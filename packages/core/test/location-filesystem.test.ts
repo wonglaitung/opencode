@@ -19,7 +19,10 @@ const provide = (directory: string) =>
         Location.node,
         makeLocationNode({
           service: Location.Service,
-          layer: Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
+          layer: Layer.succeed(
+            Location.Service,
+            Location.Service.of(location({ directory: AbsolutePath.make(directory) })),
+          ),
           deps: [],
         }),
       ),
