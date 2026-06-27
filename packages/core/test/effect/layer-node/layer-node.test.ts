@@ -13,10 +13,7 @@ class App extends Context.Service<App, { readonly run: Effect.Effect<string[]> }
 const tags = LayerNode.tags({ app: [] })
 const make = tags.make("app")
 const build = <A, E>(root: LayerNode.Node<A, E, any>, replacements?: readonly LayerNode.Replacement[]) =>
-  LayerNode.compile(root, new Map(replacements?.map((item) => [item.source, item.replacement]))) as Layer.Layer<
-    A,
-    E
-  >
+  LayerNode.compile(root, new Map(replacements?.map((item) => [item.source, item.replacement]))) as Layer.Layer<A, E>
 const valueLayer = Layer.succeed(Value, Value.of({ value: "production" }))
 const greetingLayer = Layer.effect(
   Greeting,
