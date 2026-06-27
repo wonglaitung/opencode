@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { Context, Effect, Layer, LayerMap, Option } from "effect"
-import { LayerNode, LayerNodeTree } from "@opencode-ai/core/effect/layer-node"
-import { Node } from "@opencode-ai/core/effect/node"
-import { NodeBuild } from "@opencode-ai/core/effect/node-build"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { Node } from "@opencode-ai/core/effect/app-node"
+import { NodeBuild } from "@opencode-ai/core/effect/app-node-builder"
 import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import type { LocationError, LocationServices } from "@opencode-ai/core/location-services"
@@ -62,7 +62,7 @@ describe("node build", () => {
     }) as unknown as Effect.Effect<LayerMap.LayerMap<Location.Ref, LocationServices, LocationError>, never, CycleB>
     const mapLayer = Layer.effect(LocationServiceMap.Service, mapEffect)
     const map = Node.makeGlobalNode({ service: LocationServiceMap.Service, layer: mapLayer, deps: [b] })
-    const graph = LayerNodeTree.bind(LayerNode.group([a]), LocationServiceMap.node, map)
+    const graph = LayerNode.bind(LayerNode.group([a]), LocationServiceMap.node, map)
 
     expect(() => NodeBuild.build(graph)).toThrow("Cycle detected in layer tree")
   })
