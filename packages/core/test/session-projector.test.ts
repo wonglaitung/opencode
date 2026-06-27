@@ -169,9 +169,7 @@ describe("SessionProjector", () => {
       expect(
         (yield* sessions.context(sessionID)).map((message) => (message.type === "user" ? message.text : message.type)),
       ).toEqual(["first", "second"])
-    }).pipe(
-      Effect.provide(sessionsLayer),
-    ),
+    }).pipe(Effect.provide(sessionsLayer)),
   )
 
   it.effect("marks an inbox row promoted with the Prompted event sequence", () =>
