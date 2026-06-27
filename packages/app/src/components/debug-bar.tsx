@@ -52,36 +52,44 @@ const bad = (n: number | undefined, limit: number, low = false) => {
 
 const session = (path: string) => path.includes("/session")
 
-function Cell(props: { bad?: boolean; dim?: boolean; inline?: boolean; label: string; tip: string; value: string; wide?: boolean }) {
+function Cell(props: {
+  bad?: boolean
+  dim?: boolean
+  inline?: boolean
+  label: string
+  tip: string
+  value: string
+  wide?: boolean
+}) {
   const content = () => (
+    <div
+      classList={{
+        "flex min-w-0 items-center": true,
+        "min-h-[20px] w-fit flex-row justify-start gap-1.5 px-1.5 py-0.5 text-left": !!props.inline,
+        "justify-center text-center": !props.inline,
+        "min-h-[42px] w-full flex-col rounded-[8px] px-0.5 py-1": !props.inline,
+        "col-span-2": !!props.wide && !props.inline,
+      }}
+    >
       <div
         classList={{
-          "flex min-w-0 items-center": true,
-          "min-h-[20px] w-fit flex-row justify-start gap-1.5 px-1.5 py-0.5 text-left": !!props.inline,
-          "justify-center text-center": !props.inline,
-          "min-h-[42px] w-full flex-col rounded-[8px] px-0.5 py-1": !props.inline,
-          "col-span-2": !!props.wide && !props.inline,
+          "text-[10px] leading-none font-black uppercase tracking-[0.04em] opacity-70": true,
         }}
       >
-        <div
-          classList={{
-            "text-[10px] leading-none font-black uppercase tracking-[0.04em] opacity-70": true,
-          }}
-        >
-          {props.label}
-        </div>
-        <div
-          classList={{
-            "uppercase leading-none font-bold tabular-nums": true,
-            "text-[11px]": !!props.inline,
-            "text-[13px] sm:text-[14px]": !props.inline,
-            "text-text-on-critical-base": !!props.bad,
-            "opacity-70": !!props.dim,
-          }}
-        >
-          {props.value}
-        </div>
+        {props.label}
       </div>
+      <div
+        classList={{
+          "uppercase leading-none font-bold tabular-nums": true,
+          "text-[11px]": !!props.inline,
+          "text-[13px] sm:text-[14px]": !props.inline,
+          "text-text-on-critical-base": !!props.bad,
+          "opacity-70": !!props.dim,
+        }}
+      >
+        {props.value}
+      </div>
+    </div>
   )
 
   if (props.inline) {
