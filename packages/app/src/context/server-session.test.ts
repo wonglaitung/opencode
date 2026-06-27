@@ -264,7 +264,9 @@ describe("server session", () => {
     const message = userMessage("message")
     const stale = textPart(message.id, { id: "stale", text: "stale" })
     const part = textPart(message.id, { id: "optimistic", text: "optimistic" })
-    const store = createServerSession(messageClient(response([{ info: message, parts: [] }]), pending.promise, response()))
+    const store = createServerSession(
+      messageClient(response([{ info: message, parts: [] }]), pending.promise, response()),
+    )
     await store.sync("child")
     const refreshing = store.sync("child", { force: true })
 
@@ -372,10 +374,7 @@ describe("server session", () => {
     const updated = { ...confirmed, text: "updated" }
     const pendingPart = textPart(message.id, { id: "pending", text: "pending" })
     const store = createServerSession(
-      messageClient(
-        response([{ info: message, parts: [confirmed] }]),
-        response([{ info: message, parts: [updated] }]),
-      ),
+      messageClient(response([{ info: message, parts: [confirmed] }]), response([{ info: message, parts: [updated] }])),
     )
     store.optimistic.add({ sessionID: "child", message, parts: [confirmed, pendingPart] })
     await store.sync("child")

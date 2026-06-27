@@ -26,10 +26,7 @@ const coalescedKey = (event: QueuedServerEvent) => {
   return undefined
 }
 
-export function enqueueServerEvent(
-  queue: QueuedServerEvent[],
-  event: QueuedServerEvent,
-) {
+export function enqueueServerEvent(queue: QueuedServerEvent[], event: QueuedServerEvent) {
   const key = coalescedKey(event)
   const previous = queue[queue.length - 1]
   if (key && previous && coalescedKey(previous) === key) {

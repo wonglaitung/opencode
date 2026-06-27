@@ -61,7 +61,6 @@ describe("coalesceServerEvents", () => {
 
     expect(result.map((event) => event.payload.id)).toEqual(["1", "2", "3"])
   })
-
 })
 
 describe("enqueueServerEvent", () => {
