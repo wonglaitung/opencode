@@ -307,7 +307,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             models.setVisibility(item, true)
             if (!options?.recent) return
             models.recent.push(item)
-          })
+          }),
         )
       },
       visible(item: ModelKey) {
@@ -350,7 +350,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               if (model) {
                 models.variant.set({ providerID: model.provider.id, modelID: model.id }, value ?? undefined)
               }
-            })
+            }),
           )
         },
         cycle() {
