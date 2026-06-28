@@ -86,7 +86,9 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
       <Show when={tokens()}>
         {(value) => (
           <div class="flex items-center gap-2">
-            <span class="text-text-invert-strong">{getSessionTokenTotal(value())?.toLocaleString(language.intl())}</span>
+            <span class="text-text-invert-strong">
+              {getSessionTokenTotal(value())?.toLocaleString(language.intl())}
+            </span>
             <span class="text-text-invert-base">{language.t("context.usage.tokens")}</span>
           </div>
         )}
