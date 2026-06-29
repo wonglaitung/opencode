@@ -1761,7 +1761,9 @@ it.instance(
 // Tests that need plugin file setup or multi-instance flows fall back to a
 // scoped tmpdir + provideInstance pattern via it.effect.
 
-const instanceStoreLayer = LayerNode.compile(InstanceStore.node, [[InstanceStore.bootstrapNode, InstanceBootstrap.node]])
+const instanceStoreLayer = LayerNode.compile(InstanceStore.node, [
+  [InstanceStore.bootstrapNode, InstanceBootstrap.node],
+])
 const provideMultiInstance = <A, E, R>(eff: Effect.Effect<A, E, R>) =>
   eff.pipe(Effect.provide(instanceStoreLayer), Effect.provide(CrossSpawnSpawner.defaultLayer))
 

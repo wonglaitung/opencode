@@ -622,7 +622,9 @@ export const layer = Layer.effect(
               }),
             fallback: { applied: false },
           }).pipe(
-            Effect.provide(LayerNode.compile(InstanceStore.node, [[InstanceStore.bootstrapNode, InstanceBootstrap.node]])),
+            Effect.provide(
+              LayerNode.compile(InstanceStore.node, [[InstanceStore.bootstrapNode, InstanceBootstrap.node]]),
+            ),
           )
         }
 
