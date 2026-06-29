@@ -649,6 +649,9 @@ export const dict = {
   "workspace.lite.subscription.useBalance": "Use your available balance after reaching the usage limits",
   "workspace.lite.subscription.selectProvider":
     'Select "OpenCode Go" as the provider in your opencode configuration to use Go models.',
+  "workspace.lite.providers.title": "Providers",
+  "workspace.lite.providers.description": "Control which providers are used for routing.",
+  "workspace.lite.providers.useChina": "Enable models hosted in China",
   "workspace.lite.black.message":
     "You're currently subscribed to OpenCode Black or on the waitlist. Please unsubscribe first if you'd like to switch to Go.",
   "workspace.lite.other.message":

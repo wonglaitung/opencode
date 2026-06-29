@@ -49,6 +49,8 @@ import { createModelTpmLimiter } from "./modelTpmLimiter"
 import { createModelTpsLimiter } from "./modelTpsLimiter"
 import { createProviderBudgetTracker } from "./providerBudgetTracker"
 import { accumulateUsage, HOT_WORKSPACES } from "./usageBatcher"
+import { Workspace } from "@opencode-ai/console-core/workspace.js"
+import { countryFromRequest } from "~/lib/request-country"
 
 type ZenData = Awaited<ReturnType<typeof ZenData.list>>
 type RetryOptions = {
@@ -125,6 +127,11 @@ export async function handler(
       : createKeyRateLimiter(modelInfo.id, modelInfo.rateLimit, zenApiKey, input.request)
     await rateLimiter?.check()
     const authInfo = await authenticate(modelInfo, zenApiKey)
+    if (authInfo && !authInfo.region) {
+      await Actor.provide("system", { workspaceID: authInfo.workspaceID }, () =>
+        Workspace.setDefaultRegion({ country: countryFromRequest(input.request) }),
+      )
+    }
     const stickyId = sessionId ? sessionId : (authInfo?.workspaceID ?? ip)
     const stickyTracker = createStickyTracker(modelInfo.id, modelInfo.stickyProvider, stickyId)
     const stickyProvider = await stickyTracker?.get()
@@ -657,7 +664,10 @@ export async function handler(
       tx
         .select({
           apiKey: KeyTable.id,
-          workspaceID: KeyTable.workspaceID,
+          workspace: {
+            id: WorkspaceTable.id,
+            region: WorkspaceTable.region,
+          },
           billing: {
             balance: BillingTable.balance,
             paymentMethodID: BillingTable.paymentMethodID,
@@ -735,13 +745,13 @@ export async function handler(
     if (
       modelInfo.id.startsWith("alpha-") &&
       Resource.App.stage === "production" &&
-      !ADMIN_WORKSPACES.includes(data.workspaceID)
+      !ADMIN_WORKSPACES.includes(data.workspace.id)
     )
       throw new AuthError(t("zen.api.error.modelNotSupported", { model: modelInfo.id }))
 
     logger.metric({
       api_key: data.apiKey,
-      workspace: data.workspaceID,
+      workspace: data.workspace.id,
       user_id: data.user.id,
       ...(() => {
         if (data.billing.subscription)
@@ -758,13 +768,14 @@ export async function handler(
 
     return {
       apiKeyId: data.apiKey,
-      workspaceID: data.workspaceID,
+      workspaceID: data.workspace.id,
+      region: data.workspace.region,
       billing: data.billing,
       user: data.user,
       black: data.black,
       lite: data.lite,
       provider: data.provider,
-      isFree: ADMIN_WORKSPACES.includes(data.workspaceID),
+      isFree: ADMIN_WORKSPACES.includes(data.workspace.id),
       isDisabled: !!data.timeDisabled,
     }
   }
