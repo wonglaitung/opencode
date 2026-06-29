@@ -87,14 +87,11 @@ const root = LayerNode.group([
   LayerNode.make({ service: TestLLMServer, layer: TestLLMServer.layer, deps: [] }),
 ])
 const it = testEffect(
-  LayerNode.compile(
-    root,
-    [
-      [MCP.node, mcp],
-      [LSP.node, lsp],
-      [RuntimeFlags.node, RuntimeFlags.layer({ experimentalEventSystem: true })],
-    ],
-  ),
+  LayerNode.compile(root, [
+    [MCP.node, mcp],
+    [LSP.node, lsp],
+    [RuntimeFlags.node, RuntimeFlags.layer({ experimentalEventSystem: true })],
+  ]),
 )
 
 const providerCfg = (url: string) => ({

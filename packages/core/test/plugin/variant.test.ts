@@ -16,12 +16,7 @@ const locationLayer = Layer.succeed(
   Location.Service,
   Location.Service.of(location({ directory: AbsolutePath.make(import.meta.dir) })),
 )
-const it = testEffect(
-  AppNodeBuilder.build(
-    Catalog.node,
-    [[Location.node, locationLayer]],
-  ),
-)
+const it = testEffect(AppNodeBuilder.build(Catalog.node, [[Location.node, locationLayer]]))
 
 describe("VariantPlugin", () => {
   it.effect("adds GLM 5.2 variants after catalog sources", () =>

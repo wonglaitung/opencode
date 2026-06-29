@@ -27,9 +27,7 @@ const catalogLayer = AppNodeBuilder.build(
   LayerNode.group([Catalog.node, EventV2.node, Credential.node, Integration.node, Policy.node]),
   [[Location.node, locationLayer]],
 )
-const it = testEffect(
-  catalogLayer,
-)
+const it = testEffect(catalogLayer)
 
 describe("CatalogV2", () => {
   it.effect("publishes an updated event after catalog changes", () =>
@@ -50,10 +48,7 @@ describe("CatalogV2", () => {
   it.effect("derives availability from active credentials without changing provider state", () => {
     const integrationID = Integration.ID.make("test")
     const localCatalogLayer = Layer.fresh(
-      AppNodeBuilder.build(
-        LayerNode.group([Catalog.node, Credential.node]),
-        [[Location.node, locationLayer]],
-      ),
+      AppNodeBuilder.build(LayerNode.group([Catalog.node, Credential.node]), [[Location.node, locationLayer]]),
     )
 
     return Effect.gen(function* () {
@@ -82,10 +77,9 @@ describe("CatalogV2", () => {
     const integrationID = Integration.ID.make("gateway")
     const providerID = ProviderV2.ID.make("remote")
     const localCatalogLayer = Layer.fresh(
-      AppNodeBuilder.build(
-        LayerNode.group([Catalog.node, Credential.node, Integration.node]),
-        [[Location.node, locationLayer]],
-      ),
+      AppNodeBuilder.build(LayerNode.group([Catalog.node, Credential.node, Integration.node]), [
+        [Location.node, locationLayer],
+      ]),
     )
 
     return Effect.gen(function* () {

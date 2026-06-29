@@ -12,15 +12,12 @@ import { it } from "./lib/effect"
 
 function provide(directory: string) {
   return Effect.provide(
-    LayerNode.compile(
-      LocationMutation.node,
+    LayerNode.compile(LocationMutation.node, [
       [
-        [
-          Location.node,
-          Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
-        ],
+        Location.node,
+        Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
       ],
-    ),
+    ]),
   )
 }
 

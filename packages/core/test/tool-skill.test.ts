@@ -66,10 +66,9 @@ describe("SkillTool", () => {
               list: () => Effect.succeed(current),
             }),
           )
-          const registry = AppNodeBuilder.build(
-            LayerNode.group([ToolRegistry.node, ToolRegistry.toolsNode]),
-            [[ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig]],
-          )
+          const registry = AppNodeBuilder.build(LayerNode.group([ToolRegistry.node, ToolRegistry.toolsNode]), [
+            [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
+          ])
           const tool = SkillTool.layer.pipe(
             Layer.provide(registry),
             Layer.provide(permission),

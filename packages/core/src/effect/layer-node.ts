@@ -135,7 +135,12 @@ type ValidReplacements<Items extends Replacements> = Items & CheckReplacements<I
 function replacementNode(source: AnyNode, replacement: AnyNode | Layer.Any) {
   const replacementNode = isNode(replacement)
     ? replacement
-    : make({ ...nodeMakeIdentity(source), layer: replacement as Layer.Layer<unknown, unknown>, deps: [], tag: source.tag })
+    : make({
+        ...nodeMakeIdentity(source),
+        layer: replacement as Layer.Layer<unknown, unknown>,
+        deps: [],
+        tag: source.tag,
+      })
   if (source.name !== replacementNode.name) {
     throw new Error(`Cannot replace ${source.name} with ${replacementNode.name}`)
   }

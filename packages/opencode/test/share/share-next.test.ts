@@ -35,10 +35,7 @@ const none = HttpClient.make(() => Effect.die("unexpected http call"))
 
 function requestLayer(client: HttpClient.HttpClient) {
   const replacement = [httpClient, Layer.succeed(HttpClient.HttpClient, client)] as const
-  return LayerNode.compile(
-    LayerNode.group([ShareNext.node, AccountRepo.node]),
-    [replacement],
-  )
+  return LayerNode.compile(LayerNode.group([ShareNext.node, AccountRepo.node]), [replacement])
 }
 
 function integrationLayer(client: HttpClient.HttpClient) {

@@ -42,10 +42,7 @@ function testLayer(
       ),
     ),
   )
-  return AppNodeBuilder.build(
-    LayerNode.group([configNode, Policy.node]),
-    [[Location.node, locationLayer]],
-  )
+  return AppNodeBuilder.build(LayerNode.group([configNode, Policy.node]), [[Location.node, locationLayer]])
 }
 
 const provider = {

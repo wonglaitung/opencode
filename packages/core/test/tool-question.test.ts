@@ -31,10 +31,9 @@ const permission = Layer.succeed(
     list: () => Effect.die("unused"),
   }),
 )
-const registry = AppNodeBuilder.build(
-  LayerNode.group([ToolRegistry.node, ToolRegistry.toolsNode]),
-  [[ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig]],
-)
+const registry = AppNodeBuilder.build(LayerNode.group([ToolRegistry.node, ToolRegistry.toolsNode]), [
+  [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
+])
 const question = Layer.succeed(
   QuestionV2.Service,
   QuestionV2.Service.of({

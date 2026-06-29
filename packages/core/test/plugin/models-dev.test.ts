@@ -19,10 +19,9 @@ const locationLayer = Layer.succeed(
   Location.Service,
   Location.Service.of(location({ directory: AbsolutePath.make(import.meta.dir) })),
 )
-const layer = AppNodeBuilder.build(
-  LayerNode.group([Catalog.node, Integration.node, EventV2.node]),
-  [[Location.node, locationLayer]],
-)
+const layer = AppNodeBuilder.build(LayerNode.group([Catalog.node, Integration.node, EventV2.node]), [
+  [Location.node, locationLayer],
+])
 const it = testEffect(layer)
 
 describe("ModelsDevPlugin", () => {

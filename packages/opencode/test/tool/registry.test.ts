@@ -55,12 +55,7 @@ const replacements = [
 ] as const
 
 const it = testEffect(LayerNode.compile(root, replacements))
-const withBrokenPlugin = testEffect(
-  LayerNode.compile(
-    root,
-    [...replacements, [Plugin.node, brokenPluginLayer]],
-  ),
-)
+const withBrokenPlugin = testEffect(LayerNode.compile(root, [...replacements, [Plugin.node, brokenPluginLayer]]))
 
 afterEach(async () => {
   await disposeAllInstances()
