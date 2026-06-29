@@ -55,6 +55,7 @@ export function createProviderBudgetTracker(
   let effectiveBudget: Record<string, Record<number, number>> = {}
   // Cumulative current-minute spend through each priority, per provider.
   let spentThroughPriority: Record<string, Record<number, number>> = {}
+  let previousSpentThroughPriority: Record<string, Record<number, number>> = {}
 
   return {
     // Returns whether a provider at a given priority still has budget headroom.
@@ -87,6 +88,7 @@ export function createProviderBudgetTracker(
 
       effectiveBudget = {}
       spentThroughPriority = {}
+      previousSpentThroughPriority = {}
       Object.entries(maxPriorityByProvider).forEach(([providerId, maxPriority]) => {
         const providerBudget = budgetByProvider[providerId]
         if (providerBudget === undefined) return
@@ -96,11 +98,13 @@ export function createProviderBudgetTracker(
         let previousRunning = 0
         effectiveBudget[providerId] = {}
         spentThroughPriority[providerId] = {}
+        previousSpentThroughPriority[providerId] = {}
         Array.from({ length: maxPriority }, (_, index) => index + 1).forEach((priority) => {
           currentRunning += current[providerId]?.[priority] ?? 0
           effectiveBudget[providerId][priority] = Math.max(0, budget - previousRunning)
           previousRunning += previous[providerId]?.[priority] ?? 0
           spentThroughPriority[providerId][priority] = currentRunning
+          previousSpentThroughPriority[providerId][priority] = previousRunning
         })
       })
 
@@ -114,9 +118,18 @@ export function createProviderBudgetTracker(
           const spentThroughCurrentPriority = spentThroughPriority[providerId]?.[priority] ?? 0
           return spentThroughCurrentPriority < budget
         },
+        prefer: (providerId: string, priority: number) => {
+          const providerBudget = budgetByProvider[providerId]
+          if (providerBudget === undefined) return false
+          const budget = centsToMicroCents(providerBudget * 100)
+          const previousUsage = previousSpentThroughPriority[providerId]?.[priority]
+          if (previousUsage === undefined) return false
+          return previousUsage < budget * 0.8
+        },
       }
     },
-    track: async (provider: string, priority: number, costInCent: number) => {
+    track: async (provider: string, priority: number | undefined, costInCent: number) => {
+      if (priority === undefined) return
       const config = tracked.find((item) => item.id === provider && item.budgetPriority === priority)
       if (!config) return
       if (config.budgetContribution === undefined) return
