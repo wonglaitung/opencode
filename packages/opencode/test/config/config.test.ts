@@ -98,15 +98,12 @@ const configLayer = (
     client?: HttpClient.HttpClient
   } = {},
 ) =>
-  LayerNode.compile(
-    LayerNode.group([Config.node, FSUtil.node, Env.node, CrossSpawnSpawner.node]),
-    [
-      [Auth.node, options.auth ?? AuthTest.empty],
-      [Account.node, options.account ?? AccountTest.empty],
-      [Npm.node, NpmTest.noop],
-      [httpClient, Layer.succeed(HttpClient.HttpClient, options.client ?? unexpectedHttp)],
-    ],
-  )
+  LayerNode.compile(LayerNode.group([Config.node, FSUtil.node, Env.node, CrossSpawnSpawner.node]), [
+    [Auth.node, options.auth ?? AuthTest.empty],
+    [Account.node, options.account ?? AccountTest.empty],
+    [Npm.node, NpmTest.noop],
+    [httpClient, Layer.succeed(HttpClient.HttpClient, options.client ?? unexpectedHttp)],
+  ])
 
 const layer = configLayer()
 
