@@ -13,12 +13,7 @@ import { EventV2Bridge } from "../../src/event-v2-bridge"
 
 const questionLayer = LayerNode.compile(LayerNode.group([Question.node, EventV2Bridge.node, CrossSpawnSpawner.node]))
 const it = testEffect(questionLayer)
-const lifecycle = testEffect(
-  Layer.mergeAll(
-    questionLayer,
-    testInstanceStoreLayer,
-  ),
-)
+const lifecycle = testEffect(Layer.mergeAll(questionLayer, testInstanceStoreLayer))
 
 const askEffect = Effect.fn("QuestionTest.ask")(function* (input: {
   sessionID: SessionID

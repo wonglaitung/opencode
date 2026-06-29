@@ -18,7 +18,9 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 
 const it = testEffect(
-  LayerNode.compile(LayerNode.group([Session.node, SessionRevert.node, Snapshot.node, SessionProjector.node, CrossSpawnSpawner.node])),
+  LayerNode.compile(
+    LayerNode.group([Session.node, SessionRevert.node, Snapshot.node, SessionProjector.node, CrossSpawnSpawner.node]),
+  ),
 )
 
 const user = Effect.fn("test.user")(function* (sessionID: SessionID, agent = "default") {
