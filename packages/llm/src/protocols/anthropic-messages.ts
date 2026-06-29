@@ -516,7 +516,11 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
     request.tools.length === 0 || request.toolChoice?.type === "none"
       ? undefined
       : request.tools.map((tool) =>
-          lowerTool(breakpoints, tool, ToolSchemaProjection.modelCompatibility(tool.inputSchema, toolSchemaCompatibility)),
+          lowerTool(
+            breakpoints,
+            tool,
+            ToolSchemaProjection.modelCompatibility(tool.inputSchema, toolSchemaCompatibility),
+          ),
         )
   const system =
     request.system.length === 0
