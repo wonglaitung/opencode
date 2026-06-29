@@ -345,7 +345,11 @@ export async function handler(
                     timestampLastByte,
                     usageInfo,
                   )
-                  await providerBudgetTracker?.track(providerInfo.id, providerInfo.budgetPriority, costInfo.totalCostInCent)
+                  await providerBudgetTracker?.track(
+                    providerInfo.id,
+                    providerInfo.budgetPriority,
+                    costInfo.totalCostInCent,
+                  )
                   await trackUsage(sessionId, billingSource, authInfo, modelInfo, providerInfo, usageInfo, costInfo)
                   await reload(billingSource, authInfo, costInfo)
                   const cost = calculateOccurredCost(billingSource, costInfo)

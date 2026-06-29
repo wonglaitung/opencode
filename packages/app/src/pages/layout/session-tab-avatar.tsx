@@ -25,10 +25,7 @@ export function SessionTabAvatar(props: {
     />
   )
   return (
-    <Show
-      when={state.loading()}
-      fallback={projectAvatar()}
-    >
+    <Show when={state.loading()} fallback={projectAvatar()}>
       <span class="relative block size-4 shrink-0">
         <SessionProgressIndicatorV2
           class={`absolute inset-0 ${props.revealProjectOnHover === false ? "" : "group-hover:invisible"}`}
