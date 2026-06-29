@@ -96,7 +96,13 @@ const withTool = <A, E, R>(directory: string, body: (registry: ToolRegistry.Inte
   }).pipe(
     Effect.provide(
       AppNodeBuilder.build(
-        LayerNode.group([ToolRegistry.node, ToolRegistry.toolsNode, LocationMutation.node, FileMutation.node, ApplyPatchTool.node]),
+        LayerNode.group([
+          ToolRegistry.node,
+          ToolRegistry.toolsNode,
+          LocationMutation.node,
+          FileMutation.node,
+          ApplyPatchTool.node,
+        ]),
         [
           [FSUtil.node, filesystem],
           [Location.node, activeLocation],

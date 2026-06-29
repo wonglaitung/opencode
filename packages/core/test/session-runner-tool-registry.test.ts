@@ -32,7 +32,9 @@ const outputStore = Layer.mock(ToolOutputStore.Service, {
 const registryLayer = AppNodeBuilder.build(ToolRegistry.node, [[ToolOutputStore.node, outputStore]])
 const it = testEffect(registryLayer)
 const integrated = testEffect(
-  AppNodeBuilder.build(LayerNode.group([ApplicationTools.node, ToolRegistry.node]), [[ToolOutputStore.node, outputStore]]),
+  AppNodeBuilder.build(LayerNode.group([ApplicationTools.node, ToolRegistry.node]), [
+    [ToolOutputStore.node, outputStore],
+  ]),
 )
 const identity = {
   agent: AgentV2.ID.make("build"),

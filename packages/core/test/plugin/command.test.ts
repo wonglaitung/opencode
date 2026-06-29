@@ -11,10 +11,11 @@ import { host } from "./host"
 
 const directory = AbsolutePath.make("/repo/packages/app")
 const project = AbsolutePath.make("/repo")
-const locationLayer = Layer.succeed(Location.Service, Location.Service.of(location({ directory }, { projectDirectory: project })))
-const it = testEffect(
-  AppNodeBuilder.build(CommandV2.node, [[Location.node, locationLayer]]),
+const locationLayer = Layer.succeed(
+  Location.Service,
+  Location.Service.of(location({ directory }, { projectDirectory: project })),
 )
+const it = testEffect(AppNodeBuilder.build(CommandV2.node, [[Location.node, locationLayer]]))
 
 describe("CommandPlugin.Plugin", () => {
   it.effect("registers built-in init and review commands", () =>

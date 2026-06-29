@@ -17,9 +17,11 @@ import { testEffect } from "./lib/effect"
 
 const it = testEffect(Layer.empty)
 
-const instructionLayer = (
-  input: { config: string; locationServiceLayer: Layer.Layer<Location.Service>; filesystemLayer?: Layer.Layer<FSUtil.Service> },
-) =>
+const instructionLayer = (input: {
+  config: string
+  locationServiceLayer: Layer.Layer<Location.Service>
+  filesystemLayer?: Layer.Layer<FSUtil.Service>
+}) =>
   AppNodeBuilder.build(LayerNode.group([SystemContextRegistry.node, InstructionContext.node]), [
     [Global.node, Global.layerWith({ config: input.config })],
     [Location.node, input.locationServiceLayer],
@@ -305,7 +307,10 @@ describe("InstructionContext", () => {
             locationServiceLayer: Layer.succeed(
               Location.Service,
               Location.Service.of(
-                location({ directory: AbsolutePath.make("/outside") }, { projectDirectory: AbsolutePath.make("/repo") }),
+                location(
+                  { directory: AbsolutePath.make("/outside") },
+                  { projectDirectory: AbsolutePath.make("/repo") },
+                ),
               ),
             ),
           }),

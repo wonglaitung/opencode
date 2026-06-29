@@ -272,13 +272,15 @@ export function compile<A, E, const Items extends Replacements = readonly []>(
 }
 
 function replacementMapFrom(replacements?: Replacements) {
-  return replacements?.reduce((map, [source, replacement]) => {
-    const normalized = rewriteReplacementDependencies(replacementNode(source, replacement), map)
-    const current = new Map([[source.name, normalized]])
-    for (const [name, node] of map) map.set(name, rewriteReplacementDependencies(node, current))
-    map.set(source.name, normalized)
-    return map
-  }, new Map<string, AnyNode>()) ?? new Map<string, AnyNode>()
+  return (
+    replacements?.reduce((map, [source, replacement]) => {
+      const normalized = rewriteReplacementDependencies(replacementNode(source, replacement), map)
+      const current = new Map([[source.name, normalized]])
+      for (const [name, node] of map) map.set(name, rewriteReplacementDependencies(node, current))
+      map.set(source.name, normalized)
+      return map
+    }, new Map<string, AnyNode>()) ?? new Map<string, AnyNode>()
+  )
 }
 
 function rewriteReplacementDependencies(root: AnyNode, replacements: ReadonlyMap<string, AnyNode>) {

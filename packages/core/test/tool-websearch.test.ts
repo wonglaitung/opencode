@@ -124,12 +124,15 @@ const websearchConfig = Layer.succeed(
   }),
 )
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([ToolRegistry.node, ToolRegistry.toolsNode, WebSearchTool.configNode, WebSearchTool.node]), [
-    [PermissionV2.node, permission],
-    [LayerNodePlatform.httpClient, http],
-    [WebSearchTool.configNode, websearchConfig],
-    [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
-  ]),
+  AppNodeBuilder.build(
+    LayerNode.group([ToolRegistry.node, ToolRegistry.toolsNode, WebSearchTool.configNode, WebSearchTool.node]),
+    [
+      [PermissionV2.node, permission],
+      [LayerNodePlatform.httpClient, http],
+      [WebSearchTool.configNode, websearchConfig],
+      [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
+    ],
+  ),
 )
 
 describe("WebSearchTool registration", () => {

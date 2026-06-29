@@ -9,7 +9,10 @@ import { testEffect } from "./lib/effect"
 
 const it = testEffect(
   AppNodeBuilder.build(Policy.node, [
-    [Location.node, Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make("test") })))],
+    [
+      Location.node,
+      Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make("test") }))),
+    ],
   ]),
 )
 

@@ -114,7 +114,9 @@ describe("Snapshot", () => {
           const projectID = yield* Effect.gen(function* () {
             return (yield* Location.Service).project.id
           }).pipe(
-            Effect.provide(AppNodeBuilder.build(Location.boundNode(Location.Ref.make({ directory: AbsolutePath.make(project) })))),
+            Effect.provide(
+              AppNodeBuilder.build(Location.boundNode(Location.Ref.make({ directory: AbsolutePath.make(project) }))),
+            ),
           )
           expect(
             yield* Effect.promise(() => fs.stat(path.join(tmp.path, "snapshot", projectID, Hash.fast(project)))),
@@ -165,13 +167,10 @@ describe("Snapshot", () => {
 })
 
 function snapshotLayer(data: string, directory: string) {
-  return AppNodeBuilder.build(
-    Snapshot.node,
-    [
-      [Location.node, Location.boundNode(Location.Ref.make({ directory: AbsolutePath.make(directory) }))],
-      [Global.node, Global.layerWith({ data, config: path.join(data, "config") })],
-    ],
-  )
+  return AppNodeBuilder.build(Snapshot.node, [
+    [Location.node, Location.boundNode(Location.Ref.make({ directory: AbsolutePath.make(directory) }))],
+    [Global.node, Global.layerWith({ data, config: path.join(data, "config") })],
+  ])
 }
 
 function read(file: string) {

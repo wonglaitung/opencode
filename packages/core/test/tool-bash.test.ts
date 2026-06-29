@@ -110,13 +110,16 @@ const withTool = <A, E, R>(
     return yield* body(yield* ToolRegistry.Service)
   }).pipe(
     Effect.provide(
-      AppNodeBuilder.build(LayerNode.group([ToolRegistry.node, ToolRegistry.toolsNode, LocationMutation.node, BashTool.node]), [
-        [Location.node, activeLocation],
-        [PermissionV2.node, permission],
-        [AppProcess.node, processLayer],
-        [Config.node, config],
-        [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
-      ]),
+      AppNodeBuilder.build(
+        LayerNode.group([ToolRegistry.node, ToolRegistry.toolsNode, LocationMutation.node, BashTool.node]),
+        [
+          [Location.node, activeLocation],
+          [PermissionV2.node, permission],
+          [AppProcess.node, processLayer],
+          [Config.node, config],
+          [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
+        ],
+      ),
     ),
   )
 }

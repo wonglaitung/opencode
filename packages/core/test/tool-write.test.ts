@@ -69,12 +69,21 @@ const withTool = <A, E, R>(directory: string, body: (registry: ToolRegistry.Inte
     return yield* body(yield* ToolRegistry.Service)
   }).pipe(
     Effect.provide(
-      AppNodeBuilder.build(LayerNode.group([ToolRegistry.node, ToolRegistry.toolsNode, LocationMutation.node, FileMutation.node, WriteTool.node]), [
-        [FSUtil.node, filesystem],
-        [Location.node, activeLocation],
-        [PermissionV2.node, permission],
-        [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
-      ]),
+      AppNodeBuilder.build(
+        LayerNode.group([
+          ToolRegistry.node,
+          ToolRegistry.toolsNode,
+          LocationMutation.node,
+          FileMutation.node,
+          WriteTool.node,
+        ]),
+        [
+          [FSUtil.node, filesystem],
+          [Location.node, activeLocation],
+          [PermissionV2.node, permission],
+          [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
+        ],
+      ),
     ),
   )
 }
