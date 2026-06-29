@@ -31,7 +31,13 @@ export function ProgressCircleV2(props: ProgressCircleV2Props) {
         [split.class ?? ""]: !!split.class,
       }}
     >
-      <circle cx={center} cy={center} r={radius()} data-slot="progress-circle-v2-background" stroke-width={strokeWidth()} />
+      <circle
+        cx={center}
+        cy={center}
+        r={radius()}
+        data-slot="progress-circle-v2-background"
+        stroke-width={strokeWidth()}
+      />
       <circle
         cx={center}
         cy={center}
