@@ -375,6 +375,8 @@ export const dict = {
   "zen.api.error.userMonthlyLimitReached":
     "Osiągnąłeś swój miesięczny limit wydatków w wysokości ${{amount}}. Zarządzaj swoimi limitami tutaj: {{membersUrl}}",
   "zen.api.error.modelDisabled": "Model jest wyłączony",
+  "zen.api.error.regionNotAllowed":
+    "Ten model jest hostowany w Chinach. Jeśli chcesz korzystać z tego modelu, włącz go w swoich ustawieniach: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "Bezpłatna promocja {{model}} dobiegła końca. Możesz dalej korzystać z modelu, subskrybując OpenCode Go - {{link}}",
 

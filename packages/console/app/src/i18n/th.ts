@@ -370,6 +370,8 @@ export const dict = {
   "zen.api.error.userMonthlyLimitReached":
     "คุณถึงขีดจำกัดการใช้จ่ายรายเดือนที่ ${{amount}} แล้ว จัดการขีดจำกัดของคุณที่นี่: {{membersUrl}}",
   "zen.api.error.modelDisabled": "โมเดลถูกปิดใช้งาน",
+  "zen.api.error.regionNotAllowed":
+    "โมเดลนี้โฮสต์อยู่ในประเทศจีน หากคุณต้องการใช้โมเดลนี้ ให้เปิดใช้งานในการตั้งค่าของคุณ: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "โปรโมชันฟรีสำหรับ {{model}} สิ้นสุดแล้ว คุณสามารถใช้โมเดลต่อได้โดยสมัครสมาชิก OpenCode Go - {{link}}",
 

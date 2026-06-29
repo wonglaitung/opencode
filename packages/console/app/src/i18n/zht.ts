@@ -356,6 +356,7 @@ export const dict = {
     "你的工作區已達到每月支出限額 ${{amount}}。請在此處管理你的限額：{{billingUrl}}",
   "zen.api.error.userMonthlyLimitReached": "你已達到每月支出限額 ${{amount}}。請在此處管理你的限額：{{membersUrl}}",
   "zen.api.error.modelDisabled": "模型已停用",
+  "zen.api.error.regionNotAllowed": "此模型部署於中國。如果你想使用此模型，請在設定中啟用它：{{consoleGoUrl}}",
   "zen.api.error.trialEnded": "{{model}} 的限免活动已結束。您可以訂閱 OpenCode Go 繼續使用該模型 - {{link}}",
 
   "black.meta.title": "OpenCode Black | 存取全球最佳編碼模型",

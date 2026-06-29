@@ -21,6 +21,7 @@ import {
   MonthlyLimitError,
   UserLimitError,
   ModelError,
+  RegionError,
   RateLimitError,
   FreeUsageLimitError,
   GoUsageLimitError,
@@ -127,11 +128,24 @@ export async function handler(
       : createKeyRateLimiter(modelInfo.id, modelInfo.rateLimit, zenApiKey, input.request)
     await rateLimiter?.check()
     const authInfo = await authenticate(modelInfo, zenApiKey)
-    if (authInfo && !authInfo.region) {
-      await Actor.provide("system", { workspaceID: authInfo.workspaceID }, () =>
-        Workspace.setDefaultRegion({ country: countryFromRequest(input.request) }),
-      )
+    const allowedRegions = authInfo?.region
+      ? authInfo.region
+      : await (async () => {
+          if (!authInfo) return
+          return Actor.provide("system", { workspaceID: authInfo.workspaceID }, () =>
+            Workspace.setDefaultRegion({ country: countryFromRequest(input.request) }),
+          )
+        })()
+    /*
+    if (true) {
+      if (!allowedRegions?.includes("unavailable"))
+        throw new RegionError(
+          t("zen.api.error.regionNotAllowed", {
+            consoleGoUrl: `https://opencode.ai/workspace/${authInfo.workspaceID}/go`,
+          }),
+        )
     }
+    */
     const stickyId = sessionId ? sessionId : (authInfo?.workspaceID ?? ip)
     const stickyTracker = createStickyTracker(modelInfo.id, modelInfo.stickyProvider, stickyId)
     const stickyProvider = await stickyTracker?.get()
@@ -443,6 +457,15 @@ export async function handler(
         })
       } catch {}
     }
+
+    if (error instanceof RegionError)
+      return new Response(
+        JSON.stringify({
+          type: "error",
+          error: { type: error.constructor.name, message: error.message },
+        }),
+        { status: 403 },
+      )
 
     // Note: both top level "type" and "error.type" fields are used by the @ai-sdk/anthropic client to render the error message.
     if (
