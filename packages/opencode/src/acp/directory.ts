@@ -208,7 +208,11 @@ export const defaultLayer = layer.pipe(
   Layer.provide(InstanceStore.defaultLayer),
 )
 
-export const loaderNode = LayerNode.make({ service: Loader, layer: loaderLayer, deps: [Provider.node, Agent.node, Command.node, InstanceStore.node] })
+export const loaderNode = LayerNode.make({
+  service: Loader,
+  layer: loaderLayer,
+  deps: [Provider.node, Agent.node, Command.node, InstanceStore.node],
+})
 
 export const node = LayerNode.make({ service: Service, layer, deps: [loaderNode] })
 

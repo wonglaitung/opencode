@@ -17,9 +17,10 @@ import { Skill } from "../../src/skill"
 import { Truncate } from "../../src/tool/truncate"
 
 const agentLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
-  LayerNode.compile(LayerNode.group([Agent.node, Plugin.node, Provider.node, Auth.node, Config.node, Skill.node, RuntimeFlags.node]), [
-    [RuntimeFlags.node, RuntimeFlags.layer(flags)],
-  ])
+  LayerNode.compile(
+    LayerNode.group([Agent.node, Plugin.node, Provider.node, Auth.node, Config.node, Skill.node, RuntimeFlags.node]),
+    [[RuntimeFlags.node, RuntimeFlags.layer(flags)]],
+  )
 
 const it = testEffect(agentLayer())
 

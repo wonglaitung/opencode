@@ -156,7 +156,9 @@ const { FSUtil } = await import("@opencode-ai/core/fs-util")
 const { CrossSpawnSpawner } = await import("@opencode-ai/core/cross-spawn-spawner")
 
 const mcpTest = testEffect(
-  LayerNode.compile(LayerNode.group([MCP.node, McpAuth.node, EventV2Bridge.node, Config.node, CrossSpawnSpawner.node, FSUtil.node])),
+  LayerNode.compile(
+    LayerNode.group([MCP.node, McpAuth.node, EventV2Bridge.node, Config.node, CrossSpawnSpawner.node, FSUtil.node]),
+  ),
 )
 
 const config = (name: string) => ({

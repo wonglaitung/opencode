@@ -55,7 +55,11 @@ function testLayer(
   httpHandler: (request: HttpClientRequest.HttpClientRequest) => Response,
   spawnHandler?: (cmd: string, args: readonly string[]) => string | { code: number; stdout?: string; stderr?: string },
 ) {
-  const spawnerNode = makeGlobalNode({ service: ChildProcessSpawner.ChildProcessSpawner, layer: mockSpawner(spawnHandler), deps: [] })
+  const spawnerNode = makeGlobalNode({
+    service: ChildProcessSpawner.ChildProcessSpawner,
+    layer: mockSpawner(spawnHandler),
+    deps: [],
+  })
   const appProcessNode = makeGlobalNode({ service: AppProcess.Service, layer: AppProcess.layer, deps: [spawnerNode] })
   return LayerNode.compile(Installation.node, [
     [httpClient, mockHttpClient(httpHandler)],

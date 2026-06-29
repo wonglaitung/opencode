@@ -23,7 +23,9 @@ import { Git } from "@/git"
 import { Filesystem } from "@/util/filesystem"
 
 const toolLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
-  LayerNode.compile(LayerNode.group([CrossSpawnSpawner.node, FSUtil.node, Ripgrep.node, Truncate.node, Agent.node, Git.node]))
+  LayerNode.compile(
+    LayerNode.group([CrossSpawnSpawner.node, FSUtil.node, Ripgrep.node, Truncate.node, Agent.node, Git.node]),
+  )
 
 const it = testEffect(toolLayer())
 const rooted = testEffect(Layer.mergeAll(toolLayer(), testInstanceStoreLayer))

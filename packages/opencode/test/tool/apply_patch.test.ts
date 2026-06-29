@@ -15,7 +15,9 @@ import { SessionID, MessageID } from "../../src/session/schema"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(
-  LayerNode.compile(LayerNode.group([LSP.node, FSUtil.node, Format.node, EventV2Bridge.node, Truncate.node, Agent.node])),
+  LayerNode.compile(
+    LayerNode.group([LSP.node, FSUtil.node, Format.node, EventV2Bridge.node, Truncate.node, Agent.node]),
+  ),
 )
 
 const baseCtx = {

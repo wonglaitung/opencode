@@ -21,7 +21,9 @@ afterEach(async () => {
   await disposeAllInstances()
 })
 
-const it = testEffect(Layer.mergeAll(LayerNode.compile(LayerNode.group([CrossSpawnSpawner.node, FSUtil.node])), testInstanceStoreLayer))
+const it = testEffect(
+  Layer.mergeAll(LayerNode.compile(LayerNode.group([CrossSpawnSpawner.node, FSUtil.node])), testInstanceStoreLayer),
+)
 
 function withTmp<T, A, E, R>(
   init: (dir: string) => Promise<T>,

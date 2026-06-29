@@ -16,7 +16,9 @@ import {
 } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
-const it = testEffect(Layer.mergeAll(LayerNode.compile(LayerNode.group([Snapshot.node, FSUtil.node])), testInstanceStoreLayer))
+const it = testEffect(
+  Layer.mergeAll(LayerNode.compile(LayerNode.group([Snapshot.node, FSUtil.node])), testInstanceStoreLayer),
+)
 // Windows forbids both * and : in directory names.
 const nonWindowsIt = process.platform === "win32" ? it.live.skip : it.live
 
@@ -79,7 +81,8 @@ const bootstrapScoped = Effect.fn("SnapshotTest.bootstrapScoped")(function* () {
   return { path: dir, extra: yield* initialize(dir) }
 })
 
-const scopedGitTmpdir = () => tmpdirScoped({ git: true }).pipe(Effect.provide(LayerNode.compile(CrossSpawnSpawner.node)))
+const scopedGitTmpdir = () =>
+  tmpdirScoped({ git: true }).pipe(Effect.provide(LayerNode.compile(CrossSpawnSpawner.node)))
 
 const cleanupWorktree = (repo: string, worktree: string, files: string[] = []) =>
   Effect.promise(async () => {

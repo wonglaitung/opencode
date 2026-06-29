@@ -59,7 +59,16 @@ afterEach(async () => {
 
 const providerLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   LayerNode.compile(
-    LayerNode.group([Provider.node, FSUtil.node, Env.node, Config.node, Auth.node, Plugin.node, ModelsDev.node, RuntimeFlags.node]),
+    LayerNode.group([
+      Provider.node,
+      FSUtil.node,
+      Env.node,
+      Config.node,
+      Auth.node,
+      Plugin.node,
+      ModelsDev.node,
+      RuntimeFlags.node,
+    ]),
     [[RuntimeFlags.node, RuntimeFlags.layer(flags)]],
   )
 

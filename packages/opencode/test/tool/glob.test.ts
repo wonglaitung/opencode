@@ -21,7 +21,9 @@ import { Permission } from "../../src/permission"
 import type * as Tool from "../../src/tool/tool"
 
 const toolLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
-  LayerNode.compile(LayerNode.group([CrossSpawnSpawner.node, FSUtil.node, Ripgrep.node, Truncate.node, Agent.node, Git.node]))
+  LayerNode.compile(
+    LayerNode.group([CrossSpawnSpawner.node, FSUtil.node, Ripgrep.node, Truncate.node, Agent.node, Git.node]),
+  )
 
 const it = testEffect(toolLayer())
 const full = (p: string) => (process.platform === "win32" ? Filesystem.normalizePath(p) : p)
