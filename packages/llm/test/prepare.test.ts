@@ -117,9 +117,7 @@ describe("request option precedence", () => {
         dynamicResponse((input) =>
           Effect.gen(function* () {
             const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
-            expect(web.url).toBe(
-              "https://api.openai.test/v1/chat/completions?route=1&shared=model&model=1&request=1",
-            )
+            expect(web.url).toBe("https://api.openai.test/v1/chat/completions?route=1&shared=model&model=1&request=1")
             expect(web.headers.get("authorization")).toBe("Bearer fresh-key")
             expect(web.headers.get("x-route")).toBe("route")
             expect(web.headers.get("x-model")).toBe("model")
