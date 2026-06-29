@@ -54,7 +54,8 @@ export const queryLiteSubscription = query(async (workspaceID: string) => {
     return {
       mine,
       useBalance: row.lite?.useBalance ?? false,
-      region: row.region ?? (await Workspace.setDefaultRegion({ country: countryFromRequest(getRequestEvent()?.request) })),
+      region:
+        row.region ?? (await Workspace.setDefaultRegion({ country: countryFromRequest(getRequestEvent()?.request) })),
       rollingUsage: Subscription.analyzeRollingUsage({
         limit: limits.rollingLimit,
         window: limits.rollingWindow,
