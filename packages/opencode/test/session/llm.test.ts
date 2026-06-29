@@ -73,10 +73,12 @@ const drainWith = (layer: Layer.Layer<LLM.Service>, input: LLM.StreamInput) =>
     )
   })
 
-function llmLayerWithExecutor(options: {
-  executor?: Layer.Layer<RequestExecutor.Service>
-  flags?: Partial<RuntimeFlags.Info>
-} = {}) {
+function llmLayerWithExecutor(
+  options: {
+    executor?: Layer.Layer<RequestExecutor.Service>
+    flags?: Partial<RuntimeFlags.Info>
+  } = {},
+) {
   return AppNodeBuilder.build(LLM.node, [
     [RuntimeFlags.node, RuntimeFlags.layer(options.flags)],
     ...(options.executor ? ([[LayerNodePlatform.requestExecutor, options.executor]] as const) : []),

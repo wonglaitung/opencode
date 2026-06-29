@@ -52,7 +52,10 @@ const workspaceLayer = (experimentalWorkspaces: boolean) =>
     ]),
     [
       [RuntimeFlags.node, RuntimeFlags.layer({ experimentalWorkspaces })],
-      [InstanceBootstrap.node, Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))],
+      [
+        InstanceBootstrap.node,
+        Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void })),
+      ],
     ],
   )
 
