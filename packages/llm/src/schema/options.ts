@@ -142,12 +142,14 @@ export class ModelDefaults extends Schema.Class<ModelDefaults>("LLM.ModelDefault
 }) {}
 
 export namespace ModelDefaults {
-  export type Input = ModelDefaults | {
-    readonly limits?: ModelLimits.Input
-    readonly generation?: GenerationOptions.Input
-    readonly providerOptions?: ProviderOptions
-    readonly http?: HttpOptions.Input
-  }
+  export type Input =
+    | ModelDefaults
+    | {
+        readonly limits?: ModelLimits.Input
+        readonly generation?: GenerationOptions.Input
+        readonly providerOptions?: ProviderOptions
+        readonly http?: HttpOptions.Input
+      }
 
   /** Normalize selected-model request defaults without applying precedence. */
   export const make = (input: Input) => {
