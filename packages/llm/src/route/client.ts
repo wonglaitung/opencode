@@ -170,7 +170,11 @@ const resolveRequestOptions = (request: LLMRequest) => {
   const generation = mergeGenerationOptions(routeDefaults.generation, modelDefaults?.generation, request.generation)
   return LLMRequest.update(request, {
     generation: generation ?? new GenerationOptions({}),
-    providerOptions: mergeProviderOptions(routeDefaults.providerOptions, modelDefaults?.providerOptions, request.providerOptions),
+    providerOptions: mergeProviderOptions(
+      routeDefaults.providerOptions,
+      modelDefaults?.providerOptions,
+      request.providerOptions,
+    ),
     http: mergeHttpOptions(routeDefaults.http, modelDefaults?.http, request.http),
   })
 }
