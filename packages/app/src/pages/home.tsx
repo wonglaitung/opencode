@@ -989,6 +989,7 @@ function HomeSessionLeading(props: {
   session: Session
   server: ServerConnection.Key
   activeServer: boolean
+  revealProjectOnHover: boolean
 }) {
   const tabs = useTabs()
   const hasOpenTab = createMemo(() => sessionHasOpenTab(tabs.store, props.server, props.session))
@@ -1006,6 +1007,7 @@ function HomeSessionLeading(props: {
         directory={props.session.directory}
         sessionId={props.session.id}
         activeServer={props.activeServer}
+        revealProjectOnHover={props.revealProjectOnHover}
       />
     </div>
   )
@@ -1245,6 +1247,7 @@ function HomeSessionSearchResultRow(props: {
       classList={{
         [HOME_SEARCH_RESULT_ROW]: true,
         "bg-v2-overlay-simple-overlay-hover": props.selected,
+        group: !!showProjectName(),
       }}
       onMouseEnter={() => props.onHighlight()}
       onClick={() => props.onSelect(props.record.session)}
@@ -1254,6 +1257,7 @@ function HomeSessionSearchResultRow(props: {
         session={props.record.session}
         server={props.server}
         activeServer={props.activeServer}
+        revealProjectOnHover={!!showProjectName()}
       />
       <div class="flex min-w-0 flex-1 items-center gap-1.5">
         <span
@@ -1300,7 +1304,10 @@ function HomeSessionRow(props: {
   const showProjectName = () => props.showProjectName && props.record.projectName
 
   return (
-    <div class="group/session relative flex h-10 min-w-0 items-center rounded-[6px]">
+    <div
+      class="group/session relative flex h-10 min-w-0 items-center rounded-[6px]"
+      classList={{ group: !!showProjectName() }}
+    >
       <button
         type="button"
         data-component="home-session-row"
@@ -1312,6 +1319,7 @@ function HomeSessionRow(props: {
           session={props.record.session}
           server={props.server}
           activeServer={props.activeServer}
+          revealProjectOnHover={!!showProjectName()}
         />
         <span
           class={`min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-v2-text-text-base [font-weight:530] ${showProjectName() ? "max-w-[min(70%,480px)] flex-[0_1_auto]" : "flex-[1_1_auto]"}`}
