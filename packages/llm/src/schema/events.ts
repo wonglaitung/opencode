@@ -400,8 +400,7 @@ const contentWith = (state: ResponseState, content: ReadonlyArray<ContentPart>):
   message: Message.assistant(content),
 })
 
-const appendContent = (state: ResponseState, part: ContentPart) =>
-  contentWith(state, [...state.message.content, part])
+const appendContent = (state: ResponseState, part: ContentPart) => contentWith(state, [...state.message.content, part])
 
 const replaceContent = (state: ResponseState, index: number, part: ContentPart) =>
   contentWith(
@@ -497,7 +496,11 @@ const reduceToolInputEnd = (state: ResponseState, event: ToolInputEnd): Response
     ...state,
     toolInputs: {
       ...state.toolInputs,
-      [event.id]: { ...current, name: event.name, providerMetadata: event.providerMetadata ?? current.providerMetadata },
+      [event.id]: {
+        ...current,
+        name: event.name,
+        providerMetadata: event.providerMetadata ?? current.providerMetadata,
+      },
     },
   }
 }
