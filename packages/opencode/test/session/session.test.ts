@@ -19,10 +19,19 @@ import { InstanceBootstrap } from "@/project/bootstrap"
 
 const it = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([SessionNs.node, EventV2Bridge.node, SessionProjector.node, CrossSpawnSpawner.node, InstanceStore.node]),
+    LayerNode.group([
+      SessionNs.node,
+      EventV2Bridge.node,
+      SessionProjector.node,
+      CrossSpawnSpawner.node,
+      InstanceStore.node,
+    ]),
     [
       [RuntimeFlags.node, RuntimeFlags.layer({ experimentalWorkspaces: false })],
-      [InstanceBootstrap.node, Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))],
+      [
+        InstanceBootstrap.node,
+        Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void })),
+      ],
     ],
   ),
 )

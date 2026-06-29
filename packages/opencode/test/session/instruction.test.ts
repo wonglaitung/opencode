@@ -23,7 +23,10 @@ import { Config } from "@/config/config"
 
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([CrossSpawnSpawner.node, LayerNodePlatform.filesystem, InstanceStore.node]), [
-    [InstanceBootstrap.node, Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))],
+    [
+      InstanceBootstrap.node,
+      Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void })),
+    ],
   ]),
 )
 
