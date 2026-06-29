@@ -1,5 +1,6 @@
 import type { Session } from "@opencode-ai/sdk/v2/client"
 import {
+  type ComponentProps,
   createEffect,
   createMemo,
   createResource,
@@ -68,6 +69,9 @@ import { archiveHomeSession } from "./home-session-archive"
 import { showToast } from "@/utils/toast"
 
 const HOME_SESSION_LIMIT = 64
+const HOME_SESSION_HEADER_STICKY_TOP = 12
+const HOME_SESSION_HEADER_TEXT_HEIGHT = 16
+const HOME_SESSION_HEADER_FADE_DISTANCE = 16
 const SHOW_HOME_SESSION_ARCHIVE = false
 const HOME_ROW_LAYOUT =
   "flex min-w-0 w-full shrink-0 cursor-default items-center rounded-[6px] bg-transparent text-left transition-[background-color,color,box-shadow] duration-[120ms] ease-in-out focus-visible:outline-none"
@@ -131,6 +135,107 @@ function matchesHomeSessionSearch(record: HomeSessionRecord, query: string) {
 
 function homeSessionSearchKey(record: HomeSessionRecord) {
   return `${pathKey(record.session.directory)}:${record.session.id}`
+}
+
+function useHomeSessionHeaderOpacity(groups: () => HomeSessionGroup[]) {
+  let viewport: HTMLDivElement | undefined
+  let content: HTMLDivElement | undefined
+  let positionFrame: number | undefined
+  let resizeObserver: ResizeObserver | undefined
+  const headerRefs = new Map<HomeSessionGroup["id"], HTMLDivElement>()
+  const headerOffsets = new Map<HomeSessionGroup["id"], number>()
+  const [state, setState] = createStore({
+    titleOpacity: {} as Partial<Record<HomeSessionGroup["id"], number>>,
+  })
+
+  createEffect(() => {
+    const items = groups()
+    const ids = new Set(items.map((group) => group.id))
+    headerRefs.forEach((_, id) => {
+      if (!ids.has(id)) headerRefs.delete(id)
+    })
+    headerOffsets.forEach((_, id) => {
+      if (!ids.has(id)) headerOffsets.delete(id)
+    })
+    if (items.length === 0) {
+      content = undefined
+      bindResizeObserver()
+    }
+    queuePositionUpdate()
+  })
+
+  onCleanup(() => {
+    if (positionFrame !== undefined) cancelAnimationFrame(positionFrame)
+    resizeObserver?.disconnect()
+  })
+
+  function setViewport(el: HTMLDivElement) {
+    viewport = el
+    bindResizeObserver()
+    queuePositionUpdate()
+  }
+
+  function setContentRef(el: HTMLDivElement) {
+    content = el
+    bindResizeObserver()
+    queuePositionUpdate()
+  }
+
+  function setHeaderRef(id: HomeSessionGroup["id"], el: HTMLDivElement) {
+    headerRefs.set(id, el)
+    queuePositionUpdate()
+  }
+
+  function queuePositionUpdate() {
+    if (typeof requestAnimationFrame === "undefined") {
+      updatePositionCache()
+      return
+    }
+    if (positionFrame !== undefined) return
+    positionFrame = requestAnimationFrame(() => {
+      positionFrame = undefined
+      updatePositionCache()
+    })
+  }
+
+  function updatePositionCache() {
+    if (!viewport) return
+    groups().forEach((group) => {
+      const el = headerRefs.get(group.id)
+      if (!el) return
+      headerOffsets.set(group.id, el.offsetTop)
+    })
+    update(viewport.scrollTop)
+  }
+
+  function update(scrollTop: number) {
+    const items = groups()
+    items.forEach((group, index) => {
+      const nextOffset = items
+        .slice(index + 1)
+        .map((item) => headerOffsets.get(item.id))
+        .find((offset) => offset !== undefined)
+      const fadeEnd = HOME_SESSION_HEADER_STICKY_TOP + HOME_SESSION_HEADER_TEXT_HEIGHT
+      const nextTop = nextOffset === undefined ? undefined : nextOffset - scrollTop
+      const opacity =
+        nextTop === undefined ? 1 : Math.max(0, Math.min(1, (nextTop - fadeEnd) / HOME_SESSION_HEADER_FADE_DISTANCE))
+      setState("titleOpacity", group.id, Math.round(opacity * 1000) / 1000)
+    })
+  }
+
+  function titleOpacity(id: HomeSessionGroup["id"]) {
+    return state.titleOpacity[id] ?? 1
+  }
+
+  function bindResizeObserver() {
+    resizeObserver?.disconnect()
+    if (typeof ResizeObserver === "undefined") return
+    resizeObserver = new ResizeObserver(() => queuePositionUpdate())
+    if (viewport) resizeObserver.observe(viewport)
+    if (content) resizeObserver.observe(content)
+  }
+
+  return { setViewport, setContentRef, setHeaderRef, update, titleOpacity }
 }
 
 export function NewHome() {
@@ -223,6 +328,7 @@ export function NewHome() {
   })
   const searchOpen = createMemo(() => state.searchFocused && search().length > 0)
   const groups = createMemo(() => groupSessions(records(), language))
+  const sessionHeaderOpacity = useHomeSessionHeaderOpacity(groups)
   const prefetched = new Set<string>()
 
   createEffect(() => {
@@ -435,7 +541,7 @@ export function NewHome() {
         />
 
         <section
-          class="min-h-0 min-w-0 flex-1 flex flex-col pt-6 lg:pt-12"
+          class="min-h-0 min-w-0 flex-1 flex flex-col pt-6 lg:pt-12 relative"
           aria-label={language.t("sidebar.project.recentSessions")}
         >
           <HomeSessionSearch
@@ -456,7 +562,25 @@ export function NewHome() {
             onClose={closeSearch}
             onSelect={selectSearchSession}
           />
-          <ScrollView class="mt-3 -mr-3 min-h-0 flex-1">
+          <ScrollView
+            class="mt-3 -mr-3 min-h-0 flex-1 relative"
+            viewportRef={sessionHeaderOpacity.setViewport}
+            onScroll={(event) => sessionHeaderOpacity.update(event.currentTarget.scrollTop)}
+          >
+            <Show when={groups().length > 0 && newSessionProject()}>
+              <div class="pointer-events-none absolute top-3 right-3 z-20 flex">
+                <ButtonV2
+                  data-action="home-new-session"
+                  variant="ghost-muted"
+                  size="normal"
+                  icon="edit"
+                  class="pointer-events-auto h-7 px-2 [font-weight:530]"
+                  onClick={openNewSession}
+                >
+                  {language.t("command.session.new")}
+                </ButtonV2>
+              </div>
+            </Show>
             <Show
               when={!sessionLoad.isLoading}
               fallback={
@@ -469,15 +593,19 @@ export function NewHome() {
                 when={groups().length > 0}
                 fallback={<HomeSessionsEmpty onNewSession={newSessionProject() ? openNewSession : undefined} />}
               >
-                <div class="flex flex-col gap-6 pt-3 pr-3 pb-16">
+                <div ref={sessionHeaderOpacity.setContentRef} class="flex flex-col pt-3 pr-3 pb-16">
                   <For each={groups()}>
                     {(group, index) => (
-                      <div class="flex min-w-0 flex-col gap-4">
+                      <>
                         <HomeSessionGroupHeader
                           title={group.title}
-                          onNewSession={index() === 0 && newSessionProject() ? openNewSession : undefined}
+                          titleOpacity={sessionHeaderOpacity.titleOpacity(group.id)}
+                          ref={(el) => sessionHeaderOpacity.setHeaderRef(group.id, el)}
+                          elevated={index() === 0}
                         />
-                        <div class="flex min-w-0 flex-col gap-px">
+                        <div
+                          class={`flex min-w-0 flex-col gap-px pt-4 ${index() === groups().length - 1 ? "" : "mb-6"}`}
+                        >
                           <For each={group.sessions}>
                             {(record) => (
                               <HomeSessionRow
@@ -491,7 +619,7 @@ export function NewHome() {
                             )}
                           </For>
                         </div>
-                      </div>
+                      </>
                     )}
                   </For>
                 </div>
@@ -968,7 +1096,7 @@ function HomeSessionSearch(props: {
 
   return (
     <div class="w-full">
-      <div ref={root} data-component="home-session-search" class="relative z-10 w-full">
+      <div ref={root} data-component="home-session-search" class="relative z-30 w-full">
         <Show when={props.open}>
           <div
             data-component="home-session-search-panel"
@@ -1141,25 +1269,20 @@ function HomeSessionSearchResultRow(props: {
   )
 }
 
-function HomeSessionGroupHeader(props: { title: string; onNewSession?: () => void }) {
-  const language = useLanguage()
+function HomeSessionGroupHeader(props: {
+  title: string
+  titleOpacity: number
+  ref: ComponentProps<"div">["ref"]
+  elevated?: boolean
+}) {
   return (
-    <div class="flex h-7 min-w-0 items-center justify-between pl-3">
-      <div class={HOME_SECTION_LABEL}>{props.title}</div>
-      <Show when={props.onNewSession}>
-        {(onNewSession) => (
-          <ButtonV2
-            data-action="home-new-session"
-            variant="ghost-muted"
-            size="normal"
-            icon="edit"
-            class="h-7 px-2 [font-weight:530]"
-            onClick={onNewSession()}
-          >
-            {language.t("command.session.new")}
-          </ButtonV2>
-        )}
-      </Show>
+    <div
+      ref={props.ref}
+      class={`pointer-events-none sticky top-3 flex h-7 min-w-0 items-center justify-between pl-3 bg-v2-background-bg-base ${props.elevated ? "home-session-group-header z-[5]" : "z-10"}`}
+    >
+      <div class={HOME_SECTION_LABEL} style={{ opacity: props.titleOpacity }}>
+        {props.title}
+      </div>
     </div>
   )
 }
