@@ -44,5 +44,4 @@ describe("McpCatalog.convertTool", () => {
       content: [{ type: "text", text: JSON.stringify(structuredContent) }],
     })
   })
-
 })

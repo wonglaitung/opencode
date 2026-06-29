@@ -36,9 +36,7 @@ const appLayer = AppNodeBuilder.build(
   LayerNode.group([FSUtil.node, CrossSpawnSpawner.node, InstanceStore.node, Database.node, SessionNs.node]),
   [[InstanceStore.bootstrapNode, noopBootstrapLayer]],
 )
-const it = testEffect(
-  Layer.mergeAll(appLayer, httpApiLayer),
-)
+const it = testEffect(Layer.mergeAll(appLayer, httpApiLayer))
 
 const original = {
   OPENCODE_SERVER_PASSWORD: Flag.OPENCODE_SERVER_PASSWORD,

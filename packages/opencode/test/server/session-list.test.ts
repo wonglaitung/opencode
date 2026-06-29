@@ -14,10 +14,9 @@ import { testEffect } from "../lib/effect"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 
 const layer = (experimentalWorkspaces: boolean) =>
-  AppNodeBuilder.build(
-    LayerNode.group([Database.node, SessionNs.node, SessionProjector.node]),
-    [[RuntimeFlags.node, RuntimeFlags.layer({ experimentalWorkspaces })]],
-  )
+  AppNodeBuilder.build(LayerNode.group([Database.node, SessionNs.node, SessionProjector.node]), [
+    [RuntimeFlags.node, RuntimeFlags.layer({ experimentalWorkspaces })],
+  ])
 const it = testEffect(layer(false))
 const itWorkspaces = testEffect(layer(true))
 

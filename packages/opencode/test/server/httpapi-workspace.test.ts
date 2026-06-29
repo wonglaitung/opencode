@@ -26,19 +26,10 @@ import { httpApiLayer, requestInDirectory } from "./httpapi-layer"
 
 const originalWorkspaces = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
 const appLayer = AppNodeBuilder.build(
-  LayerNode.group([
-    Project.node,
-    Session.node,
-    Workspace.node,
-    InstanceStore.node,
-    Database.node,
-    Ripgrep.node,
-  ]),
+  LayerNode.group([Project.node, Session.node, Workspace.node, InstanceStore.node, Database.node, Ripgrep.node]),
   [[InstanceStore.bootstrapNode, InstanceBootstrap.node]],
 )
-const it = testEffect(
-  Layer.mergeAll(appLayer, httpApiLayer),
-)
+const it = testEffect(Layer.mergeAll(appLayer, httpApiLayer))
 
 function request(path: string, directory: string, init: RequestInit = {}) {
   return requestInDirectory(path, directory, init)

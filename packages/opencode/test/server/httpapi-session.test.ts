@@ -58,9 +58,7 @@ const httpApiLayer = servedRoutes.pipe(
   Layer.provideMerge(NodeHttpServer.layerTest),
   Layer.provideMerge(NodeServices.layer),
 )
-const it = testEffect(
-  Layer.mergeAll(appLayer, httpApiLayer),
-)
+const it = testEffect(Layer.mergeAll(appLayer, httpApiLayer))
 
 function pathFor(path: string, params: Record<string, string>) {
   return Object.entries(params).reduce((result, [key, value]) => result.replace(`:${key}`, value), path)

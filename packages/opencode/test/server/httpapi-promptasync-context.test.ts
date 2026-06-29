@@ -49,14 +49,7 @@ const testStateLayer = Layer.effectDiscard(
 
 const workspaceLayer = workspaceLayerWithRuntimeFlags({ experimentalWorkspaces: true })
 
-const it = testEffect(
-  Layer.mergeAll(
-    testStateLayer,
-    NodeHttpServer.layerTest,
-    NodeServices.layer,
-    workspaceLayer,
-  ),
-)
+const it = testEffect(Layer.mergeAll(testStateLayer, NodeHttpServer.layerTest, NodeServices.layer, workspaceLayer))
 
 const instanceContextTestLayer = Layer.mergeAll(
   instanceContextLayer,
