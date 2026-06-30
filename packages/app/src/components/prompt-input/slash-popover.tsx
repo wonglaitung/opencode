@@ -7,7 +7,15 @@ import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
 
 export type AtOption =
   | { type: "agent"; name: string; display: string }
-  | { type: "resource"; name: string; uri: string; client: string; display: string; description?: string; mime?: string }
+  | {
+      type: "resource"
+      name: string
+      uri: string
+      client: string
+      display: string
+      description?: string
+      mime?: string
+    }
   | { type: "reference"; name: string; path: string; display: string; description: string }
   | { type: "file"; path: string; display: string; recent?: boolean }
 
