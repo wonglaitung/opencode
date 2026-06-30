@@ -309,12 +309,12 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                             <PromptHistoryProvider>
                                                               <PromptRefProvider>
                                                                 <EditorContextProvider>
-                                                                <LocationProvider>
-                                                                  <App
-                                                                    onSnapshot={input.onSnapshot}
-                                                                    pluginHost={input.pluginHost}
-                                                                  />
-                                                                </LocationProvider>
+                                                                  <LocationProvider>
+                                                                    <App
+                                                                      onSnapshot={input.onSnapshot}
+                                                                      pluginHost={input.pluginHost}
+                                                                    />
+                                                                  </LocationProvider>
                                                                 </EditorContextProvider>
                                                               </PromptRefProvider>
                                                             </PromptHistoryProvider>
