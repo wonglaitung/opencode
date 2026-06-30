@@ -664,6 +664,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       .map((agent): AtOption => ({ type: "agent", name: agent.name, display: agent.name })),
   )
 
+  const mcpResourceList = createMemo(() =>
+    Object.values(sync().data.mcp_resource).map(
+      (resource): AtOption => ({
+        type: "resource",
+        name: resource.name,
+        uri: resource.uri,
+        client: resource.client,
+        display: resource.name,
+        description: resource.description,
+        mime: resource.mimeType,
+      }),
+    ),
+  )
+
   const handleAtSelect = (option: AtOption | undefined) => {
     if (!option) return
     if (option.type === "agent") {
@@ -682,6 +696,25 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       })
       return
     }
+    if (option.type === "resource") {
+      addPart({
+        type: "file",
+        path: option.uri,
+        content: "@" + option.name,
+        start: 0,
+        end: 0,
+        mime: option.mime ?? "text/plain",
+        filename: option.name,
+        url: option.uri,
+        source: {
+          type: "resource",
+          text: { value: "@" + option.name, start: 0, end: 0 },
+          clientName: option.client,
+          uri: option.uri,
+        },
+      })
+      return
+    }
     addPart({ type: "file", path: option.path, content: "@" + option.path, start: 0, end: 0 })
   }
 
@@ -689,6 +722,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!x) return ""
     if (x.type === "agent") return `agent:${x.name}`
     if (x.type === "reference") return `reference:${x.name}`
+    if (x.type === "resource") return `resource:${x.client}:${x.uri}`
     return `file:${x.path}`
   }
 
@@ -702,15 +736,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     items: async (query) => {
       const references = referenceList()
       const agents = agentList()
+      const mcpResources = mcpResourceList()
       const open = recent()
       const seen = new Set(open)
       const pinned: AtOption[] = open.map((path) => ({ type: "file", path, display: path, recent: true }))
-      if (!query.trim()) return [...references, ...agents, ...pinned]
+      if (!query.trim()) return [...references, ...agents, ...mcpResources, ...pinned]
       const paths = await files.searchFilesAndDirectories(query)
       const fileOptions: AtOption[] = paths
         .filter((path) => !seen.has(path))
         .map((path) => ({ type: "file", path, display: path }))
-      return [...references, ...agents, ...pinned, ...fileOptions]
+      return [...references, ...agents, ...mcpResources, ...pinned, ...fileOptions]
     },
     key: atKey,
     filterKeys: ["display"],
@@ -718,6 +753,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     groupBy: (item) => {
       if (item.type === "reference") return "reference"
       if (item.type === "agent") return "agent"
+      if (item.type === "resource") return "resource"
       if (item.recent) return "recent"
       return "file"
     },
@@ -725,8 +761,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const rank = (category: string) => {
         if (category === "reference") return 0
         if (category === "agent") return 1
-        if (category === "recent") return 2
-        return 3
+        if (category === "resource") return 2
+        if (category === "recent") return 3
+        return 4
       }
       return rank(a.category) - rank(b.category)
     },
@@ -796,6 +833,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       pill.setAttribute("data-path", part.path)
       if (part.mime) pill.setAttribute("data-mime", part.mime)
       if (part.filename) pill.setAttribute("data-filename", part.filename)
+      if (part.url) pill.setAttribute("data-url", part.url)
+      if (part.source?.type === "resource") {
+        pill.setAttribute("data-source-type", part.source.type)
+        pill.setAttribute("data-source-client-name", part.source.clientName)
+        pill.setAttribute("data-source-uri", part.source.uri)
+      }
     }
     if (part.type === "agent") pill.setAttribute("data-name", part.name)
     pill.setAttribute("contenteditable", "false")
@@ -911,6 +954,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     const pushFile = (file: HTMLElement) => {
       const content = file.textContent ?? ""
+      const source =
+        file.dataset.sourceType === "resource" && file.dataset.sourceClientName && file.dataset.sourceUri
+          ? {
+              type: "resource" as const,
+              text: {
+                value: content,
+                start: position,
+                end: position + content.length,
+              },
+              clientName: file.dataset.sourceClientName,
+              uri: file.dataset.sourceUri,
+            }
+          : undefined
       parts.push({
         type: "file",
         path: file.dataset.path!,
@@ -919,6 +975,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         end: position + content.length,
         ...(file.dataset.mime ? { mime: file.dataset.mime } : {}),
         ...(file.dataset.filename ? { filename: file.dataset.filename } : {}),
+        ...(file.dataset.url ? { url: file.dataset.url } : {}),
+        ...(source ? { source } : {}),
       })
       position += content.length
     }
