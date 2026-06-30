@@ -75,7 +75,9 @@ const providerInfo: Provider.Info = {
 
 const it = testEffect(
   LLMClient.layer.pipe(
-    Layer.provide(Layer.mergeAll(RequestExecutor.layer.pipe(Layer.provide(FetchHttpClient.layer)), WebSocketExecutor.layer)),
+    Layer.provide(
+      Layer.mergeAll(RequestExecutor.layer.pipe(Layer.provide(FetchHttpClient.layer)), WebSocketExecutor.layer),
+    ),
   ),
 )
 

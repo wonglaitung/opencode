@@ -601,9 +601,7 @@ const layer = Layer.effect(
                   }),
                 fallback: "",
                 response: "text",
-              }).pipe(
-                Effect.provide(AppNodeBuilderV1.build(InstanceStore.node)),
-              )
+              }).pipe(Effect.provide(AppNodeBuilderV1.build(InstanceStore.node)))
             : ""
 
         if (sourcePatch) {
@@ -619,9 +617,7 @@ const layer = Layer.effect(
                 body: HttpBody.jsonUnsafe({ patch: sourcePatch }),
               }),
             fallback: { applied: false },
-          }).pipe(
-            Effect.provide(AppNodeBuilderV1.build(InstanceStore.node)),
-          )
+          }).pipe(Effect.provide(AppNodeBuilderV1.build(InstanceStore.node)))
         }
 
         if (input.workspaceID === null) {
