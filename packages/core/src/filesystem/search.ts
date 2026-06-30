@@ -230,7 +230,11 @@ export const fffLayer = Layer.effect(
   }),
 )
 
-const layer = Layer.unwrap(Effect.sync(() => (Flag.OPENCODE_DISABLE_FFF || !Fff.available() ? ripgrepLayer : fffLayer)))
+const isNodeRuntime = () => process.versions.bun === undefined
+
+const layer = Layer.unwrap(
+  Effect.sync(() => (Flag.OPENCODE_DISABLE_FFF || isNodeRuntime() || !Fff.available() ? ripgrepLayer : fffLayer)),
+)
 
 export const locationLayer = layer
 
