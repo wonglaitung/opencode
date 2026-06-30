@@ -206,6 +206,8 @@ export const cleanupLayer = Layer.effectDiscard(
   }),
 )
 
-export const defaultCleanupLayer = Layer.merge(defaultLayer, cleanupLayer.pipe(Layer.provide(defaultLayer)))
-
-export const cleanupNode = makeGlobalNode({ name: "tool-output-cleanup", layer: defaultCleanupLayer, deps: [] })
+export const cleanupNode = makeGlobalNode({
+  name: "tool-output-cleanup",
+  layer: Layer.merge(layer, cleanupLayer.pipe(Layer.provide(layer))),
+  deps: [FSUtil.node, Global.node],
+})
