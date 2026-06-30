@@ -150,7 +150,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Wo
 
 export const use = serviceUse(Service)
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const auth = yield* Auth.Service
@@ -891,19 +891,6 @@ export const layer = Layer.effect(
       startWorkspaceSyncing,
     })
   }),
-)
-
-export const defaultLayer = layer.pipe(
-  Layer.provide(Auth.defaultLayer),
-  Layer.provide(Session.defaultLayer),
-  Layer.provide(SessionPrompt.defaultLayer),
-  Layer.provide(Project.defaultLayer),
-  Layer.provide(Vcs.defaultLayer),
-  Layer.provide(FSUtil.defaultLayer),
-  Layer.provide(Database.defaultLayer),
-  Layer.provide(EventV2Bridge.defaultLayer),
-  Layer.provide(FetchHttpClient.layer),
-  Layer.provide(RuntimeFlags.defaultLayer),
 )
 
 const TIMEOUT = 5000
