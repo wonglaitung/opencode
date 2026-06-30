@@ -71,12 +71,16 @@ const withPlatform = <A, E, R>(platform: typeof process.platform, self: Effect.E
 
 const getTuiConfig = (directory: string) =>
   TuiConfig.Service.use((svc) => svc.get()).pipe(
-    Effect.provide(AppNodeBuilder.build(TuiConfig.node).pipe(Layer.provide(Layer.succeed(CurrentWorkingDirectory, directory)))),
+    Effect.provide(
+      AppNodeBuilder.build(TuiConfig.node).pipe(Layer.provide(Layer.succeed(CurrentWorkingDirectory, directory))),
+    ),
   )
 
 const getTuiPluginOrigins = (directory: string) =>
   TuiConfig.Service.use((svc) => svc.pluginOrigins()).pipe(
-    Effect.provide(AppNodeBuilder.build(TuiConfig.node).pipe(Layer.provide(Layer.succeed(CurrentWorkingDirectory, directory)))),
+    Effect.provide(
+      AppNodeBuilder.build(TuiConfig.node).pipe(Layer.provide(Layer.succeed(CurrentWorkingDirectory, directory))),
+    ),
   )
 
 it.instance("keeps server and tui plugin merge semantics aligned", () =>

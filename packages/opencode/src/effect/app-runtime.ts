@@ -108,10 +108,7 @@ export const AppLayer = AppNodeBuilder.build(
     SessionShare.node,
   ]),
   [[InstanceStore.bootstrapNode, InstanceBootstrap.node]],
-).pipe(
-  Layer.provideMerge(AppNodeBuilder.build(Ripgrep.node)),
-  Layer.provideMerge(Observability.layer),
-)
+).pipe(Layer.provideMerge(AppNodeBuilder.build(Ripgrep.node)), Layer.provideMerge(Observability.layer))
 
 const rt = ManagedRuntime.make(AppLayer, { memoMap })
 type Runtime = Pick<typeof rt, "runSync" | "runPromise" | "runPromiseExit" | "runFork" | "runCallback" | "dispose">

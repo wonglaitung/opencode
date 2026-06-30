@@ -577,20 +577,17 @@ function makeSessionService() {
 
 function makeDirectoryService(sdk: OpencodeClient) {
   return ManagedRuntime.make(
-    AppNodeBuilder.build(
-      Directory.node,
+    AppNodeBuilder.build(Directory.node, [
       [
-        [
-          Directory.loaderNode,
-          Layer.succeed(
-            Directory.Loader,
-            Directory.Loader.of({
-              load: (directory) => request(() => loadDirectorySnapshot(sdk, directory), "directory"),
-            }),
-          ),
-        ],
+        Directory.loaderNode,
+        Layer.succeed(
+          Directory.Loader,
+          Directory.Loader.of({
+            load: (directory) => request(() => loadDirectorySnapshot(sdk, directory), "directory"),
+          }),
+        ),
       ],
-    ),
+    ]),
   ).runSync(Directory.Service.use((service) => Effect.succeed(service)))
 }
 
