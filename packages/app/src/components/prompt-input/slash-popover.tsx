@@ -7,6 +7,7 @@ import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
 
 export type AtOption =
   | { type: "agent"; name: string; display: string }
+  | { type: "reference"; name: string; path: string; display: string; description: string }
   | { type: "file"; path: string; display: string; recent?: boolean }
 
 export interface SlashCommand {
@@ -99,6 +100,23 @@ export const PromptPopover: Component<PromptPopoverProps> = (props) => {
                         >
                           @{item.name}
                         </span>
+                      </button>
+                    )
+                  }
+
+                  if (item.type === "reference") {
+                    return (
+                      <button
+                        class="w-full flex items-center gap-x-2 rounded-md px-2 py-0.5"
+                        classList={{ "bg-surface-raised-base-hover": props.atActive === key }}
+                        onClick={() => props.onAtSelect(item)}
+                        onMouseEnter={() => props.setAtActive(key)}
+                      >
+                        <FileIcon node={{ path: item.path, type: "directory" }} class="shrink-0 size-4" />
+                        <div class="flex items-center text-14-regular min-w-0">
+                          <span class="text-text-strong whitespace-nowrap">@{item.name}</span>
+                          <span class="text-text-weak whitespace-nowrap truncate min-w-0 ml-2">{item.description}</span>
+                        </div>
                       </button>
                     )
                   }
