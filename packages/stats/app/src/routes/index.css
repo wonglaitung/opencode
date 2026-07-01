@@ -3827,15 +3827,24 @@
   background: var(--stats-bar-idle);
 }
 
-[data-page="stats"] [data-component="lab-related-card"][data-tone="high"] [data-slot="lab-related-usage"] b[data-active="true"] {
+[data-page="stats"]
+  [data-component="lab-related-card"][data-tone="high"]
+  [data-slot="lab-related-usage"]
+  b[data-active="true"] {
   background: #198b43;
 }
 
-[data-page="stats"] [data-component="lab-related-card"][data-tone="mid"] [data-slot="lab-related-usage"] b[data-active="true"] {
+[data-page="stats"]
+  [data-component="lab-related-card"][data-tone="mid"]
+  [data-slot="lab-related-usage"]
+  b[data-active="true"] {
   background: #d69a00;
 }
 
-[data-page="stats"] [data-component="lab-related-card"][data-tone="low"] [data-slot="lab-related-usage"] b[data-active="true"] {
+[data-page="stats"]
+  [data-component="lab-related-card"][data-tone="low"]
+  [data-slot="lab-related-usage"]
+  b[data-active="true"] {
   background: #b82d35;
 }
 
