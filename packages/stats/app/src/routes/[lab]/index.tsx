@@ -42,6 +42,14 @@ const getLabData = query(async (lab: string) => {
   return runStatsEffect(getStatsLabData(lab))
 }, "getStatsLabData")
 
+type LabModelTooltipState = {
+  model: ModelCatalogEntry
+  placement: "left" | "right"
+  usage: LabUsageModelEntry | undefined
+  x: number
+  y: number
+}
+
 export default function StatsLab() {
   const i18n = useI18n()
   const language = useLanguage()
@@ -478,52 +486,168 @@ function LabUsageSection(props: { lab: ModelCatalogLab; data: StatsLabData | nul
 
 function LabModelsSection(props: { lab: ModelCatalogLab; usage: LabUsageModelEntry[] }) {
   const i18n = useI18n()
+  const [activeTooltip, setActiveTooltip] = createSignal<LabModelTooltipState>()
   const usageBySlug = createMemo(() => new Map(props.usage.map((item) => [item.slug, item])))
   return (
-    <section id="models" data-section="model-panel">
-      <SectionHeading
-        href="#models"
-        title={i18n.t("lab.modelsTitle", { lab: props.lab.name })}
-        description={i18n.t("lab.recentUsageAndLimits")}
-      />
-      <div data-component="lab-model-grid">
-        <For each={props.lab.models}>
-          {(model) => <LabModelCard model={model} usage={usageBySlug().get(model.slug)} />}
-        </For>
+    <section id="models" data-section="model-panel" data-variant="lab-models">
+      <div data-slot="lab-model-heading">
+        <SectionHeading href="#models" title={i18n.t("nav.models")} description={i18n.t("lab.recentUsageAndLimits")} />
+        <button data-slot="lab-model-compare" type="button" aria-label="Compare models" hidden>
+          <span data-slot="lab-model-compare-icon" aria-hidden="true" />
+          <span>Compare</span>
+        </button>
       </div>
+      <div data-slot="lab-model-pattern" aria-hidden="true" />
+      <div data-component="lab-model-table" role="table" aria-label={i18n.t("lab.modelsTitle", { lab: props.lab.name })}>
+        <div data-slot="lab-model-table-track">
+          <div data-slot="lab-model-table-head" role="row">
+            <span data-column="model" role="columnheader">
+              {i18n.t("nav.models")}
+            </span>
+            <span data-column="usage" role="columnheader">
+              {i18n.t("lab.usage")}
+            </span>
+            <span data-column="share" role="columnheader">
+              {i18n.t("lab.share")}
+            </span>
+            <span data-column="context" role="columnheader">
+              {i18n.t("model.context")}
+            </span>
+            <span data-column="output" role="columnheader">
+              {i18n.t("model.output")}
+            </span>
+            <span data-column="release" role="columnheader">
+              {i18n.t("model.release")}
+            </span>
+          </div>
+          <For each={props.lab.models}>
+            {(model) => (
+              <LabModelRow
+                model={model}
+                usage={usageBySlug().get(model.slug)}
+                onTooltipChange={setActiveTooltip}
+              />
+            )}
+          </For>
+        </div>
+      </div>
+      <Show when={activeTooltip()} keyed>
+        {(state) => <LabModelTooltip state={state} />}
+      </Show>
     </section>
   )
 }
 
-function LabModelCard(props: { model: ModelCatalogEntry; usage: LabUsageModelEntry | undefined }) {
+function LabModelRow(props: {
+  model: ModelCatalogEntry
+  onTooltipChange: (state: LabModelTooltipState | undefined) => void
+  usage: LabUsageModelEntry | undefined
+}) {
   const i18n = useI18n()
   const language = useLanguage()
+  const showTooltip = (x: number, y: number) => {
+    const viewportWidth = typeof window === "undefined" ? 0 : window.innerWidth
+    const viewportHeight = typeof window === "undefined" ? 0 : window.innerHeight
+    props.onTooltipChange({
+      model: props.model,
+      placement: viewportWidth > 0 && x > viewportWidth - 280 ? "left" : "right",
+      usage: props.usage,
+      x,
+      y: viewportHeight > 0 ? Math.min(Math.max(y, 96), viewportHeight - 128) : y,
+    })
+  }
+  const showPointerTooltip: JSX.EventHandler<HTMLAnchorElement, PointerEvent> = (event) => {
+    if (event.pointerType === "touch") return
+    showTooltip(event.clientX, event.clientY)
+  }
+  const showFocusTooltip: JSX.EventHandler<HTMLAnchorElement, FocusEvent> = (event) => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    showTooltip(rect.left + rect.width * 0.58, rect.top + rect.height / 2)
+  }
   return (
-    <a data-component="lab-model-card" href={language.route(`${import.meta.env.BASE_URL}${props.model.id}`)}>
-      <strong>{props.model.name}</strong>
-      <div data-slot="lab-model-card-meta">
+    <a
+      data-component="lab-model-row"
+      href={language.route(`${import.meta.env.BASE_URL}${props.model.id}`)}
+      role="row"
+      aria-label={props.model.name}
+      onBlur={() => props.onTooltipChange(undefined)}
+      onFocus={showFocusTooltip}
+      onPointerEnter={showPointerTooltip}
+      onPointerLeave={(event) => {
+        if (event.pointerType === "touch") return
+        props.onTooltipChange(undefined)
+      }}
+      onPointerMove={showPointerTooltip}
+    >
+      <span data-slot="lab-model-cell" data-column="model" role="cell">
+        <span data-slot="lab-model-avatar" aria-hidden="true">
+          <ProviderIcon id={getProviderIconId(props.model.lab)} />
+        </span>
+        <strong>{props.model.name}</strong>
+      </span>
+      <span data-slot="lab-model-cell" data-column="usage" role="cell">
+        {props.usage ? formatTokens(props.usage.tokens) : "-"}
+      </span>
+      <span data-slot="lab-model-cell" data-column="share" role="cell">
+        {props.usage ? formatPercent(props.usage.share) : "-"}
+      </span>
+      <span data-slot="lab-model-cell" data-column="context" role="cell">
+        {formatCatalogLimit(props.model.limit?.context, i18n.t("home.unknown"))}
+      </span>
+      <span data-slot="lab-model-cell" data-column="output" role="cell">
+        {formatCatalogLimit(props.model.limit?.output, i18n.t("home.unknown"))}
+      </span>
+      <span data-slot="lab-model-cell" data-column="release" role="cell">
+        {formatCatalogDate(props.model.releaseDate, language.tag(language.locale()), i18n.t("home.unknown"))}
+      </span>
+    </a>
+  )
+}
+
+function LabModelTooltip(props: { state: LabModelTooltipState }) {
+  const i18n = useI18n()
+  return (
+    <div
+      data-component="lab-model-tooltip"
+      data-placement={props.state.placement}
+      style={
+        {
+          "--lab-model-tooltip-x": `${props.state.x}px`,
+          "--lab-model-tooltip-y": `${props.state.y}px`,
+        } as JSX.CSSProperties
+      }
+    >
+      <div data-slot="lab-model-tooltip-summary">
+        <div data-slot="lab-model-tooltip-head">
+          <span data-slot="lab-model-tooltip-avatar" aria-hidden="true">
+            <ProviderIcon id={getProviderIconId(props.state.model.lab)} />
+          </span>
+          <strong>{props.state.model.name}</strong>
+        </div>
         <p>
-          <b>{i18n.t("lab.usage")}</b>
-          <em>{props.usage ? formatTokens(props.usage.tokens) : "—"}</em>
-        </p>
-        <p>
-          <b>{i18n.t("lab.share")}</b>
-          <em>{props.usage ? formatPercent(props.usage.share) : "—"}</em>
-        </p>
-        <p>
-          <b>{i18n.t("model.context")}</b>
-          <em>{formatCatalogLimit(props.model.limit?.context, i18n.t("home.unknown"))}</em>
-        </p>
-        <p>
-          <b>{i18n.t("model.output")}</b>
-          <em>{formatCatalogLimit(props.model.limit?.output, i18n.t("home.unknown"))}</em>
-        </p>
-        <p>
-          <b>{i18n.t("model.release")}</b>
-          <em>{formatCatalogDate(props.model.releaseDate, language.tag(language.locale()), i18n.t("home.unknown"))}</em>
+          Recent OpenCode Go usage, share, context, and output limits.
         </p>
       </div>
-    </a>
+      <div data-slot="tooltip-divider" />
+      <div data-slot="lab-model-tooltip-metrics">
+        <p>
+          <span>{i18n.t("lab.usage")}</span>
+          <b>{props.state.usage ? formatTokens(props.state.usage.tokens) : "-"}</b>
+        </p>
+        <p>
+          <span>{i18n.t("lab.share")}</span>
+          <b>{props.state.usage ? formatPercent(props.state.usage.share) : "-"}</b>
+        </p>
+        <p>
+          <span>{i18n.t("model.context")}</span>
+          <b>{formatCatalogLimit(props.state.model.limit?.context, i18n.t("home.unknown"))}</b>
+        </p>
+        <p>
+          <span>{i18n.t("model.output")}</span>
+          <b>{formatCatalogLimit(props.state.model.limit?.output, i18n.t("home.unknown"))}</b>
+        </p>
+      </div>
+    </div>
   )
 }
 

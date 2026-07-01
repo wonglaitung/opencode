@@ -3299,68 +3299,360 @@
   color: #b82d35;
 }
 
-[data-page="stats"] [data-component="lab-model-grid"] {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+[data-page="stats"] [data-section="model-panel"][data-variant="lab-models"] {
+  overflow: hidden;
 }
 
-[data-page="stats"] [data-component="lab-model-card"] {
+[data-page="stats"] [data-slot="lab-model-heading"] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 40px;
+  min-height: 42px;
+  margin-bottom: 40px;
+}
+
+[data-page="stats"] [data-slot="lab-model-heading"] [data-slot="section-title"] {
+  min-width: 0;
+  margin: 0;
+}
+
+[data-page="stats"] [data-slot="lab-model-compare"] {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  gap: 8px;
+  height: 32px;
+  padding: 0 12px 0 8px;
+  border: 0;
+  border-radius: 0;
+  color: var(--stats-text);
+  background: var(--stats-bg);
+  box-shadow:
+    0 0 0 0.5px var(--stats-line-strong),
+    0 1px 1.5px #0000001a;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 14px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+[data-page="stats"] [data-slot="lab-model-compare"][hidden] {
+  display: none;
+}
+
+[data-page="stats"] [data-slot="lab-model-compare"]::before {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 16px;
+  pointer-events: none;
+  content: "";
+  background: linear-gradient(180deg, #ffffff00 0%, #ffffff16 100%);
+}
+
+[data-page="stats"] [data-slot="lab-model-compare"] span {
+  position: relative;
+  z-index: 1;
+}
+
+[data-page="stats"] [data-slot="lab-model-compare-icon"] {
+  width: 16px;
+  height: 16px;
+  color: var(--stats-muted);
+  background:
+    linear-gradient(currentColor 0 0) 3px 3px / 3px 3px no-repeat,
+    linear-gradient(currentColor 0 0) 10px 3px / 3px 3px no-repeat,
+    linear-gradient(currentColor 0 0) 3px 10px / 3px 3px no-repeat,
+    linear-gradient(currentColor 0 0) 10px 10px / 3px 3px no-repeat;
+}
+
+[data-page="stats"] [data-slot="lab-model-compare"]:hover,
+[data-page="stats"] [data-slot="lab-model-compare"]:focus-visible {
+  color: var(--stats-text);
+  outline: none;
+  box-shadow:
+    0 0 0 0.5px var(--stats-text),
+    0 1px 1.5px #0000001a;
+}
+
+[data-page="stats"] [data-slot="lab-model-pattern"] {
+  height: 16px;
+  margin-bottom: 40px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--stats-text) 10%, transparent);
+  mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
+  mask-position: center top;
+  mask-repeat: repeat;
+  mask-size: 6px 6px;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
+  -webkit-mask-position: center top;
+  -webkit-mask-repeat: repeat;
+  -webkit-mask-size: 6px 6px;
+}
+
+[data-page="stats"] [data-component="lab-model-table"] {
+  --lab-model-row-bleed: 16px;
+  box-sizing: border-box;
+  width: calc(100% + 32px);
+  margin-inline: -16px;
+  padding-inline: 16px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+[data-page="stats"] [data-component="lab-model-table"]::-webkit-scrollbar {
+  display: none;
+}
+
+[data-page="stats"] [data-slot="lab-model-table-track"] {
+  --lab-model-column-template: 240px repeat(4, 200px) minmax(160px, 1fr);
+  --lab-model-table-width: 1200px;
   position: relative;
   display: grid;
-  align-content: space-between;
-  gap: 28px;
-  min-height: 220px;
-  padding: 16px;
-  overflow: hidden;
-  border: 1px solid var(--stats-line);
+  width: 100%;
+  min-width: var(--lab-model-table-width);
+}
+
+[data-page="stats"] [data-slot="lab-model-table-track"]::before {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  content: "";
+  background:
+    linear-gradient(var(--stats-line), var(--stats-line)) 240px 0 / 1px 100% no-repeat,
+    linear-gradient(var(--stats-line), var(--stats-line)) 440px 0 / 1px 100% no-repeat,
+    linear-gradient(var(--stats-line), var(--stats-line)) 640px 0 / 1px 100% no-repeat,
+    linear-gradient(var(--stats-line), var(--stats-line)) 840px 0 / 1px 100% no-repeat,
+    linear-gradient(var(--stats-line), var(--stats-line)) 1040px 0 / 1px 100% no-repeat;
+}
+
+[data-page="stats"] [data-slot="lab-model-table-head"],
+[data-page="stats"] [data-component="lab-model-row"] {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: var(--lab-model-column-template);
+}
+
+[data-page="stats"] [data-slot="lab-model-table-head"] {
+  align-items: start;
+  height: 20px;
+  margin-bottom: 20px;
+  color: var(--stats-muted);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  text-transform: uppercase;
+}
+
+[data-page="stats"] [data-slot="lab-model-table-head"] span,
+[data-page="stats"] [data-slot="lab-model-cell"] {
+  min-width: 0;
+}
+
+[data-page="stats"] [data-slot="lab-model-table-head"] span:not([data-column="model"]) {
+  padding-left: 40px;
+}
+
+[data-page="stats"] [data-component="lab-model-row"] {
+  align-items: center;
+  height: 64px;
   color: var(--stats-text);
+  text-decoration: none;
+  isolation: isolate;
+}
+
+[data-page="stats"] [data-component="lab-model-row"]::before {
+  position: absolute;
+  top: 8px;
+  right: calc(var(--lab-model-row-bleed) * -1);
+  bottom: 8px;
+  left: calc(var(--lab-model-row-bleed) * -1);
+  z-index: 0;
+  content: "";
+  background: transparent;
+  pointer-events: none;
+}
+
+[data-page="stats"] [data-component="lab-model-row"]:hover,
+[data-page="stats"] [data-component="lab-model-row"]:focus-visible {
+  color: var(--stats-text);
+  outline: none;
+  text-decoration: none;
+}
+
+[data-page="stats"] [data-component="lab-model-row"]:hover::before,
+[data-page="stats"] [data-component="lab-model-row"]:focus-visible::before {
   background: var(--stats-layer);
 }
 
-[data-page="stats"] [data-component="lab-model-card"]:hover,
-[data-page="stats"] [data-component="lab-model-card"]:focus-visible {
+[data-page="stats"] [data-slot="lab-model-cell"] {
+  position: relative;
   z-index: 1;
-  border-color: var(--stats-text);
-  outline: none;
-}
-
-[data-page="stats"] [data-component="lab-model-card"] > strong {
-  align-self: start;
-  min-width: 0;
-  color: var(--stats-text);
-  font-size: 24px;
-  font-weight: 500;
-  line-height: 1.05;
-  letter-spacing: 0;
-  overflow-wrap: anywhere;
-}
-
-[data-page="stats"] [data-slot="lab-model-card-meta"] {
-  display: grid;
-  gap: 8px;
-}
-
-[data-page="stats"] [data-slot="lab-model-card-meta"] p {
   display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  margin: 0;
-  padding-top: 8px;
-  border-top: 1px solid var(--stats-line);
-  color: var(--stats-muted);
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1.3;
-}
-
-[data-page="stats"] [data-slot="lab-model-card-meta"] b,
-[data-page="stats"] [data-slot="lab-model-card-meta"] em {
-  font: inherit;
-}
-
-[data-page="stats"] [data-slot="lab-model-card-meta"] em {
+  align-items: center;
+  height: 24px;
   color: var(--stats-text);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 24px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-slot="lab-model-cell"][data-column="model"] {
+  gap: 16px;
+}
+
+[data-page="stats"] [data-slot="lab-model-cell"]:not([data-column="model"]):not([data-column="release"]) {
+  justify-content: flex-end;
+  padding-right: 40px;
+  text-align: right;
+}
+
+[data-page="stats"] [data-slot="lab-model-cell"][data-column="release"] {
+  padding-left: 40px;
+}
+
+[data-page="stats"] [data-slot="lab-model-avatar"] {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  color: #ffffff;
+  background: var(--stats-accent-text);
+  box-shadow: inset 0 0 0 1px #0000001a;
+}
+
+[data-page="stats"] [data-slot="lab-model-avatar"] svg {
+  width: 15px;
+  height: 15px;
+}
+
+[data-page="stats"] [data-slot="lab-model-cell"] strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--stats-text);
+  font-size: inherit;
+  font-weight: 500;
+  line-height: inherit;
+  text-overflow: ellipsis;
+}
+
+[data-page="stats"] [data-component="lab-model-tooltip"] {
+  position: fixed;
+  top: var(--lab-model-tooltip-y);
+  left: var(--lab-model-tooltip-x);
+  z-index: 40;
+  width: 240px;
+  color: var(--stats-text);
+  background: var(--stats-bg);
+  border: 1px solid var(--stats-line);
+  box-shadow: 0 12px 24px #0000001f;
+  pointer-events: none;
+  transform: translate(12px, -50%);
+}
+
+[data-page="stats"] [data-component="lab-model-tooltip"][data-placement="left"] {
+  transform: translate(calc(-100% - 12px), -50%);
+}
+
+[data-page="stats"] [data-slot="lab-model-tooltip-summary"] {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px;
+}
+
+[data-page="stats"] [data-slot="lab-model-tooltip-head"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+[data-page="stats"] [data-slot="lab-model-tooltip-avatar"] {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  color: #ffffff;
+  background: var(--stats-accent-text);
+  box-shadow: inset 0 0 0 1px #0000001a;
+}
+
+[data-page="stats"] [data-slot="lab-model-tooltip-avatar"] svg {
+  width: 12px;
+  height: 12px;
+}
+
+[data-page="stats"] [data-slot="lab-model-tooltip-head"] strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--stats-text);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 17px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-slot="lab-model-tooltip-summary"] > p {
+  margin: 0;
+  color: var(--stats-muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 17px;
+}
+
+[data-page="stats"] [data-component="lab-model-tooltip"] [data-slot="tooltip-divider"] {
+  height: 0.5px;
+  background: var(--stats-line);
+}
+
+[data-page="stats"] [data-slot="lab-model-tooltip-metrics"] {
+  display: grid;
+  padding: 12px;
+}
+
+[data-page="stats"] [data-slot="lab-model-tooltip-metrics"] p {
+  display: grid;
+  grid-template-columns: minmax(0, 100px) minmax(0, 1fr);
+  align-items: center;
+  column-gap: 16px;
+  min-width: 0;
+  height: 17px;
+  margin: 0;
+  padding: 0;
+  color: var(--stats-muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 17px;
+}
+
+[data-page="stats"] [data-slot="lab-model-tooltip-metrics"] span,
+[data-page="stats"] [data-slot="lab-model-tooltip-metrics"] b {
+  min-width: 0;
+  overflow: hidden;
+  font: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-slot="lab-model-tooltip-metrics"] b {
+  color: var(--stats-text);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
   text-align: right;
 }
 
@@ -4525,6 +4817,25 @@
 
   [data-page="stats"] [data-slot="model-hero-copy"] p:not([data-slot="hero-meta"]) {
     font-size: 13px;
+  }
+
+  [data-page="stats"] [data-slot="lab-model-heading"] {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+
+  [data-page="stats"] [data-slot="lab-model-pattern"] {
+    margin-bottom: 32px;
+  }
+
+  [data-page="stats"] [data-component="lab-model-table"] {
+    --lab-model-row-bleed: 24px;
+    box-sizing: border-box;
+    width: calc(100% + 48px);
+    margin-inline: -24px;
+    padding-inline: 24px;
   }
 
   [data-page="stats"] [data-component="model-metric-grid"],
