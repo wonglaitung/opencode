@@ -347,13 +347,7 @@ export function ModelSelectorPopoverV2(props: {
   }
 
   return (
-    <MenuV2
-      open={store.open}
-      modal={false}
-      placement="top-start"
-      gutter={6}
-      onOpenChange={setOpen}
-    >
+    <MenuV2 open={store.open} modal={false} placement="top-start" gutter={6} onOpenChange={setOpen}>
       <MenuV2.Trigger as={props.triggerAs ?? "div"} {...props.triggerProps}>
         {props.children}
       </MenuV2.Trigger>

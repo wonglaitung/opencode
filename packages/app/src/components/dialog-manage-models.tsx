@@ -156,7 +156,10 @@ export const DialogManageModelsV2: Component = () => {
   return (
     <DialogV2 size="large" variant="settings" class="settings-v2-manage-models-dialog">
       <DialogHeader hideClose={true} closeLabel={language.t("common.close")}>
-        <DialogTitleGroup title={language.t("dialog.model.manage")} description={language.t("dialog.model.manage.description")} />
+        <DialogTitleGroup
+          title={language.t("dialog.model.manage")}
+          description={language.t("dialog.model.manage.description")}
+        />
         <ButtonV2 variant="neutral" icon="plus" onClick={handleConnectProvider}>
           {language.t("command.provider.connect")}
         </ButtonV2>
