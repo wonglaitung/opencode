@@ -202,9 +202,7 @@ function SessionErrorFallback(props: { error: unknown; sessionID?: string; serve
           <Show when={props.sessionID}>
             {(sessionID) => (
               <div class="max-w-full flex flex-col items-center gap-1">
-                <div class="max-w-full text-11-regular text-text-faint break-all">
-                  {displayServer()}
-                </div>
+                <div class="max-w-full text-11-regular text-text-faint break-all">{displayServer()}</div>
                 <code class="max-w-full rounded-[4px] px-1 py-0.5 font-mono text-xs font-medium leading-4 text-text-base break-all bg-[color-mix(in_oklch,var(--v2-text-text-base)_8%,transparent)]">
                   {sessionID()}
                 </code>
