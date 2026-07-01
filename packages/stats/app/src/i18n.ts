@@ -161,7 +161,7 @@ const en = {
   "lab.latestRelease": "Latest release {{date}}",
   "lab.shareOfUsage": "{{share}} of recent OpenCode usage",
   "lab.usageTitle": "{{lab}} token usage",
-  "lab.usageDescription": "Daily OpenCode token volume over the last two months.",
+  "lab.usageDescription": "Daily token volume.",
   "lab.noUsageTitle": "No usage yet",
   "lab.noUsageDescription": "Recent token usage appears here once this lab has activity.",
   "lab.dailyTokenChart": "{{lab}} daily token usage chart",

@@ -8,7 +8,7 @@ import {
   type StatsLabData,
 } from "@opencode-ai/stats-core/domain/home"
 import { createAsync, query, useParams } from "@solidjs/router"
-import { createMemo, createSignal, For, onMount, Show, type JSX } from "solid-js"
+import { createMemo, createSignal, createUniqueId, For, onMount, Show, type JSX } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
 import { LocaleLinks } from "../../component/locale-links"
 import { useI18n } from "../../context/i18n"
@@ -270,20 +270,58 @@ function LabOverviewMetric(props: { label: string; value: string }) {
 
 function LabUsageSection(props: { lab: ModelCatalogLab; data: StatsLabData | null }) {
   const i18n = useI18n()
+  const activeLineClipId = createUniqueId()
+  const activeLineMaskId = createUniqueId()
   const [activeIndex, setActiveIndex] = createSignal<number>()
   const usage = createMemo(() => props.data?.usage ?? [])
-  const max = createMemo(() => Math.max(0, ...usage().map((item) => item.tokens)) || 1)
+  const tokenMax = createMemo(() => Math.max(0, ...usage().map((item) => item.tokens)) || 1)
+  const userMax = createMemo(() => Math.max(0, ...usage().map((item) => item.users)) || 1)
+  const linePoints = createMemo(() =>
+    usage().map((point, index) => ({
+      point,
+      x: usagePointX(index, usage().length),
+      y: usageLineY(point.users, userMax()),
+    })),
+  )
+  const userLinePath = createMemo(() => usageLinePath(linePoints()))
+  const activeLineBreak = createMemo(() => {
+    const index = activeIndex()
+    if (index === undefined) return undefined
+    const points = linePoints()
+    if (points.length < 2) return undefined
+    return usageColumnBounds(index, points.length)
+  })
+  const activeLineClip = createMemo(() => {
+    const index = activeIndex()
+    if (index === undefined) return undefined
+    const points = linePoints()
+    if (points.length < 2) return undefined
+    return usageColumnInnerBounds(index, points.length)
+  })
+  const monthTicks = createMemo(() => labUsageMonthTicks(usage()))
   const activePoint = createMemo(() => {
     const index = activeIndex()
     if (index === undefined) return undefined
     return usage()[index]
+  })
+  const activeTooltip = createMemo(() => {
+    const index = activeIndex()
+    const point = activePoint()
+    if (index === undefined || !point) return undefined
+    const bounds = usageColumnBounds(index, usage().length)
+    return {
+      bounds,
+      index,
+      point,
+      userY: linePoints()[index]?.y ?? 100,
+    }
   })
 
   return (
     <section id="usage" data-section="model-panel">
       <SectionHeading
         href="#usage"
-        title={i18n.t("lab.usageTitle", { lab: props.lab.name })}
+        title={i18n.t("nav.usage")}
         description={i18n.t("lab.usageDescription")}
       />
       <Show
@@ -292,83 +330,143 @@ function LabUsageSection(props: { lab: ModelCatalogLab; data: StatsLabData | nul
       >
         <div
           data-component="model-usage-chart"
+          data-variant="lab-usage"
           data-dense-labels={isLabUsageDense(usage().length) ? "true" : undefined}
           role="img"
-          aria-label={i18n.t("lab.dailyTokenChart", { lab: props.lab.name })}
+          aria-label={`${props.lab.name} daily token volume and unique active user chart`}
           style={{ "--model-usage-count": usage().length } as JSX.CSSProperties}
           onPointerLeave={(event) => {
             if (event.pointerType === "touch") return
             setActiveIndex(undefined)
           }}
         >
-          <div data-slot="model-usage-axis" aria-hidden="true">
-            <For each={usage()}>
-              {(point, index) => (
-                <div
-                  data-active={activeIndex() === index() ? "true" : undefined}
-                  data-label-hidden={isLabUsageLabelHidden(index(), usage().length) ? "true" : undefined}
-                >
-                  <span data-slot="model-usage-label">
-                    <span data-slot="model-usage-total">{formatTokens(point.tokens)}</span>
-                    <span data-slot="model-usage-date">{point.date}</span>
-                  </span>
-                </div>
-              )}
-            </For>
-          </div>
-          <div data-slot="model-usage-bars">
-            <For each={usage()}>
-              {(point, index) => (
-                <div
-                  data-slot="model-usage-column"
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`${point.date} ${formatTokens(point.tokens)} ${i18n.t("lab.tokens")}`}
-                  data-active={activeIndex() === index() ? "true" : undefined}
-                  data-muted={activeIndex() !== undefined && activeIndex() !== index() ? "true" : undefined}
-                  onPointerDown={(event) => {
-                    if (event.pointerType !== "touch") return
-                    setActiveIndex(index())
-                  }}
-                  onPointerEnter={() => setActiveIndex(index())}
-                  onPointerMove={(event) => {
-                    if (event.pointerType === "touch") return
-                    setActiveIndex(index())
-                  }}
-                  onClick={() => setActiveIndex(index())}
-                  onFocus={() => setActiveIndex(index())}
-                  onBlur={() => setActiveIndex(undefined)}
-                  onKeyDown={(event) => {
-                    if (event.key !== "Enter" && event.key !== " ") return
-                    event.preventDefault()
-                    setActiveIndex(index())
-                  }}
-                >
-                  <div
-                    data-slot="model-usage-bar"
-                    style={{ "--model-usage-fill": `${usageHeight(point.tokens, max())}%` } as JSX.CSSProperties}
-                  />
-                  <Show when={activeIndex() === index() && activePoint()}>
-                    {(active) => (
-                      <div
-                        data-component="chart-tooltip"
-                        data-placement={index() > usage().length * 0.62 ? "left" : "right"}
+          <div data-slot="lab-usage-plot">
+            <Show when={userLinePath()}>
+              {(path) => (
+                <>
+                  <svg
+                    data-slot="lab-usage-line"
+                    data-layer="base"
+                    viewBox="0 0 100 100"
+                    preserveAspectRatio="none"
+                    aria-hidden="true"
+                  >
+                    <Show
+                      when={activeLineBreak()}
+                      fallback={<path data-slot="lab-usage-line-base" d={path()} />}
+                    >
+                      {(lineBreak) => (
+                        <>
+                          <defs>
+                            <mask id={activeLineMaskId} maskUnits="userSpaceOnUse">
+                              <rect x="0" y="-2" width="100" height="104" fill="white" />
+                              <rect x={lineBreak().x} y="-2" width={lineBreak().width} height="104" fill="black" />
+                            </mask>
+                          </defs>
+                          <path data-slot="lab-usage-line-base" d={path()} mask={`url(#${activeLineMaskId})`} />
+                        </>
+                      )}
+                    </Show>
+                  </svg>
+                  <Show when={activeLineClip()}>
+                    {(clip) => (
+                      <svg
+                        data-slot="lab-usage-line"
+                        data-layer="active"
+                        viewBox="0 0 100 100"
+                        preserveAspectRatio="none"
+                        aria-hidden="true"
                       >
-                        <strong>{active().date}</strong>
-                        <span>
-                          {formatTokens(active().tokens)} {i18n.t("lab.tokens")}
-                        </span>
-                        <div data-slot="tooltip-divider" />
-                        <p>
-                          <span data-slot="tooltip-label">
-                            <i /> {i18n.t("lab.dailyTokens")}
-                          </span>
-                          <b>{formatTokens(active().tokens)}</b>
-                        </p>
-                      </div>
+                        <defs>
+                          <clipPath id={activeLineClipId} clipPathUnits="userSpaceOnUse">
+                            <rect x={clip().x} y="-2" width={clip().width} height="104" />
+                          </clipPath>
+                        </defs>
+                        <path data-slot="lab-usage-line-active" d={path()} clip-path={`url(#${activeLineClipId})`} />
+                      </svg>
                     )}
                   </Show>
-                </div>
+                </>
+              )}
+            </Show>
+            <div data-slot="lab-usage-bars">
+              <For each={usage()}>
+                {(point, index) => (
+                  <div
+                    data-slot="lab-usage-column"
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`${point.date} ${formatTokens(point.tokens)} ${i18n.t("lab.tokens")}, ${formatUsers(point.users)} ${i18n.t("format.users")}`}
+                    data-active={activeIndex() === index() ? "true" : undefined}
+                    data-muted={activeIndex() !== undefined && activeIndex() !== index() ? "true" : undefined}
+                    style={
+                      {
+                        "--lab-usage-token-height": `${usageStripHeight(point.tokens, tokenMax())}px`,
+                        "--lab-usage-user-y": `${linePoints()[index()]?.y ?? 100}`,
+                      } as JSX.CSSProperties
+                    }
+                    onPointerDown={(event) => {
+                      if (event.pointerType !== "touch") return
+                      setActiveIndex(index())
+                    }}
+                    onPointerEnter={() => setActiveIndex(index())}
+                    onPointerMove={(event) => {
+                      if (event.pointerType === "touch") return
+                      setActiveIndex(index())
+                    }}
+                    onClick={() => setActiveIndex(index())}
+                    onFocus={() => setActiveIndex(index())}
+                    onBlur={() => setActiveIndex(undefined)}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter" && event.key !== " ") return
+                      event.preventDefault()
+                      setActiveIndex(index())
+                    }}
+                  >
+                    <div data-slot="lab-usage-token-bar" />
+                  </div>
+                )}
+              </For>
+            </div>
+            <Show when={activeTooltip()} keyed>
+              {(active) => {
+                return (
+                  <div
+                    data-component="chart-tooltip"
+                    data-placement={active.index > usage().length * 0.62 ? "left" : "right"}
+                    style={
+                      {
+                        "--lab-usage-tooltip-left": `${active.bounds.x}%`,
+                        "--lab-usage-tooltip-right": `${active.bounds.x + active.bounds.width}%`,
+                        "--lab-usage-user-y": `${active.userY}`,
+                      } as JSX.CSSProperties
+                    }
+                  >
+                    <strong>{formatUsageTooltipDate(active.point.date)}</strong>
+                    <span>
+                      {formatTokens(active.point.tokens)} {i18n.t("lab.tokens")}
+                    </span>
+                    <div data-slot="tooltip-divider" />
+                    <p>
+                      <span data-slot="tooltip-label">
+                        <i data-kind="tokens" /> {i18n.t("lab.dailyTokens")}
+                      </span>
+                      <b>{formatTokens(active.point.tokens)}</b>
+                    </p>
+                  </div>
+                )
+              }}
+            </Show>
+          </div>
+          <div data-slot="lab-usage-months" aria-hidden="true">
+            <For each={monthTicks()}>
+              {(tick) => (
+                <span
+                  data-align={tick.align}
+                  style={{ "--lab-usage-month-left": `${tick.left}%` } as JSX.CSSProperties}
+                >
+                  {tick.label}
+                </span>
               )}
             </For>
           </div>
@@ -479,23 +577,117 @@ function formatTokens(value: number) {
   return String(Math.round(value))
 }
 
+function formatUsers(value: number) {
+  if (value >= 1_000_000) return `${trimNumber(value / 1_000_000, value >= 10_000_000 ? 0 : 1)}M`
+  if (value >= 1_000) return `${trimNumber(value / 1_000, value >= 10_000 ? 0 : 1)}K`
+  return new Intl.NumberFormat("en").format(Math.round(value))
+}
+
+function formatUsageTooltipDate(value: string) {
+  const match = /^([A-Z]{3})\s+(\d{1,2})$/.exec(value)
+  if (!match) return value
+  return `${monthName(match[1])} ${Number(match[2])} ${new Date().getFullYear()}`
+}
+
+function monthName(value: string) {
+  const names: Record<string, string> = {
+    JAN: "Jan",
+    FEB: "Feb",
+    MAR: "Mar",
+    APR: "Apr",
+    MAY: "May",
+    JUN: "Jun",
+    JUL: "Jul",
+    AUG: "Aug",
+    SEP: "Sep",
+    OCT: "Oct",
+    NOV: "Nov",
+    DEC: "Dec",
+  }
+  return names[value] ?? value
+}
+
 function trimNumber(value: number, digits: number) {
   return Number(value.toFixed(digits)).toLocaleString("en")
 }
 
-function usageHeight(value: number, max: number) {
+function usageStripHeight(value: number, max: number) {
   if (value <= 0 || max <= 0) return 0
-  return Math.max(4, (value / max) * 100)
+  return Math.max(1, (value / max) * 40)
+}
+
+function usageLineY(value: number, max: number) {
+  if (value <= 0 || max <= 0) return 100
+  return Math.max(0, 100 - (value / max) * 100)
+}
+
+function usagePointX(index: number, count: number) {
+  if (count <= 1) return 50
+  return ((index + 0.5) / count) * 100
+}
+
+function usageColumnBounds(index: number, count: number) {
+  if (count <= 0) return { x: 0, width: 100 }
+  return { x: (index / count) * 100, width: 100 / count }
+}
+
+function usageColumnInnerBounds(index: number, count: number) {
+  const bounds = usageColumnBounds(index, count)
+  const inset = Math.min(bounds.width * 0.1, 0.24)
+  return { x: bounds.x + inset, width: Math.max(0.001, bounds.width - inset * 2) }
+}
+
+type UsageLinePoint = { x: number; y: number }
+
+function usageLinePath(points: UsageLinePoint[]) {
+  if (points.length === 0) return ""
+  if (points.length === 1) return `M ${pathNumber(points[0].x)} ${pathNumber(points[0].y)}`
+
+  return points.slice(0, -1).reduce(
+    (path, point, index) => {
+      const next = points[index + 1]
+      const previous = points[index - 1] ?? point
+      const afterNext = points[index + 2] ?? next
+      const controlA = {
+        x: point.x + (next.x - previous.x) / 6,
+        y: clampUsagePercent(point.y + (next.y - previous.y) / 6),
+      }
+      const controlB = {
+        x: next.x - (afterNext.x - point.x) / 6,
+        y: clampUsagePercent(next.y - (afterNext.y - point.y) / 6),
+      }
+      return `${path} C ${pathNumber(controlA.x)} ${pathNumber(controlA.y)}, ${pathNumber(controlB.x)} ${pathNumber(controlB.y)}, ${pathNumber(next.x)} ${pathNumber(next.y)}`
+    },
+    `M ${pathNumber(points[0].x)} ${pathNumber(points[0].y)}`,
+  )
+}
+
+function pathNumber(value: number) {
+  return Number(value.toFixed(3))
+}
+
+function clampUsagePercent(value: number) {
+  return Math.max(0, Math.min(100, value))
+}
+
+function labUsageMonthTicks(points: ModelUsagePoint[]) {
+  const seen = new Set<string>()
+  return points.flatMap((point, index) => {
+    const label = point.date.split(" ")[0]
+    if (!label || seen.has(label)) return []
+    seen.add(label)
+    return [
+      {
+        label,
+        left: usagePointX(index, points.length),
+        align: index === 0 ? "start" : index >= points.length - 2 ? "end" : "center",
+      },
+    ]
+  })
 }
 
 function isLabUsageDense(count: number) {
   return count > 20
-}
-
-function isLabUsageLabelHidden(index: number, count: number) {
-  if (count <= 14) return false
-  const cadence = count > 45 ? 7 : count > 28 ? 4 : 2
-  return index % cadence !== 0 && index !== count - 1
 }
 
 function getProviderIconId(provider: string) {
