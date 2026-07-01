@@ -36,9 +36,7 @@ export type AddableProbePlan = {
   distros: string[]
 }
 
-export type AutoProbePlan =
-  | { key: "runtime"; action: "probeRuntime" }
-  | { key: "distros"; action: "refreshDistros" }
+export type AutoProbePlan = { key: "runtime"; action: "probeRuntime" } | { key: "distros"; action: "refreshDistros" }
 
 export type AddServerProbePlan =
   | { kind: "auto"; key: string; plan: AutoProbePlan }

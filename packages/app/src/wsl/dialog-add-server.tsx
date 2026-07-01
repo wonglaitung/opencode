@@ -82,9 +82,7 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
         <Dialog fit class="settings-v2-wsl-dialog">
           <DialogHeader hideClose={true}>
             <DialogTitle>
-              {controller.view() === "main"
-                ? language.t("wsl.server.add")
-                : language.t("wsl.onboarding.installDistro")}
+              {controller.view() === "main" ? language.t("wsl.server.add") : language.t("wsl.onboarding.installDistro")}
             </DialogTitle>
           </DialogHeader>
           <DividerV2 />
@@ -144,7 +142,12 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
             <DialogBody class="settings-v2-wsl-dialog-body">
               <div class="settings-v2-wsl-section-header">
                 <span class="settings-v2-wsl-section-title">{language.t("wsl.onboarding.installedDistros")}</span>
-                <ButtonV2 variant="ghost-muted" size="small" disabled={model().busy} onClick={controller.refreshDistros}>
+                <ButtonV2
+                  variant="ghost-muted"
+                  size="small"
+                  disabled={model().busy}
+                  onClick={controller.refreshDistros}
+                >
                   {language.t("wsl.onboarding.checkAgain")}
                 </ButtonV2>
               </div>
@@ -436,11 +439,7 @@ function DialogWslSetup(props: {
           </Show>
         </div>
         <Show when={props.state === "unavailable" && props.installable}>
-          <ButtonV2
-            variant="neutral"
-            disabled={props.busy}
-            onClick={props.onInstall}
-          >
+          <ButtonV2 variant="neutral" disabled={props.busy} onClick={props.onInstall}>
             {language.t("wsl.onboarding.installWsl")}
           </ButtonV2>
         </Show>

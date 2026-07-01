@@ -1,5 +1,11 @@
 import { expect, test } from "bun:test"
-import { clearWslDistroState, requireWslIpcString, requireWslIpcStrings, wslServerIdToRestart, wslTerminalArgs } from "./policy"
+import {
+  clearWslDistroState,
+  requireWslIpcString,
+  requireWslIpcStrings,
+  wslServerIdToRestart,
+  wslTerminalArgs,
+} from "./policy"
 import {
   expectOpencodeVersion,
   pendingRestartAfterWslInstall,
@@ -149,22 +155,18 @@ test("probes addable distros in parallel before checking OpenCode", async () => 
   const started: string[] = []
   const release = new Map<string, () => void>()
   const opencode: string[] = []
-  const controller = createWslServersController(
-    "1.16.2",
-    async () => new Promise<never>(() => undefined),
-    {
-      ...testControllerOptions(),
-      probeDistro: async (distro) => {
-        started.push(distro)
-        await new Promise<void>((resolve) => release.set(distro, resolve))
-        return { name: distro, canExecute: true, hasBash: true, hasCurl: true, error: null }
-      },
-      resolveOpencode: async (distro) => {
-        opencode.push(distro)
-        return "/home/me/.opencode/bin/opencode"
-      },
+  const controller = createWslServersController("1.16.2", async () => new Promise<never>(() => undefined), {
+    ...testControllerOptions(),
+    probeDistro: async (distro) => {
+      started.push(distro)
+      await new Promise<void>((resolve) => release.set(distro, resolve))
+      return { name: distro, canExecute: true, hasBash: true, hasCurl: true, error: null }
     },
-  )
+    resolveOpencode: async (distro) => {
+      opencode.push(distro)
+      return "/home/me/.opencode/bin/opencode"
+    },
+  })
 
   const task = controller.probeAddable(["Debian", "Ubuntu"])
   await waitFor(() => started.length === 2)
@@ -182,24 +184,20 @@ test("probes addable distros in parallel before checking OpenCode", async () => 
 test("does not check OpenCode in addable distros that cannot execute commands", async () => {
   persistedServers = []
   const opencode: string[] = []
-  const controller = createWslServersController(
-    "1.16.2",
-    async () => new Promise<never>(() => undefined),
-    {
-      ...testControllerOptions(),
-      probeDistro: async (distro) => ({
-        name: distro,
-        canExecute: distro === "Debian",
-        hasBash: distro === "Debian",
-        hasCurl: distro === "Debian",
-        error: distro === "Debian" ? null : "Open Ubuntu once to finish setup",
-      }),
-      resolveOpencode: async (distro) => {
-        opencode.push(distro)
-        return "/home/me/.opencode/bin/opencode"
-      },
+  const controller = createWslServersController("1.16.2", async () => new Promise<never>(() => undefined), {
+    ...testControllerOptions(),
+    probeDistro: async (distro) => ({
+      name: distro,
+      canExecute: distro === "Debian",
+      hasBash: distro === "Debian",
+      hasCurl: distro === "Debian",
+      error: distro === "Debian" ? null : "Open Ubuntu once to finish setup",
+    }),
+    resolveOpencode: async (distro) => {
+      opencode.push(distro)
+      return "/home/me/.opencode/bin/opencode"
     },
-  )
+  })
 
   await controller.probeAddable(["Debian", "Ubuntu"])
 
