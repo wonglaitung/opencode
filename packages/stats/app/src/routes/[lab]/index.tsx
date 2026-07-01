@@ -123,6 +123,7 @@ export default function StatsLab() {
               {(data) => (
                 <>
                   <LabHero lab={data()} labs={catalog()?.labs ?? []} />
+                  <LabOverview lab={data()} data={stats() ?? null} />
                   <LabUsageSection lab={data()} data={stats() ?? null} />
                   <LabModelsSection lab={data()} usage={stats()?.models ?? []} />
                 </>
@@ -226,6 +227,44 @@ function LabHeroTitleRow(props: { icon?: string; label: string }) {
       <h1>{props.label}</h1>
       <div data-slot="lab-hero-pattern" aria-hidden="true" />
     </div>
+  )
+}
+
+function LabOverview(props: { lab: ModelCatalogLab; data: StatsLabData | null }) {
+  const i18n = useI18n()
+  const language = useLanguage()
+  const featuredModels = createMemo(() => props.lab.models.slice(0, 3).map((model) => model.name))
+  return (
+    <section data-section="lab-overview">
+      <div data-slot="lab-overview-copy">
+        <ProviderIcon data-slot="lab-overview-watermark" aria-hidden="true" id={getProviderIconId(props.lab.id)} />
+        <p>
+          {i18n.t("lab.heroPrefix", { count: props.lab.models.length, lab: props.lab.name })}
+          <Show when={featuredModels().length > 0}>
+            {" "}
+            {i18n.t("lab.heroIncluding", { models: formatList(featuredModels(), language.tag(language.locale())) })}
+          </Show>
+          . {i18n.t("lab.heroSuffix")}
+        </p>
+      </div>
+      <LabOverviewMetric
+        label="Tokens processed"
+        value={props.data ? formatTokens(props.data.totals.tokens) : i18n.t("lab.pending")}
+      />
+      <LabOverviewMetric
+        label="Recent usage"
+        value={props.data ? formatWholePercent(props.data.tokenShare) : i18n.t("lab.pending")}
+      />
+    </section>
+  )
+}
+
+function LabOverviewMetric(props: { label: string; value: string }) {
+  return (
+    <article data-component="lab-overview-metric">
+      <span>{props.label}</span>
+      <strong>{props.value}</strong>
+    </article>
   )
 }
 
@@ -418,8 +457,17 @@ function formatCatalogDate(value: string | undefined, locale: string, unknown: s
   }).format(new Date(Date.UTC(year, month, day)))
 }
 
+function formatList(values: string[], locale = "en") {
+  if (values.length <= 1) return values[0] ?? ""
+  return new Intl.ListFormat(locale, { style: "long", type: "conjunction" }).format(values)
+}
+
 function formatPercent(value: number) {
   return `${trimNumber(value, value >= 10 ? 1 : 2)}%`
+}
+
+function formatWholePercent(value: number) {
+  return `${Math.round(value).toLocaleString("en")}%`
 }
 
 function formatTokens(value: number) {

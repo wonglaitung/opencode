@@ -154,7 +154,7 @@ const en = {
   "lab.notFound": "No models matched this lab.",
   "lab.heroPrefix": "Explore {{count}} {{lab}} models used in OpenCode",
   "lab.heroIncluding": "including {{models}}",
-  "lab.heroSuffix": "Compare recent token usage, context windows, release dates, and model-specific data.",
+  "lab.heroSuffix": "Compare recent token usage, context windows, release dates, and model data.",
   "lab.tokensProcessed": "Tokens Processed",
   "lab.pending": "Pending",
   "lab.usageAfterActivity": "Usage appears after model activity lands",
