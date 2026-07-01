@@ -1,5 +1,6 @@
 import "../index.css"
 import { Meta, Title } from "@solidjs/meta"
+import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import {
   getStatsLabData,
   type LabUsageModelEntry,
@@ -118,10 +119,10 @@ export default function StatsLab() {
       <div data-component="container">
         <div data-component="content">
           <Show when={catalog() !== undefined} fallback={<LabLoading />}>
-            <Show when={lab()} fallback={<LabNotFound lab={labParam()} />}>
+            <Show when={lab()} fallback={<LabNotFound lab={labParam()} labs={catalog()?.labs ?? []} />}>
               {(data) => (
                 <>
-                  <LabHero lab={data()} stats={stats() ?? null} />
+                  <LabHero lab={data()} labs={catalog()?.labs ?? []} />
                   <LabUsageSection lab={data()} data={stats() ?? null} />
                   <LabModelsSection lab={data()} usage={stats()?.models ?? []} />
                 </>
@@ -141,97 +142,90 @@ export default function StatsLab() {
 
 function LabLoading() {
   const i18n = useI18n()
-  const language = useLanguage()
   return (
     <section id="overview" data-section="lab-hero">
-      <div data-slot="model-hero-grid">
-        <div data-slot="model-hero-copy">
-          <a data-slot="model-back-link" href={language.route(import.meta.env.BASE_URL)}>
-            {i18n.t("footer.modelData")}
-          </a>
-          <h1>
-            <a data-slot="heading-link" href="#overview">
-              {i18n.t("lab.loadingTitle")}
-            </a>
-          </h1>
-          <p>{i18n.t("lab.loadingDescription")}</p>
-        </div>
-      </div>
+      <LabHeroBreadcrumb label={i18n.t("lab.loadingTitle")} />
+      <LabHeroTitleRow label={i18n.t("lab.loadingTitle")} />
     </section>
   )
 }
 
-function LabNotFound(props: { lab: string }) {
+function LabNotFound(props: { lab: string; labs: ModelCatalogLab[] }) {
   const i18n = useI18n()
-  const language = useLanguage()
+  const labName = () => formatCatalogLabName(props.lab)
   return (
     <section id="overview" data-section="lab-hero">
-      <div data-slot="model-hero-grid">
-        <div data-slot="model-hero-copy">
-          <a data-slot="model-back-link" href={language.route(import.meta.env.BASE_URL)}>
-            {i18n.t("footer.modelData")}
-          </a>
-          <h1>
-            <a data-slot="heading-link" href="#overview">
-              {formatCatalogLabName(props.lab)}
-            </a>
-          </h1>
-          <p>{i18n.t("lab.notFound")}</p>
-        </div>
-      </div>
+      <LabHeroBreadcrumb label={labName()} labs={props.labs} />
+      <LabHeroTitleRow label={labName()} />
+      <p data-slot="lab-hero-state">{i18n.t("lab.notFound")}</p>
     </section>
   )
 }
 
-function LabHero(props: { lab: ModelCatalogLab; stats: StatsLabData | null }) {
-  const i18n = useI18n()
-  const language = useLanguage()
-  const latest = createMemo(
-    () =>
-      props.lab.models
-        .map((model) => model.releaseDate)
-        .filter((value): value is string => value !== undefined)
-        .toSorted((a, b) => new Date(b).getTime() - new Date(a).getTime())[0],
-  )
-  const featuredModels = createMemo(() => props.lab.models.slice(0, 3).map((model) => model.name))
-
+function LabHero(props: { lab: ModelCatalogLab; labs: ModelCatalogLab[] }) {
   return (
     <section id="overview" data-section="lab-hero">
-      <a data-slot="model-back-link" href={language.route(import.meta.env.BASE_URL)}>
-        {i18n.t("footer.modelData")}
+      <LabHeroBreadcrumb label={props.lab.name} labs={props.labs} />
+      <LabHeroTitleRow icon={props.lab.id} label={props.lab.name} />
+    </section>
+  )
+}
+
+function LabHeroBreadcrumb(props: { label: string; labs?: ModelCatalogLab[] }) {
+  const language = useLanguage()
+  const labs = () => props.labs ?? []
+  return (
+    <nav data-component="lab-hero-breadcrumb" aria-label="Data breadcrumb">
+      <a data-slot="lab-hero-crumb" href={language.route(import.meta.env.BASE_URL)}>
+        Data
       </a>
-      <div data-slot="model-hero-grid">
-        <div data-slot="model-hero-copy">
-          <h1>
-            <a data-slot="heading-link" href="#overview">
-              {props.lab.name}
-            </a>
-          </h1>
-          <div data-slot="model-hero-pattern" aria-hidden="true" />
-          <p>
-            {i18n.t("lab.heroPrefix", { count: props.lab.models.length, lab: props.lab.name })}
-            <Show when={featuredModels().length > 0}>
-              {" "}
-              {i18n.t("lab.heroIncluding", { models: formatList(featuredModels(), language.tag(language.locale())) })}
-            </Show>
-            . {i18n.t("lab.heroSuffix")}
-          </p>
-        </div>
-        <div data-component="model-rank-panel">
-          <span>{i18n.t("lab.tokensProcessed")}</span>
-          <strong>{props.stats ? formatTokens(props.stats.totals.tokens) : i18n.t("lab.pending")}</strong>
-          <p>
-            {props.stats
-              ? i18n.t("lab.shareOfUsage", { share: formatPercent(props.stats.tokenShare) })
-              : latest()
-                ? i18n.t("lab.latestRelease", {
-                    date: formatCatalogDate(latest(), language.tag(language.locale()), i18n.t("home.unknown")),
-                  })
-                : i18n.t("lab.usageAfterActivity")}
-          </p>
-        </div>
-      </div>
-    </section>
+      <span data-slot="lab-hero-separator">/</span>
+      <Show
+        when={labs().length > 0}
+        fallback={
+          <span data-slot="lab-hero-crumb" data-current="true" aria-current="page">
+            <span>{props.label}</span>
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M4.75 6.25L8 9.5L11.25 6.25" fill="none" stroke="currentColor" stroke-width="1.5" />
+            </svg>
+          </span>
+        }
+      >
+        <details data-component="lab-hero-menu">
+          <summary data-slot="lab-hero-crumb" data-current="true" aria-current="page">
+            <span>{props.label}</span>
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M4.75 6.25L8 9.5L11.25 6.25" fill="none" stroke="currentColor" stroke-width="1.5" />
+            </svg>
+          </summary>
+          <div data-slot="lab-hero-options">
+            <For each={labs()}>
+              {(lab) => (
+                <a
+                  data-slot="lab-hero-option"
+                  data-current={lab.name === props.label ? "true" : undefined}
+                  href={language.route(`${import.meta.env.BASE_URL}${lab.id}`)}
+                >
+                  {lab.name}
+                </a>
+              )}
+            </For>
+          </div>
+        </details>
+      </Show>
+    </nav>
+  )
+}
+
+function LabHeroTitleRow(props: { icon?: string; label: string }) {
+  return (
+    <div data-slot="lab-hero-title-row">
+      <span data-slot="lab-hero-avatar" data-empty={props.icon ? undefined : "true"}>
+        <Show when={props.icon}>{(icon) => <ProviderIcon aria-hidden="true" id={getProviderIconId(icon())} />}</Show>
+      </span>
+      <h1>{props.label}</h1>
+      <div data-slot="lab-hero-pattern" aria-hidden="true" />
+    </div>
   )
 }
 
@@ -424,11 +418,6 @@ function formatCatalogDate(value: string | undefined, locale: string, unknown: s
   }).format(new Date(Date.UTC(year, month, day)))
 }
 
-function formatList(values: string[], locale = "en") {
-  if (values.length <= 1) return values[0] ?? ""
-  return new Intl.ListFormat(locale, { style: "long", type: "conjunction" }).format(values)
-}
-
 function formatPercent(value: number) {
   return `${trimNumber(value, value >= 10 ? 1 : 2)}%`
 }
@@ -459,4 +448,11 @@ function isLabUsageLabelHidden(index: number, count: number) {
   if (count <= 14) return false
   const cadence = count > 45 ? 7 : count > 28 ? 4 : 2
   return index % cadence !== 0 && index !== count - 1
+}
+
+function getProviderIconId(provider: string) {
+  const id = provider.toLowerCase().replace(/[^a-z0-9]+/g, "")
+  if (id === "moonshot") return "moonshotai"
+  if (id === "zhipu") return "zhipuai"
+  return id
 }
