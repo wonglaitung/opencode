@@ -344,7 +344,9 @@ function DesktopRoot(props: { windowState: DesktopWindowState }) {
 
   const [defaultServer] = createResource(() => platform.getDefaultServer?.())
   const [locale] = createResource(loadLocale)
-  const router = (props: BaseRouterProps) => <DesktopMemoryRouter {...props} windowID={platform.windowID ?? "browser"} />
+  const router = (props: BaseRouterProps) => (
+    <DesktopMemoryRouter {...props} windowID={platform.windowID ?? "browser"} />
+  )
 
   function handleClick(e: MouseEvent) {
     const link = (e.target as HTMLElement).closest("a.external-link") as HTMLAnchorElement | null

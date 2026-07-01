@@ -9,13 +9,7 @@ import type { FatalRendererError, ServerReadyData, TitlebarTheme } from "../prel
 import { runDesktopMenuAction } from "./desktop-menu-actions"
 import { assertAttachmentBudget, createPickedFileAuthorizations } from "./attachment-picker"
 import { getStore } from "./store"
-import {
-  getPinchZoomEnabled,
-  getWindowID,
-  setPinchZoomEnabled,
-  setTitlebar,
-  updateTitlebar,
-} from "./windows"
+import { getPinchZoomEnabled, getWindowID, setPinchZoomEnabled, setTitlebar, updateTitlebar } from "./windows"
 import type { UpdaterController } from "./updater-controller"
 import { createUpdaterSubscriptions } from "./updater-subscriptions"
 
