@@ -583,54 +583,54 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
             }
           >
             <form
-                data-slot="question-option"
-                data-custom="true"
-                data-picked={on()}
-                role={multi() ? "checkbox" : "radio"}
-                aria-checked={on()}
-                onMouseDown={(e) => {
-                  if (sending()) {
-                    e.preventDefault()
-                    return
-                  }
-                  if (e.target instanceof HTMLTextAreaElement) return
-                  const input = e.currentTarget.querySelector('[data-slot="question-custom-input"]')
-                  if (input instanceof HTMLTextAreaElement) input.focus()
-                }}
-                onSubmit={(e) => {
+              data-slot="question-option"
+              data-custom="true"
+              data-picked={on()}
+              role={multi() ? "checkbox" : "radio"}
+              aria-checked={on()}
+              onMouseDown={(e) => {
+                if (sending()) {
                   e.preventDefault()
-                  commitCustom()
-                }}
-              >
-                <Mark multi={multi()} picked={on()} onClick={toggleCustomMark} />
-                <span data-slot="question-option-main">
-                  <span data-slot="option-label">{customLabel()}</span>
-                  <textarea
-                    ref={focusCustom}
-                    data-slot="question-custom-input"
-                    placeholder={customPlaceholder()}
-                    value={input()}
-                    rows={1}
-                    disabled={sending()}
-                    onKeyDown={(e) => {
-                      if (e.key === "Escape") {
-                        e.preventDefault()
-                        setStore("editing", false)
-                        focus(options().length)
-                        return
-                      }
-                      if ((e.metaKey || e.ctrlKey) && !e.altKey) return
-                      if (e.key !== "Enter" || e.shiftKey) return
+                  return
+                }
+                if (e.target instanceof HTMLTextAreaElement) return
+                const input = e.currentTarget.querySelector('[data-slot="question-custom-input"]')
+                if (input instanceof HTMLTextAreaElement) input.focus()
+              }}
+              onSubmit={(e) => {
+                e.preventDefault()
+                commitCustom()
+              }}
+            >
+              <Mark multi={multi()} picked={on()} onClick={toggleCustomMark} />
+              <span data-slot="question-option-main">
+                <span data-slot="option-label">{customLabel()}</span>
+                <textarea
+                  ref={focusCustom}
+                  data-slot="question-custom-input"
+                  placeholder={customPlaceholder()}
+                  value={input()}
+                  rows={1}
+                  disabled={sending()}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
                       e.preventDefault()
-                      commitCustom()
-                    }}
-                    onInput={(e) => {
-                      customUpdate(e.currentTarget.value)
-                      resizeInput(e.currentTarget)
-                    }}
-                  />
-                </span>
-              </form>
+                      setStore("editing", false)
+                      focus(options().length)
+                      return
+                    }
+                    if ((e.metaKey || e.ctrlKey) && !e.altKey) return
+                    if (e.key !== "Enter" || e.shiftKey) return
+                    e.preventDefault()
+                    commitCustom()
+                  }}
+                  onInput={(e) => {
+                    customUpdate(e.currentTarget.value)
+                    resizeInput(e.currentTarget)
+                  }}
+                />
+              </span>
+            </form>
           </Show>
         </div>
       </DockPrompt>
