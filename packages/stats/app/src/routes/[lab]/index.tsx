@@ -469,6 +469,12 @@ function LabUsageSection(props: { lab: ModelCatalogLab; data: StatsLabData | nul
                       </span>
                       <b>{formatTokens(active.point.tokens)}</b>
                     </p>
+                    <p>
+                      <span data-slot="tooltip-label">
+                        <i data-kind="users" /> {i18n.t("model.uniqueUsers")}
+                      </span>
+                      <b>{formatUsers(active.point.users)}</b>
+                    </p>
                   </div>
                 )
               }}
@@ -759,7 +765,7 @@ function relatedLabStats(labs: ModelCatalogLab[], market: MarketDay[]) {
 }
 
 function labRelatedDescription(lab: ModelCatalogLab) {
-  return lab.description ?? `OpenCode Go usage across ${lab.name} models, recent token volume, and model limits.`
+  return lab.description ?? ""
 }
 
 function relatedTone(share: number) {
