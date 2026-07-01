@@ -3608,6 +3608,10 @@
 }
 
 [data-page="stats"] [data-slot="lab-model-tooltip-summary"] > p {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
   margin: 0;
   color: var(--stats-muted);
   font-size: 12px;
@@ -3654,6 +3658,185 @@
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   text-align: right;
+}
+
+[data-page="stats"] [data-section="model-panel"][data-variant="lab-related"] {
+  min-height: 465px;
+}
+
+[data-page="stats"] [data-component="lab-related-list"] {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  min-width: 0;
+}
+
+[data-page="stats"] [data-component="lab-related-card"] {
+  position: relative;
+  display: grid;
+  grid-template-rows: 42px 40px 20px 1px 24px;
+  gap: 16px;
+  min-width: 0;
+  height: 223px;
+  overflow: hidden;
+  box-sizing: border-box;
+  padding: 16px;
+  color: var(--stats-text);
+  background: var(--stats-layer);
+  border: 1px solid var(--stats-line);
+  box-shadow: 0 1px 2px #00000008;
+  text-decoration: none;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
+}
+
+[data-page="stats"] [data-component="lab-related-card"]:hover,
+[data-page="stats"] [data-component="lab-related-card"]:focus-visible {
+  color: var(--stats-text);
+  background: var(--stats-bg);
+  border-color: var(--stats-line-strong);
+  outline: none;
+  box-shadow:
+    0 0 0 0.5px #00000014,
+    0 6px 16px #0000000d,
+    0 2px 6px #0000000f;
+  transform: translateY(-1px);
+}
+
+[data-page="stats"] [data-slot="lab-related-watermark"] {
+  position: absolute;
+  top: -128px;
+  right: -132px;
+  width: 480px;
+  height: 480px;
+  color: var(--stats-bg);
+  opacity: 0.82;
+  pointer-events: none;
+}
+
+[data-page="stats"] [data-slot="lab-related-heading"] {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+[data-page="stats"] [data-slot="lab-related-avatar"] {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  color: #ffffff;
+  background: var(--stats-accent-text);
+  box-shadow: inset 0 0 0 1px #0000001a;
+}
+
+[data-page="stats"] [data-slot="lab-related-avatar"] svg {
+  width: 21px;
+  height: 21px;
+}
+
+[data-page="stats"] [data-slot="lab-related-heading"] strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--stats-text);
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 42px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-slot="lab-related-copy"],
+[data-page="stats"] [data-slot="lab-related-models"] {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  overflow: hidden;
+  margin: 0;
+  color: var(--stats-muted);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 20px;
+}
+
+[data-page="stats"] [data-slot="lab-related-copy"] {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+[data-page="stats"] [data-slot="lab-related-models"] {
+  color: var(--stats-text);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-slot="lab-related-divider"] {
+  position: relative;
+  z-index: 1;
+  align-self: center;
+  height: 1px;
+  background: var(--stats-line);
+}
+
+[data-page="stats"] [data-slot="lab-related-usage"] {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+[data-page="stats"] [data-slot="lab-related-usage"] > span {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  height: 24px;
+  padding: 0 8px;
+  color: var(--stats-text);
+  background: var(--stats-layer-2);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 14px;
+}
+
+[data-page="stats"] [data-slot="lab-related-usage"] i {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  height: 24px;
+  padding: 0 6px;
+  background: var(--stats-layer-2);
+  font-style: normal;
+}
+
+[data-page="stats"] [data-slot="lab-related-usage"] b {
+  display: block;
+  width: 3px;
+  height: 12px;
+  background: var(--stats-bar-idle);
+}
+
+[data-page="stats"] [data-component="lab-related-card"][data-tone="high"] [data-slot="lab-related-usage"] b[data-active="true"] {
+  background: #198b43;
+}
+
+[data-page="stats"] [data-component="lab-related-card"][data-tone="mid"] [data-slot="lab-related-usage"] b[data-active="true"] {
+  background: #d69a00;
+}
+
+[data-page="stats"] [data-component="lab-related-card"][data-tone="low"] [data-slot="lab-related-usage"] b[data-active="true"] {
+  background: #b82d35;
 }
 
 [data-page="stats"] [data-component="model-usage-chart"] {
@@ -4232,6 +4415,12 @@
   opacity: 0.78;
 }
 
+[data-page="stats"][data-theme="dark"] [data-slot="lab-related-watermark"],
+:root[data-stats-theme="dark"] [data-page="stats"]:not([data-theme="light"]) [data-slot="lab-related-watermark"] {
+  color: var(--stats-line-strong);
+  opacity: 0.28;
+}
+
 [data-page="stats"][data-theme="dark"] button[data-component="cache-ratio-row"][data-active="true"],
 :root[data-stats-theme="dark"]
   [data-page="stats"]:not([data-theme="light"])
@@ -4790,6 +4979,22 @@
     max-width: calc(100vw - 48px);
   }
 
+  [data-page="stats"] [data-component="lab-related-list"] {
+    grid-auto-columns: minmax(320px, 392px);
+    grid-auto-flow: column;
+    grid-template-columns: none;
+    width: calc(100% + 48px);
+    margin-inline: -24px;
+    padding-inline: 24px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+
+  [data-page="stats"] [data-component="lab-related-list"]::-webkit-scrollbar {
+    display: none;
+  }
+
   [data-page="stats"] [data-section="model-hero"] h1 {
     font-size: 38px;
     line-height: 1;
@@ -5147,6 +5352,14 @@
 }
 
 @media (max-width: 30rem) {
+  [data-page="stats"] [data-component="lab-related-list"] {
+    grid-auto-columns: calc(100vw - 48px);
+  }
+
+  [data-page="stats"] [data-slot="lab-related-heading"] strong {
+    font-size: 24px;
+  }
+
   [data-page="stats"] [data-slot="lab-hero-pattern"] {
     display: none;
   }

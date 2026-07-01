@@ -1,6 +1,6 @@
 import { query } from "@solidjs/router"
 
-export const modelCatalogSourceUrl = "https://models.dev/models.json"
+export const modelCatalogSourceUrl = "https://models.dev/catalog.json"
 export const modelCatalogPricingUrl = "https://models.dev/api.json"
 
 export type ModelCatalogCost = {
@@ -15,6 +15,7 @@ export type ModelCatalogEntry = {
   lab: string
   slug: string
   name: string
+  description?: string
   family?: string
   knowledge?: string
   releaseDate?: string
@@ -45,6 +46,7 @@ export type ModelCatalogBenchmark = {
 export type ModelCatalogLab = {
   id: string
   name: string
+  description?: string
   models: ModelCatalogEntry[]
 }
 
@@ -113,7 +115,8 @@ export function catalogSlug(value: string) {
 
 function buildModelCatalog(payload: unknown, pricingPayload?: unknown): ModelCatalog {
   const costs = readCatalogCosts(pricingPayload)
-  const models = (Array.isArray(payload) ? payload : isRecord(payload) ? Object.values(payload) : [])
+  const labDescriptions = readCatalogLabDescriptions(payload, pricingPayload)
+  const models = readCatalogModels(payload)
     .flatMap(readModelCatalogEntry)
     .map((model) => ({
       ...model,
@@ -131,6 +134,7 @@ function buildModelCatalog(payload: unknown, pricingPayload?: unknown): ModelCat
         result[model.lab] = {
           id: model.lab,
           name: formatCatalogLabName(model.lab),
+          description: result[model.lab]?.description ?? labDescriptions.get(model.lab),
           models: [...(result[model.lab]?.models ?? []), model],
         }
         return result
@@ -152,6 +156,7 @@ function readModelCatalogEntry(value: unknown): ModelCatalogEntry[] {
       lab: catalogSlug(lab),
       slug: catalogSlug(slug),
       name,
+      description: stringValue(value.description),
       family: stringValue(value.family),
       knowledge: stringValue(value.knowledge),
       releaseDate: stringValue(value.release_date),
@@ -168,6 +173,51 @@ function readModelCatalogEntry(value: unknown): ModelCatalogEntry[] {
       benchmarks: readCatalogBenchmarks(value.benchmarks),
     },
   ]
+}
+
+function readCatalogModels(payload: unknown): unknown[] {
+  if (Array.isArray(payload)) return payload
+  if (!isRecord(payload)) return []
+  if (Array.isArray(payload.models)) return payload.models
+  if (isRecord(payload.models)) return Object.values(payload.models)
+  return Object.values(payload)
+}
+
+function readCatalogLabDescriptions(...payloads: unknown[]) {
+  const descriptions = new Map<string, string>()
+  const add = (value: unknown, fallbackId?: string) => {
+    if (!isRecord(value)) return
+    const description = stringValue(value.description)
+    if (!description) return
+    const id = stringValue(value.id) ?? fallbackId
+    const name = stringValue(value.name)
+    const keys = [id, name]
+    keys.forEach((key) => {
+      if (!key) return
+      descriptions.set(catalogLabSlug(key), description)
+    })
+  }
+  const addCollection = (value: unknown) => {
+    if (Array.isArray(value)) {
+      value.forEach((item) => add(item))
+      return
+    }
+    if (!isRecord(value)) return
+    Object.entries(value).forEach(([key, item]) => add(item, key))
+  }
+
+  payloads.forEach((payload) => {
+    if (Array.isArray(payload)) {
+      payload.forEach((item) => add(item))
+      return
+    }
+    if (!isRecord(payload)) return
+    addCollection(payload.labs)
+    addCollection(payload.providers)
+    Object.entries(payload).forEach(([key, value]) => add(value, key))
+  })
+
+  return descriptions
 }
 
 async function fetchCatalogPayload(url: string) {

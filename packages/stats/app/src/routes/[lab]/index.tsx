@@ -3,8 +3,11 @@ import { Meta, Title } from "@solidjs/meta"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import {
   getStatsLabData,
+  getStatsHomeData,
   type LabUsageModelEntry,
+  type MarketDay,
   type ModelUsagePoint,
+  type StatsHomeData,
   type StatsLabData,
 } from "@opencode-ai/stats-core/domain/home"
 import { createAsync, query, useParams } from "@solidjs/router"
@@ -15,6 +18,7 @@ import { useI18n } from "../../context/i18n"
 import { useLanguage } from "../../context/language"
 import { localizedUrl } from "../../lib/language"
 import {
+  catalogSlug,
   findModelCatalogLab,
   formatCatalogLabName,
   getModelCatalog,
@@ -41,6 +45,11 @@ const getLabData = query(async (lab: string) => {
   "use server"
   return runStatsEffect(getStatsLabData(lab))
 }, "getStatsLabData")
+
+const getHomeData = query(async () => {
+  "use server"
+  return runStatsEffect(getStatsHomeData())
+}, "getStatsHomeData")
 
 type LabModelTooltipState = {
   model: ModelCatalogEntry
@@ -69,6 +78,7 @@ export default function StatsLab() {
     if (!entry) return Promise.resolve(null)
     return getLabData(entry.id)
   })
+  const homeStats = createAsync((): Promise<StatsHomeData | undefined> => getHomeData())
   const githubStars = createAsync(() => getGitHubStars())
   const [themePreference, setThemePreference] = createSignal<ThemePreference>("system")
   const labName = createMemo(() => lab()?.name ?? formatCatalogLabName(labParam()))
@@ -134,6 +144,7 @@ export default function StatsLab() {
                   <LabOverview lab={data()} data={stats() ?? null} />
                   <LabUsageSection lab={data()} data={stats() ?? null} />
                   <LabModelsSection lab={data()} usage={stats()?.models ?? []} />
+                  <LabRelatedSection lab={data()} labs={catalog()?.labs ?? []} market={homeStats()?.market["2M"] ?? []} />
                 </>
               )}
             </Show>
@@ -625,7 +636,7 @@ function LabModelTooltip(props: { state: LabModelTooltipState }) {
           <strong>{props.state.model.name}</strong>
         </div>
         <p>
-          Recent OpenCode Go usage, share, context, and output limits.
+          {props.state.model.description ?? "Recent OpenCode Go usage, share, context, and output limits."}
         </p>
       </div>
       <div data-slot="tooltip-divider" />
@@ -651,6 +662,63 @@ function LabModelTooltip(props: { state: LabModelTooltipState }) {
   )
 }
 
+function LabRelatedSection(props: { lab: ModelCatalogLab; labs: ModelCatalogLab[]; market: MarketDay[] }) {
+  const related = createMemo(() => relatedLabs(props.lab, props.labs, props.market))
+  return (
+    <section id="related-labs" data-section="model-panel" data-variant="lab-related">
+      <SectionHeading href="#related-labs" title="Related labs" description="Explore more." />
+      <div data-component="lab-related-list">
+        <For each={related()}>
+          {(entry) => <LabRelatedCard entry={entry} />}
+        </For>
+      </div>
+    </section>
+  )
+}
+
+function LabRelatedCard(props: { entry: RelatedLabEntry }) {
+  const language = useLanguage()
+  const featured = () => props.entry.lab.models[0]
+  const otherCount = () => Math.max(props.entry.lab.models.length - 1, 0)
+  const modelSummary = () => {
+    const model = featured()
+    if (!model) return props.entry.lab.name
+    const count = otherCount()
+    if (count === 0) return model.name
+    return `${model.name} + ${count} other ${count === 1 ? "model" : "models"}`
+  }
+  const activeBars = () => {
+    if (props.entry.share <= 0) return 0
+    return Math.max(1, Math.min(20, Math.round(props.entry.share / 5)))
+  }
+  return (
+    <a
+      data-component="lab-related-card"
+      data-tone={relatedTone(props.entry.share)}
+      href={language.route(`${import.meta.env.BASE_URL}${props.entry.lab.id}`)}
+    >
+      <ProviderIcon data-slot="lab-related-watermark" aria-hidden="true" id={getProviderIconId(props.entry.lab.id)} />
+      <div data-slot="lab-related-heading">
+        <span data-slot="lab-related-avatar" aria-hidden="true">
+          <ProviderIcon id={getProviderIconId(props.entry.lab.id)} />
+        </span>
+        <strong>{props.entry.lab.name}</strong>
+      </div>
+      <p data-slot="lab-related-copy">{labRelatedDescription(props.entry.lab)}</p>
+      <p data-slot="lab-related-models">{modelSummary()}</p>
+      <div data-slot="lab-related-divider" />
+      <div data-slot="lab-related-usage">
+        <span>Used by {formatWholePercent(props.entry.share)}</span>
+        <i aria-hidden="true">
+          <For each={Array.from({ length: 20 })}>
+            {(_, index) => <b data-active={index() < activeBars() ? "true" : undefined} />}
+          </For>
+        </i>
+      </div>
+    </a>
+  )
+}
+
 function LabEmptyState(props: { title: string; description: string }) {
   return (
     <div data-component="empty-state" data-compact="true">
@@ -658,6 +726,53 @@ function LabEmptyState(props: { title: string; description: string }) {
       <p>{props.description}</p>
     </div>
   )
+}
+
+type RelatedLabEntry = { lab: ModelCatalogLab; share: number; tokens: number }
+
+function relatedLabs(current: ModelCatalogLab, labs: ModelCatalogLab[], market: MarketDay[]): RelatedLabEntry[] {
+  const stats = relatedLabStats(labs, market)
+  return labs
+    .filter((lab) => lab.id !== current.id)
+    .map((lab) => stats.get(lab.id) ?? { lab, share: 0, tokens: 0 })
+    .toSorted((a, b) => b.tokens - a.tokens || a.lab.name.localeCompare(b.lab.name))
+    .slice(0, 3)
+}
+
+function relatedLabStats(labs: ModelCatalogLab[], market: MarketDay[]) {
+  const labByKey = new Map<string, ModelCatalogLab>()
+  labs.forEach((lab) => {
+    labByKey.set(lab.id, lab)
+    labByKey.set(catalogSlug(lab.name), lab)
+    labByKey.set(catalogSlug(formatCatalogLabName(lab.id)), lab)
+  })
+
+  const tokensByLab = new Map<string, number>()
+  const total = market.reduce((sum, day) => {
+    day.authors.forEach((author) => {
+      const lab = labByKey.get(catalogSlug(author.author))
+      if (!lab) return
+      tokensByLab.set(lab.id, (tokensByLab.get(lab.id) ?? 0) + author.tokens)
+    })
+    return sum + day.total
+  }, 0)
+
+  return new Map(
+    labs.map((lab) => {
+      const tokens = tokensByLab.get(lab.id) ?? 0
+      return [lab.id, { lab, tokens, share: total > 0 ? (tokens / total) * 100 : 0 }]
+    }),
+  )
+}
+
+function labRelatedDescription(lab: ModelCatalogLab) {
+  return lab.description ?? `OpenCode Go usage across ${lab.name} models, recent token volume, and model limits.`
+}
+
+function relatedTone(share: number) {
+  if (share >= 50) return "high"
+  if (share > 0 && share < 10) return "low"
+  return "mid"
 }
 
 function formatCatalogLimit(value: number | undefined, unknown: string) {
