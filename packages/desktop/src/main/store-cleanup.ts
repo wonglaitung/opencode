@@ -87,9 +87,7 @@ async function isEmptyStore(file: string, size: number) {
 
   try {
     const parsed = JSON.parse(raw) as unknown
-    return (
-      typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) && Object.keys(parsed).length === 0
-    )
+    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) && Object.keys(parsed).length === 0
   } catch {
     return false
   }

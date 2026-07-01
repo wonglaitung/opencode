@@ -39,12 +39,7 @@ describe("store cleanup", () => {
   test("removes stale drafts by age without removing non-empty workspace stores", async () => {
     const root = await tempRoot()
     const now = new Date("2026-07-01T00:00:00.000Z")
-    await writeStore(
-      root,
-      "opencode.draft.old.dat",
-      '{"draft:prompt":"hello"}',
-      new Date("2026-05-01T00:00:00.000Z"),
-    )
+    await writeStore(root, "opencode.draft.old.dat", '{"draft:prompt":"hello"}', new Date("2026-05-01T00:00:00.000Z"))
     await writeStore(root, "opencode.draft.recent.dat", '{"draft:prompt":"hello"}', now)
     await writeStore(
       root,
