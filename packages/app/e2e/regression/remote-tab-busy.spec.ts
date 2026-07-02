@@ -34,7 +34,7 @@ test("tab busy indicator reflects the tab server's own session status", async ({
   await expect(tabB.locator('[data-component="session-progress-indicator-v2"]')).toBeVisible()
 
   const tabA = page.locator(`[data-titlebar-tab-slot]:has(a[href="${hrefA}"])`)
-  await expect(tabA.locator('[data-titlebar-tab-title]')).toHaveText(sessionA.title)
+  await expect(tabA.locator("[data-titlebar-tab-title]")).toHaveText(sessionA.title)
   await expect(tabA.locator('[data-component="session-progress-indicator-v2"]')).toHaveCount(0)
 })
 
