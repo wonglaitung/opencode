@@ -268,7 +268,8 @@ function ModelHero(props: {
   const weights = () => props.catalog?.weights[0]
   const labs = () => props.catalogData?.labs ?? []
   const labModels = () =>
-    props.catalogData?.labs.find((lab) => lab.id === providerSlug(labId()))?.models ?? (props.catalog ? [props.catalog] : [])
+    props.catalogData?.labs.find((lab) => lab.id === providerSlug(labId()))?.models ??
+    (props.catalog ? [props.catalog] : [])
   return (
     <section id="overview" data-section="model-hero">
       <nav data-component="model-hero-breadcrumb" aria-label="Data breadcrumb">
@@ -1005,7 +1006,9 @@ function formatHeroRank(rank: number | null) {
 
 function sparklineLinePath(values: number[]) {
   return sparklinePoints(values)
-    .map((point, index) => `${index === 0 ? "M" : "L"}${formatSparklinePoint(point.x)} ${formatSparklinePoint(point.y)}`)
+    .map(
+      (point, index) => `${index === 0 ? "M" : "L"}${formatSparklinePoint(point.x)} ${formatSparklinePoint(point.y)}`,
+    )
     .join(" ")
 }
 
