@@ -11,7 +11,6 @@ import {
   createMemo,
   createEffect,
   createComputed,
-  createSignal,
   on,
   onMount,
   type ParentProps,
@@ -91,10 +90,11 @@ import { Identifier } from "@/utils/id"
 import { diffs as list } from "@/utils/diffs"
 import { Persist, persisted } from "@/utils/persist"
 import { extractPromptFromParts } from "@/utils/prompt"
-import { formatServerError, isSessionNotFoundError } from "@/utils/server-errors"
+import { formatServerError, isLocalSessionNotFoundError, isSessionNotFoundError } from "@/utils/server-errors"
 import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/session-route"
 import { useUsageExceededDialogs } from "./session/usage-exceeded-dialogs"
 import { createSessionOwnership } from "./session/session-ownership"
+import { createSessionLineage } from "./session/session-lineage"
 
 type FollowupItem = FollowupDraft & { id: string }
 type FollowupEdit = Pick<FollowupItem, "id" | "prompt" | "context">
@@ -108,10 +108,6 @@ const sessionViewState = () => ({
   mobileTab: "session" as "session" | "changes",
   changes: "git" as ChangeMode,
 })
-
-function isLocalSessionNotFoundError(error: unknown, sessionID: string) {
-  return error instanceof Error && error.message === `Session not found: ${sessionID}`
-}
 
 function isCurrentSessionNotFoundError(error: unknown, sessionID: string | undefined) {
   if (!sessionID) return false
@@ -149,14 +145,16 @@ export function SessionPage() {
   )
 }
 
-export function TargetSessionRoute() {
+// Rendered under app.tsx's TargetSessionRoute, which owns the per-server keyed
+// remount around the server-scoped providers. Nothing here may key on the
+// session ID: session tabs on the same server share this route instance, and
+// workspace-scoped state (terminal, directory providers) lives below.
+export function TargetSessionRouteContent() {
   const params = useParams<{ serverKey: string; id: string }>()
   return (
-    <Show when={`${params.serverKey}\0${params.id}`} keyed>
-      <SessionRouteErrorBoundary sessionID={params.id} serverKey={requireServerKey(params.serverKey)} padded>
-        <ResolvedTargetSessionRoute />
-      </SessionRouteErrorBoundary>
-    </Show>
+    <SessionRouteErrorBoundary sessionID={params.id} serverKey={requireServerKey(params.serverKey)} padded>
+      <ResolvedTargetSessionRoute />
+    </SessionRouteErrorBoundary>
   )
 }
 
@@ -230,8 +228,12 @@ function ResolvedTargetSessionRoute() {
   const params = useParams<{ serverKey: string; id: string }>()
   const settings = useSettings()
   const tabs = useTabs()
+  const sync = useServerSync()
   const serverKey = createMemo(() => requireServerKey(params.serverKey))
-  const current = createSessionLineage(() => params.id)
+  const current = createSessionLineage(
+    () => params.id,
+    () => sync().session.lineage,
+  )
   const directory = createMemo(() => current()?.session.directory)
   const targetDirectory = () => directory()!
 
@@ -246,6 +248,10 @@ function ResolvedTargetSessionRoute() {
 
   return (
     <TargetServerScopedProviders directory={directory} sessionID={() => params.id}>
+      {/* Non-keyed: closes only while the target's directory is unknown (uncached
+          lineage mid-resolution), which tears down the workspace subtree including
+          the terminal. Same-workspace tab switches keep it open because warm
+          targets resolve synchronously from the sync cache. */}
       <Show when={directory()}>
         <Show
           when={settings.general.newLayoutDesigns()}
@@ -262,42 +268,9 @@ function ResolvedTargetSessionRoute() {
   )
 }
 
-// Reactive session lineage for the target session route, read from the sync store.
-// The route keys its consumer to the session ID, so resolution runs once per target.
-// Resolution is imperative rather than a resource on purpose: a resource created here
-// would be created inside the router's navigation transition, and suspending that
-// transition deadlocks the URL commit and double-mounts the session header portals
-// from the transition's shadow render. `lineage.resolve` fills the sync store, which
-// the returned accessor observes; resolve failures rethrow on read so the enclosing
-// SessionRouteErrorBoundary renders the scoped session error.
-function createSessionLineage(sessionID: () => string) {
-  const sync = useServerSync()
-  const cached = createMemo(() => sync().session.lineage.peek(sessionID()))
-  const [failure, setFailure] = createSignal<unknown>()
-  const [settled, setSettled] = createSignal(false)
-  onMount(() => {
-    if (cached()) {
-      setSettled(true)
-      return
-    }
-    sync()
-      .session.lineage.resolve(sessionID())
-      .then(() => setSettled(true))
-      .catch((error) => setFailure(() => error))
-  })
-  return createMemo(() => {
-    const error = failure()
-    if (error) throw error
-    const lineage = cached()
-    // The viewed session is pinned and pinned lineages are exempt from cache pruning,
-    // so a lineage missing after settlement means the session (or an ancestor) was
-    // deleted, possibly by another client. Match the resolve error so the boundary
-    // shows the session not found fallback.
-    if (!lineage && settled()) throw new Error(`Session not found: ${sessionID()}`)
-    return lineage
-  })
-}
-
+// Owns the workspace-identity remount. Must not include the session ID in the
+// key: SessionPage handles session changes reactively, and remounting here
+// destroys workspace-scoped state (terminal PTYs, file/prompt providers).
 function TargetSessionPage() {
   const sdk = useSDK()
   const serverSDK = useServerSDK()
@@ -419,6 +392,7 @@ export default function Page() {
   })
 
   const workspaceTabs = createMemo(() => layout.tabs(workspaceKey))
+  const sessionPanelKey = createMemo(() => (params.id ? `${serverSDK().scope}\0${params.id}` : undefined))
 
   createEffect(
     on(
@@ -2135,13 +2109,19 @@ export default function Page() {
             width: sessionPanelWidth(),
           }}
         >
-          <SessionPanelFrame newLayout={settings.general.newLayoutDesigns()} raised={!!params.id}>
-            {settings.general.newLayoutDesigns() ? (
-              <ErrorBoundary fallback={sessionErrorFallback}>{sessionPanelContent()}</ErrorBoundary>
-            ) : (
-              sessionPanelContent()
-            )}
-          </SessionPanelFrame>
+          {settings.general.newLayoutDesigns() ? (
+            <Show when={sessionPanelKey()} keyed>
+              {(_) => (
+                <SessionPanelFrame newLayout raised={!!params.id}>
+                  <ErrorBoundary fallback={sessionErrorFallback}>{sessionPanelContent()}</ErrorBoundary>
+                </SessionPanelFrame>
+              )}
+            </Show>
+          ) : (
+            <SessionPanelFrame newLayout={false} raised={!!params.id}>
+              {sessionPanelContent()}
+            </SessionPanelFrame>
+          )}
 
           <Show when={desktopReviewOpen()}>
             <div onPointerDown={() => size.start()}>
