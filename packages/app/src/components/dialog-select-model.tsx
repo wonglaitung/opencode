@@ -245,9 +245,7 @@ export function ModelSelectorPopoverV2(props: {
   const models = createMemo(() => {
     const search = store.search.trim()
     const filtered = search
-      ? allModels().filter(
-          (item) => matchesModelSearch(search, [item.name, item.id, item.provider.name]),
-        )
+      ? allModels().filter((item) => matchesModelSearch(search, [item.name, item.id, item.provider.name]))
       : allModels()
 
     return [...filtered].sort((a, b) => a.name.localeCompare(b.name))
