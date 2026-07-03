@@ -3609,8 +3609,7 @@
   overflow: hidden;
   border: 1px solid var(--stats-line);
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--stats-bg) 76%, transparent), transparent),
-    var(--stats-layer);
+    linear-gradient(180deg, color-mix(in srgb, var(--stats-bg) 76%, transparent), transparent), var(--stats-layer);
 }
 
 [data-page="stats"] [data-component="model-momentum-metric"] span {

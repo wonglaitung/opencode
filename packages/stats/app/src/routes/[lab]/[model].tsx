@@ -554,9 +554,7 @@ function MomentumChart(props: { data: StatsModelData; locale: string }) {
 function MomentumMetric(props: { label: string; value: string; watermark?: string }) {
   return (
     <div data-component="model-momentum-metric">
-      <Show when={props.watermark}>
-        {(watermark) => <em aria-hidden="true">{watermark()}</em>}
-      </Show>
+      <Show when={props.watermark}>{(watermark) => <em aria-hidden="true">{watermark()}</em>}</Show>
       <span>{props.label}</span>
       <strong>{props.value}</strong>
     </div>
@@ -920,7 +918,8 @@ function formatGeoShare(value: number) {
 
 function momentumChart(data: ModelUsagePoint[], updatedAt: string | null) {
   const fallbackDate = updatedAt ? formatMomentumDateLabel(updatedAt) : "JAN 1"
-  const points = data.length > 1 ? data : [data[0] ?? emptyUsagePoint(fallbackDate), data[0] ?? emptyUsagePoint(fallbackDate)]
+  const points =
+    data.length > 1 ? data : [data[0] ?? emptyUsagePoint(fallbackDate), data[0] ?? emptyUsagePoint(fallbackDate)]
   const max = Math.max(1, ...points.map((point) => point.tokens))
   const split = Math.max(1, Math.floor((points.length - 1) / 2))
   const coordinates = points.map((point, index) => ({
