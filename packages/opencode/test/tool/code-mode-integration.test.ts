@@ -19,8 +19,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js"
 import { Effect, Layer } from "effect"
 
-const PNG =
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
 
 const SERVER = "fixtures"
 
@@ -141,8 +140,8 @@ async function buildTool() {
 
   const layer = Layer.mergeAll(
     Layer.mock(Plugin.Service, {
-      trigger: (((_name: unknown, _input: unknown, output: unknown) =>
-        Effect.succeed(output)) as Plugin.Interface["trigger"]),
+      trigger: ((_name: unknown, _input: unknown, output: unknown) =>
+        Effect.succeed(output)) as Plugin.Interface["trigger"],
     }),
     Layer.mock(Truncate.Service, {
       output: (text: string) => Effect.succeed({ content: text, truncated: false as const }),
@@ -172,9 +171,7 @@ describe("code mode integration (real MCP server)", () => {
   test("the appended catalog inlines full signatures with real MCP schemas", () => {
     expect(description).toContain("Available tools (COMPLETE list")
     expect(description).toContain("- fixtures (4 tools)")
-    expect(description).toContain(
-      "tools.fixtures.add(input: { a: number; b: number }): Promise<{ sum: number }>",
-    )
+    expect(description).toContain("tools.fixtures.add(input: { a: number; b: number }): Promise<{ sum: number }>")
     expect(description).toContain("tools.fixtures.get_text(input: { name: string }): Promise<unknown>")
     expect(description).toContain("// Add two numbers and return the structured sum")
     expect(description).not.toContain("$codemode")
