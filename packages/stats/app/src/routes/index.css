@@ -2129,27 +2129,40 @@
 }
 
 [data-page="stats"] [data-component="market-share-list"] li {
+  min-width: 0;
+}
+
+[data-page="stats"] [data-component="market-share-list"] li > a,
+[data-page="stats"] [data-component="market-share-list"] li > button {
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
   min-width: 0;
   height: 28px;
   box-sizing: border-box;
   padding: 0 8px;
-  background: var(--stats-layer);
   border: 1px solid var(--stats-line);
+  background: var(--stats-layer);
+  color: inherit;
+  font: inherit;
   font-size: 11px;
   line-height: 1;
   cursor: pointer;
   outline: none;
+  text-decoration: none;
   transition:
     border-color 120ms ease,
     box-shadow 120ms ease,
     background 120ms ease;
 }
 
-[data-page="stats"] [data-component="market-share-list"] li[data-active="true"],
-[data-page="stats"] [data-component="market-share-list"] li:focus-visible {
+[data-page="stats"] [data-component="market-share-list"] li > button {
+  appearance: none;
+}
+
+[data-page="stats"] [data-component="market-share-list"] li[data-active="true"] > :is(a, button),
+[data-page="stats"] [data-component="market-share-list"] li > :is(a, button):focus-visible {
   border-color: var(--stats-text);
   background: var(--stats-layer);
   box-shadow:
