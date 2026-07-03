@@ -1992,7 +1992,9 @@ ToolRegistry.register({
             <Show when={running()}>
               <span data-component="task-tool-spinner" style={{ color: tone() ?? "var(--icon-interactive-base)" }}>
                 <Show when={newLayout()} fallback={<Spinner />}>
-                  <SessionProgressIndicatorV2 style={{ color: v2Tone() ?? "light-dark(var(--v2-text-text-base), #ffffff)" }} />
+                  <SessionProgressIndicatorV2
+                    style={{ color: v2Tone() ?? "light-dark(var(--v2-text-text-base), #ffffff)" }}
+                  />
                 </Show>
               </span>
             </Show>
