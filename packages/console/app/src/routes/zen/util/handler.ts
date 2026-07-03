@@ -179,6 +179,8 @@ export async function handler(
       logger.metric({
         provider: providerInfo.id,
         "provider.model": providerInfo.model,
+        shallowProvider: providerInfo.id,
+        "shallowProvider.model": providerInfo.model,
       })
 
       const startTimestamp = Date.now()
