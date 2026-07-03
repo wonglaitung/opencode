@@ -104,7 +104,8 @@ export function groupByServer(
   const byLongest = [...servers].sort((a, b) => b.length - a.length)
   const groups = new Map<string, CatalogEntry[]>()
   for (const key of Object.keys(mcpTools).sort((a, b) => a.localeCompare(b))) {
-    const server = byLongest.find((name) => key.startsWith(name + "_")) ?? (key.includes("_") ? key.slice(0, key.indexOf("_")) : key)
+    const server =
+      byLongest.find((name) => key.startsWith(name + "_")) ?? (key.includes("_") ? key.slice(0, key.indexOf("_")) : key)
     const local = server && key.startsWith(server + "_") ? key.slice(server.length + 1) : key
     const def = mcpDefs[key]
     const entry: CatalogEntry = {
@@ -129,7 +130,9 @@ export function buildCatalog(
   mcpDefs: Record<string, MCPToolDef>,
   servers: readonly string[],
 ): CatalogEntry[] {
-  return [...groupByServer(mcpTools, servers, mcpDefs).values()].flat().filter((entry) => entry.tool.execute !== undefined)
+  return [...groupByServer(mcpTools, servers, mcpDefs).values()]
+    .flat()
+    .filter((entry) => entry.tool.execute !== undefined)
 }
 
 /**
@@ -334,7 +337,8 @@ export const CodeModeTool = Tool.define(
         const collect = (attachment: Attachment) => void attachments.push(attachment)
         // Stream the current call list to the UI. Sent on every status change so the
         // tool part shows each child call appearing and resolving while the program runs.
-        const publish = () => ctx.metadata({ title: CODE_MODE_TOOL, metadata: { toolCalls: calls.map((c) => ({ ...c })) } })
+        const publish = () =>
+          ctx.metadata({ title: CODE_MODE_TOOL, metadata: { toolCalls: calls.map((c) => ({ ...c })) } })
 
         // One CodeMode tool per MCP tool, running the same shared middle as legacy
         // per-tool registration (McpInvoke.invoke: plugin before hook → permission

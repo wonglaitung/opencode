@@ -21,8 +21,7 @@ import type { Tool as AITool } from "ai"
 import { Effect, Layer } from "effect"
 
 // A 1x1 transparent PNG, base64-encoded, used to exercise image attachments.
-const PNG =
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
 
 const SERVER = "fixtures"
 
@@ -163,8 +162,8 @@ async function buildTool() {
   // this real in-memory server listed — the same snapshot shape the live service returns.
   const layer = Layer.mergeAll(
     Layer.mock(Plugin.Service, {
-      trigger: (((_name: unknown, _input: unknown, output: unknown) =>
-        Effect.succeed(output)) as Plugin.Interface["trigger"]),
+      trigger: ((_name: unknown, _input: unknown, output: unknown) =>
+        Effect.succeed(output)) as Plugin.Interface["trigger"],
     }),
     Layer.mock(Truncate.Service, {
       output: (text: string) => Effect.succeed({ content: text, truncated: false as const }),
@@ -196,9 +195,7 @@ describe("code mode integration (real MCP server)", () => {
   test("the appended catalog inlines full signatures with real MCP schemas", () => {
     expect(description).toContain("Available tools (COMPLETE list")
     expect(description).toContain("- fixtures (4 tools)")
-    expect(description).toContain(
-      "tools.fixtures.add(input: { a: number; b: number }): Promise<{ sum: number }>",
-    )
+    expect(description).toContain("tools.fixtures.add(input: { a: number; b: number }): Promise<{ sum: number }>")
     expect(description).toContain("tools.fixtures.get_text(input: { name: string }): Promise<unknown>")
     expect(description).toContain("// Add two numbers and return the structured sum")
     // Small catalog: everything is inline, so no discovery tool is advertised.

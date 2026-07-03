@@ -2355,7 +2355,13 @@ function Execute(props: ToolProps) {
   return (
     <>
       <InlineTool
-        icon={props.part.state.status === "completed" && !hasRuntimeError() ? "✓" : props.part.state.status === "error" || hasRuntimeError() ? "✗" : "│"}
+        icon={
+          props.part.state.status === "completed" && !hasRuntimeError()
+            ? "✓"
+            : props.part.state.status === "error" || hasRuntimeError()
+              ? "✗"
+              : "│"
+        }
         color={hasRuntimeError() ? theme.error : undefined}
         spinner={isLoading()}
         pending="execute"

@@ -193,7 +193,9 @@ describe("code mode execute", () => {
     // never cherry-picks a catalog tool or fabricates result fields.
     expect(description).toContain("## Workflow")
     expect(description).toContain("1. Pick a tool from the list under `## Available tools`")
-    expect(description).toContain('`const data = typeof res === "string" ? JSON.parse(res) : res` — most tools return JSON as a string')
+    expect(description).toContain(
+      '`const data = typeof res === "string" ? JSON.parse(res) : res` — most tools return JSON as a string',
+    )
     expect(description).toContain("Return only the fields you need")
     expect(description).not.toContain("total_count")
   })
@@ -249,7 +251,9 @@ describe("code mode execute", () => {
     expect(description).toContain("tools.$codemode.search(")
     // PARTIAL catalogs put search first in the workflow and advertise namespace browsing.
     expect(description).toContain("1. Find a tool (skip when it is already listed below)")
-    expect(description).toContain('- Browse one namespace: `await tools.$codemode.search({ query: "", namespace: "<name>" })`.')
+    expect(description).toContain(
+      '- Browse one namespace: `await tools.$codemode.search({ query: "", namespace: "<name>" })`.',
+    )
     expect(description).not.toContain("total_count")
     // All op lines cost the same estimated tokens (chars/4 rounds away the 1- vs 3-digit
     // name difference), so the path tiebreak decides: the lexicographically-first ops made
@@ -290,7 +294,10 @@ describe("code mode execute", () => {
       linear_search: mcpTool("search", () => ""),
     })
     const output = await Effect.runPromise(
-      tool.execute({ code: "const namespaces = Object.keys(tools); return { namespaces, count: namespaces.length }" }, ctx),
+      tool.execute(
+        { code: "const namespaces = Object.keys(tools); return { namespaces, count: namespaces.length }" },
+        ctx,
+      ),
     )
     expect(JSON.parse(output.output)).toEqual({ namespaces: ["github", "linear"], count: 2 })
   })
@@ -565,9 +572,7 @@ describe("code mode execute", () => {
     const tool = await build({
       shot_take: mcpTool("take", () => ({ content: [{ type: "image", data: "PNGDATA", mimeType: "image/png" }] })),
     })
-    const out = await Effect.runPromise(
-      tool.execute({ code: "await tools.shot.take({}); return 'captured'" }, ctx),
-    )
+    const out = await Effect.runPromise(tool.execute({ code: "await tools.shot.take({}); return 'captured'" }, ctx))
     expect(out.output).toBe("captured")
     expect(out.attachments).toHaveLength(1)
   })
@@ -690,9 +695,7 @@ describe("code mode permission visibility", () => {
     expect(called).toEqual([])
 
     // The rest of the namespace still works.
-    const allowed = await Effect.runPromise(
-      tool.execute({ code: "return await tools.github.list_issues({})" }, ctx),
-    )
+    const allowed = await Effect.runPromise(tool.execute({ code: "return await tools.github.list_issues({})" }, ctx))
     expect(allowed.metadata.error).toBeUndefined()
     expect(allowed.output).toBe("ok")
   })
@@ -706,9 +709,7 @@ describe("code mode permission visibility", () => {
       ["github"],
       [askRule("github_list_issues")],
     )
-    const out = await Effect.runPromise(
-      tool.execute({ code: "return await tools.github.list_issues({})" }, askCtx),
-    )
+    const out = await Effect.runPromise(tool.execute({ code: "return await tools.github.list_issues({})" }, askCtx))
     expect(out.output).toBe("ok")
     expect(asked).toEqual(["github_list_issues"])
   })
@@ -733,16 +734,21 @@ describe("toSandboxResult", () => {
 
   test("prefers structuredContent over text", () => {
     const { collect } = collector()
-    expect(toSandboxResult({ structuredContent: { x: 1 }, content: [{ type: "text", text: "hi" }] }, collect)).toEqual(
-      { x: 1 },
-    )
+    expect(toSandboxResult({ structuredContent: { x: 1 }, content: [{ type: "text", text: "hi" }] }, collect)).toEqual({
+      x: 1,
+    })
   })
 
   test("joins text content when no structured content is present", () => {
     const { collect } = collector()
     expect(
       toSandboxResult(
-        { content: [{ type: "text", text: "one" }, { type: "text", text: "two" }] },
+        {
+          content: [
+            { type: "text", text: "one" },
+            { type: "text", text: "two" },
+          ],
+        },
         collect,
       ),
     ).toBe("one\ntwo")

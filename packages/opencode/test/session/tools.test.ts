@@ -96,8 +96,7 @@ function resolveTools(trigger?: Plugin.Interface["trigger"]) {
       Layer.mergeAll(
         Layer.mock(Permission.Service, { ask: () => Effect.void }),
         Layer.mock(Plugin.Service, {
-          trigger:
-            trigger ?? (((_name, _input, output) => Effect.succeed(output)) as Plugin.Interface["trigger"]),
+          trigger: trigger ?? (((_name, _input, output) => Effect.succeed(output)) as Plugin.Interface["trigger"]),
         }),
         Layer.mock(Truncate.Service, {
           output: (text: string) => Effect.succeed({ content: text, truncated: false as const }),

@@ -276,7 +276,10 @@ const layer = Layer.effect(
     // fresh per turn so it tracks live tool-list changes. Hard-denied tools (the shared
     // Permission.visibleTools predicate over the agent's ruleset) never enter the
     // catalog, its inlined signatures, or the in-program search index.
-    const describeCodeMode = Effect.fn("ToolRegistry.describeCodeMode")(function* (agent: Agent.Info, permission?: PermissionV1.Ruleset) {
+    const describeCodeMode = Effect.fn("ToolRegistry.describeCodeMode")(function* (
+      agent: Agent.Info,
+      permission?: PermissionV1.Ruleset,
+    ) {
       const visible = Permission.visibleTools(yield* mcp.tools(), Permission.merge(agent.permission, permission ?? []))
       const servers = Object.keys(yield* mcp.clients()).map(McpCatalog.sanitize)
       return catalogInstructions(visible, yield* mcp.defs(), servers)
@@ -340,7 +343,6 @@ const layer = Layer.effect(
     return Service.of({ ids, all, named, tools })
   }),
 )
-
 
 function isZodType(value: unknown): value is z.ZodType {
   return typeof value === "object" && value !== null && "_zod" in value

@@ -118,9 +118,16 @@ export type CodeModeOptions<Tools extends Record<string, unknown> = {}> = Omit<E
 export const ExecuteInputSchema = Schema.Struct({ code: Schema.String })
 
 const DiagnosticKindSchema = Schema.Literals([
-  "ParseError", "UnsupportedSyntax", "UnknownTool", "InvalidToolInput", "InvalidToolOutput", "InvalidDataValue",
-  "ToolCallLimitExceeded", "TimeoutExceeded",
-  "ToolFailure", "ExecutionFailure",
+  "ParseError",
+  "UnsupportedSyntax",
+  "UnknownTool",
+  "InvalidToolInput",
+  "InvalidToolOutput",
+  "InvalidDataValue",
+  "ToolCallLimitExceeded",
+  "TimeoutExceeded",
+  "ToolFailure",
+  "ExecutionFailure",
 ])
 
 /** Structured success or diagnostic result schema returned by CodeMode execution. */
@@ -246,7 +253,10 @@ class GlobalNamespace {
 }
 
 class GlobalMethodReference {
-  constructor(readonly namespace: GlobalNamespaceName | "Number" | "String", readonly name: string) {}
+  constructor(
+    readonly namespace: GlobalNamespaceName | "Number" | "String",
+    readonly name: string,
+  ) {}
 }
 
 // A built-in callable global (`Number`, `String`, `Boolean`, `parseInt`, `parseFloat`).
@@ -298,10 +308,41 @@ export type DiagnosticKind =
   | "ExecutionFailure"
 
 const arrayMethods = new Set([
-  "map", "filter", "find", "findIndex", "findLast", "findLastIndex", "some", "every", "includes", "join",
-  "reduce", "reduceRight", "flatMap", "forEach", "sort", "toSorted", "slice", "concat", "indexOf", "lastIndexOf",
-  "at", "flat", "reverse", "toReversed", "with", "push", "pop", "shift", "unshift",
-  "splice", "fill", "copyWithin", "keys", "values", "entries",
+  "map",
+  "filter",
+  "find",
+  "findIndex",
+  "findLast",
+  "findLastIndex",
+  "some",
+  "every",
+  "includes",
+  "join",
+  "reduce",
+  "reduceRight",
+  "flatMap",
+  "forEach",
+  "sort",
+  "toSorted",
+  "slice",
+  "concat",
+  "indexOf",
+  "lastIndexOf",
+  "at",
+  "flat",
+  "reverse",
+  "toReversed",
+  "with",
+  "push",
+  "pop",
+  "shift",
+  "unshift",
+  "splice",
+  "fill",
+  "copyWithin",
+  "keys",
+  "values",
+  "entries",
 ])
 
 const mathConstants = new Set(["PI", "E", "LN2", "LN10", "LOG2E", "LOG10E", "SQRT2", "SQRT1_2"])
@@ -309,10 +350,38 @@ const mathConstants = new Set(["PI", "E", "LN2", "LN10", "LOG2E", "LOG10E", "SQR
 const numberMethods = new Set(["toFixed", "toPrecision", "toExponential", "toString"])
 
 const stringMethods = new Set([
-  "toLowerCase", "toUpperCase", "trim", "trimStart", "trimEnd", "trimLeft", "trimRight", "split", "slice",
-  "substring", "substr", "includes", "startsWith", "endsWith", "indexOf", "lastIndexOf", "replace", "replaceAll",
-  "repeat", "padStart", "padEnd", "charAt", "charCodeAt", "codePointAt", "at", "concat", "toString",
-  "match", "matchAll", "search", "localeCompare", "normalize",
+  "toLowerCase",
+  "toUpperCase",
+  "trim",
+  "trimStart",
+  "trimEnd",
+  "trimLeft",
+  "trimRight",
+  "split",
+  "slice",
+  "substring",
+  "substr",
+  "includes",
+  "startsWith",
+  "endsWith",
+  "indexOf",
+  "lastIndexOf",
+  "replace",
+  "replaceAll",
+  "repeat",
+  "padStart",
+  "padEnd",
+  "charAt",
+  "charCodeAt",
+  "codePointAt",
+  "at",
+  "concat",
+  "toString",
+  "match",
+  "matchAll",
+  "search",
+  "localeCompare",
+  "normalize",
 ])
 
 const numberConstants = new Set(["MAX_SAFE_INTEGER", "MIN_SAFE_INTEGER", "MAX_VALUE", "MIN_VALUE", "EPSILON"])
@@ -325,21 +394,57 @@ const consoleMethods = new Set(["log", "info", "debug", "warn", "error", "dir", 
 
 const promiseStatics = new Set<PromiseMethodName>(["all", "allSettled", "race", "resolve", "reject"])
 
-const errorConstructors = new Set(["Error", "TypeError", "RangeError", "SyntaxError", "ReferenceError", "EvalError", "URIError"])
+const errorConstructors = new Set([
+  "Error",
+  "TypeError",
+  "RangeError",
+  "SyntaxError",
+  "ReferenceError",
+  "EvalError",
+  "URIError",
+])
 
 const valueConstructors = new Set(["Date", "RegExp", "Map", "Set"])
 
 const dateMethods = new Set([
-  "getTime", "valueOf", "toISOString", "toJSON", "toString",
-  "getFullYear", "getMonth", "getDate", "getDay", "getHours", "getMinutes", "getSeconds", "getMilliseconds",
-  "getUTCFullYear", "getUTCMonth", "getUTCDate", "getUTCDay", "getUTCHours", "getUTCMinutes", "getUTCSeconds", "getUTCMilliseconds",
+  "getTime",
+  "valueOf",
+  "toISOString",
+  "toJSON",
+  "toString",
+  "getFullYear",
+  "getMonth",
+  "getDate",
+  "getDay",
+  "getHours",
+  "getMinutes",
+  "getSeconds",
+  "getMilliseconds",
+  "getUTCFullYear",
+  "getUTCMonth",
+  "getUTCDate",
+  "getUTCDay",
+  "getUTCHours",
+  "getUTCMinutes",
+  "getUTCSeconds",
+  "getUTCMilliseconds",
   "getTimezoneOffset",
 ])
 const dateStatics = new Set(["now", "parse", "UTC"])
 
 const regexpMethods = new Set(["test", "exec", "toString"])
 // Read-only host regex fields surfaced as plain values.
-const regexpProperties = new Set(["source", "flags", "lastIndex", "global", "ignoreCase", "multiline", "sticky", "unicode", "dotAll"])
+const regexpProperties = new Set([
+  "source",
+  "flags",
+  "lastIndex",
+  "global",
+  "ignoreCase",
+  "multiline",
+  "sticky",
+  "unicode",
+  "dotAll",
+])
 
 const mapMethods = new Set(["get", "set", "has", "delete", "clear", "forEach", "keys", "values", "entries"])
 const setMethods = new Set(["add", "has", "delete", "clear", "forEach", "keys", "values", "entries"])
@@ -350,7 +455,12 @@ const supportedSyntaxMessage =
   "Supported orchestration syntax: tools.* calls (they return promises — resolve them with await), data literals, destructuring, optional chaining, template literals, conditionals, switch, loops (incl. for...of and for...in over object/array/tools keys), arrow functions, spread, try/catch, array methods (map/filter/find/findIndex/some/every/reduce/flatMap/forEach/sort/slice/concat/indexOf/lastIndexOf/at/flat/reverse/includes/join), string methods (incl. match/matchAll/replace/split with regular expressions), Date/RegExp/Map/Set, Object/Math/JSON helpers, captured console.log/warn/error/dir/table, and Promise.all/allSettled/race/resolve/reject over arrays mixing promises and plain values for parallel tool calls (promise chaining with .then/.catch is not supported — use await with try/catch)."
 
 const unsupportedSyntax = (kind: string, node: AstNode): InterpreterRuntimeError =>
-  new InterpreterRuntimeError(`Syntax '${kind}' is not supported in CodeMode. ${supportedSyntaxMessage}`, node, "UnsupportedSyntax", [supportedSyntaxMessage])
+  new InterpreterRuntimeError(
+    `Syntax '${kind}' is not supported in CodeMode. ${supportedSyntaxMessage}`,
+    node,
+    "UnsupportedSyntax",
+    [supportedSyntaxMessage],
+  )
 
 /** How many eagerly forked tool calls may run at once. Fixed; not a configurable knob. */
 const TOOL_CALL_CONCURRENCY = 8
@@ -358,7 +468,11 @@ const TOOL_CALL_CONCURRENCY = 8
 /** Console formatting recursion ceiling; deeper values render as "…". Fixed; not a knob. */
 const MAX_CONSOLE_DEPTH = 32
 
-const validateLimit = <Value extends number | undefined>(name: keyof ExecutionLimits, value: Value, minimum: number): Value => {
+const validateLimit = <Value extends number | undefined>(
+  name: keyof ExecutionLimits,
+  value: Value,
+  minimum: number,
+): Value => {
   if (value !== undefined && (!Number.isSafeInteger(value) || value < minimum)) {
     throw new RangeError(`${name} must be a safe integer greater than or equal to ${minimum}.`)
   }
@@ -385,7 +499,12 @@ class InterpreterRuntimeError extends Error {
    */
   errorName: string = "Error"
 
-  constructor(message: string, node?: AstNode, readonly kind: DiagnosticKind = "ExecutionFailure", readonly suggestions?: ReadonlyArray<string>) {
+  constructor(
+    message: string,
+    node?: AstNode,
+    readonly kind: DiagnosticKind = "ExecutionFailure",
+    readonly suggestions?: ReadonlyArray<string>,
+  ) {
     super(message)
     this.name = "InterpreterRuntimeError"
 
@@ -400,8 +519,7 @@ class InterpreterRuntimeError extends Error {
   }
 }
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null
 
 const asNode = (value: unknown, context: string): AstNode => {
   if (!isRecord(value) || typeof value.type !== "string") {
@@ -535,7 +653,11 @@ const normalizeError = (error: unknown): Diagnostic => {
       message = "a non-data value"
     } else if (typeof value === "string") {
       message = value
-    } else if (value !== null && typeof value === "object" && typeof (value as { message?: unknown }).message === "string") {
+    } else if (
+      value !== null &&
+      typeof value === "object" &&
+      typeof (value as { message?: unknown }).message === "string"
+    ) {
       message = (value as { message: string }).message
     } else {
       try {
@@ -605,10 +727,17 @@ const caughtErrorValue = (thrown: unknown): unknown => {
 const boundedData = (value: unknown, label: string): unknown => copyIn(value, label, true)
 
 const isRuntimeReference = (value: unknown): boolean =>
-    value instanceof CodeModeFunction || value instanceof ToolReference || value instanceof IntrinsicReference ||
-    value instanceof GlobalNamespace || value instanceof GlobalMethodReference || value instanceof PromiseNamespace ||
-    value instanceof PromiseMethodReference || value instanceof SandboxPromise || value instanceof CoercionFunction ||
-    value instanceof ErrorConstructorReference || isSandboxValue(value)
+  value instanceof CodeModeFunction ||
+  value instanceof ToolReference ||
+  value instanceof IntrinsicReference ||
+  value instanceof GlobalNamespace ||
+  value instanceof GlobalMethodReference ||
+  value instanceof PromiseNamespace ||
+  value instanceof PromiseMethodReference ||
+  value instanceof SandboxPromise ||
+  value instanceof CoercionFunction ||
+  value instanceof ErrorConstructorReference ||
+  isSandboxValue(value)
 
 const containsRuntimeReference = (value: unknown, seen = new Set<object>()): boolean => {
   if (isRuntimeReference(value)) return true
@@ -643,10 +772,15 @@ const containsOpaqueReference = (value: unknown, seen = new Set<object>()): bool
 // like a real JS promise.
 const typeofValue = (value: unknown): string => {
   if (
-    value instanceof CodeModeFunction || value instanceof CoercionFunction || value instanceof IntrinsicReference ||
-    value instanceof GlobalMethodReference || value instanceof PromiseMethodReference || value instanceof PromiseNamespace ||
+    value instanceof CodeModeFunction ||
+    value instanceof CoercionFunction ||
+    value instanceof IntrinsicReference ||
+    value instanceof GlobalMethodReference ||
+    value instanceof PromiseMethodReference ||
+    value instanceof PromiseNamespace ||
     value instanceof ErrorConstructorReference
-  ) return "function"
+  )
+    return "function"
   if (value instanceof ToolReference) return value.path.length > 0 ? "function" : "object"
   if (value instanceof GlobalNamespace) {
     return value.name === "Math" || value.name === "JSON" || value.name === "console" ? "object" : "function"
@@ -665,12 +799,18 @@ const instanceofValue = (lhs: unknown, rhs: unknown, node: AstNode): boolean => 
   }
   if (rhs instanceof GlobalNamespace) {
     switch (rhs.name) {
-      case "Date": return lhs instanceof SandboxDate
-      case "RegExp": return lhs instanceof SandboxRegExp
-      case "Map": return lhs instanceof SandboxMap
-      case "Set": return lhs instanceof SandboxSet
-      case "Array": return Array.isArray(lhs)
-      case "Object": return lhs !== null && (typeof lhs === "object" || typeofValue(lhs) === "function")
+      case "Date":
+        return lhs instanceof SandboxDate
+      case "RegExp":
+        return lhs instanceof SandboxRegExp
+      case "Map":
+        return lhs instanceof SandboxMap
+      case "Set":
+        return lhs instanceof SandboxSet
+      case "Array":
+        return Array.isArray(lhs)
+      case "Object":
+        return lhs !== null && (typeof lhs === "object" || typeofValue(lhs) === "function")
     }
   }
   if (rhs instanceof PromiseNamespace) return lhs instanceof SandboxPromise
@@ -736,12 +876,14 @@ const matchToValue = (match: RegExpMatchArray): Array<unknown> => {
 const invokeStringMethod = (value: string, name: string, args: Array<unknown>, node: AstNode): unknown => {
   const str = (index: number): string => {
     const arg = args[index]
-    if (typeof arg !== "string") throw new InterpreterRuntimeError(`String.${name} expects argument ${index + 1} to be a string.`, node)
+    if (typeof arg !== "string")
+      throw new InterpreterRuntimeError(`String.${name} expects argument ${index + 1} to be a string.`, node)
     return arg
   }
   const num = (index: number): number => {
     const arg = args[index]
-    if (typeof arg !== "number") throw new InterpreterRuntimeError(`String.${name} expects argument ${index + 1} to be a number.`, node)
+    if (typeof arg !== "number")
+      throw new InterpreterRuntimeError(`String.${name} expects argument ${index + 1} to be a number.`, node)
     return arg
   }
   const optNum = (index: number): number | undefined => (args[index] === undefined ? undefined : num(index))
@@ -749,15 +891,29 @@ const invokeStringMethod = (value: string, name: string, args: Array<unknown>, n
 
   let result: unknown
   switch (name) {
-    case "toLowerCase": result = value.toLowerCase(); break
-    case "toUpperCase": result = value.toUpperCase(); break
-    case "trim": result = value.trim(); break
+    case "toLowerCase":
+      result = value.toLowerCase()
+      break
+    case "toUpperCase":
+      result = value.toUpperCase()
+      break
+    case "trim":
+      result = value.trim()
+      break
     // trimLeft/trimRight are the legacy aliases of trimStart/trimEnd, kept because models write them.
-    case "trimStart": case "trimLeft": result = value.trimStart(); break
-    case "trimEnd": case "trimRight": result = value.trimEnd(); break
+    case "trimStart":
+    case "trimLeft":
+      result = value.trimStart()
+      break
+    case "trimEnd":
+    case "trimRight":
+      result = value.trimEnd()
+      break
     // Locale/options arguments are ignored: comparison runs with the host default locale, and
     // the common use is a sort comparator where any consistent order works.
-    case "localeCompare": result = value.localeCompare(str(0)); break
+    case "localeCompare":
+      result = value.localeCompare(str(0))
+      break
     case "normalize": {
       const form = optStr(0)
       try {
@@ -783,16 +939,33 @@ const invokeStringMethod = (value: string, name: string, args: Array<unknown>, n
       result = value.split(str(0), requestedLimit === undefined ? undefined : requestedLimit >>> 0)
       break
     }
-    case "slice": result = value.slice(optNum(0), optNum(1)); break
-    case "includes": result = value.includes(str(0), optNum(1)); break
-    case "startsWith": result = value.startsWith(str(0), optNum(1)); break
-    case "endsWith": result = value.endsWith(str(0), optNum(1)); break
-    case "indexOf": result = value.indexOf(str(0), optNum(1)); break
-    case "lastIndexOf": result = value.lastIndexOf(str(0), optNum(1)); break
+    case "slice":
+      result = value.slice(optNum(0), optNum(1))
+      break
+    case "includes":
+      result = value.includes(str(0), optNum(1))
+      break
+    case "startsWith":
+      result = value.startsWith(str(0), optNum(1))
+      break
+    case "endsWith":
+      result = value.endsWith(str(0), optNum(1))
+      break
+    case "indexOf":
+      result = value.indexOf(str(0), optNum(1))
+      break
+    case "lastIndexOf":
+      result = value.lastIndexOf(str(0), optNum(1))
+      break
     case "replace":
     case "replaceAll": {
       if (args[0] instanceof CodeModeFunction || args[1] instanceof CodeModeFunction) {
-        throw new InterpreterRuntimeError(`String.${name} does not support function replacers in CodeMode; use match/matchAll and rebuild the string instead.`, node, "UnsupportedSyntax", [supportedSyntaxMessage])
+        throw new InterpreterRuntimeError(
+          `String.${name} does not support function replacers in CodeMode; use match/matchAll and rebuild the string instead.`,
+          node,
+          "UnsupportedSyntax",
+          [supportedSyntaxMessage],
+        )
       }
       if (args[0] instanceof SandboxRegExp) {
         const pattern = (args[0] as SandboxRegExp).regex
@@ -840,26 +1013,46 @@ const invokeStringMethod = (value: string, name: string, args: Array<unknown>, n
     }
     case "repeat": {
       const count = num(0)
-      if (!Number.isFinite(count) || count < 0) throw new InterpreterRuntimeError("String.repeat expects a finite non-negative count.", node)
+      if (!Number.isFinite(count) || count < 0)
+        throw new InterpreterRuntimeError("String.repeat expects a finite non-negative count.", node)
       result = value.repeat(count)
       break
     }
-    case "padStart": result = value.padStart(num(0), optStr(1)); break
-    case "padEnd": result = value.padEnd(num(0), optStr(1)); break
-    case "charAt": result = value.charAt(optNum(0) ?? 0); break
-    case "at": result = value.at(optNum(0) ?? 0); break
-    case "substring": result = value.substring(optNum(0) ?? 0, optNum(1)); break
-    case "substr": result = value.substr(optNum(0) ?? 0, optNum(1)); break
+    case "padStart":
+      result = value.padStart(num(0), optStr(1))
+      break
+    case "padEnd":
+      result = value.padEnd(num(0), optStr(1))
+      break
+    case "charAt":
+      result = value.charAt(optNum(0) ?? 0)
+      break
+    case "at":
+      result = value.at(optNum(0) ?? 0)
+      break
+    case "substring":
+      result = value.substring(optNum(0) ?? 0, optNum(1))
+      break
+    case "substr":
+      result = value.substr(optNum(0) ?? 0, optNum(1))
+      break
     // JS charCodeAt returns NaN out of range; NaN flows as an ordinary in-sandbox value
     // (normalized to null only at the data boundary — see copyOut), so return it as-is.
-    case "charCodeAt": result = value.charCodeAt(optNum(0) ?? 0); break
-    case "codePointAt": result = value.codePointAt(optNum(0) ?? 0); break
-    case "toString": result = value; break
+    case "charCodeAt":
+      result = value.charCodeAt(optNum(0) ?? 0)
+      break
+    case "codePointAt":
+      result = value.codePointAt(optNum(0) ?? 0)
+      break
+    case "toString":
+      result = value
+      break
     case "concat": {
       result = value.concat(...args.map((_, index) => str(index)))
       break
     }
-    default: throw new InterpreterRuntimeError(`String method '${name}' is not available in CodeMode.`, node)
+    default:
+      throw new InterpreterRuntimeError(`String method '${name}' is not available in CodeMode.`, node)
   }
   return boundedData(result, `String.${name} result`)
 }
@@ -873,8 +1066,12 @@ const invokeNumberMethod = (value: number, name: string, args: Array<unknown>, n
   }
   let result: unknown
   switch (name) {
-    case "toFixed": result = value.toFixed(optNum(0)); break
-    case "toExponential": result = value.toExponential(optNum(0)); break
+    case "toFixed":
+      result = value.toFixed(optNum(0))
+      break
+    case "toExponential":
+      result = value.toExponential(optNum(0))
+      break
     case "toPrecision": {
       const digits = optNum(0)
       result = digits === undefined ? value.toString() : value.toPrecision(digits)
@@ -888,7 +1085,8 @@ const invokeNumberMethod = (value: number, name: string, args: Array<unknown>, n
       result = value.toString(radix)
       break
     }
-    default: throw new InterpreterRuntimeError(`Number method '${name}' is not available in CodeMode.`, node)
+    default:
+      throw new InterpreterRuntimeError(`Number method '${name}' is not available in CodeMode.`, node)
   }
   return boundedData(result, `Number.${name} result`)
 }
@@ -899,7 +1097,8 @@ const coerceToString = (value: unknown): string => {
   if (value === undefined) return "undefined"
   // Sandbox values stringify deterministically: Date as ISO (not the host's locale/timezone
   // toString), RegExp as its literal form, Map/Set with their JS Object.prototype tags.
-  if (value instanceof SandboxDate) return Number.isFinite(value.time) ? new Date(value.time).toISOString() : "Invalid Date"
+  if (value instanceof SandboxDate)
+    return Number.isFinite(value.time) ? new Date(value.time).toISOString() : "Invalid Date"
   if (value instanceof SandboxRegExp) return `/${value.regex.source}/${value.regex.flags}`
   if (value instanceof SandboxMap) return "[object Map]"
   if (value instanceof SandboxSet) return "[object Set]"
@@ -936,7 +1135,8 @@ const invokeCoercion = (ref: CoercionFunction, args: Array<unknown>, node: AstNo
   if (ref.name === "Boolean") return Boolean(value)
   if (ref.name === "parseInt") {
     const radix = args[1]
-    if (radix !== undefined && typeof radix !== "number") throw new InterpreterRuntimeError("parseInt expects a numeric radix.", node)
+    if (radix !== undefined && typeof radix !== "number")
+      throw new InterpreterRuntimeError("parseInt expects a numeric radix.", node)
     return parseInt(coerceToString(value), radix)
   }
   if (ref.name === "parseFloat") return parseFloat(coerceToString(value))
@@ -971,9 +1171,12 @@ const invokeObjectMethod = (name: string, args: Array<unknown>, node: AstNode): 
       }
       return Object.keys(value)
     }
-    case "values": return Object.values(requireObject())
-    case "entries": return Object.entries(requireObject()).map(([key, item]) => [key, item])
-    case "hasOwn": return Object.hasOwn(requireObject(), String(args[1]))
+    case "values":
+      return Object.values(requireObject())
+    case "entries":
+      return Object.entries(requireObject()).map(([key, item]) => [key, item])
+    case "hasOwn":
+      return Object.hasOwn(requireObject(), String(args[1]))
     case "assign": {
       const out: Record<string, unknown> = Object.create(null)
       for (const source of args) {
@@ -981,7 +1184,8 @@ const invokeObjectMethod = (name: string, args: Array<unknown>, node: AstNode): 
         const value = boundedData(source, "Object.assign input")
         // A sandbox value source contributes nothing (no own enumerable properties in JS).
         if (isSandboxValue(value)) continue
-        if (value === null || typeof value !== "object" || Array.isArray(value)) throw new InterpreterRuntimeError("Object.assign expects data objects.", node)
+        if (value === null || typeof value !== "object" || Array.isArray(value))
+          throw new InterpreterRuntimeError("Object.assign expects data objects.", node)
         for (const [key, item] of Object.entries(value)) guardedSet(out, key, item)
       }
       return out
@@ -995,15 +1199,18 @@ const invokeObjectMethod = (name: string, args: Array<unknown>, node: AstNode): 
         return out
       }
       const pairs = boundedData(args[0], "Object.fromEntries input")
-      if (!Array.isArray(pairs)) throw new InterpreterRuntimeError("Object.fromEntries expects an array of [key, value] pairs.", node)
+      if (!Array.isArray(pairs))
+        throw new InterpreterRuntimeError("Object.fromEntries expects an array of [key, value] pairs.", node)
       const out: Record<string, unknown> = Object.create(null)
       for (const pair of pairs) {
-        if (!Array.isArray(pair)) throw new InterpreterRuntimeError("Object.fromEntries expects [key, value] pairs.", node)
+        if (!Array.isArray(pair))
+          throw new InterpreterRuntimeError("Object.fromEntries expects [key, value] pairs.", node)
         guardedSet(out, String(pair[0]), pair[1])
       }
       return out
     }
-    default: throw new InterpreterRuntimeError(`Object.${name} is not available in CodeMode.`, node)
+    default:
+      throw new InterpreterRuntimeError(`Object.${name} is not available in CodeMode.`, node)
   }
 }
 
@@ -1014,23 +1221,40 @@ const invokeMathMethod = (name: string, args: Array<unknown>, node: AstNode): nu
   })
   const [a = Number.NaN, b = Number.NaN] = nums
   switch (name) {
-    case "max": return Math.max(...nums)
-    case "min": return Math.min(...nums)
-    case "abs": return Math.abs(a)
-    case "floor": return Math.floor(a)
-    case "ceil": return Math.ceil(a)
-    case "round": return Math.round(a)
-    case "trunc": return Math.trunc(a)
-    case "sign": return Math.sign(a)
-    case "sqrt": return Math.sqrt(a)
-    case "cbrt": return Math.cbrt(a)
-    case "pow": return Math.pow(a, b)
-    case "hypot": return Math.hypot(...nums)
-    case "log": return Math.log(a)
-    case "log2": return Math.log2(a)
-    case "log10": return Math.log10(a)
-    case "exp": return Math.exp(a)
-    default: throw new InterpreterRuntimeError(`Math.${name} is not available in CodeMode.`, node)
+    case "max":
+      return Math.max(...nums)
+    case "min":
+      return Math.min(...nums)
+    case "abs":
+      return Math.abs(a)
+    case "floor":
+      return Math.floor(a)
+    case "ceil":
+      return Math.ceil(a)
+    case "round":
+      return Math.round(a)
+    case "trunc":
+      return Math.trunc(a)
+    case "sign":
+      return Math.sign(a)
+    case "sqrt":
+      return Math.sqrt(a)
+    case "cbrt":
+      return Math.cbrt(a)
+    case "pow":
+      return Math.pow(a, b)
+    case "hypot":
+      return Math.hypot(...nums)
+    case "log":
+      return Math.log(a)
+    case "log2":
+      return Math.log2(a)
+    case "log10":
+      return Math.log10(a)
+    case "exp":
+      return Math.exp(a)
+    default:
+      throw new InterpreterRuntimeError(`Math.${name} is not available in CodeMode.`, node)
   }
 }
 
@@ -1039,7 +1263,12 @@ const invokeJsonMethod = (name: string, args: Array<unknown>, node: AstNode): un
     case "stringify": {
       const replacer = args[1]
       if (Array.isArray(replacer) || replacer instanceof CodeModeFunction) {
-        throw new InterpreterRuntimeError("JSON.stringify replacers are not supported in CodeMode.", node, "UnsupportedSyntax", [supportedSyntaxMessage])
+        throw new InterpreterRuntimeError(
+          "JSON.stringify replacers are not supported in CodeMode.",
+          node,
+          "UnsupportedSyntax",
+          [supportedSyntaxMessage],
+        )
       }
       const space = args[2]
       const indent = typeof space === "number" || typeof space === "string" ? space : undefined
@@ -1062,7 +1291,8 @@ const invokeJsonMethod = (name: string, args: Array<unknown>, node: AstNode): un
       }
       return copyIn(parsed, "JSON.parse result")
     }
-    default: throw new InterpreterRuntimeError(`JSON.${name} is not available in CodeMode.`, node)
+    default:
+      throw new InterpreterRuntimeError(`JSON.${name} is not available in CodeMode.`, node)
   }
 }
 
@@ -1082,12 +1312,17 @@ const invokeArrayStatic = (name: string, args: Array<unknown>, node: AstNode): u
         )
       }
       // Map/Set materialize directly (the data checkpoint would serialize them to {}).
-      if (args[0] instanceof SandboxMap) return Array.from((args[0] as SandboxMap).map.entries(), ([key, item]) => [key, item])
+      if (args[0] instanceof SandboxMap)
+        return Array.from((args[0] as SandboxMap).map.entries(), ([key, item]) => [key, item])
       if (args[0] instanceof SandboxSet) return Array.from((args[0] as SandboxSet).set.values())
       const source = boundedData(args[0], "Array.from input")
       if (typeof source === "string") return Array.from(source)
       if (Array.isArray(source)) return [...source]
-      if (source !== null && typeof source === "object" && typeof (source as { length?: unknown }).length === "number") {
+      if (
+        source !== null &&
+        typeof source === "object" &&
+        typeof (source as { length?: unknown }).length === "number"
+      ) {
         return Array.from(source as ArrayLike<unknown>)
       }
       throw new InterpreterRuntimeError("Array.from expects an array, string, Map, Set, or array-like value.", node)
@@ -1100,17 +1335,24 @@ const invokeArrayStatic = (name: string, args: Array<unknown>, node: AstNode): u
 const invokeNumberStatic = (name: string, args: Array<unknown>, node: AstNode): unknown => {
   const value = args[0]
   switch (name) {
-    case "isInteger": return Number.isInteger(value)
-    case "isFinite": return Number.isFinite(value)
-    case "isNaN": return Number.isNaN(value)
-    case "isSafeInteger": return Number.isSafeInteger(value)
+    case "isInteger":
+      return Number.isInteger(value)
+    case "isFinite":
+      return Number.isFinite(value)
+    case "isNaN":
+      return Number.isNaN(value)
+    case "isSafeInteger":
+      return Number.isSafeInteger(value)
     case "parseInt": {
       const radix = args[1]
-      if (radix !== undefined && typeof radix !== "number") throw new InterpreterRuntimeError("Number.parseInt expects a numeric radix.", node)
+      if (radix !== undefined && typeof radix !== "number")
+        throw new InterpreterRuntimeError("Number.parseInt expects a numeric radix.", node)
       return parseInt(coerceToString(value), radix)
     }
-    case "parseFloat": return parseFloat(coerceToString(value))
-    default: throw new InterpreterRuntimeError(`Number.${name} is not available in CodeMode.`, node)
+    case "parseFloat":
+      return parseFloat(coerceToString(value))
+    default:
+      throw new InterpreterRuntimeError(`Number.${name} is not available in CodeMode.`, node)
   }
 }
 
@@ -1120,54 +1362,82 @@ const invokeStringStatic = (name: string, args: Array<unknown>, node: AstNode): 
     return arg
   })
   switch (name) {
-    case "fromCharCode": return String.fromCharCode(...codes)
-    case "fromCodePoint": return String.fromCodePoint(...codes)
-    default: throw new InterpreterRuntimeError(`String.${name} is not available in CodeMode.`, node)
+    case "fromCharCode":
+      return String.fromCharCode(...codes)
+    case "fromCodePoint":
+      return String.fromCodePoint(...codes)
+    default:
+      throw new InterpreterRuntimeError(`String.${name} is not available in CodeMode.`, node)
   }
 }
 
 const invokeDateStatic = (name: string, args: Array<unknown>, node: AstNode): number => {
   switch (name) {
-    case "now": return Date.now()
-    case "parse": return Date.parse(coerceToString(args[0]))
+    case "now":
+      return Date.now()
+    case "parse":
+      return Date.parse(coerceToString(args[0]))
     case "UTC": {
       const parts = args.map((arg) => coerceToNumber(arg))
       return Date.UTC(...(parts as Parameters<typeof Date.UTC>))
     }
-    default: throw new InterpreterRuntimeError(`Date.${name} is not available in CodeMode.`, node)
+    default:
+      throw new InterpreterRuntimeError(`Date.${name} is not available in CodeMode.`, node)
   }
 }
 
 const invokeDateMethod = (value: SandboxDate, name: string, node: AstNode): unknown => {
   const hosted = new Date(value.time)
   switch (name) {
-    case "getTime": case "valueOf": return value.time
+    case "getTime":
+    case "valueOf":
+      return value.time
     case "toISOString": {
       if (!Number.isFinite(value.time)) throw new InterpreterRuntimeError("Invalid time value.", node)
       return hosted.toISOString()
     }
     // toJSON of an invalid date is null in JS (never a throw); toString stays ISO for
     // determinism across host timezones/locales.
-    case "toJSON": return Number.isFinite(value.time) ? hosted.toISOString() : null
-    case "toString": return coerceToString(value)
-    case "getFullYear": return hosted.getFullYear()
-    case "getMonth": return hosted.getMonth()
-    case "getDate": return hosted.getDate()
-    case "getDay": return hosted.getDay()
-    case "getHours": return hosted.getHours()
-    case "getMinutes": return hosted.getMinutes()
-    case "getSeconds": return hosted.getSeconds()
-    case "getMilliseconds": return hosted.getMilliseconds()
-    case "getUTCFullYear": return hosted.getUTCFullYear()
-    case "getUTCMonth": return hosted.getUTCMonth()
-    case "getUTCDate": return hosted.getUTCDate()
-    case "getUTCDay": return hosted.getUTCDay()
-    case "getUTCHours": return hosted.getUTCHours()
-    case "getUTCMinutes": return hosted.getUTCMinutes()
-    case "getUTCSeconds": return hosted.getUTCSeconds()
-    case "getUTCMilliseconds": return hosted.getUTCMilliseconds()
-    case "getTimezoneOffset": return hosted.getTimezoneOffset()
-    default: throw new InterpreterRuntimeError(`Date method '${name}' is not available in CodeMode.`, node)
+    case "toJSON":
+      return Number.isFinite(value.time) ? hosted.toISOString() : null
+    case "toString":
+      return coerceToString(value)
+    case "getFullYear":
+      return hosted.getFullYear()
+    case "getMonth":
+      return hosted.getMonth()
+    case "getDate":
+      return hosted.getDate()
+    case "getDay":
+      return hosted.getDay()
+    case "getHours":
+      return hosted.getHours()
+    case "getMinutes":
+      return hosted.getMinutes()
+    case "getSeconds":
+      return hosted.getSeconds()
+    case "getMilliseconds":
+      return hosted.getMilliseconds()
+    case "getUTCFullYear":
+      return hosted.getUTCFullYear()
+    case "getUTCMonth":
+      return hosted.getUTCMonth()
+    case "getUTCDate":
+      return hosted.getUTCDate()
+    case "getUTCDay":
+      return hosted.getUTCDay()
+    case "getUTCHours":
+      return hosted.getUTCHours()
+    case "getUTCMinutes":
+      return hosted.getUTCMinutes()
+    case "getUTCSeconds":
+      return hosted.getUTCSeconds()
+    case "getUTCMilliseconds":
+      return hosted.getUTCMilliseconds()
+    case "getTimezoneOffset":
+      return hosted.getTimezoneOffset()
+    default:
+      throw new InterpreterRuntimeError(`Date method '${name}' is not available in CodeMode.`, node)
   }
 }
 
@@ -1175,26 +1445,31 @@ const invokeRegExpMethod = (value: SandboxRegExp, name: string, args: Array<unkn
   switch (name) {
     // test/exec run on the sandbox regex's own host instance, so `g`-flag lastIndex advances
     // across calls per the spec.
-    case "test": return value.regex.test(coerceToString(args[0]))
+    case "test":
+      return value.regex.test(coerceToString(args[0]))
     case "exec": {
       const matched = value.regex.exec(coerceToString(args[0]))
       if (matched === null) return null
       return matchToValue(matched)
     }
-    case "toString": return coerceToString(value)
-    default: throw new InterpreterRuntimeError(`RegExp method '${name}' is not available in CodeMode.`, node)
+    case "toString":
+      return coerceToString(value)
+    default:
+      throw new InterpreterRuntimeError(`RegExp method '${name}' is not available in CodeMode.`, node)
   }
 }
 
 const invokeGlobalMethod = (ref: GlobalMethodReference, args: Array<unknown>, node: AstNode): unknown => {
-  if (ref.namespace === "console") throw new InterpreterRuntimeError(`console.${ref.name} is not available in CodeMode.`, node)
+  if (ref.namespace === "console")
+    throw new InterpreterRuntimeError(`console.${ref.name} is not available in CodeMode.`, node)
   if (ref.namespace === "Object") return invokeObjectMethod(ref.name, args, node)
   if (ref.namespace === "Math") return invokeMathMethod(ref.name, args, node)
   if (ref.namespace === "Array") return invokeArrayStatic(ref.name, args, node)
   if (ref.namespace === "Number") return invokeNumberStatic(ref.name, args, node)
   if (ref.namespace === "String") return invokeStringStatic(ref.name, args, node)
   if (ref.namespace === "Date") {
-    if (!dateStatics.has(ref.name)) throw new InterpreterRuntimeError(`Date.${ref.name} is not available in CodeMode.`, node)
+    if (!dateStatics.has(ref.name))
+      throw new InterpreterRuntimeError(`Date.${ref.name} is not available in CodeMode.`, node)
     return invokeDateStatic(ref.name, args, node)
   }
   if (ref.namespace === "RegExp" || ref.namespace === "Map" || ref.namespace === "Set") {
@@ -1207,7 +1482,8 @@ const invokeGlobalMethod = (ref: GlobalMethodReference, args: Array<unknown>, no
 const spreadItems = (spread: unknown): Array<unknown> | undefined => {
   if (Array.isArray(spread)) return spread
   if (typeof spread === "string") return Array.from(spread)
-  if (spread instanceof SandboxMap) return Array.from(spread.map.entries(), ([key, item]): Array<unknown> => [key, item])
+  if (spread instanceof SandboxMap)
+    return Array.from(spread.map.entries(), ([key, item]): Array<unknown> => [key, item])
   if (spread instanceof SandboxSet) return Array.from(spread.set.values())
   return undefined
 }
@@ -1300,7 +1576,7 @@ class Interpreter<R> {
     // top-level declarations (`let undefined = 5`, `const Object = ...`) shadow builtins like
     // JS module scope, instead of colliding with the seeded globals.
     this.pushScope()
-    return Effect.gen(function*() {
+    return Effect.gen(function* () {
       self.hoistFunctions(program.body)
       let value: unknown = undefined
       let returned = false
@@ -1338,7 +1614,7 @@ class Interpreter<R> {
   // diagnostic (interrupted calls, e.g. Promise.race losers, are ignored).
   private drainPendingSettlements(): Effect.Effect<void, unknown, never> {
     const self = this
-    return Effect.gen(function*() {
+    return Effect.gen(function* () {
       for (const promise of [...self.pendingSettlements]) {
         const exit = yield* self.observePromise(promise)
         if (Exit.isSuccess(exit) || Cause.hasInterruptsOnly(exit.cause)) continue
@@ -1357,13 +1633,15 @@ class Interpreter<R> {
   // scope teardown interrupt it) gated by the concurrency semaphore, and wraps the fiber in a
   // first-class promise value. `startImmediately` makes the runtime admit the call — charging
   // the tool-call budget and firing onToolCallStart — at the call site, before any await.
-  private createToolCallPromise(path: ReadonlyArray<string>, args: Array<unknown>): Effect.Effect<SandboxPromise, never, R> {
+  private createToolCallPromise(
+    path: ReadonlyArray<string>,
+    args: Array<unknown>,
+  ): Effect.Effect<SandboxPromise, never, R> {
     const self = this
     return Effect.map(
-      Effect.forkChild(
-        this.callPermits.withPermit(Effect.suspend(() => self.invokeTool(path, args))),
-        { startImmediately: true },
-      ),
+      Effect.forkChild(this.callPermits.withPermit(Effect.suspend(() => self.invokeTool(path, args))), {
+        startImmediately: true,
+      }),
       (fiber) => {
         const promise = new SandboxPromise(fiber)
         self.pendingSettlements.add(promise)
@@ -1387,13 +1665,22 @@ class Interpreter<R> {
     return Effect.flatMap(this.observePromise(promise), (exit) => self.unwrapPromiseExit(promise, exit, node))
   }
 
-  private unwrapPromiseExit(promise: SandboxPromise | undefined, exit: Exit.Exit<unknown, unknown>, node?: AstNode): Effect.Effect<unknown, unknown> {
+  private unwrapPromiseExit(
+    promise: SandboxPromise | undefined,
+    exit: Exit.Exit<unknown, unknown>,
+    node?: AstNode,
+  ): Effect.Effect<unknown, unknown> {
     if (Exit.isSuccess(exit)) return Effect.succeed(exit.value)
     // A call Promise.race interrupted after losing settles as a catchable program failure;
     // any other interruption is execution teardown (timeout/host) and must keep propagating
     // as interruption rather than becoming program-visible data.
     if (promise?.interrupted === true && Cause.hasInterruptsOnly(exit.cause)) {
-      return Effect.fail(new InterpreterRuntimeError("This tool call was interrupted because another value settled a Promise.race first.", node))
+      return Effect.fail(
+        new InterpreterRuntimeError(
+          "This tool call was interrupted because another value settled a Promise.race first.",
+          node,
+        ),
+      )
     }
     return Effect.failCause(exit.cause)
   }
@@ -1446,7 +1733,7 @@ class Interpreter<R> {
   private evaluateBlock(node: AstNode): Effect.Effect<StatementResult, unknown, R> {
     this.pushScope()
     const self = this
-    return Effect.gen(function*() {
+    return Effect.gen(function* () {
       const body = getArray(node, "body")
       self.hoistFunctions(body)
 
@@ -1470,7 +1757,12 @@ class Interpreter<R> {
 
   private createFunction(node: AstNode): CodeModeFunction {
     if (node.generator === true) {
-      throw new InterpreterRuntimeError("Generator functions are not supported in CodeMode.", node, "UnsupportedSyntax", [supportedSyntaxMessage])
+      throw new InterpreterRuntimeError(
+        "Generator functions are not supported in CodeMode.",
+        node,
+        "UnsupportedSyntax",
+        [supportedSyntaxMessage],
+      )
     }
     return new CodeModeFunction(
       getArray(node, "params").map((parameter, index) => asNode(parameter, `params[${index}]`)),
@@ -1495,16 +1787,25 @@ class Interpreter<R> {
     const alternateNode = getOptionalNode(node, "alternate")
 
     return Effect.flatMap(this.evaluateExpression(testNode), (test) =>
-      test ? this.evaluateStatement(consequentNode) : alternateNode ? this.evaluateStatement(alternateNode) : Effect.succeed({ kind: "none" }))
+      test
+        ? this.evaluateStatement(consequentNode)
+        : alternateNode
+          ? this.evaluateStatement(alternateNode)
+          : Effect.succeed({ kind: "none" }),
+    )
   }
 
   private evaluateSwitchStatement(node: AstNode): Effect.Effect<StatementResult, unknown, R> {
     const self = this
     this.pushScope()
-    return Effect.gen(function*() {
+    return Effect.gen(function* () {
       const discriminant = yield* self.evaluateExpression(getNode(node, "discriminant"))
       if (containsOpaqueReference(discriminant)) {
-        throw new InterpreterRuntimeError("Switch discriminants must be data values in CodeMode.", node, "InvalidDataValue")
+        throw new InterpreterRuntimeError(
+          "Switch discriminants must be data values in CodeMode.",
+          node,
+          "InvalidDataValue",
+        )
       }
       const cases = getArray(node, "cases").map((value, index) => asNode(value, `cases[${index}]`))
       let defaultIndex: number | undefined
@@ -1517,7 +1818,11 @@ class Interpreter<R> {
         }
         const candidate = yield* self.evaluateExpression(test)
         if (containsOpaqueReference(candidate)) {
-          throw new InterpreterRuntimeError("Switch case values must be data values in CodeMode.", test, "InvalidDataValue")
+          throw new InterpreterRuntimeError(
+            "Switch case values must be data values in CodeMode.",
+            test,
+            "InvalidDataValue",
+          )
         }
         if (candidate === discriminant) {
           selected = index
@@ -1543,7 +1848,7 @@ class Interpreter<R> {
     const bodyNode = getNode(node, "body")
 
     const self = this
-    return Effect.gen(function*() {
+    return Effect.gen(function* () {
       while (yield* self.evaluateExpression(testNode)) {
         const result = yield* self.evaluateStatement(bodyNode)
 
@@ -1552,7 +1857,7 @@ class Interpreter<R> {
         }
 
         if (result.kind === "break") {
-        return { kind: "none" } satisfies StatementResult
+          return { kind: "none" } satisfies StatementResult
         }
 
         if (result.kind === "return") {
@@ -1573,7 +1878,7 @@ class Interpreter<R> {
     const testNode = getNode(node, "test")
 
     const self = this
-    return Effect.gen(function*() {
+    return Effect.gen(function* () {
       do {
         const result = yield* self.evaluateStatement(bodyNode)
 
@@ -1601,7 +1906,7 @@ class Interpreter<R> {
   private evaluateForStatement(node: AstNode): Effect.Effect<StatementResult, unknown, R> {
     this.pushScope()
     const self = this
-    return Effect.gen(function*() {
+    return Effect.gen(function* () {
       const initNode = getOptionalNode(node, "init")
       const testNode = getOptionalNode(node, "test")
       const updateNode = getOptionalNode(node, "update")
@@ -1615,23 +1920,28 @@ class Interpreter<R> {
         }
       }
 
-      const perIterationBindings = initNode?.type === "VariableDeclaration" && getString(initNode, "kind") !== "var"
-        ? Array.from(self.currentScope().keys())
-        : []
+      const perIterationBindings =
+        initNode?.type === "VariableDeclaration" && getString(initNode, "kind") !== "var"
+          ? Array.from(self.currentScope().keys())
+          : []
 
       while (testNode ? yield* self.evaluateExpression(testNode) : true) {
         let iterationScope: Map<string, Binding> | undefined
         if (perIterationBindings.length > 0) {
-          iterationScope = new Map(perIterationBindings.map((name) => {
-            const binding = self.currentScope().get(name)!
-            return [name, { ...binding }]
-          }))
+          iterationScope = new Map(
+            perIterationBindings.map((name) => {
+              const binding = self.currentScope().get(name)!
+              return [name, { ...binding }]
+            }),
+          )
           self.scopes.push(iterationScope)
         }
         const result = yield* self.evaluateStatement(bodyNode).pipe(
-          Effect.ensuring(Effect.sync(() => {
-            if (iterationScope) self.popScope()
-          })),
+          Effect.ensuring(
+            Effect.sync(() => {
+              if (iterationScope) self.popScope()
+            }),
+          ),
         )
 
         if (result.kind === "return") {
@@ -1672,7 +1982,7 @@ class Interpreter<R> {
     }
 
     const self = this
-    return Effect.gen(function*() {
+    return Effect.gen(function* () {
       const left = getNode(node, "left")
       const right = yield* self.evaluateExpression(getNode(node, "right"))
       const body = getNode(node, "body")
@@ -1710,9 +2020,11 @@ class Interpreter<R> {
         }
 
         const result = yield* self.evaluateStatement(body).pipe(
-          Effect.ensuring(Effect.sync(() => {
-            if (declaration) self.popScope()
-          })),
+          Effect.ensuring(
+            Effect.sync(() => {
+              if (declaration) self.popScope()
+            }),
+          ),
         )
 
         if (result.kind === "return") {
@@ -1756,7 +2068,7 @@ class Interpreter<R> {
 
   private evaluateForInStatement(node: AstNode): Effect.Effect<StatementResult, unknown, R> {
     const self = this
-    return Effect.gen(function*() {
+    return Effect.gen(function* () {
       const left = getNode(node, "left")
       const right = yield* self.evaluateExpression(getNode(node, "right"))
       const body = getNode(node, "body")
@@ -1801,9 +2113,11 @@ class Interpreter<R> {
         }
 
         const result = yield* self.evaluateStatement(body).pipe(
-          Effect.ensuring(Effect.sync(() => {
-            if (declaration) self.popScope()
-          })),
+          Effect.ensuring(
+            Effect.sync(() => {
+              if (declaration) self.popScope()
+            }),
+          ),
         )
 
         if (result.kind === "return") {
@@ -1869,12 +2183,10 @@ class Interpreter<R> {
         const caught = caughtErrorValue(Cause.squash(cause))
         const parameter = getOptionalNode(handler, "param")
         self.pushScope()
-        return Effect.gen(function*() {
+        return Effect.gen(function* () {
           if (parameter) yield* self.declarePattern(parameter, caught, true, handler)
           return yield* self.evaluateStatement(getNode(handler, "body"))
-        }).pipe(
-          Effect.ensuring(Effect.sync(() => self.popScope())),
-        )
+        }).pipe(Effect.ensuring(Effect.sync(() => self.popScope())))
       },
       onSuccess: Effect.succeed,
     })
@@ -1889,10 +2201,12 @@ class Interpreter<R> {
         cause.reasons.some(Cause.isInterruptReason)
           ? Effect.failCause(cause)
           : Effect.flatMap(this.evaluateStatement(finalizer), (final) =>
-              isAbrupt(final) ? Effect.succeed(final) : Effect.failCause(cause)),
+              isAbrupt(final) ? Effect.succeed(final) : Effect.failCause(cause),
+            ),
       onSuccess: (result) =>
         Effect.flatMap(this.evaluateStatement(finalizer), (final) =>
-          isAbrupt(final) ? Effect.succeed(final) : Effect.succeed(result)),
+          isAbrupt(final) ? Effect.succeed(final) : Effect.succeed(result),
+        ),
     })
   }
 
@@ -1900,7 +2214,7 @@ class Interpreter<R> {
     const kind = getString(node, "kind")
     const declarations = getArray(node, "declarations")
     const self = this
-    return Effect.gen(function*() {
+    return Effect.gen(function* () {
       for (const declarationValue of declarations) {
         const declaration = asNode(declarationValue, "declarations")
 
@@ -1915,9 +2229,14 @@ class Interpreter<R> {
     })
   }
 
-  private declarePattern(pattern: AstNode, value: unknown, mutable: boolean, node: AstNode): Effect.Effect<void, unknown, R> {
+  private declarePattern(
+    pattern: AstNode,
+    value: unknown,
+    mutable: boolean,
+    node: AstNode,
+  ): Effect.Effect<void, unknown, R> {
     const self = this
-    return Effect.gen(function*() {
+    return Effect.gen(function* () {
       if (pattern.type === "Identifier") {
         self.declare(getString(pattern, "name"), value, mutable, node)
         return
@@ -1932,7 +2251,11 @@ class Interpreter<R> {
 
       if (pattern.type === "ObjectPattern") {
         if (value === null || typeof value !== "object" || Array.isArray(value) || isRuntimeReference(value)) {
-          throw new InterpreterRuntimeError("Object destructuring requires a data object value.", pattern, "InvalidDataValue")
+          throw new InterpreterRuntimeError(
+            "Object destructuring requires a data object value.",
+            pattern,
+            "InvalidDataValue",
+          )
         }
 
         const consumed = new Set<string>()
@@ -1949,7 +2272,11 @@ class Interpreter<R> {
             continue
           }
 
-          if (property.type !== "Property" || getBoolean(property, "computed") || getString(property, "kind") !== "init") {
+          if (
+            property.type !== "Property" ||
+            getBoolean(property, "computed") ||
+            getString(property, "kind") !== "init"
+          ) {
             throw new InterpreterRuntimeError("Only named object destructuring properties are supported.", property)
           }
 
@@ -1993,7 +2320,9 @@ class Interpreter<R> {
         // sandbox regex from those (the host `value` instance is never exposed).
         const regex = node.regex
         if (isRecord(regex) && typeof regex.pattern === "string") {
-          return Effect.sync(() => this.constructRegExp([regex.pattern, typeof regex.flags === "string" ? regex.flags : ""], node))
+          return Effect.sync(() =>
+            this.constructRegExp([regex.pattern, typeof regex.flags === "string" ? regex.flags : ""], node),
+          )
         }
         return Effect.sync(() => boundedData(node.value, "Literal"))
       }
@@ -2016,7 +2345,8 @@ class Interpreter<R> {
         return this.readMember(node)
       case "ChainExpression":
         return Effect.map(this.evaluateExpression(getNode(node, "expression")), (value) =>
-          value === OptionalShortCircuit ? undefined : value)
+          value === OptionalShortCircuit ? undefined : value,
+        )
       case "ObjectExpression":
         return this.evaluateObjectExpression(node)
       case "ArrayExpression":
@@ -2032,7 +2362,8 @@ class Interpreter<R> {
         // matching real JS semantics for non-thenables.
         const self = this
         return Effect.flatMap(this.evaluateExpression(getNode(node, "argument")), (value) =>
-          value instanceof SandboxPromise ? self.settlePromise(value, node) : Effect.succeed(value))
+          value instanceof SandboxPromise ? self.settlePromise(value, node) : Effect.succeed(value),
+        )
       }
       case "NewExpression":
         return this.evaluateNewExpression(node)
@@ -2058,19 +2389,24 @@ class Interpreter<R> {
       )
     }
     if (errorConstructors.has(name)) {
-      return Effect.gen(function*() {
-        const arg = argNodes.length > 0 ? yield* self.evaluateExpression(asNode(argNodes[0], "arguments[0]")) : undefined
+      return Effect.gen(function* () {
+        const arg =
+          argNodes.length > 0 ? yield* self.evaluateExpression(asNode(argNodes[0], "arguments[0]")) : undefined
         return createErrorValue(name, arg === undefined ? "" : coerceToString(arg))
       })
     }
     if (valueConstructors.has(name)) {
-      return Effect.gen(function*() {
+      return Effect.gen(function* () {
         const args = yield* self.evaluateCallArguments(argNodes)
         switch (name) {
-          case "Date": return self.constructDate(args)
-          case "RegExp": return self.constructRegExp(args, node)
-          case "Map": return self.constructMap(args[0], node)
-          default: return self.constructSet(args[0], node)
+          case "Date":
+            return self.constructDate(args)
+          case "RegExp":
+            return self.constructRegExp(args, node)
+          case "Map":
+            return self.constructMap(args[0], node)
+          default:
+            return self.constructSet(args[0], node)
         }
       })
     }
@@ -2093,7 +2429,8 @@ class Interpreter<R> {
 
   private constructRegExp(args: Array<unknown>, node: AstNode): SandboxRegExp {
     const first = args[0]
-    const pattern = first instanceof SandboxRegExp ? first.regex.source : first === undefined ? "" : coerceToString(first)
+    const pattern =
+      first instanceof SandboxRegExp ? first.regex.source : first === undefined ? "" : coerceToString(first)
     const flagsArg = args[1]
     if (flagsArg !== undefined && typeof flagsArg !== "string") {
       throw new InterpreterRuntimeError(
@@ -2127,7 +2464,10 @@ class Interpreter<R> {
         ? Array.from(init.map.entries(), ([key, item]): Array<unknown> => [key, item])
         : undefined
     if (entries === undefined) {
-      throw new InterpreterRuntimeError("new Map(...) expects an array of [key, value] pairs, a Map, or no argument.", node)
+      throw new InterpreterRuntimeError(
+        "new Map(...) expects an array of [key, value] pairs, a Map, or no argument.",
+        node,
+      )
     }
     for (const pair of entries) {
       if (!Array.isArray(pair)) {
@@ -2155,12 +2495,10 @@ class Interpreter<R> {
     return target
   }
 
-
-
   private evaluateBinaryExpression(node: AstNode): Effect.Effect<unknown, unknown, R> {
     const operator = getString(node, "operator")
     const self = this
-    return Effect.gen(function*() {
+    return Effect.gen(function* () {
       const lhs = (yield* self.evaluateExpression(getNode(node, "left"))) as any
       const rhs = (yield* self.evaluateExpression(getNode(node, "right"))) as any
       // Like `typeof`, `instanceof` observes any value without coercing it (a promise or
@@ -2194,34 +2532,55 @@ class Interpreter<R> {
     const l = coerceOperand(lhs) as any
     const r = coerceOperand(rhs) as any
     switch (operator) {
-      case "+": return l + r
-      case "-": return l - r
-      case "*": return l * r
-      case "/": return l / r
-      case "%": return l % r
-      case "**": return l ** r
+      case "+":
+        return l + r
+      case "-":
+        return l - r
+      case "*":
+        return l * r
+      case "/":
+        return l / r
+      case "%":
+        return l % r
+      case "**":
+        return l ** r
       // Two objects compare by identity in JS (no ToPrimitive); only object-vs-primitive coerces.
-      case "==": return bothObjects ? lhs === rhs : l == r
-      case "===": return lhs === rhs
-      case "!=": return bothObjects ? lhs !== rhs : l != r
-      case "!==": return lhs !== rhs
-      case "<": return l < r
-      case "<=": return l <= r
-      case ">": return l > r
-      case ">=": return l >= r
-      case "&": return l & r
-      case "|": return l | r
-      case "^": return l ^ r
-      case "<<": return l << r
-      case ">>": return l >> r
-      case ">>>": return l >>> r
+      case "==":
+        return bothObjects ? lhs === rhs : l == r
+      case "===":
+        return lhs === rhs
+      case "!=":
+        return bothObjects ? lhs !== rhs : l != r
+      case "!==":
+        return lhs !== rhs
+      case "<":
+        return l < r
+      case "<=":
+        return l <= r
+      case ">":
+        return l > r
+      case ">=":
+        return l >= r
+      case "&":
+        return l & r
+      case "|":
+        return l | r
+      case "^":
+        return l ^ r
+      case "<<":
+        return l << r
+      case ">>":
+        return l >> r
+      case ">>>":
+        return l >>> r
       case "in":
         if (rhs === null || typeof rhs !== "object") {
           throw new InterpreterRuntimeError("The 'in' operator requires a data object on the right-hand side.", node)
         }
         // Own properties only, so arrays don't leak the host Array.prototype (map/constructor/...).
         return Object.hasOwn(rhs as object, coerceOperand(lhs) as PropertyKey)
-      default: throw new InterpreterRuntimeError(`Unsupported binary operator '${operator}'.`, node)
+      default:
+        throw new InterpreterRuntimeError(`Unsupported binary operator '${operator}'.`, node)
     }
   }
 
@@ -2230,7 +2589,10 @@ class Interpreter<R> {
     return Effect.flatMap(this.evaluateExpression(getNode(node, "left")), (left) => {
       if (operator === "&&") return left ? this.evaluateExpression(getNode(node, "right")) : Effect.succeed(left)
       if (operator === "||") return left ? Effect.succeed(left) : this.evaluateExpression(getNode(node, "right"))
-      if (operator === "??") return left !== null && left !== undefined ? Effect.succeed(left) : this.evaluateExpression(getNode(node, "right"))
+      if (operator === "??")
+        return left !== null && left !== undefined
+          ? Effect.succeed(left)
+          : this.evaluateExpression(getNode(node, "right"))
       throw new InterpreterRuntimeError(`Unsupported logical operator '${operator}'.`, node)
     })
   }
@@ -2256,17 +2618,25 @@ class Interpreter<R> {
       // Numeric/bitwise unary operators ToPrimitive their operand; a Date yields its time value
       // (`+date` is the epoch-ms idiom), other null-prototype data objects/arrays coerce to
       // their JS string form first (see evaluateBinaryExpression).
-      const operand = rhs instanceof SandboxDate
-        ? (rhs.time as any)
-        : rhs !== null && typeof rhs === "object"
-          ? (coerceToString(rhs) as any)
-          : rhs
+      const operand =
+        rhs instanceof SandboxDate
+          ? (rhs.time as any)
+          : rhs !== null && typeof rhs === "object"
+            ? (coerceToString(rhs) as any)
+            : rhs
       let result: unknown
       switch (operator) {
-        case "+": result = +operand; break
-        case "-": result = -operand; break
-        case "~": result = ~operand; break
-        default: throw new InterpreterRuntimeError(`Unsupported unary operator '${operator}'.`, node)
+        case "+":
+          result = +operand
+          break
+        case "-":
+          result = -operand
+          break
+        case "~":
+          result = ~operand
+          break
+        default:
+          throw new InterpreterRuntimeError(`Unsupported unary operator '${operator}'.`, node)
       }
       return boundedData(result, "Unary expression result")
     })
@@ -2276,7 +2646,7 @@ class Interpreter<R> {
     const left = getNode(node, "left")
     const operator = getString(node, "operator")
     const self = this
-    return Effect.gen(function*() {
+    return Effect.gen(function* () {
       if (operator === "??=" || operator === "||=" || operator === "&&=") {
         return yield* self.evaluateLogicalAssignment(node, left, operator)
       }
@@ -2284,13 +2654,19 @@ class Interpreter<R> {
       if (left.type === "Identifier") {
         const name = getString(left, "name")
         if (operator === "=") return self.setIdentifierValue(name, rightValue, left)
-        const next = boundedData(self.applyCompoundAssignment(operator, self.getIdentifierValue(name, left), rightValue, node), "Assignment result")
+        const next = boundedData(
+          self.applyCompoundAssignment(operator, self.getIdentifierValue(name, left), rightValue, node),
+          "Assignment result",
+        )
         return self.setIdentifierValue(name, next, left)
       }
       if (left.type === "MemberExpression") {
         if (operator === "=") return yield* self.writeMember(left, rightValue)
         return yield* self.modifyMember(left, (current) => {
-          const next = boundedData(self.applyCompoundAssignment(operator, current, rightValue, node), "Assignment result")
+          const next = boundedData(
+            self.applyCompoundAssignment(operator, current, rightValue, node),
+            "Assignment result",
+          )
           return Effect.succeed({ write: true, next, result: next })
         })
       }
@@ -2298,13 +2674,17 @@ class Interpreter<R> {
     })
   }
 
-  private evaluateLogicalAssignment(node: AstNode, left: AstNode, operator: string): Effect.Effect<unknown, unknown, R> {
+  private evaluateLogicalAssignment(
+    node: AstNode,
+    left: AstNode,
+    operator: string,
+  ): Effect.Effect<unknown, unknown, R> {
     const self = this
     const shouldAssign = (current: unknown): boolean =>
       operator === "??=" ? current === null || current === undefined : operator === "||=" ? !current : Boolean(current)
     if (left.type === "Identifier") {
       const name = getString(left, "name")
-      return Effect.gen(function*() {
+      return Effect.gen(function* () {
         const current = self.getIdentifierValue(name, left)
         if (!shouldAssign(current)) return current
         const rightValue = yield* self.evaluateExpression(getNode(node, "right"))
@@ -2315,8 +2695,13 @@ class Interpreter<R> {
       // Resolve the member exactly once; evaluate the RHS only if we actually assign.
       return self.modifyMember(left, (current) =>
         shouldAssign(current)
-          ? Effect.map(self.evaluateExpression(getNode(node, "right")), (rightValue) => ({ write: true, next: rightValue, result: rightValue }))
-          : Effect.succeed({ write: false, next: current, result: current }))
+          ? Effect.map(self.evaluateExpression(getNode(node, "right")), (rightValue) => ({
+              write: true,
+              next: rightValue,
+              result: rightValue,
+            }))
+          : Effect.succeed({ write: false, next: current, result: current }),
+      )
     }
     throw new InterpreterRuntimeError("Assignment target must be an Identifier or MemberExpression.", left)
   }
@@ -2358,7 +2743,7 @@ class Interpreter<R> {
     const argNodes = getArray(node, "arguments")
 
     const self = this
-    return Effect.gen(function*() {
+    return Effect.gen(function* () {
       const callable = yield* self.evaluateExpression(callee)
       if (callable === OptionalShortCircuit) return OptionalShortCircuit
       if ((callable === null || callable === undefined) && node.optional === true) return OptionalShortCircuit
@@ -2393,7 +2778,7 @@ class Interpreter<R> {
       if (callable instanceof ErrorConstructorReference) {
         return createErrorValue(callable.name, args[0] === undefined ? "" : coerceToString(args[0]))
       }
-        throw new InterpreterRuntimeError("Only tools are callable in CodeMode.", callee)
+      throw new InterpreterRuntimeError("Only tools are callable in CodeMode.", callee)
     })
   }
 
@@ -2413,7 +2798,8 @@ class Interpreter<R> {
   }
 
   private invokeConsole(name: string, args: Array<unknown>, node: AstNode): undefined {
-    if (!consoleMethods.has(name)) throw new InterpreterRuntimeError(`console.${name} is not available in CodeMode.`, node)
+    if (!consoleMethods.has(name))
+      throw new InterpreterRuntimeError(`console.${name} is not available in CodeMode.`, node)
     this.logs.push(publicErrorMessage(this.formatConsoleMessage(name, args, node)))
     return undefined
   }
@@ -2473,7 +2859,9 @@ class Interpreter<R> {
       if (Array.isArray(value)) {
         return `[${value.map((item) => this.formatConsoleValue(item, seen, depth + 1)).join(",")}]`
       }
-      return `{${Object.entries(value).map(([key, item]) => `${JSON.stringify(key)}:${this.formatConsoleValue(item, seen, depth + 1)}`).join(",")}}`
+      return `{${Object.entries(value)
+        .map(([key, item]) => `${JSON.stringify(key)}:${this.formatConsoleValue(item, seen, depth + 1)}`)
+        .join(",")}}`
     } finally {
       seen.delete(value)
     }
@@ -2489,7 +2877,10 @@ class Interpreter<R> {
     const rows = this.consoleTableRows(data, columns)
     const keys = columns ?? Array.from(new Set(rows.flatMap((row) => Object.keys(row.values))))
     const header = ["(index)", ...keys].join("\t")
-    return [header, ...rows.map((row) => [row.index, ...keys.map((key) => this.formatConsoleTableCell(row.values[key]))].join("\t"))].join("\n")
+    return [
+      header,
+      ...rows.map((row) => [row.index, ...keys.map((key) => this.formatConsoleTableCell(row.values[key]))].join("\t")),
+    ].join("\n")
   }
 
   private consoleTableColumns(value: unknown, node: AstNode): ReadonlyArray<string> | undefined {
@@ -2499,7 +2890,10 @@ class Interpreter<R> {
     return Array.isArray(columns) ? columns.map((column) => String(column)) : undefined
   }
 
-  private consoleTableRows(data: unknown, columns: ReadonlyArray<string> | undefined): Array<{ readonly index: string; readonly values: Record<string, unknown> }> {
+  private consoleTableRows(
+    data: unknown,
+    columns: ReadonlyArray<string> | undefined,
+  ): Array<{ readonly index: string; readonly values: Record<string, unknown> }> {
     if (Array.isArray(data)) {
       return data.map((item, index) => ({ index: String(index), values: this.consoleTableValues(item, columns) }))
     }
@@ -2526,14 +2920,18 @@ class Interpreter<R> {
 
   private evaluateCallArguments(argNodes: Array<unknown>): Effect.Effect<Array<unknown>, unknown, R> {
     const self = this
-    return Effect.gen(function*() {
+    return Effect.gen(function* () {
       const args: Array<unknown> = []
       for (const [index, arg] of argNodes.entries()) {
         const argNode = asNode(arg, `arguments[${index}]`)
         if (argNode.type === "SpreadElement") {
           const spread = yield* self.evaluateExpression(getNode(argNode, "argument"))
           const items = spreadItems(spread)
-          if (items === undefined) throw new InterpreterRuntimeError("Spread arguments require an array, string, Map, or Set in CodeMode.", argNode)
+          if (items === undefined)
+            throw new InterpreterRuntimeError(
+              "Spread arguments require an array, string, Map, or Set in CodeMode.",
+              argNode,
+            )
           args.push(...items)
         } else {
           args.push(yield* self.evaluateExpression(argNode))
@@ -2548,13 +2946,19 @@ class Interpreter<R> {
   // whatever — because tool calls already run eagerly on their own fibers; the combinators
   // only observe settlements. Joining is therefore sequential (no extra fibers) without
   // costing parallelism, and the concurrency cap stays where the work is: the fork semaphore.
-  private invokePromiseMethod(ref: PromiseMethodReference, args: Array<unknown>, node: AstNode): Effect.Effect<unknown, unknown, R> {
+  private invokePromiseMethod(
+    ref: PromiseMethodReference,
+    args: Array<unknown>,
+    node: AstNode,
+  ): Effect.Effect<unknown, unknown, R> {
     const self = this
     if (ref.name === "resolve") {
       // Promise.resolve of a promise is that promise (JS flattens); anything else is a
       // promise already fulfilled with the value.
       const value = args[0]
-      return Effect.succeed(value instanceof SandboxPromise ? value : new SandboxPromise(undefined, Effect.succeed(value)))
+      return Effect.succeed(
+        value instanceof SandboxPromise ? value : new SandboxPromise(undefined, Effect.succeed(value)),
+      )
     }
     if (ref.name === "reject") {
       return Effect.sync(() => new SandboxPromise(undefined, Effect.fail(new ProgramThrow(args[0]))))
@@ -2573,8 +2977,10 @@ class Interpreter<R> {
         // Mark every promise element observed up-front (Promise.all handles all of its
         // members' failures, as in JS), then join in index order; the first failure rejects
         // the whole call while unrelated in-flight members keep running.
-        const settles = items.map((item) => (item instanceof SandboxPromise ? this.settlePromise(item, node) : Effect.succeed(item)))
-        return Effect.gen(function*() {
+        const settles = items.map((item) =>
+          item instanceof SandboxPromise ? this.settlePromise(item, node) : Effect.succeed(item),
+        )
+        return Effect.gen(function* () {
           const values: Array<unknown> = []
           for (const settle of settles) values.push(yield* settle)
           return values
@@ -2584,13 +2990,16 @@ class Interpreter<R> {
         const observations = items.map((item) =>
           item instanceof SandboxPromise
             ? Effect.map(this.observePromise(item), (exit) => ({ promise: item as SandboxPromise | undefined, exit }))
-            : Effect.succeed({ promise: undefined as SandboxPromise | undefined, exit: Exit.succeed(item as unknown) }))
-        return Effect.gen(function*() {
+            : Effect.succeed({ promise: undefined as SandboxPromise | undefined, exit: Exit.succeed(item as unknown) }),
+        )
+        return Effect.gen(function* () {
           const outcomes: Array<unknown> = []
           for (const observation of observations) {
             const { exit, promise } = yield* observation
             if (Exit.isSuccess(exit)) {
-              outcomes.push(Object.assign(Object.create(null) as SafeObject, { status: "fulfilled", value: exit.value }))
+              outcomes.push(
+                Object.assign(Object.create(null) as SafeObject, { status: "fulfilled", value: exit.value }),
+              )
               continue
             }
             const raceInterrupted = promise?.interrupted === true && Cause.hasInterruptsOnly(exit.cause)
@@ -2599,22 +3008,34 @@ class Interpreter<R> {
               return yield* Effect.failCause(exit.cause)
             }
             const thrown = raceInterrupted
-              ? new InterpreterRuntimeError("This tool call was interrupted because another value settled a Promise.race first.", node)
+              ? new InterpreterRuntimeError(
+                  "This tool call was interrupted because another value settled a Promise.race first.",
+                  node,
+                )
               : Cause.squash(exit.cause)
-            outcomes.push(Object.assign(Object.create(null) as SafeObject, { status: "rejected", reason: caughtErrorValue(thrown) }))
+            outcomes.push(
+              Object.assign(Object.create(null) as SafeObject, {
+                status: "rejected",
+                reason: caughtErrorValue(thrown),
+              }),
+            )
           }
           return outcomes
         })
       }
       case "race": {
         if (items.length === 0) {
-          throw new InterpreterRuntimeError("Promise.race([]) would never settle; provide at least one promise or value.", node)
+          throw new InterpreterRuntimeError(
+            "Promise.race([]) would never settle; provide at least one promise or value.",
+            node,
+          )
         }
         const observations = items.map((item, index) =>
           item instanceof SandboxPromise
             ? Effect.map(this.observePromise(item), (exit) => ({ index, exit }))
-            : Effect.succeed({ index, exit: Exit.succeed(item as unknown) }))
-        return Effect.gen(function*() {
+            : Effect.succeed({ index, exit: Exit.succeed(item as unknown) }),
+        )
+        return Effect.gen(function* () {
           // First settlement (fulfilled OR rejected) wins; the observations never fail, so
           // racing them yields exactly that. Losing in-flight calls are then interrupted.
           const winner = yield* Effect.raceAll(observations)
@@ -2624,7 +3045,11 @@ class Interpreter<R> {
             yield* Fiber.interrupt(item.fiber)
           }
           const winningItem = items[winner.index]
-          return yield* self.unwrapPromiseExit(winningItem instanceof SandboxPromise ? winningItem : undefined, winner.exit, node)
+          return yield* self.unwrapPromiseExit(
+            winningItem instanceof SandboxPromise ? winningItem : undefined,
+            winner.exit,
+            node,
+          )
         })
       }
     }
@@ -2635,7 +3060,7 @@ class Interpreter<R> {
     return Effect.suspend(() => {
       const savedScopes = self.scopes
       self.scopes = [...fn.capturedScopes, new Map<string, Binding>()]
-      const run = Effect.gen(function*() {
+      const run = Effect.gen(function* () {
         // Seed every parameter name into the scope as a TDZ slot first, so a default that
         // references another parameter resolves to that (uninitialized) param rather than
         // silently falling through to an outer binding of the same name — matching JS.
@@ -2660,11 +3085,21 @@ class Interpreter<R> {
 
         return yield* self.evaluateExpression(fn.body)
       })
-      return run.pipe(Effect.ensuring(Effect.sync(() => { self.scopes = savedScopes })))
+      return run.pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            self.scopes = savedScopes
+          }),
+        ),
+      )
     })
   }
 
-  private invokeIntrinsic(ref: IntrinsicReference, args: Array<unknown>, node: AstNode): Effect.Effect<unknown, unknown, R> {
+  private invokeIntrinsic(
+    ref: IntrinsicReference,
+    args: Array<unknown>,
+    node: AstNode,
+  ): Effect.Effect<unknown, unknown, R> {
     if (typeof ref.receiver === "string") {
       return Effect.succeed(invokeStringMethod(ref.receiver, ref.name, args, node))
     }
@@ -2691,7 +3126,11 @@ class Interpreter<R> {
 
   // Runs a Map/Set callback (forEach) accepting a user function or a builtin coercion,
   // mirroring the array-method callback contract.
-  private applyCollectionCallback(callback: unknown, name: string, node: AstNode): (args: Array<unknown>) => Effect.Effect<unknown, unknown, R> {
+  private applyCollectionCallback(
+    callback: unknown,
+    name: string,
+    node: AstNode,
+  ): (args: Array<unknown>) => Effect.Effect<unknown, unknown, R> {
     if (!(callback instanceof CodeModeFunction) && !(callback instanceof CoercionFunction)) {
       throw new InterpreterRuntimeError(`${name} expects a function callback.`, node)
     }
@@ -2701,64 +3140,96 @@ class Interpreter<R> {
         : this.invokeFunction(callback, callbackArgs)
   }
 
-  private invokeMapMethod(target: SandboxMap, name: string, args: Array<unknown>, node: AstNode): Effect.Effect<unknown, unknown, R> {
+  private invokeMapMethod(
+    target: SandboxMap,
+    name: string,
+    args: Array<unknown>,
+    node: AstNode,
+  ): Effect.Effect<unknown, unknown, R> {
     switch (name) {
-      case "get": return Effect.succeed(target.map.get(args[0]))
-      case "has": return Effect.succeed(target.map.has(args[0]))
-      case "set": return Effect.sync(() => {
-        target.map.set(args[0], args[1])
-        return target
-      })
-      case "delete": return Effect.sync(() => target.map.delete(args[0]))
-      case "clear": return Effect.sync(() => {
-        target.map.clear()
-        return undefined
-      })
-      case "keys": return Effect.sync(() => Array.from(target.map.keys()))
-      case "values": return Effect.sync(() => Array.from(target.map.values()))
-      case "entries": return Effect.sync(() => Array.from(target.map.entries(), ([key, item]): Array<unknown> => [key, item]))
+      case "get":
+        return Effect.succeed(target.map.get(args[0]))
+      case "has":
+        return Effect.succeed(target.map.has(args[0]))
+      case "set":
+        return Effect.sync(() => {
+          target.map.set(args[0], args[1])
+          return target
+        })
+      case "delete":
+        return Effect.sync(() => target.map.delete(args[0]))
+      case "clear":
+        return Effect.sync(() => {
+          target.map.clear()
+          return undefined
+        })
+      case "keys":
+        return Effect.sync(() => Array.from(target.map.keys()))
+      case "values":
+        return Effect.sync(() => Array.from(target.map.values()))
+      case "entries":
+        return Effect.sync(() => Array.from(target.map.entries(), ([key, item]): Array<unknown> => [key, item]))
       case "forEach": {
         const apply = this.applyCollectionCallback(args[0], "Map.forEach", node)
-        return Effect.gen(function*() {
+        return Effect.gen(function* () {
           // Snapshot iteration, matching the array-method callback contract.
           for (const [key, item] of Array.from(target.map.entries())) yield* apply([item, key, target])
           return undefined
         })
       }
-      default: throw new InterpreterRuntimeError(`Map method '${name}' is not available in CodeMode.`, node)
+      default:
+        throw new InterpreterRuntimeError(`Map method '${name}' is not available in CodeMode.`, node)
     }
   }
 
-  private invokeSetMethod(target: SandboxSet, name: string, args: Array<unknown>, node: AstNode): Effect.Effect<unknown, unknown, R> {
+  private invokeSetMethod(
+    target: SandboxSet,
+    name: string,
+    args: Array<unknown>,
+    node: AstNode,
+  ): Effect.Effect<unknown, unknown, R> {
     switch (name) {
-      case "has": return Effect.succeed(target.set.has(args[0]))
-      case "add": return Effect.sync(() => {
-        target.set.add(args[0])
-        return target
-      })
-      case "delete": return Effect.sync(() => target.set.delete(args[0]))
-      case "clear": return Effect.sync(() => {
-        target.set.clear()
-        return undefined
-      })
+      case "has":
+        return Effect.succeed(target.set.has(args[0]))
+      case "add":
+        return Effect.sync(() => {
+          target.set.add(args[0])
+          return target
+        })
+      case "delete":
+        return Effect.sync(() => target.set.delete(args[0]))
+      case "clear":
+        return Effect.sync(() => {
+          target.set.clear()
+          return undefined
+        })
       case "keys":
-      case "values": return Effect.sync(() => Array.from(target.set.values()))
-      case "entries": return Effect.sync(() => Array.from(target.set.values(), (item): Array<unknown> => [item, item]))
+      case "values":
+        return Effect.sync(() => Array.from(target.set.values()))
+      case "entries":
+        return Effect.sync(() => Array.from(target.set.values(), (item): Array<unknown> => [item, item]))
       case "forEach": {
         const apply = this.applyCollectionCallback(args[0], "Set.forEach", node)
-        return Effect.gen(function*() {
+        return Effect.gen(function* () {
           for (const item of Array.from(target.set.values())) yield* apply([item, item, target])
           return undefined
         })
       }
-      default: throw new InterpreterRuntimeError(`Set method '${name}' is not available in CodeMode.`, node)
+      default:
+        throw new InterpreterRuntimeError(`Set method '${name}' is not available in CodeMode.`, node)
     }
   }
 
-  private invokeArrayMethod(target: Array<unknown>, name: string, args: Array<unknown>, node: AstNode): Effect.Effect<unknown, unknown, R> {
+  private invokeArrayMethod(
+    target: Array<unknown>,
+    name: string,
+    args: Array<unknown>,
+    node: AstNode,
+  ): Effect.Effect<unknown, unknown, R> {
     const optNumber = (value: unknown, label: string): number | undefined => {
       if (value === undefined) return undefined
-      if (typeof value !== "number") throw new InterpreterRuntimeError(`Array.${name} expects ${label} to be a number.`, node)
+      if (typeof value !== "number")
+        throw new InterpreterRuntimeError(`Array.${name} expects ${label} to be a number.`, node)
       return value
     }
     switch (name) {
@@ -2767,15 +3238,22 @@ class Interpreter<R> {
           throw new InterpreterRuntimeError("Array.join expects zero arguments or one string separator.", node)
         }
         const input = boundedData(target, "Array.join input") as Array<unknown>
-        return Effect.succeed(input.map((item) => coerceToString(item ?? "")).join(args.length === 0 ? "," : args[0] as string))
+        return Effect.succeed(
+          input.map((item) => coerceToString(item ?? "")).join(args.length === 0 ? "," : (args[0] as string)),
+        )
       }
       case "includes":
-        if (args.length === 0 || args.length > 2) throw new InterpreterRuntimeError("Array.includes expects a value and optional start index.", node)
+        if (args.length === 0 || args.length > 2)
+          throw new InterpreterRuntimeError("Array.includes expects a value and optional start index.", node)
         return Effect.succeed(target.includes(args[0], optNumber(args[1], "start index")))
       case "indexOf":
         return Effect.succeed(target.indexOf(args[0], optNumber(args[1], "start index")))
       case "lastIndexOf":
-        return Effect.succeed(args[1] === undefined ? target.lastIndexOf(args[0]) : target.lastIndexOf(args[0], optNumber(args[1], "start index")))
+        return Effect.succeed(
+          args[1] === undefined
+            ? target.lastIndexOf(args[0])
+            : target.lastIndexOf(args[0], optNumber(args[1], "start index")),
+        )
       case "at":
         return Effect.succeed(target.at(optNumber(args[0], "index") ?? 0))
       case "slice":
@@ -2833,7 +3311,13 @@ class Interpreter<R> {
         return Effect.succeed(target.fill(args[0], optNumber(args[1], "start"), optNumber(args[2], "end")))
       }
       case "copyWithin":
-        return Effect.succeed(target.copyWithin(optNumber(args[0], "target index") ?? 0, optNumber(args[1], "start") ?? 0, optNumber(args[2], "end")))
+        return Effect.succeed(
+          target.copyWithin(
+            optNumber(args[0], "target index") ?? 0,
+            optNumber(args[1], "start") ?? 0,
+            optNumber(args[2], "end"),
+          ),
+        )
       // keys/values/entries return arrays (not iterators), matching the Map/Set convention;
       // they work with for...of and spread either way.
       case "keys":
@@ -2856,7 +3340,7 @@ class Interpreter<R> {
       callback instanceof CoercionFunction
         ? Effect.succeed(invokeCoercion(callback, callbackArgs, node))
         : self.invokeFunction(callback, callbackArgs)
-    return Effect.gen(function*() {
+    return Effect.gen(function* () {
       // Iterate a snapshot taken at call time so a callback that mutates the array can't
       // self-extend the loop — matching JS, where elements appended during iteration are not visited.
       const items = target.slice()
@@ -2912,7 +3396,8 @@ class Interpreter<R> {
             accumulator = args[1]
             start = 0
           } else {
-            if (items.length === 0) throw new InterpreterRuntimeError("Array.reduce of an empty array with no initial value.", node)
+            if (items.length === 0)
+              throw new InterpreterRuntimeError("Array.reduce of an empty array with no initial value.", node)
             accumulator = items[0]
             start = 1
           }
@@ -2928,7 +3413,8 @@ class Interpreter<R> {
             accumulator = args[1]
             start = items.length - 1
           } else {
-            if (items.length === 0) throw new InterpreterRuntimeError("Array.reduceRight of an empty array with no initial value.", node)
+            if (items.length === 0)
+              throw new InterpreterRuntimeError("Array.reduceRight of an empty array with no initial value.", node)
             accumulator = items[items.length - 1]
             start = items.length - 2
           }
@@ -2952,7 +3438,11 @@ class Interpreter<R> {
     })
   }
 
-  private sortArray(target: Array<unknown>, comparator: unknown, node: AstNode): Effect.Effect<Array<unknown>, unknown, R> {
+  private sortArray(
+    target: Array<unknown>,
+    comparator: unknown,
+    node: AstNode,
+  ): Effect.Effect<Array<unknown>, unknown, R> {
     if (comparator !== undefined && !(comparator instanceof CodeModeFunction)) {
       throw new InterpreterRuntimeError("Array.sort expects an arrow function comparator.", node)
     }
@@ -2962,13 +3452,14 @@ class Interpreter<R> {
           const left = coerceToString(a)
           const right = coerceToString(b)
           return left < right ? -1 : left > right ? 1 : 0
-        }))
+        }),
+      )
     }
     const self = this
     const mergeSort = (items: Array<unknown>): Effect.Effect<Array<unknown>, unknown, R> => {
       if (items.length <= 1) return Effect.succeed(items)
       const midpoint = Math.floor(items.length / 2)
-      return Effect.gen(function*() {
+      return Effect.gen(function* () {
         const left = yield* mergeSort(items.slice(0, midpoint))
         const right = yield* mergeSort(items.slice(midpoint))
         const merged: Array<unknown> = []
@@ -2994,7 +3485,7 @@ class Interpreter<R> {
     const objectValue: Record<string, unknown> = Object.create(null) as Record<string, unknown>
     const properties = getArray(node, "properties")
     const self = this
-    return Effect.gen(function*() {
+    return Effect.gen(function* () {
       for (const propertyValue of properties) {
         const property = asNode(propertyValue, "properties")
 
@@ -3005,10 +3496,15 @@ class Interpreter<R> {
           // (Date/RegExp/Map/Set) have no own enumerable properties in JS, so they are no-ops too.
           if (spread === null || spread === undefined || isSandboxValue(spread)) continue
           if (typeof spread !== "object" || Array.isArray(spread) || isRuntimeReference(spread)) {
-            throw new InterpreterRuntimeError("Object spread requires a data object in CodeMode.", property, "InvalidDataValue")
+            throw new InterpreterRuntimeError(
+              "Object spread requires a data object in CodeMode.",
+              property,
+              "InvalidDataValue",
+            )
           }
           for (const [key, value] of Object.entries(spread)) {
-            if (isBlockedMember(key)) throw new InterpreterRuntimeError(`Property '${key}' is not available in CodeMode.`, property)
+            if (isBlockedMember(key))
+              throw new InterpreterRuntimeError(`Property '${key}' is not available in CodeMode.`, property)
             objectValue[key] = value
           }
           continue
@@ -3053,7 +3549,7 @@ class Interpreter<R> {
     const values: Array<unknown> = []
 
     const self = this
-    return Effect.gen(function*() {
+    return Effect.gen(function* () {
       for (const elementValue of elements) {
         if (elementValue === null) {
           values.push(undefined)
@@ -3063,7 +3559,11 @@ class Interpreter<R> {
         if (element.type === "SpreadElement") {
           const spread = yield* self.evaluateExpression(getNode(element, "argument"))
           const items = spreadItems(spread)
-          if (items === undefined) throw new InterpreterRuntimeError("Array spread requires an array, string, Map, or Set in CodeMode.", element)
+          if (items === undefined)
+            throw new InterpreterRuntimeError(
+              "Array spread requires an array, string, Map, or Set in CodeMode.",
+              element,
+            )
           values.push(...items)
         } else {
           values.push(yield* self.evaluateExpression(element))
@@ -3080,7 +3580,7 @@ class Interpreter<R> {
     let output = ""
 
     const self = this
-    return Effect.gen(function*() {
+    return Effect.gen(function* () {
       for (let index = 0; index < quasis.length; index += 1) {
         const quasi = asNode(quasis[index], "quasis")
         const rawValue = quasi.value
@@ -3105,15 +3605,11 @@ class Interpreter<R> {
 
   private evaluateConditionalExpression(node: AstNode): Effect.Effect<unknown, unknown, R> {
     return Effect.flatMap(this.evaluateExpression(getNode(node, "test")), (test) =>
-      this.evaluateExpression(getNode(node, test ? "consequent" : "alternate")))
+      this.evaluateExpression(getNode(node, test ? "consequent" : "alternate")),
+    )
   }
 
-  private applyCompoundAssignment(
-    operator: string,
-    current: unknown,
-    incoming: unknown,
-    node: AstNode,
-  ): unknown {
+  private applyCompoundAssignment(operator: string, current: unknown, incoming: unknown, node: AstNode): unknown {
     // `x op= y` is `x = x op y`: dispatch through the shared binary operator implementation
     // so compound assignment inherits the same coercion semantics (Dates, data objects, ...).
     // Only the arithmetic/bitwise operators are compoundable; logical assignments (&&=/||=/??=)
@@ -3124,13 +3620,26 @@ class Interpreter<R> {
     return this.applyBinaryOperator(operator.slice(0, -1), current, incoming, node)
   }
 
-  private getMemberReference(node: AstNode): Effect.Effect<MemberReference | ToolReference | PromiseMethodReference | IntrinsicReference | GlobalMethodReference | ComputedValue | typeof OptionalShortCircuit | undefined, unknown, R> {
+  private getMemberReference(
+    node: AstNode,
+  ): Effect.Effect<
+    | MemberReference
+    | ToolReference
+    | PromiseMethodReference
+    | IntrinsicReference
+    | GlobalMethodReference
+    | ComputedValue
+    | typeof OptionalShortCircuit
+    | undefined,
+    unknown,
+    R
+  > {
     const objectNode = getNode(node, "object")
     const propertyNode = getNode(node, "property")
     const computed = getBoolean(node, "computed")
     const optional = node.optional === true
     const self = this
-    return Effect.gen(function*() {
+    return Effect.gen(function* () {
       const objectValue = yield* self.evaluateExpression(objectNode)
       if (objectValue === OptionalShortCircuit) return OptionalShortCircuit
       if ((objectValue === null || objectValue === undefined) && optional) return OptionalShortCircuit
@@ -3160,7 +3669,10 @@ class Interpreter<R> {
 
       if (objectValue instanceof GlobalNamespace) {
         if (typeof key !== "string" || isBlockedMember(key)) {
-          throw new InterpreterRuntimeError(`${objectValue.name}.${String(key)} is not available in CodeMode.`, propertyNode)
+          throw new InterpreterRuntimeError(
+            `${objectValue.name}.${String(key)} is not available in CodeMode.`,
+            propertyNode,
+          )
         }
         if (objectValue.name === "Math" && mathConstants.has(key)) {
           return new ComputedValue((Math as unknown as Record<string, number>)[key])
@@ -3239,7 +3751,11 @@ class Interpreter<R> {
       }
 
       if (isRuntimeReference(objectValue)) {
-        throw new InterpreterRuntimeError("CodeMode runtime references are opaque and do not expose properties.", objectNode, "InvalidDataValue")
+        throw new InterpreterRuntimeError(
+          "CodeMode runtime references are opaque and do not expose properties.",
+          objectNode,
+          "InvalidDataValue",
+        )
       }
 
       if (typeof objectValue !== "object" || objectValue === null) {
@@ -3251,7 +3767,12 @@ class Interpreter<R> {
       }
 
       if (Array.isArray(objectValue)) {
-        if (key !== "length" && !(typeof key === "string" && arrayMethods.has(key)) && (typeof key !== "number" && !/^\d+$/.test(key))) {
+        if (
+          key !== "length" &&
+          !(typeof key === "string" && arrayMethods.has(key)) &&
+          typeof key !== "number" &&
+          !/^\d+$/.test(key)
+        ) {
           // Own non-index properties read through (match results carry index/groups); like JS,
           // they are readable in place and dropped by JSON at data boundaries.
           if (typeof key === "string" && Object.hasOwn(objectValue, key)) {
@@ -3278,7 +3799,8 @@ class Interpreter<R> {
         reference instanceof PromiseMethodReference ||
         reference instanceof IntrinsicReference ||
         reference instanceof GlobalMethodReference
-      ) return reference
+      )
+        return reference
       if (Array.isArray(reference.target)) {
         if (typeof reference.key === "string" && arrayMethods.has(reference.key)) {
           return new IntrinsicReference(reference.target, reference.key)
@@ -3301,7 +3823,7 @@ class Interpreter<R> {
     compute: (current: unknown) => Effect.Effect<{ write: boolean; next: unknown; result: unknown }, unknown, R>,
   ): Effect.Effect<unknown, unknown, R> {
     const self = this
-    return Effect.gen(function*() {
+    return Effect.gen(function* () {
       const reference = yield* self.getMemberReference(node)
       if (
         reference === OptionalShortCircuit ||
@@ -3315,7 +3837,8 @@ class Interpreter<R> {
         throw new InterpreterRuntimeError("Only data fields may be assigned in CodeMode.", node)
       }
       if (Array.isArray(reference.target)) {
-        if (reference.key === "length") throw new InterpreterRuntimeError("Array length cannot be assigned in CodeMode.", node)
+        if (reference.key === "length")
+          throw new InterpreterRuntimeError("Array length cannot be assigned in CodeMode.", node)
         if (typeof reference.key === "string" && arrayMethods.has(reference.key)) {
           throw new InterpreterRuntimeError("Array methods cannot be assigned in CodeMode.", node)
         }
@@ -3330,8 +3853,15 @@ class Interpreter<R> {
 
   // Rejects inserting a value that (transitively) contains the container it is being inserted
   // into — the mutation that would create a circular structure no later walk could survive.
-  private rejectCircularInsertion(container: object, value: unknown, label: string, node: AstNode, seen = new Set<object>()): void {
-    if (value === container) throw new InterpreterRuntimeError(`${label} contains a circular value.`, node, "InvalidDataValue")
+  private rejectCircularInsertion(
+    container: object,
+    value: unknown,
+    label: string,
+    node: AstNode,
+    seen = new Set<object>(),
+  ): void {
+    if (value === container)
+      throw new InterpreterRuntimeError(`${label} contains a circular value.`, node, "InvalidDataValue")
     if (value === null || typeof value !== "object" || isRuntimeReference(value) || seen.has(value)) return
     seen.add(value)
     const items = Array.isArray(value) ? value : Object.values(value)
@@ -3344,7 +3874,11 @@ class Interpreter<R> {
       const target = reference.target
       const index = key as number
       if (!Number.isInteger(index) || index < 0) {
-        throw new InterpreterRuntimeError("Array assignment index must be a non-negative integer.", node, "InvalidDataValue")
+        throw new InterpreterRuntimeError(
+          "Array assignment index must be a non-negative integer.",
+          node,
+          "InvalidDataValue",
+        )
       }
       this.rejectCircularInsertion(target, next, "Array assignment result", node)
       target[index] = next
@@ -3437,7 +3971,6 @@ class Interpreter<R> {
   private popScope(): void {
     this.scopes.pop()
   }
-
 }
 
 /**
@@ -3460,9 +3993,14 @@ const executeWithLimits = <const Tools extends Record<string, unknown>>(
     ...(options.onToolCallStart === undefined ? {} : { onToolCallStart: options.onToolCallStart }),
     ...(options.onToolCallEnd === undefined ? {} : { onToolCallEnd: options.onToolCallEnd }),
   }
-  const tools = ToolRuntime.make((options.tools ?? {}) as HostTools<Services<Tools>>, limits.maxToolCalls, hooks, searchIndex)
+  const tools = ToolRuntime.make(
+    (options.tools ?? {}) as HostTools<Services<Tools>>,
+    limits.maxToolCalls,
+    hooks,
+    searchIndex,
+  )
   const logs: Array<string> = []
-  const logged = () => logs.length > 0 ? { logs: [...logs] } : {}
+  const logged = () => (logs.length > 0 ? { logs: [...logs] } : {})
 
   if (options.code.trim().length === 0) {
     return Effect.succeed({
@@ -3472,7 +4010,7 @@ const executeWithLimits = <const Tools extends Record<string, unknown>>(
     })
   }
 
-  const operation = Effect.gen(function*() {
+  const operation = Effect.gen(function* () {
     const program = parseProgram(options.code)
     const interpreter = new Interpreter<Services<Tools>>(tools.invoke, tools.keys, logs)
     const value = yield* interpreter.run(program)
@@ -3483,23 +4021,22 @@ const executeWithLimits = <const Tools extends Record<string, unknown>>(
       ...logged(),
       toolCalls: tools.calls,
     } satisfies ExecuteResult
-  }).pipe(
-    (program) => {
-      const timeoutMs = limits.timeoutMs
-      if (timeoutMs === undefined) return program
-      return program.pipe(
-        Effect.timeoutOrElse({
-          duration: timeoutMs,
-          orElse: () => Effect.succeed({
+  }).pipe((program) => {
+    const timeoutMs = limits.timeoutMs
+    if (timeoutMs === undefined) return program
+    return program.pipe(
+      Effect.timeoutOrElse({
+        duration: timeoutMs,
+        orElse: () =>
+          Effect.succeed({
             ok: false,
             error: { kind: "TimeoutExceeded", message: `Execution timed out after ${timeoutMs}ms.` },
             ...logged(),
             toolCalls: tools.calls,
           } satisfies ExecuteResult),
-        }),
-      )
-    },
-  )
+      }),
+    )
+  })
 
   return operation.pipe(
     Effect.catchCause((cause) =>
@@ -3512,7 +4049,7 @@ const executeWithLimits = <const Tools extends Record<string, unknown>>(
             toolCalls: tools.calls,
           } satisfies ExecuteResult),
     ),
-    Effect.map((result) => limits.maxOutputBytes === undefined ? result : boundOutput(result, limits.maxOutputBytes)),
+    Effect.map((result) => (limits.maxOutputBytes === undefined ? result : boundOutput(result, limits.maxOutputBytes))),
   )
 }
 
@@ -3574,7 +4111,9 @@ const boundOutput = (result: ExecuteResult, maxOutputBytes: number): ExecuteResu
     : { ok: false, error: result.error, ...logsPart, truncated: true, toolCalls: result.toolCalls }
 }
 
-export const execute = <const Tools extends Record<string, unknown>>(options: ExecuteOptions<Tools>): Effect.Effect<ExecuteResult, never, Services<Tools>> => {
+export const execute = <const Tools extends Record<string, unknown>>(
+  options: ExecuteOptions<Tools>,
+): Effect.Effect<ExecuteResult, never, Services<Tools>> => {
   const tools = (options.tools ?? {}) as HostTools<Services<Tools>>
   ToolRuntime.assertValidTools(tools)
   return executeWithLimits(options, resolveExecutionLimits(options.limits), ToolRuntime.searchIndex(tools))
@@ -3592,7 +4131,9 @@ export const execute = <const Tools extends Record<string, unknown>>(options: Ex
  * const code = runtime.agentTool()
  * ```
  */
-export const make = <const Tools extends Record<string, unknown> = {}>(options: CodeModeOptions<Tools> = {} as CodeModeOptions<Tools>): CodeModeRuntime<Services<Tools>> => {
+export const make = <const Tools extends Record<string, unknown> = {}>(
+  options: CodeModeOptions<Tools> = {} as CodeModeOptions<Tools>,
+): CodeModeRuntime<Services<Tools>> => {
   const tools = (options.tools ?? {}) as HostTools<Services<Tools>>
   ToolRuntime.assertValidTools(tools)
   const limits = resolveExecutionLimits(options.limits)
