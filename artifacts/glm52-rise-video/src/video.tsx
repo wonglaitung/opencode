@@ -73,7 +73,11 @@ export function GLM52Rise() {
   // token number climbs as the camera pulls back and the headline re-enters frame
   const tokensT =
     glmWeekTokensT *
-    interpolate(frame, [150, 202], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.out(Easing.cubic) })
+    interpolate(frame, [150, 202], [0, 1], {
+      extrapolateLeft: "clamp",
+      extrapolateRight: "clamp",
+      easing: Easing.out(Easing.cubic),
+    })
 
   // chart geometry
   const chartH = 440
@@ -83,7 +87,16 @@ export function GLM52Rise() {
 
   return (
     <AbsoluteFill style={{ background: c.bg, overflow: "hidden" }}>
-      <div style={{ position: "absolute", width: W, height: W, background: c.bg, transformOrigin: "0 0", transform: camera }}>
+      <div
+        style={{
+          position: "absolute",
+          width: W,
+          height: W,
+          background: c.bg,
+          transformOrigin: "0 0",
+          transform: camera,
+        }}
+      >
         <div
           style={{
             width: W,

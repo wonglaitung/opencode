@@ -50,7 +50,10 @@ export function NZSheep() {
   )
 
   // slow Ken Burns push-in (scale up only — never reveals an edge)
-  const zoom = interpolate(frame, [0, 150], [1.06, 1.12], { extrapolateRight: "clamp", easing: Easing.inOut(Easing.quad) })
+  const zoom = interpolate(frame, [0, 150], [1.06, 1.12], {
+    extrapolateRight: "clamp",
+    easing: Easing.inOut(Easing.quad),
+  })
 
   return (
     <AbsoluteFill style={{ background: "#0c0c0c", overflow: "hidden" }}>

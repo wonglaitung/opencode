@@ -56,7 +56,10 @@ export function FlashShare() {
   const { fps } = useVideoConfig()
 
   const grow = (i: number) =>
-    Math.min(1, Math.max(0, spring({ frame: frame - 18 - i * 7, fps, config: { damping: 18, stiffness: 120, mass: 0.6 } })))
+    Math.min(
+      1,
+      Math.max(0, spring({ frame: frame - 18 - i * 7, fps, config: { damping: 18, stiffness: 120, mass: 0.6 } })),
+    )
 
   return (
     <AbsoluteFill style={{ background: c.bg, color: c.ink, fontFamily: MONO, padding: 72, boxSizing: "border-box" }}>
@@ -72,7 +75,9 @@ export function FlashShare() {
           <div style={{ fontSize: 23, fontWeight: 600, color: c.muted, letterSpacing: 2 }}>
             OPENCODE GO · SHARE OF TOKENS
           </div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 24, marginTop: 14 }}>
+          <div
+            style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 24, marginTop: 14 }}
+          >
             <div style={{ fontSize: 62, fontWeight: 600, letterSpacing: -2, lineHeight: 1 }}>DeepSeek V4 Flash</div>
             <div
               style={{

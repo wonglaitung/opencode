@@ -57,7 +57,10 @@ export function MiniMaxClimb() {
   const { fps } = useVideoConfig()
 
   const grow = (i: number) =>
-    Math.min(1, Math.max(0, spring({ frame: frame - 22 - i * 9, fps, config: { damping: 18, stiffness: 110, mass: 0.6 } })))
+    Math.min(
+      1,
+      Math.max(0, spring({ frame: frame - 22 - i * 9, fps, config: { damping: 18, stiffness: 110, mass: 0.6 } })),
+    )
 
   return (
     <AbsoluteFill style={{ background: c.bg, color: c.ink, fontFamily: MONO, padding: 72, boxSizing: "border-box" }}>
@@ -73,7 +76,9 @@ export function MiniMaxClimb() {
           <div style={{ fontSize: 23, fontWeight: 600, color: c.muted, letterSpacing: 2 }}>
             OPENCODE GO · WEEKLY TOKENS
           </div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 24, marginTop: 14 }}>
+          <div
+            style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 24, marginTop: 14 }}
+          >
             <div style={{ fontSize: 62, fontWeight: 600, letterSpacing: -2, lineHeight: 1 }}>MiniMax M3</div>
             <div style={{ textAlign: "right", flexShrink: 0 }}>
               <div
@@ -145,7 +150,10 @@ export function MiniMaxClimb() {
                         fontWeight: w.latest ? 600 : 500,
                         color: w.latest ? c.accent : c.muted,
                         fontVariantNumeric: "tabular-nums",
-                        opacity: interpolate(g, [0.5, 1], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }),
+                        opacity: interpolate(g, [0.5, 1], [0, 1], {
+                          extrapolateLeft: "clamp",
+                          extrapolateRight: "clamp",
+                        }),
                       }}
                     >
                       {w.t.toFixed(2)}T

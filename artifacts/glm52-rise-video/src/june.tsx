@@ -95,7 +95,14 @@ export function JuneTotals() {
           <div style={{ fontSize: 25, fontWeight: 600, color: c.muted, letterSpacing: 3 }}>OPENCODE GO · JUNE 2026</div>
           <div style={{ marginTop: 14 }}>
             <div
-              style={{ fontSize: 300, fontWeight: 600, letterSpacing: -10, lineHeight: 0.82, color: c.accent, marginLeft: -22 }}
+              style={{
+                fontSize: 300,
+                fontWeight: 600,
+                letterSpacing: -10,
+                lineHeight: 0.82,
+                color: c.accent,
+                marginLeft: -22,
+              }}
             >
               73T
             </div>
