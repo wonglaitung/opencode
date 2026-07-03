@@ -280,10 +280,7 @@ const layer = Layer.effect(
       const ruleset = Permission.merge(input.agent.permission, input.permission ?? [])
       const tools = Permission.visibleTools(yield* mcp.tools(), ruleset)
       if (Object.keys(tools).length === 0) return
-      return codeMode.describeCatalog(
-        tools,
-        Object.keys(yield* mcp.clients()).map(McpCatalog.sanitize),
-      )
+      return codeMode.describeCatalog(tools, Object.keys(yield* mcp.clients()).map(McpCatalog.sanitize))
     })
 
     const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (input) {
@@ -300,7 +297,9 @@ const layer = Layer.effect(
         return true
       })
 
-      const codeModeDescription = filtered.some((tool) => tool.id === "execute") ? yield* describeCodeMode(input) : undefined
+      const codeModeDescription = filtered.some((tool) => tool.id === "execute")
+        ? yield* describeCodeMode(input)
+        : undefined
       const visible = filtered.filter((tool) => tool.id !== "execute" || codeModeDescription)
 
       return yield* Effect.forEach(

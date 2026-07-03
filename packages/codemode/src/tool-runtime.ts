@@ -467,7 +467,9 @@ export const discoveryPlan = <R>(
       : complete
         ? "Execute JavaScript in a confined runtime. Inside this program, `tools` contains only the host-provided tools listed below; surrounding agent tools are not available unless listed here."
         : "Execute JavaScript in a confined runtime. Inside this program, `tools` contains only the host-provided tools listed or searchable below; surrounding agent tools are not available unless listed here.",
-    ...(empty ? [] : ["Do not infer or normalize tool names; use only exact signatures shown below or returned by search."]),
+    ...(empty
+      ? []
+      : ["Do not infer or normalize tool names; use only exact signatures shown below or returned by search."]),
   ]
 
   // The search step exists only when search is advertised (PARTIAL catalog); a COMPLETE
@@ -481,7 +483,7 @@ export const discoveryPlan = <R>(
         ...(complete
           ? [
               "1. Pick a tool from the list under `## Available tools` - each line is the exact call signature; use it as-is rather than guessing segments.",
-              '2. Call it using the exact signature shown; bracket notation and quotes are part of the path.',
+              "2. Call it using the exact signature shown; bracket notation and quotes are part of the path.",
               '3. Parse text results: `const data = typeof res === "string" ? JSON.parse(res) : res` - most tools return JSON as a string.',
               "4. Return only the fields you need: `return { <field>: data.<field> }` - raw payloads get truncated and waste context.",
             ]
