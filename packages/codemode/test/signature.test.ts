@@ -308,10 +308,7 @@ describe("union schemas render every alternative", () => {
 
   test("allOf renders intersections with parenthesized union members", () => {
     const schema = {
-      allOf: [
-        { type: "object", properties: { id: { type: "string" } } },
-        { type: ["string", "null"] },
-      ],
+      allOf: [{ type: "object", properties: { id: { type: "string" } } }, { type: ["string", "null"] }],
     } as const
     expect(jsonSchemaToTypeScript(schema)).toBe("{ id?: string } & (string | null)")
   })
@@ -321,7 +318,9 @@ describe("union schemas render every alternative", () => {
       "unknown",
     )
     expect(
-      jsonSchemaToTypeScript({ allOf: [{ type: "string" }, { allOf: [{ $ref: "https://example.com/external.json" }] }] }),
+      jsonSchemaToTypeScript({
+        allOf: [{ type: "string" }, { allOf: [{ $ref: "https://example.com/external.json" }] }],
+      }),
     ).toBe("unknown")
     expect(
       jsonSchemaToTypeScript({
