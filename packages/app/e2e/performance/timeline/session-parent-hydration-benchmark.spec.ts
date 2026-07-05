@@ -48,7 +48,12 @@ benchmark("hydrates an orphaned latest turn after a cold session click", async (
   const results = [] as Awaited<ReturnType<typeof trial>>[]
   for (let run = 0; run < 5; run++) {
     results.push(
-      await withBenchmarkPage(browser, `session-parent-hydration-${mode}-${run}`, (page) => trial(page, mode), testInfo),
+      await withBenchmarkPage(
+        browser,
+        `session-parent-hydration-${mode}-${run}`,
+        (page) => trial(page, mode),
+        testInfo,
+      ),
     )
   }
   const timing = results.map((result) => result.metrics.firstCorrectObservedMs!).sort((a, b) => a - b)

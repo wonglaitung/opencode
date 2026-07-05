@@ -194,9 +194,7 @@ describe("server session", () => {
 
     await store.sync("child")
 
-    expect(client.requests).toEqual([
-      { sessionID: "child", limit: 2, before: undefined },
-    ])
+    expect(client.requests).toEqual([{ sessionID: "child", limit: 2, before: undefined }])
     expect(client.rootRequests).toEqual([{ sessionID: "child", messageID: user.id }])
     expect(store.data.message.child).toEqual([user, ...assistants])
     expect(store.history.more("child")).toBe(true)
