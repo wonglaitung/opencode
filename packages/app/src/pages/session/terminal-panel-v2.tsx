@@ -55,7 +55,9 @@ export function TerminalPanelV2(props: { stacked?: boolean } = {}) {
   const max = () => store.view * 0.6
   const pane = () => Math.min(height(), max())
   const stacked = createMemo(() => isDesktop() && props.stacked)
-  const panelHeight = createMemo(() => (isDesktop() ? (stacked() ? `${pane()}px` : "100%") : opened() ? `${pane()}px` : "0px"))
+  const panelHeight = createMemo(() =>
+    isDesktop() ? (stacked() ? `${pane()}px` : "100%") : opened() ? `${pane()}px` : "0px",
+  )
   const contentHeight = createMemo(() => (isDesktop() ? (stacked() ? `${pane()}px` : "100%") : `${pane()}px`))
   const newTerminalKeybind = createMemo(() => command.keybindParts("terminal.new"))
 

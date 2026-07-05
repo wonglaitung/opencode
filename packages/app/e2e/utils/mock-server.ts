@@ -68,7 +68,10 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       return json(route, await config.fileContent(url.searchParams.get("path") ?? ""))
     if (path === "/api/reference")
       return json(route, {
-        location: { directory: config.directory, project: { id: (config.project as { id?: string }).id, directory: config.directory } },
+        location: {
+          directory: config.directory,
+          project: { id: (config.project as { id?: string }).id, directory: config.directory },
+        },
         data: [],
       })
     if (emptyObject.has(path)) return json(route, {})

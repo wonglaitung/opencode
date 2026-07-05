@@ -443,8 +443,8 @@ export default function Page() {
         opened: layout.fileTree.opened(),
       }),
   )
-  const desktopSessionResizeOpen = createMemo(
-    () => (newSessionDesign() ? desktopV2ReviewOpen() || desktopTerminalOpen() : desktopReviewOpen()),
+  const desktopSessionResizeOpen = createMemo(() =>
+    newSessionDesign() ? desktopV2ReviewOpen() || desktopTerminalOpen() : desktopReviewOpen(),
   )
   const desktopSidePanelOpen = createMemo(() => desktopSessionResizeOpen() || desktopFileTreeOpen())
   const sessionPanelWidth = createMemo(() => {
