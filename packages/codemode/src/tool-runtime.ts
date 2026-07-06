@@ -390,8 +390,7 @@ const makeSearchTool = (searchIndex: ReadonlyArray<SearchEntry>) =>
           pathQuery === ""
             ? undefined
             : scoped.find(
-                (entry) =>
-                  entry.description.path === pathQuery || toolExpression(entry.description.path) === trimmed,
+                (entry) => entry.description.path === pathQuery || toolExpression(entry.description.path) === trimmed,
               )
         const terms = tokenize(query).map(termForms)
         // Additive field-weighted scoring, summed across terms: exact path or path segment
@@ -418,8 +417,7 @@ const makeSearchTool = (searchIndex: ReadonlyArray<SearchEntry>) =>
                 .filter(({ score }) => terms.length === 0 || score > 0)
                 .sort(
                   (left, right) =>
-                    right.score - left.score ||
-                    left.entry.description.path.localeCompare(right.entry.description.path),
+                    right.score - left.score || left.entry.description.path.localeCompare(right.entry.description.path),
                 )
                 .map(({ entry }) => entry)
         const items = ranked.slice(offset, offset + (request.limit ?? defaultSearchLimit)).map(({ description }) => ({
@@ -479,10 +477,7 @@ export const assertValidTools = <R>(tools: HostTools<R>): void => {
  * namespace. Namespace stub lines are never budgeted: every namespace appears with its
  * tool count even at budget 0.
  */
-export const prepare = <R>(
-  tools: HostTools<R>,
-  catalogBudget = defaultCatalogBudget,
-): DiscoveryPlan => {
+export const prepare = <R>(tools: HostTools<R>, catalogBudget = defaultCatalogBudget): DiscoveryPlan => {
   if (!Number.isSafeInteger(catalogBudget) || catalogBudget < 0) {
     throw new RangeError("discovery.catalogBudget must be a non-negative safe integer")
   }
@@ -644,10 +639,7 @@ export const prepare = <R>(
  * function in JS). An unknown path is an `UnknownTool` error pointing at the working
  * discovery idioms, mirroring how calling an unknown tool fails.
  */
-const namespaceKeys = <R>(
-  tools: HostTools<R>,
-  path: ReadonlyArray<string>,
-): ReadonlyArray<string> => {
+const namespaceKeys = <R>(tools: HostTools<R>, path: ReadonlyArray<string>): ReadonlyArray<string> => {
   let value: HostTool<R> | Definition<R> | HostTools<R> = tools
   for (const segment of path) {
     if (
@@ -656,13 +648,9 @@ const namespaceKeys = <R>(
       isDefinition(value) ||
       !Object.hasOwn(value, segment)
     ) {
-      throw new ToolRuntimeError(
-        "UnknownTool",
-        `Unknown tool namespace '${path.join(".")}'.`,
-        [
-          "Object.keys(tools) lists the available namespaces; tools.$codemode.search({ query }) finds described tools.",
-        ],
-      )
+      throw new ToolRuntimeError("UnknownTool", `Unknown tool namespace '${path.join(".")}'.`, [
+        "Object.keys(tools) lists the available namespaces; tools.$codemode.search({ query }) finds described tools.",
+      ])
     }
     value = value[segment] as HostTool<R> | Definition<R> | HostTools<R>
   }
@@ -670,10 +658,7 @@ const namespaceKeys = <R>(
   return Object.keys(value)
 }
 
-const resolve = <R>(
-  tools: HostTools<R>,
-  path: ReadonlyArray<string>,
-): HostTool<R> | Definition<R> => {
+const resolve = <R>(tools: HostTools<R>, path: ReadonlyArray<string>): HostTool<R> | Definition<R> => {
   let value: HostTool<R> | Definition<R> | HostTools<R> = tools
 
   for (const segment of path) {
@@ -683,11 +668,9 @@ const resolve = <R>(
       isDefinition(value) ||
       !Object.hasOwn(value, segment)
     ) {
-      throw new ToolRuntimeError(
-        "UnknownTool",
-        `Unknown tool '${path.join(".")}'.`,
-        ["Use tools.$codemode.search({ query }) to find available described tools."],
-      )
+      throw new ToolRuntimeError("UnknownTool", `Unknown tool '${path.join(".")}'.`, [
+        "Use tools.$codemode.search({ query }) to find available described tools.",
+      ])
     }
     value = value[segment] as HostTool<R> | Definition<R> | HostTools<R>
   }

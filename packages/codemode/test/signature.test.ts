@@ -83,9 +83,15 @@ describe("pretty signature rendering", () => {
       true,
     )
     expect(pretty).toBe(
-      ["{", "  /** Search filter */", "  filter?: {", "    /** Issue state */", "    state?: string,", "  },", "}"].join(
-        "\n",
-      ),
+      [
+        "{",
+        "  /** Search filter */",
+        "  filter?: {",
+        "    /** Issue state */",
+        "    state?: string,",
+        "  },",
+        "}",
+      ].join("\n"),
     )
   })
 

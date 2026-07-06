@@ -131,7 +131,9 @@ describe("code mode execute", () => {
       },
       ["weather"],
     )
-    expect(description).toContain("tools.weather.current(input: {\n  city: string,\n}): Promise<{\n  tempC: number,\n}>")
+    expect(description).toContain(
+      "tools.weather.current(input: {\n  city: string,\n}): Promise<{\n  tempC: number,\n}>",
+    )
   })
 
   test("the static base description carries no catalog; the registry appends it", async () => {
