@@ -531,8 +531,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("terminal.close"),
       keybind: "mod+w",
       hidden: true,
-      when: (event) =>
-        event.target instanceof Element && !!event.target.closest('[data-component="terminal"]'),
+      when: (event) => event.target instanceof Element && !!event.target.closest('[data-component="terminal"]'),
       onSelect: closeTerminal,
     }),
     terminalCommand({
