@@ -884,8 +884,14 @@ function ModelEfficiencySection(props: { data: StatsModelData | null; catalog: M
             <div data-slot="model-efficiency-pattern" aria-hidden="true" />
             <div data-component="model-efficiency-grid">
               <MetricCard label={i18n.t("model.totalSpendLabel")} value={formatMoney(data().totals.cost)} />
-              <MetricCard label={i18n.t("model.costInput")} value={formatCatalogUnitPrice(props.catalog?.cost?.input)} />
-              <MetricCard label={i18n.t("model.costOutput")} value={formatCatalogUnitPrice(props.catalog?.cost?.output)} />
+              <MetricCard
+                label={i18n.t("model.costInput")}
+                value={formatCatalogUnitPrice(props.catalog?.cost?.input)}
+              />
+              <MetricCard
+                label={i18n.t("model.costOutput")}
+                value={formatCatalogUnitPrice(props.catalog?.cost?.output)}
+              />
               <MetricCard
                 label={i18n.t("model.averageCostSession")}
                 value={formatSessionCost(data().totals.costPerSession)}
