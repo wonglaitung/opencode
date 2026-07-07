@@ -39,9 +39,9 @@ describe("ConfigAgentPlugin.Plugin", () => {
       expect(
         PermissionV2.evaluate("external_directory", "C:\\Users\\test\\p\\opencode\\src\\*", permissions).effect,
       ).toBe("allow")
-      expect(
-        PermissionV2.evaluate("external_directory", "C:\\Users\\test\\cache\\files\\*", permissions).effect,
-      ).toBe("deny")
+      expect(PermissionV2.evaluate("external_directory", "C:\\Users\\test\\cache\\files\\*", permissions).effect).toBe(
+        "deny",
+      )
     }),
   )
 
