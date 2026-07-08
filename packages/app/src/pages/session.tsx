@@ -2198,7 +2198,7 @@ export default function Page() {
           </Show>
         </div>
 
-        <Show when={!newSessionDesign()}>
+        <Show when={!newSessionDesign() && desktopSidePanelOpen()}>
           <SessionSidePanel
             canReview={canReview}
             diffs={reviewDiffs}
@@ -2217,13 +2217,8 @@ export default function Page() {
         <Show when={newSessionDesign()}>
           <Show when={isDesktop() ? desktopV2PanelLayout().visible : terminalOpen()}>
             <div class="min-w-0 h-full flex flex-1 flex-col">
-              <Show when={isDesktop()}>
-                <div
-                  classList={{
-                    "min-h-0 flex-1": desktopV2ReviewOpen() || desktopFileTreeOpen(),
-                    "size-0 shrink-0 overflow-hidden": !(desktopV2ReviewOpen() || desktopFileTreeOpen()),
-                  }}
-                >
+              <Show when={isDesktop() && (desktopV2ReviewOpen() || desktopFileTreeOpen())}>
+                <div class="min-h-0 flex-1">
                   <SessionSidePanel
                     canReview={canReview}
                     diffs={reviewDiffs}

@@ -168,8 +168,8 @@ test("keeps the review tree and terminal sized when both panels are open", async
   await expectTree(page, 2_773, "action.yml")
 
   await page.getByRole("button", { name: "Toggle file tree" }).click()
-  await expect(page.locator('[data-slot="session-review-v2-sidebar"]')).toHaveAttribute("aria-hidden", "true")
-  await expect(page.locator('#review-panel [data-component="file-tree-v2"]')).toHaveCount(1)
+  await expect(page.locator('[data-slot="session-review-v2-sidebar"]')).toHaveCount(0)
+  await expect(page.locator('#review-panel [data-component="file-tree-v2"]')).toHaveCount(0)
   await page.getByRole("button", { name: "Toggle file tree" }).click()
   await expectTree(page, 2_773, "action.yml")
 
@@ -181,8 +181,7 @@ test("keeps the review tree and terminal sized when both panels are open", async
   await expectTree(page, 2_773, "action.yml")
 
   await page.getByRole("button", { name: "Toggle review" }).click()
-  await expect(page.locator("#review-panel")).toHaveAttribute("aria-hidden", "true")
-  await expect(page.locator('#review-panel [data-component="file-tree-v2"]')).toHaveCount(1)
+  await expect(page.locator("#review-panel")).toHaveCount(0)
   await page.getByRole("button", { name: "Toggle review" }).click()
   await expectTree(page, 2_773, "action.yml")
   await page.setViewportSize({ width: 1_000, height: 700 })

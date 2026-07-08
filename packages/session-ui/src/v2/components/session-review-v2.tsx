@@ -74,62 +74,62 @@ export function SessionReviewV2Sidebar(props: SessionReviewV2SidebarProps) {
 
   return (
     <div data-component="session-review-v2-sidebar-root">
-      <aside
-        data-slot="session-review-v2-sidebar"
-        data-resizing={resizing() ? "" : undefined}
-        aria-hidden={!props.open}
-        inert={!props.open}
-        style={{ width: props.open ? `${width()}px` : "0px" }}
-      >
-        <div data-slot="session-review-v2-sidebar-header">
-          <div data-slot="session-review-v2-sidebar-title">{props.title}</div>
-          {props.stats}
-        </div>
-        <div data-slot="session-review-v2-sidebar-filter">
-          <TextInputV2
-            type="search"
-            value={props.filter}
-            onInput={(event) => props.onFilterChange(event.currentTarget.value)}
-            onKeyDown={props.onFilterKeyDown}
-            autofocus={props.filterAutofocus}
-            ref={props.filterRef}
-            role={props.filterControls ? "combobox" : undefined}
-            aria-autocomplete={props.filterControls ? "list" : undefined}
-            aria-controls={props.filterControls}
-            aria-activedescendant={props.filterActiveDescendant}
-            aria-expanded={props.filterControls ? props.filterExpanded : undefined}
-            showClearButton={props.filter.length > 0}
-            clearLabel={i18n.t("ui.list.clearFilter")}
-            onClearClick={() => props.onFilterChange("")}
-            placeholder={i18n.t("ui.sessionReviewV2.filterFiles")}
-            aria-label={i18n.t("ui.sessionReviewV2.filterFiles")}
-            leadingIcon={
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 14 14"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-                aria-hidden="true"
-              >
-                <path
-                  d="M12.25 12.25L10.0625 10.0625M11.0833 6.41667C11.0833 8.994 8.994 11.0833 6.41667 11.0833C3.83934 11.0833 1.75 8.994 1.75 6.41667C1.75 3.83934 3.83934 1.75 6.41667 1.75C8.994 1.75 11.0833 3.83934 11.0833 6.41667Z"
-                  stroke="currentColor"
-                  stroke-linecap="square"
-                />
-              </svg>
-            }
-          />
-        </div>
-        <ScrollView
-          data-slot="session-review-v2-sidebar-tree"
-          class="group/file-tree-v2"
-          thumbVisibility="scroll"
-          viewportRef={props.viewportRef}
+      <Show when={props.open}>
+        <aside
+          data-slot="session-review-v2-sidebar"
+          data-resizing={resizing() ? "" : undefined}
+          style={{ width: `${width()}px` }}
         >
-          {props.children}
-        </ScrollView>
-      </aside>
+          <div data-slot="session-review-v2-sidebar-header">
+            <div data-slot="session-review-v2-sidebar-title">{props.title}</div>
+            {props.stats}
+          </div>
+          <div data-slot="session-review-v2-sidebar-filter">
+            <TextInputV2
+              type="search"
+              value={props.filter}
+              onInput={(event) => props.onFilterChange(event.currentTarget.value)}
+              onKeyDown={props.onFilterKeyDown}
+              autofocus={props.filterAutofocus}
+              ref={props.filterRef}
+              role={props.filterControls ? "combobox" : undefined}
+              aria-autocomplete={props.filterControls ? "list" : undefined}
+              aria-controls={props.filterControls}
+              aria-activedescendant={props.filterActiveDescendant}
+              aria-expanded={props.filterControls ? props.filterExpanded : undefined}
+              showClearButton={props.filter.length > 0}
+              clearLabel={i18n.t("ui.list.clearFilter")}
+              onClearClick={() => props.onFilterChange("")}
+              placeholder={i18n.t("ui.sessionReviewV2.filterFiles")}
+              aria-label={i18n.t("ui.sessionReviewV2.filterFiles")}
+              leadingIcon={
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 14 14"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M12.25 12.25L10.0625 10.0625M11.0833 6.41667C11.0833 8.994 8.994 11.0833 6.41667 11.0833C3.83934 11.0833 1.75 8.994 1.75 6.41667C1.75 3.83934 3.83934 1.75 6.41667 1.75C8.994 1.75 11.0833 3.83934 11.0833 6.41667Z"
+                    stroke="currentColor"
+                    stroke-linecap="square"
+                  />
+                </svg>
+              }
+            />
+          </div>
+          <ScrollView
+            data-slot="session-review-v2-sidebar-tree"
+            class="group/file-tree-v2"
+            thumbVisibility="scroll"
+            viewportRef={props.viewportRef}
+          >
+            {props.children}
+          </ScrollView>
+        </aside>
+      </Show>
       <Show when={props.open && props.onWidthChange}>
         <div data-slot="session-review-v2-sidebar-resize" onPointerDown={() => setResizing(true)}>
           <ResizeHandle
