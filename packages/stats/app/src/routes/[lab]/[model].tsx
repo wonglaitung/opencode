@@ -1205,7 +1205,9 @@ function modelComparisonPairs(
       },
       detail: "Usage peer",
     }))
-  const catalogPairs = (catalogEntry && catalog ? catalog.labs.find((lab) => lab.id === catalogEntry.lab)?.models ?? [] : [])
+  const catalogPairs = (
+    catalogEntry && catalog ? (catalog.labs.find((lab) => lab.id === catalogEntry.lab)?.models ?? []) : []
+  )
     .filter((model) => model.id !== catalogEntry?.id)
     .slice(0, 3)
     .map((model) => ({

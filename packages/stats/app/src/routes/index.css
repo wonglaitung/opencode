@@ -5726,11 +5726,15 @@
 }
 
 [data-page="stats"] [data-component="compare-home-selector"] button[data-slot="compare-home-select-panel"]:hover,
-[data-page="stats"] [data-component="compare-home-selector"] button[data-slot="compare-home-select-panel"]:focus-within {
+[data-page="stats"]
+  [data-component="compare-home-selector"]
+  button[data-slot="compare-home-select-panel"]:focus-within {
   background: var(--stats-layer);
 }
 
-[data-page="stats"] [data-component="compare-home-selector"] button[data-slot="compare-home-select-panel"]:focus-visible {
+[data-page="stats"]
+  [data-component="compare-home-selector"]
+  button[data-slot="compare-home-select-panel"]:focus-visible {
   z-index: 1;
   outline: 1px solid var(--stats-line-strong);
   outline-offset: -1px;
@@ -6043,7 +6047,9 @@
 
 [data-page="stats"] [data-component="compare-model-modal"] button[data-slot="compare-model-modal-row"]:hover,
 [data-page="stats"] [data-component="compare-model-modal"] button[data-slot="compare-model-modal-row"]:focus-visible,
-[data-page="stats"] [data-component="compare-model-modal"] button[data-slot="compare-model-modal-row"][data-active="true"] {
+[data-page="stats"]
+  [data-component="compare-model-modal"]
+  button[data-slot="compare-model-modal-row"][data-active="true"] {
   color: var(--stats-text);
   background: var(--stats-layer-2);
   outline: none;

@@ -1,9 +1,6 @@
 import "../../../../index.css"
 import { Link, Meta, Title } from "@solidjs/meta"
-import {
-  getStatsModelComparisonData,
-  type StatsModelComparisonEntry,
-} from "@opencode-ai/stats-core/domain/home"
+import { getStatsModelComparisonData, type StatsModelComparisonEntry } from "@opencode-ai/stats-core/domain/home"
 import { runtime } from "@opencode-ai/stats-core/runtime"
 import { createAsync, query, useParams } from "@solidjs/router"
 import { createMemo, createSignal, For, onMount, Show } from "solid-js"
@@ -124,7 +121,11 @@ export default function ModelComparePair() {
   const rows = createMemo(() => buildComparisonRows(models()[0], models()[1]))
   const relatedPairs = createMemo(() => buildRelatedPairs(catalog(), models()[0], models()[1]))
   const selectorModels = createMemo(() =>
-    uniqueCatalogModels([comparisonCatalogEntry(models()[0]), comparisonCatalogEntry(models()[1]), ...(catalog()?.models ?? [])]),
+    uniqueCatalogModels([
+      comparisonCatalogEntry(models()[0]),
+      comparisonCatalogEntry(models()[1]),
+      ...(catalog()?.models ?? []),
+    ]),
   )
   const structuredData = createMemo(() =>
     JSON.stringify({
@@ -176,17 +177,16 @@ export default function ModelComparePair() {
           <ComparisonHero models={models()} />
           <section id="comparison" data-section="model-panel">
             <p data-slot="section-title">
-              <strong>Comparison Table.</strong>{" "}
-              <span>Compare usage, cost, limits, and features.</span>
+              <strong>Comparison Table.</strong> <span>Compare usage, cost, limits, and features.</span>
             </p>
             <Show
               when={stats() !== undefined}
-	              fallback={
-	                <div data-component="empty-state" data-compact="true">
-	                  <strong>Loading comparison</strong>
-	                  <p>Loading stats for both models.</p>
-	                </div>
-	              }
+              fallback={
+                <div data-component="empty-state" data-compact="true">
+                  <strong>Loading comparison</strong>
+                  <p>Loading stats for both models.</p>
+                </div>
+              }
             >
               <ComparisonTable models={models()} rows={rows()} />
             </Show>
@@ -197,12 +197,12 @@ export default function ModelComparePair() {
             </p>
             <Show
               when={selectorModels().length > 1}
-	              fallback={
-	                <div data-component="empty-state" data-compact="true">
-	                  <strong>No models found</strong>
-	                  <p>The model list could not be loaded.</p>
-	                </div>
-	              }
+              fallback={
+                <div data-component="empty-state" data-compact="true">
+                  <strong>No models found</strong>
+                  <p>The model list could not be loaded.</p>
+                </div>
+              }
             >
               <ComparisonSelector
                 models={selectorModels()}
@@ -337,18 +337,18 @@ function uniqueCatalogModels(models: ModelCatalogEntry[]) {
 function buildComparisonRows(first: ComparisonModel, second: ComparisonModel): ComparisonRow[] {
   return [
     comparisonRow(
-	      "Recent Rank",
-	      "Lower is better.",
-	      {
-	        value: first.stats?.rank == null ? "No usage" : `#${first.stats.rank}`,
-	        score: first.stats?.rank ?? undefined,
-	      },
-	      {
-	        value: second.stats?.rank == null ? "No usage" : `#${second.stats.rank}`,
-	        score: second.stats?.rank ?? undefined,
-	      },
-	      "lower",
-	    ),
+      "Recent Rank",
+      "Lower is better.",
+      {
+        value: first.stats?.rank == null ? "No usage" : `#${first.stats.rank}`,
+        score: first.stats?.rank ?? undefined,
+      },
+      {
+        value: second.stats?.rank == null ? "No usage" : `#${second.stats.rank}`,
+        score: second.stats?.rank ?? undefined,
+      },
+      "lower",
+    ),
     comparisonRow(
       "Token Share",
       "Share of recent OpenCode usage.",
@@ -408,7 +408,10 @@ function buildComparisonRows(first: ComparisonModel, second: ComparisonModel): C
     comparisonRow(
       "Cache Ratio",
       "Higher is better.",
-      { value: first.stats ? formatPercent(first.stats.totals.cacheRatio) : "No usage", score: first.stats?.totals.cacheRatio },
+      {
+        value: first.stats ? formatPercent(first.stats.totals.cacheRatio) : "No usage",
+        score: first.stats?.totals.cacheRatio,
+      },
       {
         value: second.stats ? formatPercent(second.stats.totals.cacheRatio) : "No usage",
         score: second.stats?.totals.cacheRatio,

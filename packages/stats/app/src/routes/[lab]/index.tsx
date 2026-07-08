@@ -28,11 +28,7 @@ import {
 import { SectionHeading } from "../section-heading"
 import { runStatsEffect } from "../../stats-runtime"
 import { setStatsPageCacheHeaders } from "../stats-cache"
-import {
-  ComparisonCardsSection,
-  modelRefFromCatalog,
-  uniqueComparisonPairs,
-} from "../compare-cards"
+import { ComparisonCardsSection, modelRefFromCatalog, uniqueComparisonPairs } from "../compare-cards"
 import {
   applyThemePreference,
   Footer,

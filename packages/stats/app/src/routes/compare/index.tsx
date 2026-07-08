@@ -294,10 +294,7 @@ function CompareModelSelectModal(props: {
     return availableModels().filter((model) => terms.every((term) => modelSearchText(model).includes(term)))
   })
   const preview = createMemo(
-    () =>
-      filteredModels().find((model) => model.id === previewId()) ??
-      filteredModels()[0] ??
-      availableModels()[0],
+    () => filteredModels().find((model) => model.id === previewId()) ?? filteredModels()[0] ?? availableModels()[0],
   )
 
   createEffect(() => {
@@ -395,7 +392,10 @@ function CompareModelDetail(props: { model: ModelCatalogEntry }) {
         <strong>{props.model.name}</strong>
       </header>
       <div data-slot="compare-model-modal-description">
-        <p>{props.model.description ?? `${props.model.name} is an AI model from ${formatCatalogLabName(props.model.lab)}.`}</p>
+        <p>
+          {props.model.description ??
+            `${props.model.name} is an AI model from ${formatCatalogLabName(props.model.lab)}.`}
+        </p>
         <span aria-hidden="true" />
       </div>
       <dl data-slot="compare-model-modal-facts">
@@ -464,7 +464,9 @@ function CompareHomeCard(props: { category: CompareCategory }) {
         <span>{props.category.second.name}</span>
       </span>
       <span data-slot="compare-home-card-avatars" aria-hidden="true">
-        <For each={props.category.avatars}>{(model) => <LabLogo lab={model.lab} label={model.name} size="small" />}</For>
+        <For each={props.category.avatars}>
+          {(model) => <LabLogo lab={model.lab} label={model.name} size="small" />}
+        </For>
       </span>
     </a>
   )
@@ -485,22 +487,25 @@ function LabLogo(props: { lab: string; label: string; size: "large" | "small" | 
 }
 
 function buildComparisonCategories(models: ModelCatalogEntry[]): CompareCategory[] {
-  return categoryTemplates.reduce<{ keys: Set<string>; categories: CompareCategory[] }>((result, template, index) => {
-    const candidates = categoryCandidates(template.kind, models)
-    const pair = categoryPair(candidates, models, index, result.keys)
-    if (!pair) return result
-    result.keys.add(comparisonKey(pair.first, pair.second))
-    const first = modelRefFromCatalog(pair.first)
-    const second = modelRefFromCatalog(pair.second)
-    result.categories.push({
-      title: template.title,
-      description: template.description,
-      first,
-      second,
-      avatars: [first, second],
-    })
-    return result
-  }, { keys: new Set(), categories: [] }).categories
+  return categoryTemplates.reduce<{ keys: Set<string>; categories: CompareCategory[] }>(
+    (result, template, index) => {
+      const candidates = categoryCandidates(template.kind, models)
+      const pair = categoryPair(candidates, models, index, result.keys)
+      if (!pair) return result
+      result.keys.add(comparisonKey(pair.first, pair.second))
+      const first = modelRefFromCatalog(pair.first)
+      const second = modelRefFromCatalog(pair.second)
+      result.categories.push({
+        title: template.title,
+        description: template.description,
+        first,
+        second,
+        avatars: [first, second],
+      })
+      return result
+    },
+    { keys: new Set(), categories: [] },
+  ).categories
 }
 
 function categoryPair(
@@ -525,9 +530,10 @@ function categoryCandidates(kind: (typeof categoryTemplates)[number]["kind"], mo
   if (kind === "affordable")
     return models
       .filter((model) => model.cost)
-      .toSorted((a, b) => modelCost(a) - modelCost(b) || displayDateTime(b.releaseDate) - displayDateTime(a.releaseDate))
-  if (kind === "code")
-    return models.filter((model) => model.toolCall || model.reasoning).toSorted(recentModelSort)
+      .toSorted(
+        (a, b) => modelCost(a) - modelCost(b) || displayDateTime(b.releaseDate) - displayDateTime(a.releaseDate),
+      )
+  if (kind === "code") return models.filter((model) => model.toolCall || model.reasoning).toSorted(recentModelSort)
   if (kind === "image")
     return models
       .filter((model) => model.modalities.output.some((modality) => modality.toLowerCase().includes("image")))

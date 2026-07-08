@@ -243,7 +243,9 @@ export function Footer(props: {
     { href: "https://www.youtube.com/@anomaly-co", label: i18n.t("footer.youtube") },
   ]
   const bridge = () =>
-    props.bridge === undefined ? { href: "#geo-breakdown", label: i18n.t("nav.geoBreakdown").toUpperCase() } : props.bridge
+    props.bridge === undefined
+      ? { href: "#geo-breakdown", label: i18n.t("nav.geoBreakdown").toUpperCase() }
+      : props.bridge
 
   return (
     <footer data-component="footer">
