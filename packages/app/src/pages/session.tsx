@@ -1,4 +1,4 @@
-import type { Project, UserMessage } from "@opencode-ai/sdk/v2"
+import type { Project, UserMessage, VcsFileDiff } from "@opencode-ai/sdk/v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { createQuery, skipToken, useMutation, useQueryClient } from "@tanstack/solid-query"
 import {
@@ -75,6 +75,7 @@ import { SessionReviewEmptyChangesV2 } from "@opencode-ai/session-ui/v2/session-
 import { SessionReviewEmptyNoGitV2 } from "@opencode-ai/session-ui/v2/session-review-empty-no-git-v2"
 import { ReviewPanelV2 } from "@/pages/session/v2/review-panel-v2"
 import { createReviewPanelV2State } from "@/pages/session/v2/review-panel-v2-state"
+import { reviewDiffDirectory, reviewDiffNeedsLoad, reviewRootDirectory } from "@/pages/session/v2/review-diff-kinds"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
 import { TerminalPanelV2 } from "@/pages/session/terminal-panel-v2"
 import { useComposerCommands } from "@/pages/session/use-composer-commands"
@@ -644,6 +645,46 @@ export default function Page() {
     if (store.changes === "git" || store.changes === "branch") return !vcsQuery.isPending
     return true
   }
+  const loadReviewDiff = async (file: string, version?: number): Promise<VcsFileDiff | undefined> => {
+    const mode = vcsMode()
+    if (!mode) return
+    const root = reviewRootDirectory(sync().project?.worktree ?? sdk().directory)
+    const directory = reviewDiffDirectory(root, file)
+    const source = reviewDiffs().find((diff) => diff.file === file)
+    const valid = (diff: VcsFileDiff | undefined) => {
+      if (!diff || !source) return
+      if (diff.additions !== source.additions || diff.deletions !== source.deletions) return
+      if (reviewDiffNeedsLoad(diff)) return
+      return diff
+    }
+    const request = (scope: string, context?: number) =>
+      queryClient
+        .fetchQuery({
+          queryKey: [serverSDK().scope, ...vcsKey(), mode, "directory", scope, context, version] as const,
+          staleTime: Number.POSITIVE_INFINITY,
+          retry: 2,
+          queryFn: () =>
+            sdk()
+              .client.vcs.diff({ mode, directory: scope, context })
+              .then((result) => result.data ?? []),
+        })
+        .then((diffs) => diffs.find((diff) => diff.file === file))
+
+    if (directory !== root) {
+      try {
+        const scoped = valid(await request(directory))
+        if (scoped) return scoped
+      } catch (error) {
+        console.debug("[session-review] failed to load scoped vcs diff", { mode, file, directory, error })
+      }
+    }
+    try {
+      const bounded = valid(await request(root, 3))
+      if (bounded) return bounded
+    } catch (error) {
+      console.debug("[session-review] failed to load bounded vcs diff", { mode, file, root, error })
+    }
+  }
 
   const newSessionWorktree = createMemo(() => {
     if (store.newSessionWorktree === "create") return "create"
@@ -1175,6 +1216,10 @@ export default function Page() {
     },
     diffs: reviewDiffs,
     diffsReady: reviewReady,
+    get diffVersion() {
+      return vcsQuery.dataUpdatedAt
+    },
+    loadDiff: loadReviewDiff,
     get activeFile() {
       return tree.activeDiff
     },
