@@ -899,8 +899,10 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Expand edit tool parts",
   "settings.general.row.editToolPartsExpanded.description":
     "Show edit, write, and patch tool parts expanded by default in the timeline",
-  "settings.general.row.newLayoutDesigns.title": "New layout and designs",
-  "settings.general.row.newLayoutDesigns.description": "Enable the redesigned layout, home, composer, and session UI",
+  "settings.general.row.newInterface.title": "Use the new interface",
+  "settings.general.row.newInterface.badge": "New",
+  "settings.general.row.newInterface.description":
+    "A redesigned layout, tabs, composer and new home. Old interface goes away on {{date}}.",
   "settings.general.row.pinchZoom.title": "Pinch to zoom",
   "settings.general.row.pinchZoom.description": "Allow trackpad pinch and Ctrl-scroll gestures to zoom",
 
