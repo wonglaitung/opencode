@@ -1037,7 +1037,9 @@ function HomeProjectRow(props: {
   const canRevealInFileManager = () =>
     platform.platform === "desktop" && !!platform.openPath && ServerConnection.local(props.server)
   const fileManagerActionLabel = () =>
-    props.language.t(fileManagerApp(platform.platform === "desktop" ? platform.os ?? "unknown" : "unknown").actionLabel)
+    props.language.t(
+      fileManagerApp(platform.platform === "desktop" ? (platform.os ?? "unknown") : "unknown").actionLabel,
+    )
   const revealInFileManager = () => {
     if (!platform.openPath) return
     platform.openPath(props.project.worktree).catch((err: unknown) =>
