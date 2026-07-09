@@ -92,9 +92,7 @@ type DrawerDescriptionProps<T extends ValidComponent = "div"> = DescriptionProps
   class?: string
 }
 
-const DrawerDescription = <T extends ValidComponent = "div">(
-  props: DynamicProps<T, DrawerDescriptionProps<T>>,
-) => {
+const DrawerDescription = <T extends ValidComponent = "div">(props: DynamicProps<T, DrawerDescriptionProps<T>>) => {
   const [, rest] = splitProps(props as DrawerDescriptionProps, ["class"])
   return (
     <DrawerPrimitive.Description
