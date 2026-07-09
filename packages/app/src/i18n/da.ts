@@ -600,7 +600,8 @@ export const dict = {
   "home.sessions.group.today": "I dag",
   "home.sessions.group.yesterday": "I går",
   "home.sessions.group.older": "Ældre",
-  "home.providerTip": "Opret forbindelse til mere end 75 udbydere for at bruge andre modeller, herunder Claude, GPT, Gemini og flere",
+  "home.providerTip":
+    "Opret forbindelse til mere end 75 udbydere for at bruge andre modeller, herunder Claude, GPT, Gemini og flere",
 
   "session.tab.session": "Session",
   "session.tab.review": "Gennemgang",
