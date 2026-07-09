@@ -111,9 +111,7 @@ const symbol = (name: keyof typeof icons) => `opencode-icon-${name}`
 let spriteInserted = false
 
 function viewBox(name: keyof typeof icons) {
-  return name === "magnifying-glass" || name === "arrow-undo-down" || name === "subagent"
-    ? "0 0 16 16"
-    : "0 0 20 20"
+  return name === "magnifying-glass" || name === "arrow-undo-down" || name === "subagent" ? "0 0 16 16" : "0 0 20 20"
 }
 
 function ensureSprite() {
