@@ -20,65 +20,62 @@ const INCREMENTAL_LOOKBACK_MS = 2 * 3_600_000
 export type SyncStatsResult = { ok: true; rows: number; startedAt: string; periodStart: string; periodEnd: string }
 export type SyncStatsError = AthenaQueryError | AthenaQueryTimeoutError | DatabaseError
 
-export const syncStats: (options?: { full?: boolean }) => Effect.Effect<
-  SyncStatsResult,
-  SyncStatsError,
-  Athena | ModelStatRepo | ProviderStatRepo | GeoStatRepo
-> = Effect.fn("StatSync.sync")(function* (options?: { full?: boolean }) {
-  const startedAt = yield* DateTime.nowAsDate
-  const periodEnd = new Date(Math.floor((startedAt.getTime() - DATALAKE_INGESTION_LAG_MS) / 60_000) * 60_000)
-  const periodStart = options?.full ? fullPeriodStart(periodEnd) : incrementalPeriodStart(periodEnd)
-  const athena = yield* Athena
-  const modelStats = yield* ModelStatRepo
-  const providerStats = yield* ProviderStatRepo
-  const geoStats = yield* GeoStatRepo
+export const syncStats: (options?: {
+  full?: boolean
+}) => Effect.Effect<SyncStatsResult, SyncStatsError, Athena | ModelStatRepo | ProviderStatRepo | GeoStatRepo> =
+  Effect.fn("StatSync.sync")(function* (options?: { full?: boolean }) {
+    const startedAt = yield* DateTime.nowAsDate
+    const periodEnd = new Date(Math.floor((startedAt.getTime() - DATALAKE_INGESTION_LAG_MS) / 60_000) * 60_000)
+    const periodStart = options?.full ? fullPeriodStart(periodEnd) : incrementalPeriodStart(periodEnd)
+    const athena = yield* Athena
+    const modelStats = yield* ModelStatRepo
+    const providerStats = yield* ProviderStatRepo
+    const geoStats = yield* GeoStatRepo
 
-  yield* logRuntimeCheck()
+    yield* logRuntimeCheck()
 
-  const rows = yield* athena.query(buildStatsQuery(periodStart, periodEnd))
-  const modelRows = modelRowsFromAggregates(
-    rows.filter((row) => row.dimension === "model").flatMap(toModelAggregate),
-  )
-  const providerRows = providerRowsFromAggregates(
-    rows.filter((row) => row.dimension === "provider").flatMap(toProviderAggregate),
-  )
-  const geoRows = geoRowsFromAggregates(
-    rows.filter((row) => row.dimension === "geo" || row.dimension === "geo_model").flatMap(toGeoAggregate),
-  )
+    const rows = yield* athena.query(buildStatsQuery(periodStart, periodEnd))
+    const modelRows = modelRowsFromAggregates(rows.filter((row) => row.dimension === "model").flatMap(toModelAggregate))
+    const providerRows = providerRowsFromAggregates(
+      rows.filter((row) => row.dimension === "provider").flatMap(toProviderAggregate),
+    )
+    const geoRows = geoRowsFromAggregates(
+      rows.filter((row) => row.dimension === "geo" || row.dimension === "geo_model").flatMap(toGeoAggregate),
+    )
 
-  yield* Effect.all([modelStats.upsert(modelRows), providerStats.upsert(providerRows), geoStats.upsert(geoRows)], {
-    concurrency: "unbounded",
-    discard: true,
-  })
-  yield* Effect.all(
-    [
-      modelStats.deleteRetiredDimensions(modelRows),
-      providerStats.deleteRetiredDimensions(providerRows),
-      geoStats.deleteRetiredDimensions(geoRows),
-    ],
-    { concurrency: "unbounded", discard: true },
-  )
+    yield* Effect.all([modelStats.upsert(modelRows), providerStats.upsert(providerRows), geoStats.upsert(geoRows)], {
+      concurrency: "unbounded",
+      discard: true,
+    })
+    yield* Effect.all(
+      [
+        modelStats.deleteRetiredDimensions(modelRows),
+        providerStats.deleteRetiredDimensions(providerRows),
+        geoStats.deleteRetiredDimensions(geoRows),
+      ],
+      { concurrency: "unbounded", discard: true },
+    )
 
-  yield* Effect.logInfo(
-    `stats sync complete ${JSON.stringify({
+    yield* Effect.logInfo(
+      `stats sync complete ${JSON.stringify({
+        startedAt: startedAt.toISOString(),
+        periodStart: periodStart.toISOString(),
+        periodEnd: periodEnd.toISOString(),
+        rows: modelRows.length,
+        providerRows: providerRows.length,
+        geoRows: geoRows.length,
+        stage: Resource.App.stage,
+      })}`,
+    )
+
+    return {
+      ok: true,
+      rows: modelRows.length,
       startedAt: startedAt.toISOString(),
       periodStart: periodStart.toISOString(),
       periodEnd: periodEnd.toISOString(),
-      rows: modelRows.length,
-      providerRows: providerRows.length,
-      geoRows: geoRows.length,
-      stage: Resource.App.stage,
-    })}`,
-  )
-
-  return {
-    ok: true,
-    rows: modelRows.length,
-    startedAt: startedAt.toISOString(),
-    periodStart: periodStart.toISOString(),
-    periodEnd: periodEnd.toISOString(),
-  }
-})
+    }
+  })
 
 // May 27 was partial, so keep Athena stats anchored at the first complete day.
 function fullPeriodStart(periodEnd: Date) {
@@ -96,10 +93,7 @@ function fullPeriodStart(periodEnd: Date) {
 // dimension cleanup).
 function incrementalPeriodStart(periodEnd: Date) {
   return new Date(
-    Math.max(
-      startOfIsoWeek(new Date(periodEnd.getTime() - INCREMENTAL_LOOKBACK_MS)).getTime(),
-      STATS_DATA_START_MS,
-    ),
+    Math.max(startOfIsoWeek(new Date(periodEnd.getTime() - INCREMENTAL_LOOKBACK_MS)).getTime(), STATS_DATA_START_MS),
   )
 }
 
