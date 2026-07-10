@@ -9,7 +9,7 @@ import {
 } from "@opencode-ai/stats-core/domain/home"
 import { runtime } from "@opencode-ai/stats-core/runtime"
 import { createAsync, query, useParams, useSearchParams } from "@solidjs/router"
-import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, For, onMount, Show } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
 import {
   ComparisonCardsSection,
@@ -150,16 +150,6 @@ export default function ModelComparePair() {
   const [themePreference, setThemePreference] = createSignal<ThemePreference>("system")
   const [highlightBest, setHighlightBest] = createSignal(true)
   const [addingModel, setAddingModel] = createSignal(false)
-  let comparisonPage: HTMLElement | undefined
-  let comparisonHeadingScroll: HTMLDivElement | undefined
-  let comparisonBodyScroll: HTMLDivElement | undefined
-  // Trackpads emit noisy diagonal deltas, so keep an axis until a clear handoff or idle.
-  const comparisonWheel = {
-    axis: undefined as "horizontal" | "vertical" | undefined,
-    deltaX: 0,
-    deltaY: 0,
-    reset: undefined as number | undefined,
-  }
   const models = createMemo(
     () =>
       modelSelections().map((model, index) =>
@@ -198,74 +188,6 @@ export default function ModelComparePair() {
     if (typeof window === "undefined" || next.length < 2) return
     window.location.href = comparisonModelsHref(next)
   }
-  const syncComparisonScroll = (source: HTMLDivElement, target: HTMLDivElement | undefined) => {
-    if (target && target.scrollLeft !== source.scrollLeft) target.scrollLeft = source.scrollLeft
-  }
-  const resetComparisonWheel = () => {
-    comparisonWheel.axis = undefined
-    comparisonWheel.deltaX = 0
-    comparisonWheel.deltaY = 0
-    comparisonWheel.reset = undefined
-  }
-  const handleComparisonWheel = (event: WheelEvent) => {
-    if (event.ctrlKey) return
-    if (event.target instanceof Element && event.target.closest('[data-component="compare-model-modal"]')) return
-    if (!(event.currentTarget instanceof HTMLDivElement)) return
-    const scale = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? window.innerHeight : 1
-    const deltaX = (event.shiftKey && event.deltaX === 0 ? event.deltaY : event.deltaX) * scale
-    const deltaY = (event.shiftKey ? 0 : event.deltaY) * scale
-    if (event.currentTarget.scrollWidth <= event.currentTarget.clientWidth + 1) {
-      resetComparisonWheel()
-      if (deltaY === 0) return
-      event.preventDefault()
-      window.scrollBy({ top: deltaY })
-      return
-    }
-
-    if (
-      (comparisonWheel.axis === "horizontal" && Math.abs(deltaY) >= 8 && Math.abs(deltaY) > Math.abs(deltaX) * 1.5) ||
-      (comparisonWheel.axis === "vertical" && Math.abs(deltaX) >= 8 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5)
-    )
-      resetComparisonWheel()
-
-    event.preventDefault()
-    comparisonWheel.deltaX += deltaX
-    comparisonWheel.deltaY += deltaY
-    if (comparisonWheel.reset !== undefined) window.clearTimeout(comparisonWheel.reset)
-    comparisonWheel.reset = window.setTimeout(resetComparisonWheel, 80)
-
-    if (
-      comparisonWheel.axis === undefined &&
-      Math.max(Math.abs(comparisonWheel.deltaX), Math.abs(comparisonWheel.deltaY)) < 6
-    )
-      return
-    comparisonWheel.axis ??=
-      Math.abs(comparisonWheel.deltaX) > Math.abs(comparisonWheel.deltaY) * 1.5 ? "horizontal" : "vertical"
-
-    if (comparisonWheel.axis === "vertical") window.scrollBy({ top: comparisonWheel.deltaY })
-    if (comparisonWheel.axis === "horizontal") {
-      event.currentTarget.scrollLeft += comparisonWheel.deltaX
-      syncComparisonScroll(
-        event.currentTarget,
-        event.currentTarget === comparisonHeadingScroll ? comparisonBodyScroll : comparisonHeadingScroll,
-      )
-    }
-    comparisonWheel.deltaX = 0
-    comparisonWheel.deltaY = 0
-  }
-  const handleComparisonPageWheel = (event: WheelEvent) => {
-    if (event.ctrlKey || event.shiftKey || event.deltaY === 0) return
-    if (
-      event.target instanceof Element &&
-      event.target.closest(
-        '[data-component="compare-detail-heading-scroll"], [data-component="compare-detail-body-scroll"], [data-component="compare-model-modal"]',
-      )
-    )
-      return
-    event.preventDefault()
-    const scale = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? window.innerHeight : 1
-    window.scrollBy({ top: event.deltaY * scale })
-  }
   const structuredData = createMemo(() =>
     JSON.stringify({
       "@context": "https://schema.org",
@@ -294,24 +216,10 @@ export default function ModelComparePair() {
     const nextPreference = isThemePreference(preference) ? preference : "system"
     applyThemePreference(nextPreference)
     setThemePreference(nextPreference)
-    comparisonPage?.addEventListener("wheel", handleComparisonPageWheel, { passive: false })
-    comparisonHeadingScroll?.addEventListener("wheel", handleComparisonWheel, { passive: false })
-    comparisonBodyScroll?.addEventListener("wheel", handleComparisonWheel, { passive: false })
-    onCleanup(() => {
-      comparisonPage?.removeEventListener("wheel", handleComparisonPageWheel)
-      comparisonHeadingScroll?.removeEventListener("wheel", handleComparisonWheel)
-      comparisonBodyScroll?.removeEventListener("wheel", handleComparisonWheel)
-      if (comparisonWheel.reset !== undefined) window.clearTimeout(comparisonWheel.reset)
-    })
   })
 
   return (
-    <main
-      ref={(element) => (comparisonPage = element)}
-      data-page="stats"
-      data-layout="compare-detail"
-      data-theme={themePreference()}
-    >
+    <main data-page="stats" data-layout="compare-detail" data-theme={themePreference()}>
       <Title>{title()}</Title>
       <Meta name="description" content={description()} />
       <Meta name="robots" content={models().length > 2 ? "noindex,follow" : "index,follow"} />
@@ -352,18 +260,8 @@ export default function ModelComparePair() {
             data-model-count={models().length}
             style={`--compare-detail-grid: ${comparisonDetailGridTemplate(models().length)}`}
           >
-            <div
-              data-component="compare-detail-heading-scroll"
-              ref={(element) => (comparisonHeadingScroll = element)}
-              onScroll={(event) => syncComparisonScroll(event.currentTarget, comparisonBodyScroll)}
-            >
+            <div data-component="compare-detail-scroll">
               <ComparisonPairSelector catalogModels={selectorModels()} models={models()} />
-            </div>
-            <div
-              data-component="compare-detail-body-scroll"
-              ref={(element) => (comparisonBodyScroll = element)}
-              onScroll={(event) => syncComparisonScroll(event.currentTarget, comparisonHeadingScroll)}
-            >
               <Show
                 when={stats() !== undefined}
                 fallback={
