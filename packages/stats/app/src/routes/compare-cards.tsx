@@ -32,6 +32,11 @@ export function comparisonHref(first: ComparisonModelRef, second: ComparisonMode
   )}/${catalogSlug(second.slug)}`
 }
 
+export function canonicalComparisonHref(first: ComparisonModelRef, second: ComparisonModelRef) {
+  const models = [first, second].toSorted((a, b) => modelKey(a).localeCompare(modelKey(b)))
+  return comparisonHref(models[0], models[1])
+}
+
 export function uniqueComparisonPairs(pairs: ComparisonPair[]) {
   return pairs.reduce<{ keys: Set<string>; pairs: ComparisonPair[] }>(
     (result, pair) => {
@@ -80,7 +85,7 @@ function FeaturedComparisonCard(props: { pair: ComparisonPair }) {
   return (
     <a
       data-component="compare-home-card"
-      href={comparisonHref(props.pair.first, props.pair.second)}
+      href={canonicalComparisonHref(props.pair.first, props.pair.second)}
       aria-label={`${props.pair.detail}: ${props.pair.first.name} vs ${props.pair.second.name}`}
     >
       <span data-slot="compare-home-card-head">
@@ -106,7 +111,7 @@ function FeaturedComparisonCard(props: { pair: ComparisonPair }) {
 
 function ComparisonPanelCard(props: { pair: ComparisonPair }) {
   return (
-    <a data-component="comparison-card" href={comparisonHref(props.pair.first, props.pair.second)}>
+    <a data-component="comparison-card" href={canonicalComparisonHref(props.pair.first, props.pair.second)}>
       <span>{props.pair.detail}</span>
       <strong>
         {props.pair.first.name} <em>vs</em> {props.pair.second.name}
