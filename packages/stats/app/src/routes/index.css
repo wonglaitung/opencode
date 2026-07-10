@@ -6094,6 +6094,7 @@
   top: 72px;
   z-index: 9;
   overflow-x: auto;
+  overscroll-behavior-x: none;
   background: var(--stats-bg);
   scrollbar-width: none;
 }
@@ -6104,6 +6105,7 @@
 
 [data-page="stats"] [data-component="compare-detail-body-scroll"] {
   overflow-x: auto;
+  overscroll-behavior-x: none;
 }
 
 [data-page="stats"] [data-section="compare-detail-selector"],
