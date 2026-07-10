@@ -1,4 +1,3 @@
-import { Icon } from "@opencode-ai/ui/icon"
 import { createMemo, createSignal, For, Show, type JSX } from "solid-js"
 import type { ModelCatalogBenchmark, ModelCatalogEntry } from "./model-catalog"
 
@@ -25,20 +24,12 @@ type RadarAxis = {
   score: (model: ModelCatalogEntry) => number | undefined
 }
 
-type RadarSeries = {
-  name: string
-  labName: string
-  color: string
-  scores: (number | undefined)[]
-}
-
 type RadarPoint = {
   x: number
   y: number
 }
 
 export function ComparisonRadar(props: ComparisonRadarProps) {
-  let section: HTMLElement | undefined
   const [activeAxis, setActiveAxis] = createSignal<number>()
   const axes = createMemo(() => buildRadarAxes(props.catalogModels))
   const series = createMemo(() =>
@@ -60,11 +51,9 @@ export function ComparisonRadar(props: ComparisonRadarProps) {
       .join(". "),
   )
   const clearActiveAxis = (index: number) => setActiveAxis((active) => (active === index ? undefined : active))
-  const download = () => downloadRadarChart(axes(), series())
-  const open = () => openRadarChart(section, axes(), series())
 
   return (
-    <section ref={(element) => (section = element)} data-section="compare-radar" aria-label="Model capabilities">
+    <section data-section="compare-radar" aria-label="Model capabilities">
       <ol data-slot="compare-radar-legend">
         <For each={series()}>
           {(model) => (
@@ -167,14 +156,6 @@ export function ComparisonRadar(props: ComparisonRadarProps) {
             <p>{axes()[activeAxis() ?? 0]?.description}</p>
           </div>
         </Show>
-      </div>
-      <div data-slot="compare-radar-actions">
-        <button type="button" aria-label="Download chart" title="Download chart" onClick={download}>
-          <Icon name="download" size="small" />
-        </button>
-        <button type="button" aria-label="View chart full screen" title="View chart full screen" onClick={open}>
-          <Icon name="square-arrow-top-right" size="small" />
-        </button>
       </div>
       <div data-slot="compare-radar-data">
         <table>
@@ -407,132 +388,4 @@ function roundRadarCoordinate(value: number) {
 
 function formatRadarScore(score: number | undefined) {
   return score === undefined ? "No data" : `${Math.round(score)}/100`
-}
-
-function downloadRadarChart(axes: RadarAxis[], series: RadarSeries[]) {
-  if (typeof document === "undefined") return
-  const url = radarChartUrl(axes, series)
-  const link = document.createElement("a")
-  link.href = url
-  link.download = `${series.map((model) => fileSlug(model.name)).join("-vs-") || "model-comparison"}.svg`
-  document.body.append(link)
-  link.click()
-  link.remove()
-  window.setTimeout(() => URL.revokeObjectURL(url), 0)
-}
-
-function openRadarChart(section: HTMLElement | undefined, axes: RadarAxis[], series: RadarSeries[]) {
-  if (typeof document === "undefined") return
-  if (document.fullscreenElement) {
-    void document.exitFullscreen()
-    return
-  }
-  if (section?.requestFullscreen) {
-    void section.requestFullscreen()
-    return
-  }
-  const url = radarChartUrl(axes, series)
-  window.open(url, "_blank", "noopener,noreferrer")
-  window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
-}
-
-function radarChartUrl(axes: RadarAxis[], series: RadarSeries[]) {
-  return URL.createObjectURL(new Blob([standaloneRadarChart(axes, series)], { type: "image/svg+xml" }))
-}
-
-function standaloneRadarChart(axes: RadarAxis[], series: RadarSeries[]) {
-  const grid = Array.from({ length: radarRingCount })
-    .map((_, index) => standalonePolygon(axes.length, ((index + 1) / radarRingCount) * 100))
-    .map((points) => `<polygon points="${points}"/>`)
-    .join("")
-  const spokes = axes
-    .map((_, index) => standalonePoint(index, axes.length, 100))
-    .map((point) => `<line x1="640" y1="400" x2="${point.x}" y2="${point.y}"/>`)
-    .join("")
-  const labels = axes
-    .map((axis, index) => {
-      const point = standalonePoint(index, axes.length, 129)
-      const horizontal = point.x - 640
-      const anchor = horizontal > 40 ? "start" : horizontal < -40 ? "end" : "middle"
-      return `<text x="${point.x}" y="${point.y}" text-anchor="${anchor}" dominant-baseline="middle">${escapeXml(axis.label)}</text>`
-    })
-    .join("")
-  const areas = series
-    .map((model) => {
-      const polygon = standaloneSeriesPolygon(model.scores)
-      const lines = polygon
-        ? `<polygon points="${polygon}" fill="${model.color}" fill-opacity="0.09"/>`
-        : standaloneSeriesConnections(model.scores)
-            .map(
-              (connection) =>
-                `<line x1="${connection.start.x}" y1="${connection.start.y}" x2="${connection.end.x}" y2="${connection.end.y}"/>`,
-            )
-            .join("")
-      const points = model.scores
-        .flatMap((score, index) => (score === undefined ? [] : [standalonePoint(index, model.scores.length, score)]))
-        .map((point) => `<circle cx="${point.x}" cy="${point.y}" r="5"/>`)
-        .join("")
-      return `<g stroke="${model.color}" fill="${model.color}" stroke-width="1.5" stroke-linejoin="round">${lines}${points}</g>`
-    })
-    .join("")
-  const legend = series
-    .map(
-      (model, index) =>
-        `<g transform="translate(45 ${50 + index * 52})"><rect width="6" height="6" y="-3" fill="${model.color}"/><text x="17" y="0" dominant-baseline="middle" fill="#161616" font-size="13" font-weight="500">${escapeXml(model.name)}</text><text x="17" y="21" dominant-baseline="middle" fill="#5c5c5c" font-size="13">${escapeXml(model.labName)}</text></g>`,
-    )
-    .join("")
-
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800"><rect width="1280" height="800" fill="#ffffff"/><g fill="none" stroke="#0000001a" stroke-width="1">${grid}${spokes}</g><g fill="#161616" font-family="IBM Plex Mono, monospace" font-size="16">${labels}</g>${areas}<g font-family="IBM Plex Mono, monospace">${legend}</g></svg>`
-}
-
-function standalonePoint(index: number, count: number, score: number) {
-  const angle = -Math.PI / 2 + (index * Math.PI * 2) / count
-  const radius = (Math.max(0, Math.min(129, score)) / 100) * 260
-  return {
-    x: roundRadarCoordinate(640 + Math.cos(angle) * radius),
-    y: roundRadarCoordinate(400 + Math.sin(angle) * radius),
-  }
-}
-
-function standalonePolygon(count: number, score: number) {
-  return Array.from({ length: count })
-    .map((_, index) => standalonePoint(index, count, score))
-    .map((point) => `${point.x},${point.y}`)
-    .join(" ")
-}
-
-function standaloneSeriesPolygon(scores: (number | undefined)[]) {
-  if (scores.some((score) => score === undefined)) return
-  return scores
-    .map((score, index) => standalonePoint(index, scores.length, score ?? 0))
-    .map((point) => `${point.x},${point.y}`)
-    .join(" ")
-}
-
-function standaloneSeriesConnections(scores: (number | undefined)[]) {
-  return scores.flatMap((score, index) => {
-    const nextIndex = (index + 1) % scores.length
-    const next = scores[nextIndex]
-    if (score === undefined || next === undefined) return []
-    return [
-      {
-        start: standalonePoint(index, scores.length, score),
-        end: standalonePoint(nextIndex, scores.length, next),
-      },
-    ]
-  })
-}
-
-function fileSlug(value: string) {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-}
-
-function escapeXml(value: string) {
-  return value.replace(/[&<>"']/g, (character) => {
-    const entities: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" }
-    return entities[character] ?? character
-  })
 }

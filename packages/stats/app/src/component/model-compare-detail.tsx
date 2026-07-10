@@ -95,12 +95,10 @@ type ComparisonDetailSection = {
   rows: ComparisonDetailRow[]
   usage?: ModelUsagePoint[][]
 }
-type ComparisonModelSelection = {
+type ComparisonModelRequest = {
   lab: string
   slug: string
-  catalog: ModelCatalogEntry | null | undefined
 }
-type ComparisonModels = [ComparisonModel, ComparisonModel, ...ComparisonModel[]]
 
 export type ModelCompareDetailPageProps = {
   first?: { lab: string; slug: string }
@@ -127,51 +125,41 @@ export default function ModelCompareDetailPage(props: ModelCompareDetailPageProp
   const catalog = createMemo(() => props.catalog ?? catalogData())
   const firstCatalog = createMemo(() => resolvedCatalogEntry(catalog(), firstLabParam(), firstModelParam()))
   const secondCatalog = createMemo(() => resolvedCatalogEntry(catalog(), secondLabParam(), secondModelParam()))
-  const modelSelections = createMemo(() => {
-    const selected: ComparisonModelSelection[] = [
-      { lab: firstLabParam(), slug: firstModelParam(), catalog: firstCatalog() },
-      { lab: secondLabParam(), slug: secondModelParam(), catalog: secondCatalog() },
-      ...parseAdditionalModels(searchParams.add).map((model) => ({
-        ...model,
-        catalog: resolvedCatalogEntry(catalog(), model.lab, model.slug),
-      })),
+  const modelRequests = createMemo(() => {
+    const selected: ComparisonModelRequest[] = [
+      { lab: firstLabParam(), slug: firstModelParam() },
+      { lab: secondLabParam(), slug: secondModelParam() },
+      ...parseAdditionalModels(searchParams.add),
     ]
     return selected
       .filter(
         (model, index) =>
           index < 2 ||
           selected.findIndex(
-            (candidate) => comparisonModelSelectionKey(candidate) === comparisonModelSelectionKey(model),
+            (candidate) => comparisonModelRequestKey(candidate) === comparisonModelRequestKey(model),
           ) === index,
       )
-      .slice(0, comparisonModelLimit) as [
-      ComparisonModelSelection,
-      ComparisonModelSelection,
-      ...ComparisonModelSelection[],
-    ]
+      .slice(0, comparisonModelLimit)
   })
-  const stats = createAsync(() => {
-    const selected = modelSelections()
-    if (catalog() === undefined || selected.some((model) => model.catalog === undefined))
-      return Promise.resolve(undefined)
-    return getComparisonData(
-      selected.map((model) => ({
-        provider: model.catalog?.lab ?? model.lab,
-        model: model.catalog?.slug ?? model.slug,
-      })),
-    )
-  })
+  const modelSelections = createMemo(() =>
+    modelRequests().map((model) => ({
+      ...model,
+      catalog: resolvedCatalogEntry(catalog(), model.lab, model.slug),
+    })),
+  )
+  const stats = createAsync(() =>
+    getComparisonData(modelRequests().map((model) => ({ provider: model.lab, model: model.slug }))),
+  )
   const githubStars = createAsync(() => getGitHubStars())
   const [themePreference, setThemePreference] = createSignal<ThemePreference>("system")
   const [highlightBest, setHighlightBest] = createSignal(true)
   const [addingModel, setAddingModel] = createSignal(false)
   let comparisonHeadingScroll: HTMLDivElement | undefined
   let comparisonBodyScroll: HTMLDivElement | undefined
-  const models = createMemo(
-    () =>
-      modelSelections().map((model, index) =>
-        buildComparisonModel(model.lab, model.slug, model.catalog ?? null, stats()?.models[index] ?? null),
-      ) as ComparisonModels,
+  const models = createMemo(() =>
+    modelSelections().map((model, index) =>
+      buildComparisonModel(model.lab, model.slug, model.catalog ?? null, stats()?.models[index] ?? null),
+    ),
   )
   const title = createMemo(() => {
     if (props.family)
@@ -298,23 +286,11 @@ export default function ModelCompareDetailPage(props: ModelCompareDetailPageProp
               ref={(element) => (comparisonBodyScroll = element)}
               onScroll={(event) => syncComparisonScroll(event.currentTarget, comparisonHeadingScroll)}
             >
-              <Show
-                when={stats() !== undefined}
-                fallback={
-                  <section data-section="compare-detail-matrix">
-                    <div data-component="empty-state" data-compact="true">
-                      <strong>Loading comparison</strong>
-                      <p>Loading model stats.</p>
-                    </div>
-                  </section>
-                }
-              >
-                <ComparisonDetailMatrix
-                  highlightBest={highlightBest()}
-                  modelCount={models().length}
-                  sections={detailSections()}
-                />
-              </Show>
+              <ComparisonDetailMatrix
+                highlightBest={highlightBest()}
+                modelCount={models().length}
+                sections={detailSections()}
+              />
             </div>
           </div>
           <ComparisonCardsSection
@@ -837,8 +813,8 @@ function parseAdditionalModels(value: string | undefined) {
     .slice(0, comparisonModelLimit - 2)
 }
 
-function comparisonModelSelectionKey(model: ComparisonModelSelection) {
-  return model.catalog?.id ?? `${catalogSlug(model.lab)}/${catalogSlug(model.slug)}`
+function comparisonModelRequestKey(model: ComparisonModelRequest) {
+  return `${catalogSlug(model.lab)}/${catalogSlug(model.slug)}`
 }
 
 function comparisonModelsHref(models: ModelCatalogEntry[]) {
@@ -1008,12 +984,12 @@ function buildRelatedPairs(
     .slice(0, 4)
     .map(modelRefFromCatalog)
 
-  return uniqueComparisonPairs([
-    ...alternatives.slice(0, 3).flatMap((model, index) => [
+  return uniqueComparisonPairs(
+    alternatives.slice(0, 3).flatMap((model, index) => [
       { first: current[0], second: model, detail: index === 0 ? "Nearby alternative" : "Related comparison" },
       { first: current[1], second: model, detail: index === 0 ? "Nearby alternative" : "Related comparison" },
     ]),
-  ]).slice(0, 6)
+  ).slice(0, 6)
 }
 
 function comparisonRef(model: ComparisonModel): ComparisonModelRef {

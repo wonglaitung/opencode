@@ -5857,7 +5857,6 @@
 }
 
 [data-page="stats"] [data-slot="compare-home-card-head"] b {
-  position: relative;
   display: grid;
   place-items: center;
   width: 32px;
@@ -5868,32 +5867,10 @@
   box-shadow: 0 1px 1.5px #0000000f;
 }
 
-[data-page="stats"] [data-slot="compare-home-card-head"] b::before {
-  position: absolute;
-  top: 8px;
-  left: 8px;
-  width: 3px;
-  height: 3px;
-  content: "";
-  background: currentColor;
-  box-shadow:
-    7px 0 currentColor,
-    0 7px currentColor;
-  color: var(--stats-muted);
-}
-
-[data-page="stats"] [data-slot="compare-home-card-head"] b::after {
-  position: absolute;
-  right: 5px;
-  bottom: 5px;
-  width: 12px;
-  height: 12px;
-  box-sizing: border-box;
-  content: "";
-  background:
-    radial-gradient(circle at 4px 4px, transparent 2.5px, var(--stats-muted) 2.75px 4px, transparent 4.25px),
-    linear-gradient(var(--stats-muted) 0 0) 7px 8px / 5px 1.5px no-repeat;
-  transform: rotate(45deg);
+[data-page="stats"] [data-slot="compare-home-card-head"] b svg {
+  display: block;
+  width: 16px;
+  height: 16px;
 }
 
 [data-page="stats"] [data-slot="compare-home-card-divider"] {
@@ -6277,42 +6254,6 @@
   line-height: 16px;
 }
 
-[data-page="stats"] [data-slot="compare-radar-actions"] {
-  display: flex;
-  align-self: end;
-  justify-self: end;
-  gap: 8px;
-  padding: 40px;
-}
-
-[data-page="stats"] [data-slot="compare-radar-actions"] button {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  box-sizing: border-box;
-  padding: 0;
-  border: 1px solid var(--stats-line);
-  border-radius: 0;
-  color: var(--stats-text);
-  background: var(--stats-bg);
-  cursor: pointer;
-}
-
-[data-page="stats"] [data-slot="compare-radar-actions"] button:hover,
-[data-page="stats"] [data-slot="compare-radar-actions"] button:focus-visible {
-  border-color: var(--stats-line-strong);
-  background: var(--stats-layer);
-  outline: none;
-}
-
-[data-page="stats"] [data-slot="compare-radar-actions"] [data-component="icon"],
-[data-page="stats"] [data-slot="compare-radar-actions"] svg {
-  display: block;
-  width: 16px;
-  height: 16px;
-}
-
 [data-page="stats"] [data-slot="compare-radar-data"] {
   position: absolute;
   width: 1px;
@@ -6322,13 +6263,6 @@
   border: 0;
   clip-path: inset(50%);
   white-space: nowrap;
-}
-
-[data-page="stats"] [data-section="compare-radar"]:fullscreen {
-  width: 100vw;
-  height: 100vh;
-  border: 0;
-  background: var(--stats-bg);
 }
 
 [data-page="stats"] [data-component="compare-detail-table"] {
@@ -6719,13 +6653,6 @@
     aspect-ratio: 1;
   }
 
-  [data-page="stats"] [data-slot="compare-radar-actions"] {
-    position: absolute;
-    right: 0;
-    bottom: 0;
-    padding: 32px;
-  }
-
   [data-page="stats"] [data-component="compare-detail-table"] {
     --compare-detail-label-column: 220px;
     --compare-detail-model-column-min: 320px;
@@ -6776,11 +6703,6 @@
   [data-page="stats"] [data-slot="compare-radar-chart"] {
     justify-self: center;
     width: min(100%, 720px);
-  }
-
-  [data-page="stats"] [data-slot="compare-radar-actions"] {
-    position: static;
-    padding: 16px 0 0;
   }
 }
 
