@@ -6089,9 +6089,21 @@
   position: relative;
 }
 
-[data-page="stats"] [data-component="compare-detail-scroll"] {
+[data-page="stats"] [data-component="compare-detail-heading-scroll"] {
+  position: sticky;
+  top: 72px;
+  z-index: 9;
   overflow-x: auto;
-  overflow-y: hidden;
+  background: var(--stats-bg);
+  scrollbar-width: none;
+}
+
+[data-page="stats"] [data-component="compare-detail-heading-scroll"]::-webkit-scrollbar {
+  display: none;
+}
+
+[data-page="stats"] [data-component="compare-detail-body-scroll"] {
+  overflow-x: auto;
 }
 
 [data-page="stats"] [data-section="compare-detail-selector"],

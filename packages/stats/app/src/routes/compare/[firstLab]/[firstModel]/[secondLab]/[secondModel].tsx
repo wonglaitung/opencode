@@ -150,6 +150,8 @@ export default function ModelComparePair() {
   const [themePreference, setThemePreference] = createSignal<ThemePreference>("system")
   const [highlightBest, setHighlightBest] = createSignal(true)
   const [addingModel, setAddingModel] = createSignal(false)
+  let comparisonHeadingScroll: HTMLDivElement | undefined
+  let comparisonBodyScroll: HTMLDivElement | undefined
   const models = createMemo(
     () =>
       modelSelections().map((model, index) =>
@@ -187,6 +189,9 @@ export default function ModelComparePair() {
   const navigateToModels = (next: ModelCatalogEntry[]) => {
     if (typeof window === "undefined" || next.length < 2) return
     window.location.href = comparisonModelsHref(next)
+  }
+  const syncComparisonScroll = (source: HTMLDivElement, target: HTMLDivElement | undefined) => {
+    if (target && target.scrollLeft !== source.scrollLeft) target.scrollLeft = source.scrollLeft
   }
   const structuredData = createMemo(() =>
     JSON.stringify({
@@ -260,8 +265,18 @@ export default function ModelComparePair() {
             data-model-count={models().length}
             style={`--compare-detail-grid: ${comparisonDetailGridTemplate(models().length)}`}
           >
-            <div data-component="compare-detail-scroll">
+            <div
+              data-component="compare-detail-heading-scroll"
+              ref={(element) => (comparisonHeadingScroll = element)}
+              onScroll={(event) => syncComparisonScroll(event.currentTarget, comparisonBodyScroll)}
+            >
               <ComparisonPairSelector catalogModels={selectorModels()} models={models()} />
+            </div>
+            <div
+              data-component="compare-detail-body-scroll"
+              ref={(element) => (comparisonBodyScroll = element)}
+              onScroll={(event) => syncComparisonScroll(event.currentTarget, comparisonHeadingScroll)}
+            >
               <Show
                 when={stats() !== undefined}
                 fallback={
