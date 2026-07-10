@@ -12,6 +12,7 @@ import { createAsync, query, useParams, useSearchParams } from "@solidjs/router"
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
 import {
+  ComparisonCardsSection,
   comparisonHref,
   modelRefFromCatalog,
   uniqueComparisonPairs,
@@ -382,7 +383,12 @@ export default function ModelComparePair() {
               </Show>
             </div>
           </div>
-          <ComparisonRelatedSection pairs={relatedPairs()} />
+          <ComparisonCardsSection
+            pairs={relatedPairs()}
+            title="Related comparisons"
+            description="Other model pairs to check."
+            variant="featured"
+          />
         </div>
         <Footer
           themePreference={themePreference()}
@@ -862,51 +868,6 @@ function ComparisonUsageBars(props: { data: ModelUsagePoint[]; column: number; l
         </span>
       </Show>
     </div>
-  )
-}
-
-function ComparisonRelatedSection(props: { pairs: ComparisonPair[] }) {
-  return (
-    <Show when={props.pairs.length > 0}>
-      <section id="model-comparison" data-section="compare-home-related">
-        <p data-slot="section-title">
-          <strong>Related comparisons.</strong> <span>Other model pairs to check.</span>
-        </p>
-        <div data-component="compare-home-card-grid">
-          <For each={props.pairs.slice(0, 4)}>{(pair) => <ComparisonRelatedCard pair={pair} />}</For>
-        </div>
-      </section>
-    </Show>
-  )
-}
-
-function ComparisonRelatedCard(props: { pair: ComparisonPair }) {
-  return (
-    <a
-      data-component="compare-home-card"
-      href={comparisonHref(props.pair.first, props.pair.second)}
-      aria-label={`${props.pair.first.name} vs ${props.pair.second.name}`}
-    >
-      <span data-slot="compare-home-card-head">
-        <span>
-          <strong>{props.pair.detail}</strong>
-          <em>
-            {props.pair.first.name} vs {props.pair.second.name}
-          </em>
-        </span>
-        <b aria-hidden="true" />
-      </span>
-      <span data-slot="compare-home-card-divider" aria-hidden="true" />
-      <span data-slot="compare-home-card-models">
-        <span>{props.pair.first.name}</span>
-        <i aria-hidden="true">·</i>
-        <span>{props.pair.second.name}</span>
-      </span>
-      <span data-slot="compare-home-card-avatars" aria-hidden="true">
-        <LabLogo lab={props.pair.first.lab} label={props.pair.first.labName ?? props.pair.first.lab} size="small" />
-        <LabLogo lab={props.pair.second.lab} label={props.pair.second.labName ?? props.pair.second.lab} size="small" />
-      </span>
-    </a>
   )
 }
 
