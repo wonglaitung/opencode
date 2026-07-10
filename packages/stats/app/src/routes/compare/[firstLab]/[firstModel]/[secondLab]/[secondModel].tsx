@@ -19,6 +19,7 @@ import {
   type ComparisonModelRef,
   type ComparisonPair,
 } from "../../../../compare-cards"
+import { ComparisonRadar } from "../../../../compare-radar"
 import {
   catalogSlug,
   findModelCatalogEntry,
@@ -260,6 +261,7 @@ export default function ModelComparePair() {
               }}
             />
           </Show>
+          <ComparisonRadar models={models()} catalogModels={catalog()?.models ?? []} />
           <div
             data-component="compare-detail-table"
             data-model-count={models().length}
