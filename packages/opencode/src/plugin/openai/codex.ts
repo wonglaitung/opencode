@@ -309,7 +309,7 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
                         input: 372_000,
                         output: 128_000,
                       }
-                  : model.limit,
+                    : model.limit,
               },
             ]),
         )
