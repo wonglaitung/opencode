@@ -1426,6 +1426,54 @@ test("models.dev normalization fills required response fields", () => {
   expect(model.release_date).toBe("")
 })
 
+test("models.dev reasoning options normalize to known shapes", () => {
+  const provider = Provider.fromModelsDevProvider({
+    id: "openai",
+    name: "OpenAI",
+    env: [],
+    npm: "@ai-sdk/openai",
+    models: {
+      reasoner: {
+        id: "reasoner",
+        name: "Reasoner",
+        reasoning: true,
+        reasoning_options: [
+          { type: "future_control", value: true },
+          { type: "effort", values: ["high", null, 42] },
+          { type: "toggle" },
+          { type: "budget_tokens", min: 1024, max: "invalid" },
+        ],
+        limit: { context: 128_000, output: 16_000 },
+      },
+    },
+  } as unknown as ModelsDev.Provider)
+
+  expect(provider.models.reasoner.reasoning_options).toEqual([
+    { type: "effort", values: ["high", null] },
+    { type: "toggle" },
+    { type: "budget_tokens", min: 1024 },
+  ])
+})
+
+test("models.dev models without reasoning options normalize to an empty list", () => {
+  const provider = Provider.fromModelsDevProvider({
+    id: "openai",
+    name: "OpenAI",
+    env: [],
+    npm: "@ai-sdk/openai",
+    models: {
+      reasoner: {
+        id: "gpt-5.4",
+        name: "Reasoner",
+        reasoning: true,
+        limit: { context: 128_000, output: 16_000 },
+      },
+    },
+  } as unknown as ModelsDev.Provider)
+
+  expect(provider.models.reasoner.reasoning_options).toEqual([])
+})
+
 test("public provider info omits invalid models", () => {
   const provider = Provider.fromModelsDevProvider({
     id: "test",
