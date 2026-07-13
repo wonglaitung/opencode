@@ -418,7 +418,7 @@ function ModelHeroSparkline(props: { data: StatsModelData }) {
 function ChevronDownIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none">
-      <path d="M4.75 6.25L8 9.5L11.25 6.25" stroke="currentColor" stroke-width="1.5" />
+      <path d="M5 6.5L8 9.5L11 6.5" stroke="currentColor" />
     </svg>
   )
 }

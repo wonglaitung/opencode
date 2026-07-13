@@ -219,7 +219,7 @@ function LabHeroBreadcrumb(props: { label: string; labs?: ModelCatalogLab[] }) {
           <span data-slot="lab-hero-crumb" data-current="true" aria-current="page">
             <span>{props.label}</span>
             <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-              <path d="M4.75 6.25L8 9.5L11.25 6.25" fill="none" stroke="currentColor" stroke-width="1.5" />
+              <path d="M5 6.5L8 9.5L11 6.5" fill="none" stroke="currentColor" />
             </svg>
           </span>
         }

@@ -2888,7 +2888,7 @@
   padding: 0 8px;
   overflow: hidden;
   background: var(--stats-layer-2);
-  color: var(--stats-faint);
+  color: var(--stats-hero-muted);
   font-size: 13px;
   font-weight: 500;
   line-height: 1.1;
@@ -2897,7 +2897,7 @@
 }
 
 [data-page="stats"] a[data-slot="lab-hero-crumb"] {
-  color: var(--stats-faint);
+  color: var(--stats-hero-muted);
 }
 
 [data-page="stats"] [data-slot="lab-hero-crumb"][data-current="true"] {
@@ -3066,7 +3066,9 @@
 [data-page="stats"] [data-slot="stats-breadcrumb-select-trigger"] {
   display: inline-flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 4px;
+  flex: 0 1 auto;
   max-width: min(100%, 280px);
   height: 24px;
   box-sizing: border-box;
@@ -3082,12 +3084,9 @@
   font-size: 13px;
   font-weight: 500;
   line-height: 1.1;
+  text-align: center;
   white-space: nowrap;
   cursor: pointer;
-}
-
-[data-page="stats"] [data-slot="stats-breadcrumb-select-trigger"][data-variant="lab"] {
-  color: var(--stats-faint);
 }
 
 [data-page="stats"] [data-slot="stats-breadcrumb-select-trigger"][data-current="true"],
@@ -3117,6 +3116,7 @@
 [data-page="stats"] [data-slot="stats-breadcrumb-select-icon"] {
   display: inline-flex;
   flex: 0 0 auto;
+  color: var(--stats-faint);
 }
 
 [data-page="stats"] [data-slot="stats-breadcrumb-select-icon"] svg {
