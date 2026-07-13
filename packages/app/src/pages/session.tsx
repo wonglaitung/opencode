@@ -1,4 +1,5 @@
-import type { Project, UserMessage, VcsFileDiff } from "@opencode-ai/sdk/v2"
+import type { FilePart, Project, UserMessage, VcsFileDiff } from "@opencode-ai/sdk/v2"
+import { getFilename } from "@opencode-ai/core/util/path"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { createQuery, skipToken, useMutation, useQueryClient } from "@tanstack/solid-query"
 import {
@@ -1905,7 +1906,30 @@ export default function Page() {
       .map((item) => ({ id: item.id, text: line(item.id) }))
   })
 
-  const actions = { revert }
+  // attachment bytes are embedded as a data URL, so downloading always works;
+  // revealing requires the on-disk path captured by the client that attached the file
+  const openAttachment = (file: FilePart) => {
+    const download = () => {
+      const anchor = document.createElement("a")
+      anchor.href = file.url
+      anchor.download = getFilename(file.filename) || "attachment"
+      anchor.click()
+    }
+    const path = file.filename ?? ""
+    const absolute = path.startsWith("/") || path.startsWith("\\\\") || /^[a-zA-Z]:[\\/]/.test(path)
+    if (platform.revealPath && absolute) {
+      void platform.revealPath(path).then(
+        (revealed) => {
+          if (!revealed) download()
+        },
+        () => download(),
+      )
+      return
+    }
+    download()
+  }
+
+  const actions = { revert, openAttachment }
 
   createEffect(() => {
     const sessionID = params.id
