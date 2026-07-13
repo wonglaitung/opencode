@@ -155,9 +155,10 @@ describe("plugin.codex", () => {
     const provider = {
       models: {
         ...Object.fromEntries(
-          ["gpt-5.4", "gpt-5.5", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.7-pro"].map(
-            (id) => [id, { id, api: { id }, limit, cost: {}, options: {} }],
-          ),
+          ["gpt-5.4", "gpt-5.5", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.7-pro"].map((id) => [
+            id,
+            { id, api: { id }, limit, cost: {}, options: {} },
+          ]),
         ),
         "gpt-5.4-pro": {
           id: "gpt-5.4-pro",
