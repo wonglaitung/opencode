@@ -333,12 +333,7 @@ function ModelHero(props: {
           }
         >
           <details data-component="model-hero-menu">
-            <summary
-              data-slot="model-hero-crumb"
-              data-menu="true"
-              data-current="true"
-              aria-current="page"
-            >
+            <summary data-slot="model-hero-crumb" data-menu="true" data-current="true" aria-current="page">
               <span>{modelName()}</span>
               <ChevronDownIcon />
             </summary>
