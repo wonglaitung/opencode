@@ -238,8 +238,7 @@ export function LineCommentEditorV2(props: LineCommentEditorV2Props) {
                 }
 
                 const nav = e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "Enter"
-                const ctrlNav =
-                  e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && (e.key === "n" || e.key === "p")
+                const ctrlNav = e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && (e.key === "n" || e.key === "p")
                 if ((nav || ctrlNav) && mention.flat().length > 0) {
                   mention.onKeyDown(e)
                   e.preventDefault()

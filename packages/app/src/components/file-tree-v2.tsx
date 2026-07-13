@@ -116,9 +116,7 @@ const FileTreeNodeV2 = (
 function GuideLines(props: { level: number }) {
   return (
     <For each={Array.from({ length: props.level })}>
-      {(_, index) => (
-        <div data-slot="file-tree-v2-guide" style={`left: ${guideLineLeft(index())}px`} />
-      )}
+      {(_, index) => <div data-slot="file-tree-v2-guide" style={`left: ${guideLineLeft(index())}px`} />}
     </For>
   )
 }

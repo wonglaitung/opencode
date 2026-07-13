@@ -81,7 +81,6 @@ function FileCommentMenuV2(props: {
   )
 }
 
-
 type ScrollPos = { x: number; y: number }
 
 function createScrollSync(input: { tab: () => string; view: ReturnType<typeof useSessionLayout>["view"] }) {

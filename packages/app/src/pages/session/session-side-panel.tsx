@@ -768,9 +768,7 @@ export function SessionSidePanel(props: {
                             <>
                               {props.reviewCount()}{" "}
                               {language.t(
-                                props.reviewCount() === 1
-                                  ? "session.review.change.one"
-                                  : "session.review.change.other",
+                                props.reviewCount() === 1 ? "session.review.change.one" : "session.review.change.other",
                               )}
                             </>
                           }

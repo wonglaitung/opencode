@@ -15,10 +15,7 @@ export function OpenInAppV2(props: { directory: () => string }) {
 
   return (
     <Show when={props.directory() && state.canOpen()}>
-      <SplitButtonV2
-        class="session-review-v2-open-in-app"
-        onPointerDown={(event) => event.stopPropagation()}
-      >
+      <SplitButtonV2 class="session-review-v2-open-in-app" onPointerDown={(event) => event.stopPropagation()}>
         <TooltipV2
           placement="bottom"
           value={language.t("session.header.open.ariaLabel", { app: state.current().label })}

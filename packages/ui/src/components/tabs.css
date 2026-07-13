@@ -782,7 +782,12 @@ body[data-new-layout]
   border-bottom: none;
 }
 
-body[data-new-layout] #review-panel [data-component="tabs"] .session-review-v2-tabs-bar [data-slot="tabs-list"] > .sticky {
+body[data-new-layout]
+  #review-panel
+  [data-component="tabs"]
+  .session-review-v2-tabs-bar
+  [data-slot="tabs-list"]
+  > .sticky {
   padding-right: 0;
 }
 
