@@ -901,8 +901,7 @@ export const dict = {
     "Show edit, write, and patch tool parts expanded by default in the timeline",
   "settings.general.row.newInterface.title": "Use the new interface",
   "settings.general.row.newInterface.badge": "New",
-  "settings.general.row.newInterface.description":
-    "New layout, tabs, composer and home. Switch back until {{date}}.",
+  "settings.general.row.newInterface.description": "New layout, tabs, composer and home. Switch back until {{date}}.",
   "settings.general.row.newInterfaceNotice.title": "You're now using the new interface",
   "settings.general.row.newInterfaceNotice.description": "The old interface was phased out on {{date}}.",
   "settings.general.row.newInterfaceNotice.dismiss": "Dismiss",

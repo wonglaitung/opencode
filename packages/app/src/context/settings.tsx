@@ -255,10 +255,7 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setNewLayoutDesigns(value: boolean) {
           setStore("general", "newLayoutDesigns", value)
         },
-        newInterfaceNoticeDismissed: withFallback(
-          () => store.general?.newInterfaceNoticeDismissed,
-          false,
-        ),
+        newInterfaceNoticeDismissed: withFallback(() => store.general?.newInterfaceNoticeDismissed, false),
         dismissNewInterfaceNotice() {
           setStore("general", "newInterfaceNoticeDismissed", true)
         },

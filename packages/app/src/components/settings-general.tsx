@@ -386,7 +386,6 @@ export const SettingsGeneral: Component = () => {
             />
           </div>
         </SettingsRow>
-
       </SettingsList>
     </div>
   )
