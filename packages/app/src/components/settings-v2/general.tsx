@@ -230,34 +230,53 @@ export const SettingsGeneralV2: Component<{
 
   const InterfaceSection = () => (
     <div class="settings-v2-section">
-      <SettingsListV2>
-        <SettingsRowV2
-          title={
-            <span class="flex items-center gap-2">
-              {language.t("settings.general.row.newInterface.title")}
-              <Tag variant="accent">{language.t("settings.general.row.newInterface.badge")}</Tag>
-            </span>
-          }
-          description={language.t("settings.general.row.newInterface.description", {
-            date: new Intl.DateTimeFormat(language.intl(), { month: "long", day: "numeric" }).format(
-              oldInterfaceSunset,
-            ),
-          })}
-        >
-          <div data-action="settings-new-layout-designs">
-            <Switch
-              checked={settings.general.newLayoutDesigns()}
-              onChange={(checked) => {
-                settings.general.setNewLayoutDesigns(checked)
-                if (checked) return
-                void import("@/components/dialog-settings").then((module) => {
-                  void dialog.show(() => <module.DialogSettings />)
-                })
-              }}
-            />
-          </div>
-        </SettingsRowV2>
-      </SettingsListV2>
+      <div class="settings-v2-interface-feature">
+        <SettingsListV2>
+          <SettingsRowV2
+            title={
+              <span class="flex items-center gap-2">
+                {language.t("settings.general.row.newInterface.title")}
+                <Tag variant="accent">{language.t("settings.general.row.newInterface.badge")}</Tag>
+              </span>
+            }
+            description={language.t("settings.general.row.newInterface.description", {
+              date: new Intl.DateTimeFormat(language.intl(), { month: "long", day: "numeric" }).format(
+                oldInterfaceSunset,
+              ),
+            })}
+          >
+            <div data-action="settings-new-layout-designs">
+              <Switch
+                checked={settings.general.newLayoutDesigns()}
+                onChange={(checked) => {
+                  settings.general.setNewLayoutDesigns(checked)
+                  if (checked) return
+                  void import("@/components/dialog-settings").then((module) => {
+                    void dialog.show(() => <module.DialogSettings />)
+                  })
+                }}
+              />
+            </div>
+          </SettingsRowV2>
+        </SettingsListV2>
+      </div>
+
+      <Show when={!settings.general.newInterfaceNoticeDismissed()}>
+        <SettingsListV2>
+          <SettingsRowV2
+            title={language.t("settings.general.row.newInterfaceNotice.title")}
+            description={language.t("settings.general.row.newInterfaceNotice.description", {
+              date: new Intl.DateTimeFormat(language.intl(), { month: "long", day: "numeric" }).format(
+                oldInterfaceSunset,
+              ),
+            })}
+          >
+            <ButtonV2 size="small" variant="ghost-muted" onClick={settings.general.dismissNewInterfaceNotice}>
+              {language.t("settings.general.row.newInterfaceNotice.dismiss")}
+            </ButtonV2>
+          </SettingsRowV2>
+        </SettingsListV2>
+      </Show>
     </div>
   )
 

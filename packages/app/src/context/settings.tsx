@@ -34,6 +34,7 @@ export interface Settings {
     showCustomAgents: boolean
     mobileTitlebarPosition: "top" | "bottom"
     newLayoutDesigns?: boolean
+    newInterfaceNoticeDismissed?: boolean
   }
   appearance: {
     fontSize: number
@@ -253,6 +254,13 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         newLayoutDesigns,
         setNewLayoutDesigns(value: boolean) {
           setStore("general", "newLayoutDesigns", value)
+        },
+        newInterfaceNoticeDismissed: withFallback(
+          () => store.general?.newInterfaceNoticeDismissed,
+          false,
+        ),
+        dismissNewInterfaceNotice() {
+          setStore("general", "newInterfaceNoticeDismissed", true)
         },
       },
       visibility: {

@@ -251,7 +251,7 @@ export const SettingsGeneral: Component = () => {
   })
 
   const InterfaceSection = () => (
-    <div class="flex flex-col gap-1">
+    <div class="flex flex-col gap-4">
       <SettingsList>
         <SettingsRow
           title={
@@ -280,6 +280,23 @@ export const SettingsGeneral: Component = () => {
           </div>
         </SettingsRow>
       </SettingsList>
+
+      <Show when={!settings.general.newInterfaceNoticeDismissed()}>
+        <SettingsList>
+          <SettingsRow
+            title={language.t("settings.general.row.newInterfaceNotice.title")}
+            description={language.t("settings.general.row.newInterfaceNotice.description", {
+              date: new Intl.DateTimeFormat(language.intl(), { month: "long", day: "numeric" }).format(
+                oldInterfaceSunset,
+              ),
+            })}
+          >
+            <Button size="small" variant="ghost" onClick={settings.general.dismissNewInterfaceNotice}>
+              {language.t("settings.general.row.newInterfaceNotice.dismiss")}
+            </Button>
+          </SettingsRow>
+        </SettingsList>
+      </Show>
     </div>
   )
 

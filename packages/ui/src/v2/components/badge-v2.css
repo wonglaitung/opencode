@@ -29,5 +29,5 @@
 [data-component="tag"][data-variant="accent"] {
   border: 0;
   background: var(--v2-background-bg-accent);
-  color: var(--v2-text-text-inverse);
+  color: var(--v2-text-text-contrast);
 }
