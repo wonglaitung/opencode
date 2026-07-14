@@ -114,7 +114,7 @@ export function TabsInfoPopup() {
       <DrawerContent>
         <div class="flex h-[52px] w-full shrink-0 items-center gap-4 self-stretch border-b border-v2-border-border-muted p-4">
           <p class="min-h-0 min-w-0 flex-1 text-[13px] font-[530] leading-5 tracking-[-0.04px] tabular-nums text-v2-text-text-muted">
-            June 16
+            July 14
           </p>
           <DrawerClose
             as={IconButtonV2}
@@ -147,7 +147,7 @@ export function TabsInfoPopup() {
             <p>When you reopen the app, your tabs are still open.</p>
             <p>
               The new design does not support Git Worktrees yet, it's coming soon. So if you'd prefer to continue using
-              the previous layout , you can switch between layouts in Settings. Just keep in mind that the new layout
+              the previous layout, you can switch between layouts in Settings. Just keep in mind that the new layout
               will become permanent in a few weeks.
             </p>
           </div>
