@@ -137,19 +137,10 @@ for (const scenario of scenarios) {
             const part = viewport?.querySelector<HTMLElement>(`[data-timeline-part-id="${CSS.escape(partID)}"]`)
             const rect = part?.getBoundingClientRect()
             return (
-              !!rect &&
-              !!view &&
-              rect.width > 0 &&
-              rect.height > 0 &&
-              rect.bottom > view.top &&
-              rect.top < view.bottom
+              !!rect && !!view && rect.width > 0 && rect.height > 0 && rect.bottom > view.top && rect.top < view.bottom
             )
           }
-          if (
-            !virtual ||
-            state.visibleParts.length === 0 ||
-            state.visibleParts.some((partID) => !visible(partID))
-          )
+          if (!virtual || state.visibleParts.length === 0 || state.visibleParts.some((partID) => !visible(partID)))
             state.hidden = true
           state.samples++
         }
