@@ -6436,7 +6436,7 @@
   white-space: nowrap;
 }
 
-[data-page="stats"] button[data-slot="compare-detail-select-model"] svg {
+[data-page="stats"] button[data-slot="compare-detail-select-model"] > svg {
   flex: 0 0 auto;
   color: var(--stats-muted);
 }
@@ -6510,6 +6510,7 @@
 [data-page="stats"] [data-slot="compare-detail-label"][data-heading="true"] span {
   display: inline-flex;
   align-items: center;
+  flex: 0 0 auto;
   height: 24px;
   padding: 0 8px;
   color: var(--stats-muted);
@@ -6517,6 +6518,7 @@
   font-size: 12px;
   font-weight: 500;
   line-height: 1;
+  white-space: nowrap;
 }
 
 [data-page="stats"] [data-slot="compare-detail-value"] {
