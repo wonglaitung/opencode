@@ -7884,8 +7884,7 @@
     max-width: min(100%, 240px);
   }
 
-  [data-page="stats"] [data-component="model-hero-breadcrumb"]
-    button[data-slot="stats-breadcrumb-select-trigger"] {
+  [data-page="stats"] [data-component="model-hero-breadcrumb"] button[data-slot="stats-breadcrumb-select-trigger"] {
     max-width: min(100%, 240px);
   }
 
