@@ -81,7 +81,9 @@
     border-radius: 0.25rem;
     background: rgb(0 0 0 / 70%);
     opacity: 0;
-    transition: opacity 150ms ease, background 150ms ease;
+    transition:
+      opacity 150ms ease,
+      background 150ms ease;
   }
 
   &:hover [data-slot="desktop-promo-close"],
