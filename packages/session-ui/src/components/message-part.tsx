@@ -1176,9 +1176,7 @@ export function ContextToolGroup(props: {
 function UserMessageComments(props: { comments: UserMessageComment[]; bounded: boolean }) {
   const i18n = useI18n()
   const [state, setState] = createStore({ expanded: false })
-  const comments = createMemo(() =>
-    props.bounded && !state.expanded ? props.comments.slice(0, 5) : props.comments,
-  )
+  const comments = createMemo(() => (props.bounded && !state.expanded ? props.comments.slice(0, 5) : props.comments))
 
   return (
     <div data-slot="user-message-comments" data-bounded={props.bounded ? "true" : undefined}>
