@@ -42,6 +42,11 @@
     U+2020-2022, U+2026, U+2030, U+2039-203A, U+2044, U+20AC, U+2122, U+2212, U+FB01-FB02;
 }
 
+body {
+  min-width: 320px;
+  margin: 0;
+}
+
 [data-page="stats"] {
   color-scheme: light;
   --color-background: #ffffff;
