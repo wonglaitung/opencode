@@ -6081,6 +6081,7 @@ body {
   height: 800px;
   box-sizing: border-box;
   border-right: 1px solid var(--stats-line);
+  border-bottom: 1px solid var(--stats-line);
   border-left: 1px solid var(--stats-line);
   color: var(--stats-text);
   background: var(--stats-bg);
