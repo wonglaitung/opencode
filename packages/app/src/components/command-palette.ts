@@ -249,30 +249,30 @@ export function createServerSessionEntries(props: {
     })
     if (current.signal.aborted) return []
     const opened = props.opened()
-    const openedByID = new Map(
-      opened.flatMap((project) => (project.id ? [[project.id, project] as const] : [])),
-    )
+    const openedByID = new Map(opened.flatMap((project) => (project.id ? [[project.id, project] as const] : [])))
     const stored = props.stored().map((project) => ({ ...project, expanded: false }))
     const storedByID = new Map(stored.map((project) => [project.id, project] as const))
     return props
       .load(search, current.signal)
       .then((result) =>
-        (result.data ?? []).filter((session) => !session.time.archived).map((session) => {
-          const project =
-            projectForSession(session, opened, openedByID) ?? projectForSession(session, stored, storedByID)
-          return {
-            id: `session:${props.server}:${session.id}`,
-            type: "session" as const,
-            title: session.title || props.untitled(),
-            description: project ? displayName(project) : session.project?.name || getFilename(session.directory),
-            category: props.category(),
-            directory: session.directory,
-            sessionID: session.id,
-            server: props.server,
-            project,
-            updated: session.time.updated,
-          }
-        }),
+        (result.data ?? [])
+          .filter((session) => !session.time.archived)
+          .map((session) => {
+            const project =
+              projectForSession(session, opened, openedByID) ?? projectForSession(session, stored, storedByID)
+            return {
+              id: `session:${props.server}:${session.id}`,
+              type: "session" as const,
+              title: session.title || props.untitled(),
+              description: project ? displayName(project) : session.project?.name || getFilename(session.directory),
+              category: props.category(),
+              directory: session.directory,
+              sessionID: session.id,
+              server: props.server,
+              project,
+              updated: session.time.updated,
+            }
+          }),
       )
       .catch(() => [] as CommandPaletteEntry[])
   }

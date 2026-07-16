@@ -90,10 +90,7 @@ export interface CommandOption {
 export function commandPaletteOptions(options: CommandOption[]) {
   return options.filter(
     (option) =>
-      !option.disabled &&
-      !option.hidden &&
-      !option.id.startsWith(SUGGESTED_PREFIX) &&
-      option.id !== "file.open",
+      !option.disabled && !option.hidden && !option.id.startsWith(SUGGESTED_PREFIX) && option.id !== "file.open",
   )
 }
 

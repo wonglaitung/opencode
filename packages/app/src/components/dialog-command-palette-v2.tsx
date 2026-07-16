@@ -73,9 +73,7 @@ export function DialogHomeCommandPaletteV2(props: {
   const state = { cleanup: undefined as (() => void) | void, committed: false }
   const commandEntries = createMemo(() => {
     const category = language.t("palette.group.commands")
-    return commandPaletteOptions(command.options).map((option) =>
-      createCommandPaletteCommandEntry(option, category),
-    )
+    return commandPaletteOptions(command.options).map((option) => createCommandPaletteCommandEntry(option, category))
   })
   const sessions = createServerSessionEntries({
     server: ServerConnection.key(props.server),
@@ -107,10 +105,7 @@ export function DialogHomeCommandPaletteV2(props: {
   const loadItems = async (text: string) => {
     const query = text.trim()
     if (!query) return commandEntries().slice(0, 5)
-    return [
-      ...commandEntries().filter((entry) => matchesEntry(entry, query)),
-      ...(await sessions(query)),
-    ]
+    return [...commandEntries().filter((entry) => matchesEntry(entry, query)), ...(await sessions(query))]
   }
 
   onCleanup(() => {
@@ -147,12 +142,7 @@ function CommandPaletteView(props: {
   const groupedEntries = createMemo(() => groups(visibleEntries()))
   const activeEntry = createMemo(() => visibleEntries()[active()])
   const openSessions = createMemo(
-    () =>
-      new Set(
-        tabs.store.flatMap((tab) =>
-          tab.type === "session" ? [`${tab.server}\0${tab.sessionId}`] : [],
-        ),
-      ),
+    () => new Set(tabs.store.flatMap((tab) => (tab.type === "session" ? [`${tab.server}\0${tab.sessionId}`] : []))),
   )
 
   createEffect(() => {

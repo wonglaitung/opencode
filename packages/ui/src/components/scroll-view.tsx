@@ -19,10 +19,10 @@ export type ScrollViewThumbVisibility = "hover" | "scroll"
 export interface ScrollViewProps extends ComponentProps<"div"> {
   viewportRef?: (el: HTMLDivElement) => void
   orientation?: "vertical" | "horizontal" // currently only vertical is fully implemented for thumb
-  /** 
-   * `hover`: show while hovered or scrolling. `scroll`: show only while scrolling. 
-   * 
-   * In most cases, scrolling a container = hovering over it, so this change has no effect. 
+  /**
+   * `hover`: show while hovered or scrolling. `scroll`: show only while scrolling.
+   *
+   * In most cases, scrolling a container = hovering over it, so this change has no effect.
    * This is a special case to account for the home page scroll, where scrolling a container != hovering over it
    * */
   thumbVisibility?: ScrollViewThumbVisibility
