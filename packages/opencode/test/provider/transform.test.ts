@@ -3283,17 +3283,15 @@ describe("ProviderTransform.reasoningVariants", () => {
     expect(ProviderTransform.reasoningVariants(effort, target("@ai-sdk/gateway", "google/gemini-3-pro"))).toEqual({
       high: { thinkingConfig: { includeThoughts: true, thinkingLevel: "high" } },
     })
-    expect(
-      ProviderTransform.reasoningVariants(effort, target("@ai-sdk/github-copilot", "gemini-3-pro")),
-    ).toEqual({})
+    expect(ProviderTransform.reasoningVariants(effort, target("@ai-sdk/github-copilot", "gemini-3-pro"))).toEqual({})
   })
 
   test.each(["@ai-sdk/cohere", "@ai-sdk/perplexity", "@ai-sdk/vercel", "@ai-sdk/alibaba", "gitlab-ai-provider"])(
     "does not invent effort controls for %s",
     (npm) => {
-      expect(
-        ProviderTransform.reasoningVariants(model([{ type: "effort", values: ["high"] }]), target(npm)),
-      ).toEqual({})
+      expect(ProviderTransform.reasoningVariants(model([{ type: "effort", values: ["high"] }]), target(npm))).toEqual(
+        {},
+      )
     },
   )
 })
