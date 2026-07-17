@@ -1121,18 +1121,10 @@ function ProviderConnection(props: {
 
   return (
     <div class={newLayout() ? "flex min-h-0 flex-1 flex-col" : "flex flex-col gap-6 px-2.5 pb-3"}>
-      <div
-        class={
-          newLayout() ? "flex h-10 shrink-0 items-start gap-2 px-3" : "flex items-center gap-4 px-2.5"
-        }
-      >
+      <div class={newLayout() ? "flex h-10 shrink-0 items-start gap-2 px-3" : "flex items-center gap-4 px-2.5"}>
         <ProviderIcon
           id={props.provider}
-          class={
-            newLayout()
-              ? "mt-0.5 size-4 shrink-0 text-v2-icon-icon-base"
-              : "size-5 shrink-0 icon-strong-base"
-          }
+          class={newLayout() ? "mt-0.5 size-4 shrink-0 text-v2-icon-icon-base" : "size-5 shrink-0 icon-strong-base"}
         />
         <div
           class={
@@ -1149,11 +1141,7 @@ function ProviderConnection(props: {
           </Switch>
         </div>
       </div>
-      <div
-        class={
-          newLayout() ? "flex min-h-0 flex-1 flex-col" : "flex flex-col gap-6 px-2.5 pb-10"
-        }
-      >
+      <div class={newLayout() ? "flex min-h-0 flex-1 flex-col" : "flex flex-col gap-6 px-2.5 pb-10"}>
         <div
           onKeyDown={handleKey}
           tabIndex={newLayout() ? undefined : 0}
