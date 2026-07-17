@@ -7,7 +7,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { NewSessionDesignView } from "@/components/session"
-import { PromptInput } from "@/components/prompt-input"
+import { PromptInputV2Composer, usePromptInputV2Controller } from "@/components/prompt-input-v2"
 import { StatusPopoverV2 } from "@/components/status-popover"
 import {
   PromptProjectAddButton,
@@ -68,8 +68,6 @@ export default function NewSessionPage() {
 
   useComposerCommands({ model })
 
-  let inputRef: HTMLDivElement | undefined
-
   const inputController = createPromptInputController({
     sessionKey: route.sessionKey,
     sessionID: () => route.params.id,
@@ -77,29 +75,6 @@ export default function NewSessionPage() {
     model,
   })
   const projectControls = createPromptProjectControls()
-  const projectController = createPromptProjectController({
-    controls: projectControls,
-    onDone: () => inputRef?.focus(),
-  })
-
-  command.register("new-session", () => [
-    {
-      id: "command.palette",
-      title: language.t("command.palette"),
-      hidden: true,
-      onSelect: async () => {
-        const { DialogSelectFile } = await import("@/components/dialog-select-file")
-        void dialog.show(() => <DialogSelectFile />)
-      },
-    },
-    {
-      id: "input.focus",
-      title: language.t("command.input.focus"),
-      category: language.t("command.category.view"),
-      keybind: "ctrl+l",
-      onSelect: () => inputRef?.focus(),
-    },
-  ])
 
   const [store, setStore] = createStore<{ worktree?: string }>({})
   const rightMount = useTitlebarRightMount()
@@ -119,6 +94,39 @@ export default function NewSessionPage() {
     if (worktree === "main" || worktree === "create") return localBranch()
     return serverSync().child(worktree)[0].vcs?.branch ?? localBranch()
   })
+  const promptInputV2Controller = usePromptInputV2Controller({
+    get controls() {
+      return inputController()
+    },
+    get newSessionWorktree() {
+      return newSessionWorktree()
+    },
+    onNewSessionWorktreeReset: () => setStore("worktree", undefined),
+    onSubmit: () => comments.clear(),
+  })
+  const projectController = createPromptProjectController({
+    controls: projectControls,
+    onDone: promptInputV2Controller.restoreFocus,
+  })
+
+  command.register("new-session", () => [
+    {
+      id: "command.palette",
+      title: language.t("command.palette"),
+      hidden: true,
+      onSelect: async () => {
+        const { DialogSelectFile } = await import("@/components/dialog-select-file")
+        void dialog.show(() => <DialogSelectFile />)
+      },
+    },
+    {
+      id: "input.focus",
+      title: language.t("command.input.focus"),
+      category: language.t("command.category.view"),
+      keybind: "ctrl+l",
+      onSelect: () => promptInputV2Controller.restoreFocus(),
+    },
+  ])
 
   createEffect(() => {
     if (!prompt.ready()) return
@@ -132,16 +140,18 @@ export default function NewSessionPage() {
 
   createEffect(() => {
     if (!prompt.ready()) return
-    requestAnimationFrame(() => inputRef?.focus())
+    promptInputV2Controller.restoreFocus()
   })
+
   const ready = Promise.resolve()
-  const [promptReady] = createResource(
+  const [suspendUntilPromptReady] = createResource(
     () => prompt.ready.promise ?? ready,
     (promise) => promise.then(() => true),
   )
 
   return (
     <div class="relative size-full overflow-hidden flex flex-col">
+      {suspendUntilPromptReady()}
       <Show when={rightMount()}>
         {(mount) => (
           <Portal mount={mount()}>
@@ -158,63 +168,44 @@ export default function NewSessionPage() {
           <div class="flex-1 min-h-0 overflow-hidden rounded-[10px]">
             <NewSessionDesignView>
               <div class={NEW_SESSION_CONTENT_WIDTH}>
-                <Show
-                  when={prompt.ready() || promptReady()}
-                  fallback={
-                    <div class="w-full min-h-32 md:min-h-40 rounded-md border border-border-weak-base bg-background-base/50 px-4 py-3 text-text-weak pointer-events-none">
-                      {language.t("prompt.loading")}
-                    </div>
-                  }
-                >
-                  <div class="flex flex-col" classList={{ "gap-8": showWorkspaceBar(), "gap-3": !showWorkspaceBar() }}>
-                    <PromptInput
-                      controls={inputController()}
-                      variant="new-session"
-                      ref={(el) => {
-                        inputRef = el
+                <div class="flex flex-col" classList={{ "gap-8": showWorkspaceBar(), "gap-3": !showWorkspaceBar() }}>
+                  <PromptInputV2Composer controller={promptInputV2Controller} />
+                  <Show when={projectController.empty()}>
+                    <PromptProjectAddButton controller={projectController} />
+                  </Show>
+                  <Show when={projectController.selected()}>
+                    <div
+                      class="flex min-h-7 min-w-0 items-center gap-0 text-v2-text-text-faint"
+                      classList={{
+                        "flex-col justify-center sm:flex-row": showWorkspaceBar(),
+                        "justify-start": !showWorkspaceBar(),
                       }}
-                      newSessionWorktree={newSessionWorktree()}
-                      onNewSessionWorktreeReset={() => setStore("worktree", undefined)}
-                      onSubmit={() => comments.clear()}
-                      toolbar={
-                        <Show when={!projectController.selected()}>
-                          <PromptProjectAddButton controller={projectController} />
-                        </Show>
-                      }
-                    />
-                    <Show when={projectController.selected()}>
-                      <div
-                        class="flex min-h-7 min-w-0 items-center gap-0 text-v2-text-text-faint"
-                        classList={{
-                          "flex-col justify-center sm:flex-row": showWorkspaceBar(),
-                          "justify-start": !showWorkspaceBar(),
-                        }}
-                      >
-                        <PromptProjectSelector
-                          controller={projectController}
-                          placement={showWorkspaceBar() ? "bottom" : "bottom-start"}
+                    >
+                      <PromptProjectSelector
+                        controller={projectController}
+                        placement={showWorkspaceBar() ? "bottom" : "bottom-start"}
+                      />
+                      <Show when={showWorkspaceBar()}>
+                        <PromptWorkspaceSelector
+                          value={newSessionWorktree()}
+                          projectRoot={projectRoot()}
+                          workspaces={sync().project?.sandboxes ?? []}
+                          branch={selectedBranch()}
+                          onChange={(value) =>
+                            setStore(
+                              "worktree",
+                              value === "main" && sync().project?.worktree !== sdk().directory
+                                ? sync().project?.worktree
+                                : value,
+                            )
+                          }
+                          onDone={promptInputV2Controller.restoreFocus}
                         />
-                        <Show when={showWorkspaceBar()}>
-                          <PromptWorkspaceSelector
-                            value={newSessionWorktree()}
-                            projectRoot={projectRoot()}
-                            workspaces={sync().project?.sandboxes ?? []}
-                            branch={selectedBranch()}
-                            onChange={(value) =>
-                              setStore(
-                                "worktree",
-                                value === "main" && sync().project?.worktree !== sdk().directory
-                                  ? sync().project?.worktree
-                                  : value,
-                              )
-                            }
-                            onDone={() => inputRef?.focus()}
-                          />
-                        </Show>
-                      </div>
-                    </Show>
-                  </div>
-                </Show>
+                      </Show>
+                    </div>
+                  </Show>
+                </div>
+                {/*</Show>*/}
               </div>
             </NewSessionDesignView>
             <ProviderTip
