@@ -29,7 +29,7 @@ import { PromptWorkspaceSelector } from "@/components/prompt-workspace-selector"
 import { useTitlebarRightMount } from "@/components/titlebar"
 import { useCommand } from "@/context/command"
 import { useProviders } from "@/hooks/use-providers"
-import { useSettingsCommand, useSettingsDialog } from "@/components/settings-dialog"
+import { useSettingsCommand } from "@/components/settings-dialog"
 import { Persist, persisted } from "@/utils/persist"
 import createPresence from "solid-presence"
 import { useLocal } from "@/context/local"
@@ -55,7 +55,11 @@ export default function NewSessionPage() {
   const dialog = useDialog()
   const command = useCommand()
   const providers = useProviders(() => sdk().directory)
-  const openProviderSettings = useSettingsDialog("providers")
+  const openProviders = () => {
+    void import("@/components/dialog-connect-provider").then(({ DialogConnectProvider }) => {
+      void dialog.show(() => <DialogConnectProvider directory={() => sdk().directory} />)
+    })
+  }
   useSettingsCommand()
   const route = useSessionKey()
   const [searchParams, setSearchParams] = useSearchParams<{ draftId?: string; prompt?: string }>()
@@ -216,7 +220,7 @@ export default function NewSessionPage() {
             <ProviderTip
               ready={() => serverSync().child(sdk().directory)[0].provider_ready}
               connected={() => providers.paid().length > 0}
-              openProviders={openProviderSettings}
+              openProviders={openProviders}
             />
           </div>
         </div>
