@@ -91,25 +91,19 @@ function inputChanged(state: PromptInputV2InteractionState, value: string, persi
   const context = value.match(/(?:^|\s)@([^\s@]*)$/)
   if (context) {
     const query = context[1] ?? ""
-    return changed(
-      { ...state, popover: { type: "context", query }, focus: "editor" },
-      [
-        ...setText,
-        { type: "popover.filter", popover: "context", query },
-      ],
-    )
+    return changed({ ...state, popover: { type: "context", query }, focus: "editor" }, [
+      ...setText,
+      { type: "popover.filter", popover: "context", query },
+    ])
   }
 
   const command = value.match(/^\/([^\s/]*)$/)
   if (command) {
     const query = command[1] ?? ""
-    return changed(
-      { ...state, popover: { type: "command-inline", query }, focus: "editor" },
-      [
-        ...setText,
-        { type: "popover.filter", popover: "command", query },
-      ],
-    )
+    return changed({ ...state, popover: { type: "command-inline", query }, focus: "editor" }, [
+      ...setText,
+      { type: "popover.filter", popover: "command", query },
+    ])
   }
 
   return changed(
@@ -123,45 +117,35 @@ function openCommands(
   persisted: PromptInputV2PersistedState,
 ): PromptInputV2Transition {
   if (!populated(persisted)) {
-    return changed(
-      { ...state, popover: { type: "command-inline", query: "" }, focus: "editor" },
-      [
-        { type: "draft.setText", value: promptText(persisted) + "/" },
-        { type: "popover.filter", popover: "command", query: "" },
-        { type: "focus.editor" },
-      ],
-    )
-  }
-  return changed(
-    { ...state, popover: { type: "command-menu", query: "" }, focus: "command-search" },
-    [
+    return changed({ ...state, popover: { type: "command-inline", query: "" }, focus: "editor" }, [
+      { type: "draft.setText", value: promptText(persisted) + "/" },
       { type: "popover.filter", popover: "command", query: "" },
-      { type: "focus.command-search" },
-    ],
-  )
+      { type: "focus.editor" },
+    ])
+  }
+  return changed({ ...state, popover: { type: "command-menu", query: "" }, focus: "command-search" }, [
+    { type: "popover.filter", popover: "command", query: "" },
+    { type: "focus.command-search" },
+  ])
 }
 
 function openContext(
   state: PromptInputV2InteractionState,
   persisted: PromptInputV2PersistedState,
 ): PromptInputV2Transition {
-  return changed(
-    { ...state, popover: { type: "context", query: "" }, focus: "editor" },
-    [
-      { type: "draft.setText", value: promptText(persisted) + "@" },
-      { type: "popover.filter", popover: "context", query: "" },
-      { type: "focus.editor" },
-    ],
-  )
+  return changed({ ...state, popover: { type: "context", query: "" }, focus: "editor" }, [
+    { type: "draft.setText", value: promptText(persisted) + "@" },
+    { type: "popover.filter", popover: "context", query: "" },
+    { type: "focus.editor" },
+  ])
 }
 
 function queryChanged(state: PromptInputV2InteractionState, query: string): PromptInputV2Transition {
   if (state.popover.type === "closed") return unchanged(state)
   const popover = state.popover.type === "context" ? "context" : "command"
-  return changed(
-    { ...state, popover: { ...state.popover, query, activeID: undefined } },
-    [{ type: "popover.filter", popover, query }],
-  )
+  return changed({ ...state, popover: { ...state.popover, query, activeID: undefined } }, [
+    { type: "popover.filter", popover, query },
+  ])
 }
 
 function resultsChanged(state: PromptInputV2InteractionState, ids: string[]): PromptInputV2Transition {
@@ -215,20 +199,26 @@ function keyDown(
     return unchanged(state)
   }
   if (event.key === "Escape") {
-    return changed(
-      { ...state, popover: { type: "closed" }, focus: "editor" },
-      [{ type: "focus.editor" }],
-      true,
-    )
+    return changed({ ...state, popover: { type: "closed" }, focus: "editor" }, [{ type: "focus.editor" }], true)
   }
   if (event.key === "Tab" || (event.key === "Enter" && !event.composing)) {
     if (!state.popover.activeID) return unchanged(state, true)
     return unchanged(state, true, [{ type: "suggestion.select", id: state.popover.activeID }])
   }
-  const direction = event.key === "ArrowDown" || (event.ctrl && event.key === "n") ? 1 : event.key === "ArrowUp" || (event.ctrl && event.key === "p") ? -1 : 0
+  const direction =
+    event.key === "ArrowDown" || (event.ctrl && event.key === "n")
+      ? 1
+      : event.key === "ArrowUp" || (event.ctrl && event.key === "p")
+        ? -1
+        : 0
   if (!direction || event.ids.length === 0) return unchanged(state)
   const current = state.popover.activeID ? event.ids.indexOf(state.popover.activeID) : -1
-  const index = current < 0 ? (direction === 1 ? 0 : event.ids.length - 1) : (current + direction + event.ids.length) % event.ids.length
+  const index =
+    current < 0
+      ? direction === 1
+        ? 0
+        : event.ids.length - 1
+      : (current + direction + event.ids.length) % event.ids.length
   return changed({ ...state, popover: { ...state.popover, activeID: event.ids[index] } }, [], true)
 }
 

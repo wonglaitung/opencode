@@ -67,7 +67,9 @@ export function createPromptInputV2Store(input: PromptInputV2StoreInput) {
       setStore()("context", "items", (items) => items.filter((item) => item.key !== key))
     },
     addMention(mention: PromptInputV2FilePart | PromptInputV2AgentPart) {
-      const text = store().prompt.map((part) => ("content" in part ? part.content : "")).join("")
+      const text = store()
+        .prompt.map((part) => ("content" in part ? part.content : ""))
+        .join("")
       const end = store().cursor ?? text.length
       const start = text.slice(0, end).lastIndexOf("@")
       setStore()("prompt", insertMention(store().prompt, start < 0 ? end : start, end, mention))

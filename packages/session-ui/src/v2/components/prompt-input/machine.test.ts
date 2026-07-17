@@ -93,7 +93,11 @@ describe("prompt input v2 interaction machine", () => {
       { type: "commands.open" },
       persisted("existing text"),
     )
-    const selected = transitionPromptInputV2(open.state, { type: "popover.select", item: command }, persisted("existing text"))
+    const selected = transitionPromptInputV2(
+      open.state,
+      { type: "popover.select", item: command },
+      persisted("existing text"),
+    )
 
     expect(selected.commands).toContainEqual({ type: "draft.setText", value: "/review existing text" })
     expect(selected.state.popover).toEqual({ type: "closed" })

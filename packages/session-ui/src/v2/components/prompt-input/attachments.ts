@@ -79,13 +79,15 @@ export type PromptInputV2AttachmentConfig = {
   getPathForFile?: (file: File) => string
 }
 
-export function createPromptInputV2Attachments(input: PromptInputV2AttachmentConfig & {
-  capture: () => PromptTarget
-  editor: () => HTMLElement | undefined
-  focusEditor: () => void
-  addPart: (part: PromptInputV2Prompt[number]) => boolean
-  setDraggingType: (type: "image" | "@mention" | null) => void
-}) {
+export function createPromptInputV2Attachments(
+  input: PromptInputV2AttachmentConfig & {
+    capture: () => PromptTarget
+    editor: () => HTMLElement | undefined
+    focusEditor: () => void
+    addPart: (part: PromptInputV2Prompt[number]) => boolean
+    setDraggingType: (type: "image" | "@mention" | null) => void
+  },
+) {
   const capture = () => {
     const prompt = input.capture()
     const editor = input.editor()
@@ -113,13 +115,10 @@ export function createPromptInputV2Attachments(input: PromptInputV2AttachmentCon
     return true
   }
   const addAttachments = async (files: File[], toast = true, target = capture()) => {
-    const found = await files.reduce(
-      async (result, file) => {
-        const previous = await result
-        return (await add(file, false, target)) || previous
-      },
-      Promise.resolve(false),
-    )
+    const found = await files.reduce(async (result, file) => {
+      const previous = await result
+      return (await add(file, false, target)) || previous
+    }, Promise.resolve(false))
     if (!found && files.length > 0 && toast) input.warn()
     return found
   }

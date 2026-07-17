@@ -1,11 +1,7 @@
 import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
 import type { Prompt } from "@/context/prompt"
 import { Persist, persisted } from "@/utils/persist"
-import {
-  prependHistoryEntry,
-  type PromptHistoryComment,
-  type PromptHistoryStoredEntry,
-} from "./history"
+import { prependHistoryEntry, type PromptHistoryComment, type PromptHistoryStoredEntry } from "./history"
 
 export type PromptInputHistory = {
   entries: (mode: "normal" | "shell") => PromptHistoryStoredEntry[]
