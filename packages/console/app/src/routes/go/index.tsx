@@ -63,7 +63,7 @@ function LimitsGraph(props: { href: string }) {
 
   const baseline = 100
   const graph = [
-    { id: "grok-4.5", name: "Grok 4.5", req: 80, d: "50ms" },
+    { id: "grok-4.5", name: "Grok 4.5", req: 120, d: "50ms" },
     { id: "kimi-k3", name: "Kimi K3 (2x usage)", req: 280, baseReq: 140, d: "75ms" },
     { id: "glm-5.2", name: "GLM-5.2", req: 880, d: "100ms" },
     { id: "qwen3.7-max", name: "Qwen3.7 Max", req: 950, d: "110ms" },
