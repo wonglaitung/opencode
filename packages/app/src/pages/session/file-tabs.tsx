@@ -530,11 +530,7 @@ function SessionFileViewV1(props: { tab: string }) {
   return content()
 }
 
-function SessionFileViewV2(props: {
-  tab: string
-  diff?: ReturnType<typeof normalize>
-  expandUnchanged?: boolean
-}) {
+function SessionFileViewV2(props: { tab: string; diff?: ReturnType<typeof normalize>; expandUnchanged?: boolean }) {
   const file = useFile()
   const comments = useComments()
   const language = useLanguage()
