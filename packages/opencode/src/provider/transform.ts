@@ -35,9 +35,7 @@ function isKimiFamily(model: Provider.Model) {
   )
     return true
   const url = model.api.url.toLowerCase()
-  return ["api.kimi.com", "api.moonshot.ai", "api.moonshot.cn", "api.moonshotai.cn"].some((host) =>
-    url.includes(host),
-  )
+  return ["api.kimi.com", "api.moonshot.ai", "api.moonshot.cn", "api.moonshotai.cn"].some((host) => url.includes(host))
 }
 
 // Maps npm package to the key the AI SDK expects for providerOptions
