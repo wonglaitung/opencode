@@ -196,7 +196,6 @@ export async function POST(input: APIEvent) {
       }
     }
     if (body.type === "customer.subscription.deleted") {
-      /*
       const subscriptionID = body.data.object.id
       if (!subscriptionID) throw new Error("Subscription ID not found")
 
@@ -206,7 +205,6 @@ export async function POST(input: APIEvent) {
       } else if (productID === BlackData.productID()) {
         await Billing.unsubscribeBlack({ subscriptionID })
       }
-        */
     }
     if (body.type === "invoice.payment_succeeded") {
       if (
