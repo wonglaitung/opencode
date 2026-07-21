@@ -697,6 +697,9 @@ export async function handler(
           workspace: {
             id: WorkspaceTable.id,
             region: WorkspaceTable.region,
+            isBlocked: WorkspaceTable.is_blocked,
+            isFlaggedByAnthropic: WorkspaceTable.is_flagged_by_anthropic,
+            isFlaggedByOpenAI: WorkspaceTable.is_flagged_by_openai,
           },
           billing: {
             balance: BillingTable.balance,
@@ -772,6 +775,8 @@ export async function handler(
     )
 
     if (!data) throw new AuthError(t("zen.api.error.invalidApiKey"))
+    if (data.workspace.isBlocked || data.workspace.isFlaggedByAnthropic || data.workspace.isFlaggedByOpenAI)
+      throw new AuthError(t("zen.api.error.requestBlockedByUpstreamProvider"))
     if (
       modelInfo.id.startsWith("alpha-") &&
       Resource.App.stage === "production" &&
