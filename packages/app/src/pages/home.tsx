@@ -1069,8 +1069,7 @@ function HomeProjectList(props: HomeProjectListProps) {
             event.pointerType === "touch"
               ? [new PointerActivationConstraints.Delay({ value: 250, tolerance: 5 })]
               : [new PointerActivationConstraints.Distance({ value: 4 })],
-          preventActivation: (event) =>
-            event.target instanceof Element && !!event.target.closest("[data-action]"),
+          preventActivation: (event) => event.target instanceof Element && !!event.target.closest("[data-action]"),
         }),
       ]}
       modifiers={[RestrictToVerticalAxis, RestrictToElement.configure({ element: () => listRef })]}
@@ -1118,8 +1117,7 @@ function HomeProjectSlot(
           index={props.index}
           serverSelected={props.selected.server === ServerConnection.key(props.server)}
           selected={
-            props.selected.server === ServerConnection.key(props.server) &&
-            props.selected.directory === props.worktree
+            props.selected.server === ServerConnection.key(props.server) && props.selected.directory === props.worktree
           }
           unseenCount={props.unseenCount(props.server, item())}
           selectProject={props.selectProject}
