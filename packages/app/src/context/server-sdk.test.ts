@@ -53,13 +53,14 @@ describe("coalesceServerEvents", () => {
   })
 
   test("merges adjacent current text deltas", () => {
-    const current = (id: string, value: string) => adaptServerEvent({
-      id,
-      created: 1,
-      type: "session.text.delta",
-      location: { directory: "/repo" },
-      data: { sessionID: "ses", assistantMessageID: "msg", ordinal: 0, delta: value },
-    } as OpenCodeEvent)
+    const current = (id: string, value: string) =>
+      adaptServerEvent({
+        id,
+        created: 1,
+        type: "session.text.delta",
+        location: { directory: "/repo" },
+        data: { sessionID: "ses", assistantMessageID: "msg", ordinal: 0, delta: value },
+      } as OpenCodeEvent)
     const result = coalesceServerEvents([
       { directory: "/repo", payload: current("evt_1", "hello ") },
       { directory: "/repo", payload: current("evt_2", "world") },

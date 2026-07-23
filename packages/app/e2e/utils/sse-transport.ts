@@ -104,7 +104,8 @@ export async function installSseTransport<T>(
           created: Date.now(),
           type: payload.type,
           data: payload.properties ?? {},
-          location: envelope.directory && envelope.directory !== "global" ? { directory: envelope.directory } : undefined,
+          location:
+            envelope.directory && envelope.directory !== "global" ? { directory: envelope.directory } : undefined,
         }
       }
       const acknowledge = (
@@ -160,9 +161,7 @@ export async function installSseTransport<T>(
         })
         encoded.forEach((item) => marker(item.delivery.options?.marker))
         if (input.burst) {
-          const bytes = encoder.encode(
-            encoded.map((item) => frame(item.payload, item.delivery.options)).join(""),
-          )
+          const bytes = encoder.encode(encoded.map((item) => frame(item.payload, item.delivery.options)).join(""))
           connection.controller.enqueue(bytes)
           return encoded.map((item) => acknowledge(connection, item.bytes.byteLength, 1, item.delivery.options?.id))
         }
@@ -196,9 +195,7 @@ export async function installSseTransport<T>(
             if (retry !== undefined) controller.enqueue(encoder.encode(`retry: ${retry}\n\n`))
             if (url.pathname === "/api/event")
               controller.enqueue(
-                encoder.encode(
-                  frame({ id: `evt_mock_connected_${id}`, type: "server.connected", data: {} }),
-                ),
+                encoder.encode(frame({ id: `evt_mock_connected_${id}`, type: "server.connected", data: {} })),
               )
             request.signal.addEventListener(
               "abort",
