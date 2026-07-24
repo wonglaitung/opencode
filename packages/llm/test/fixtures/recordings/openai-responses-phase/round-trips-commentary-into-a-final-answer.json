@@ -3,13 +3,7 @@
   "metadata": {
     "name": "openai-responses-phase/round-trips-commentary-into-a-final-answer",
     "recordedAt": "2026-07-23T18:55:21.217Z",
-    "tags": [
-      "prefix:openai-responses-phase",
-      "provider:openai",
-      "protocol:openai-responses",
-      "phase",
-      "tool"
-    ]
+    "tags": ["prefix:openai-responses-phase", "provider:openai", "protocol:openai-responses", "phase", "tool"]
   },
   "interactions": [
     {
