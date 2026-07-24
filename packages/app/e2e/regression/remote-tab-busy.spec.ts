@@ -105,7 +105,10 @@ async function mockServers(page: Page) {
       })
     if (url.pathname === "/vcs") return json(route, { branch: "main", default_branch: "main" })
     if (url.pathname === "/api/vcs")
-      return json(route, { location: { directory: current.directory }, data: { branch: "main", defaultBranch: "main" } })
+      return json(route, {
+        location: { directory: current.directory },
+        data: { branch: "main", defaultBranch: "main" },
+      })
     return json(route, {})
   })
 }

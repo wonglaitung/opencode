@@ -479,9 +479,7 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
     },
     permission: {
       ...input.current.permission,
-      async reply(
-        value: Parameters<ServerApi["permission"]["reply"]>[0] & { location?: { directory?: string } },
-      ) {
+      async reply(value: Parameters<ServerApi["permission"]["reply"]>[0] & { location?: { directory?: string } }) {
         await legacy(value.location).permission.respond({
           sessionID: value.sessionID,
           permissionID: value.requestID,
