@@ -235,7 +235,9 @@ export const SettingsProvidersV2: Component<{ onBack?: () => void }> = (props) =
                       <span class="settings-v2-provider-name">{language.t("provider.custom.title")}</span>
                       <Tag>{language.t("settings.providers.tag.custom")}</Tag>
                     </div>
-                    <p class="settings-v2-provider-description">{language.t("settings.providers.custom.description")}</p>
+                    <p class="settings-v2-provider-description">
+                      {language.t("settings.providers.custom.description")}
+                    </p>
                   </div>
                 </div>
                 <ButtonV2
