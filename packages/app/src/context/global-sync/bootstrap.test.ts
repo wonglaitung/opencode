@@ -124,7 +124,6 @@ describe("bootstrapDirectory", () => {
     expect(store.status).toBe("complete")
     expect(mcpReads).toEqual([])
   })
-
 })
 
 describe("query keys", () => {

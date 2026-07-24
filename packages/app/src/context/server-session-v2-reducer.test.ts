@@ -25,7 +25,12 @@ describe("v2 session reducer", () => {
         input: { type: "user", delivery: "steer", data: { text: "hello" } },
       },
     })
-    apply({ ...base, id: "evt_promoted", type: "session.input.promoted", data: { sessionID: "ses_1", inputID: "msg_user" } })
+    apply({
+      ...base,
+      id: "evt_promoted",
+      type: "session.input.promoted",
+      data: { sessionID: "ses_1", inputID: "msg_user" },
+    })
     apply({
       ...base,
       id: "evt_step",
@@ -136,12 +141,15 @@ describe("v2 session reducer", () => {
   })
 
   test("requests hydration when promotion admission was missed", () => {
-    const result = createV2SessionReducer().reduce([], event({
-      ...base,
-      id: "evt_promoted",
-      type: "session.input.promoted",
-      data: { sessionID: "ses_1", inputID: "msg_user" },
-    }))
+    const result = createV2SessionReducer().reduce(
+      [],
+      event({
+        ...base,
+        id: "evt_promoted",
+        type: "session.input.promoted",
+        data: { sessionID: "ses_1", inputID: "msg_user" },
+      }),
+    )
 
     expect(result).toMatchObject({ sessionID: "ses_1", missing: "msg_user", touched: [] })
   })

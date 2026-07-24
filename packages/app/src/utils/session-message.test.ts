@@ -122,9 +122,7 @@ describe("normalizeSessionMessages", () => {
       expect.objectContaining({ id: "msg_shell", role: "user" }),
       expect.objectContaining({ id: "msg_shell:assistant", role: "assistant", parentID: "msg_shell" }),
     ])
-    expect(result.parts.get("msg_shell")).toEqual([
-      expect.objectContaining({ type: "text", text: "printf hello" }),
-    ])
+    expect(result.parts.get("msg_shell")).toEqual([expect.objectContaining({ type: "text", text: "printf hello" })])
     expect(result.parts.get("msg_shell:assistant")).toEqual([
       expect.objectContaining({
         type: "tool",
