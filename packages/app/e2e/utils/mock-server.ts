@@ -80,7 +80,10 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     if (path === "/question")
       return json(route, typeof config.questions === "function" ? config.questions() : (config.questions ?? []))
     if (path === "/session/status")
-      return json(route, typeof config.sessionStatus === "function" ? config.sessionStatus() : (config.sessionStatus ?? {}))
+      return json(
+        route,
+        typeof config.sessionStatus === "function" ? config.sessionStatus() : (config.sessionStatus ?? {}),
+      )
     if (path === "/vcs/diff" && config.vcsDiff) return json(route, config.vcsDiff)
     if (path === "/file" && config.fileList)
       return json(route, await config.fileList(url.searchParams.get("path") ?? ""))
