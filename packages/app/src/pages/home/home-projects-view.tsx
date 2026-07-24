@@ -106,7 +106,12 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
                 when={props.projects().length > 0}
                 fallback={<HomeProjectEmpty {...props} server={props.servers()[0]} items={props.recentlyClosed()} />}
               >
-                <HomeProjectList {...props} {...contextMenuProps} server={props.servers()[0]} items={props.projects()} />
+                <HomeProjectList
+                  {...props}
+                  {...contextMenuProps}
+                  server={props.servers()[0]}
+                  items={props.projects()}
+                />
               </Show>
             </div>
           }
@@ -300,10 +305,11 @@ type HomeProjectsContextMenuProps = {
   onSetContextMenuOpen: (id: string, open: boolean) => void
 }
 
-type HomeProjectListProps = HomeProjectsViewProps & HomeProjectsContextMenuProps & {
-  server: ServerConnection.Any
-  items: LocalProject[]
-}
+type HomeProjectListProps = HomeProjectsViewProps &
+  HomeProjectsContextMenuProps & {
+    server: ServerConnection.Any
+    items: LocalProject[]
+  }
 
 function HomeProjectList(props: HomeProjectListProps) {
   let listRef!: HTMLDivElement
@@ -437,14 +443,15 @@ function HomeRecentlyClosedRow(
 }
 
 function HomeProjectRow(
-  props: HomeProjectsViewProps & HomeProjectsContextMenuProps & {
-    project: LocalProject
-    server: ServerConnection.Any
-    index: () => number
-    serverSelected: boolean
-    selected: boolean
-    unseen: number
-  },
+  props: HomeProjectsViewProps &
+    HomeProjectsContextMenuProps & {
+      project: LocalProject
+      server: ServerConnection.Any
+      index: () => number
+      serverSelected: boolean
+      selected: boolean
+      unseen: number
+    },
 ) {
   const platform = usePlatform()
   const serverUnreachable = () => props.serverHealth(props.server)?.healthy === false
