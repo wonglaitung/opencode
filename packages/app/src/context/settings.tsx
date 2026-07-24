@@ -89,10 +89,7 @@ export function shouldDisplayTabsToast(
   return isAppUpgrade(previous, current) || (!previous && existingInstall)
 }
 
-export function hasExistingWebState(
-  settings: Promise<string> | string | null,
-  previousVersion: string | undefined,
-) {
+export function hasExistingWebState(settings: Promise<string> | string | null, previousVersion: string | undefined) {
   return settings !== null || previousVersion !== undefined
 }
 
@@ -303,11 +300,7 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
     createEffect(() => {
       if (!ready() || !launchState.classified || platform.platform !== "web") return
       if (layoutTransitionClassified()) return
-      setStore(
-        "general",
-        "layoutTransitionEligible",
-        hasExistingWebState(settingsInit, launchState.previous),
-      )
+      setStore("general", "layoutTransitionEligible", hasExistingWebState(settingsInit, launchState.previous))
     })
 
     createEffect(() => {
