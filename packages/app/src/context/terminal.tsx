@@ -280,10 +280,12 @@ function createWorkspaceTerminalSession(
       if ((await sdk.protocol) === "v1") {
         return (await sdk.client.pty.create({ title: pty.title })).data
       }
-      return (await sdk.api.pty.create({
-        location,
-        title: pty.title,
-      })).data
+      return (
+        await sdk.api.pty.create({
+          location,
+          title: pty.title,
+        })
+      ).data
     })().catch((error: unknown) => {
       console.error("Failed to clone terminal", error)
       return undefined
@@ -432,7 +434,9 @@ function createWorkspaceTerminalSession(
       }
 
       const removePromise =
-        (await sdk.protocol) === "v1" ? sdk.client.pty.remove({ ptyID: id }) : sdk.api.pty.remove({ ptyID: id, location })
+        (await sdk.protocol) === "v1"
+          ? sdk.client.pty.remove({ ptyID: id })
+          : sdk.api.pty.remove({ ptyID: id, location })
       await removePromise.catch((error: unknown) => {
         console.error("Failed to close terminal", error)
       })

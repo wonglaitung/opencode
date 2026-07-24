@@ -181,7 +181,8 @@ async function mockServers(page: Page, permissionRequests: string[], permissionR
       return json(route, true)
     }
     if (requestDirectory && requestDirectory !== directory) return json(route, { name: "InvalidDirectory" }, 500)
-    if (url.pathname === "/global/event" || url.pathname === "/event" || url.pathname === "/api/event") return sse(route)
+    if (url.pathname === "/global/event" || url.pathname === "/event" || url.pathname === "/api/event")
+      return sse(route)
     if (url.pathname === "/global/health") return json(route, { healthy: true })
     if (url.pathname === "/api/provider" || url.pathname === "/api/model" || url.pathname === "/api/agent")
       return json(route, { data: [] })
