@@ -190,4 +190,41 @@ describe("createCompatibleApi", () => {
     expect(new URL(requests[0]!.url).pathname).toBe("/session/ses_1/permissions/permission_1")
     expect(new URL(requests[0]!.url).searchParams.get("directory")).toBe("/other")
   })
+
+  test("disposes the V1 instance after connecting a provider", async () => {
+    const { api, requests } = setup("v1")
+
+    await api.integration.connect.key({
+      integrationID: "openrouter",
+      key: "secret",
+      location: { directory: "/repo" },
+    })
+
+    expect(requests.map((request) => new URL(request.url).pathname)).toEqual([
+      "/auth/openrouter",
+      "/instance/dispose",
+      "/instance/dispose",
+    ])
+    expect(requests[1]!.headers.get("x-opencode-directory")).toBe("%2Frepo")
+    expect(requests[2]!.headers.get("x-opencode-directory")).toBeNull()
+  })
+
+  test("disposes the V1 instance after completing provider OAuth", async () => {
+    const { api, requests } = setup("v1")
+
+    await api.integration.oauth.complete({
+      integrationID: "openrouter",
+      attemptID: "openrouter:0",
+      code: "code",
+      location: { directory: "/repo" },
+    })
+
+    expect(requests.map((request) => new URL(request.url).pathname)).toEqual([
+      "/provider/openrouter/oauth/callback",
+      "/instance/dispose",
+      "/instance/dispose",
+    ])
+    expect(requests[1]!.headers.get("x-opencode-directory")).toBe("%2Frepo")
+    expect(requests[2]!.headers.get("x-opencode-directory")).toBeNull()
+  })
 })
