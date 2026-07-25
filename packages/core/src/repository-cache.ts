@@ -167,7 +167,11 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | Git.Service | EffectFl
                   yield* cacheOperation(fs.remove(localPath, { recursive: true }), "remove stale cache", localPath)
                 }
 
-                const status = !reuse ? ("cloned" as const) : input.refresh ? ("refreshed" as const) : ("cached" as const)
+                const status = !reuse
+                  ? ("cloned" as const)
+                  : input.refresh
+                    ? ("refreshed" as const)
+                    : ("cached" as const)
 
                 if (status === "cloned") {
                   yield* git.repo
