@@ -390,7 +390,9 @@ export function PromptProjectSelector(props: {
                         {server!.name}
                       </div>
                       <DropdownMenu.RadioGroup value={selectedValue()}>
-                        <For each={props.controller.projects().filter((project) => project.server?.key === server!.key)}>
+                        <For
+                          each={props.controller.projects().filter((project) => project.server?.key === server!.key)}
+                        >
                           {(project) => (
                             <ProjectItem project={project} controller={props.controller} onSelect={selectProject} />
                           )}
