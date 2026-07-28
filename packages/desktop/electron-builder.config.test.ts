@@ -39,8 +39,16 @@ test("keeps a hidden prod launcher for old Linux pins", async () => {
   if (previous === undefined) delete process.env.OPENCODE_CHANNEL
   else process.env.OPENCODE_CHANNEL = previous
 
-  expect(config.deb?.fpm?.some((entry) => entry.endsWith("opencode-desktop.desktop=/usr/share/applications/opencode-desktop.desktop"))).toBe(true)
-  expect(config.rpm?.fpm?.some((entry) => entry.endsWith("opencode-desktop.desktop=/usr/share/applications/opencode-desktop.desktop"))).toBe(true)
+  expect(
+    config.deb?.fpm?.some((entry) =>
+      entry.endsWith("opencode-desktop.desktop=/usr/share/applications/opencode-desktop.desktop"),
+    ),
+  ).toBe(true)
+  expect(
+    config.rpm?.fpm?.some((entry) =>
+      entry.endsWith("opencode-desktop.desktop=/usr/share/applications/opencode-desktop.desktop"),
+    ),
+  ).toBe(true)
 
   const desktop = await Bun.file(legacyDesktopEntry).text()
   expect(desktop).toContain("Exec=/opt/OpenCode/ai.opencode.desktop %U")
