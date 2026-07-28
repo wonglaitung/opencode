@@ -704,7 +704,9 @@ function ProviderConnection(props: {
   })
 
   async function complete() {
-    await serverSync().refreshProviders().catch(() => undefined)
+    await serverSync()
+      .refreshProviders()
+      .catch(() => undefined)
     dialog.close()
     showToast({
       variant: "success",
