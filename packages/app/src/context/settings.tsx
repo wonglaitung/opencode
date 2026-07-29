@@ -94,11 +94,7 @@ export function hasExistingWebState(settings: Promise<string> | string | null, p
   return settings !== null || previousVersion !== undefined
 }
 
-export function initialAgentVisibility(
-  initialized: boolean | undefined,
-  existing: boolean,
-  previousVersion?: string,
-) {
+export function initialAgentVisibility(initialized: boolean | undefined, existing: boolean, previousVersion?: string) {
   if (initialized === true) return
   return existing || previousVersion !== undefined
 }
@@ -282,11 +278,7 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
     })
     const visible = (preference: () => boolean) => createMemo(() => !newLayoutDesigns() || preference())
     const initializeAgentVisibility = (existing: boolean) => {
-      const initial = initialAgentVisibility(
-        store.general?.agentVisibilityInitialized,
-        existing,
-        launchState.previous,
-      )
+      const initial = initialAgentVisibility(store.general?.agentVisibilityInitialized, existing, launchState.previous)
       if (initial === undefined) return
       batch(() => {
         setStore("general", "showCustomAgents", initial)
