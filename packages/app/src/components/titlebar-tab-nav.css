@@ -12,9 +12,7 @@
 [data-titlebar-tab] {
   --tab-base: var(--v2-background-bg-deep);
   --tab-overlay: transparent;
-  background:
-    linear-gradient(var(--tab-overlay), var(--tab-overlay)),
-    var(--tab-base);
+  background: linear-gradient(var(--tab-overlay), var(--tab-overlay)), var(--tab-base);
 }
 
 [data-titlebar-tab]:is(:hover, :has(> [data-slot="tab-link"]:focus-visible)):not([data-state="pressed"]):not(
@@ -30,9 +28,7 @@
 }
 
 [data-titlebar-tab]:is(:hover, [data-state="pressed"]) [data-slot="tab-close"] {
-  background:
-    linear-gradient(var(--tab-overlay), var(--tab-overlay)),
-    var(--tab-base);
+  background: linear-gradient(var(--tab-overlay), var(--tab-overlay)), var(--tab-base);
 }
 
 [data-titlebar-tab][data-editing="true"] [data-slot="tab-close"] {
@@ -68,8 +64,7 @@
 }
 
 [data-titlebar-tab-slot]:not([data-active="true"]):has([data-titlebar-tab]:hover)::before,
-[data-titlebar-tab-slot]:not([data-active="true"]):has([data-titlebar-tab]:hover)
-  + [data-titlebar-tab-slot]::before {
+[data-titlebar-tab-slot]:not([data-active="true"]):has([data-titlebar-tab]:hover) + [data-titlebar-tab-slot]::before {
   display: none;
 }
 
