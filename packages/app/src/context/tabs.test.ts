@@ -15,17 +15,12 @@ function sessionTab(sessionId: string): SessionTab {
 describe("tab migration", () => {
   test("drops null and malformed persisted tabs", () => {
     expect(
-      migrateTabs(
-        [null, sessionTab("a"), { type: "session", server }, { type: "unknown", server }, "invalid"],
-        server,
-      ),
+      migrateTabs([null, sessionTab("a"), { type: "session", server }, { type: "unknown", server }, "invalid"], server),
     ).toEqual([sessionTab("a")])
   })
 
   test("adds the fallback server to valid legacy tabs", () => {
-    expect(migrateTabs([{ type: "session", sessionId: "a", dirBase64: "legacy" }], server)).toEqual([
-      sessionTab("a"),
-    ])
+    expect(migrateTabs([{ type: "session", sessionId: "a", dirBase64: "legacy" }], server)).toEqual([sessionTab("a")])
   })
 
   test("replaces invalid top-level persisted data", () => {
