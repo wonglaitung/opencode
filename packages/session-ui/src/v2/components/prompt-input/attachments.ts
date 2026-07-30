@@ -113,7 +113,9 @@ export function createPromptInputV2Attachments(
         (part) =>
           part.type === "image" &&
           part.dataUrl === url &&
-          (sourcePath ? part.sourcePath === sourcePath : !part.sourcePath && (clipboard || part.filename === file.name)),
+          (sourcePath
+            ? part.sourcePath === sourcePath
+            : !part.sourcePath && (clipboard || part.filename === file.name)),
       )
     if (duplicate) {
       input.duplicate()

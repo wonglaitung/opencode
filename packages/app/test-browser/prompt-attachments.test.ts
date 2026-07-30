@@ -86,7 +86,6 @@ describe("prompt attachment session ownership", () => {
       dispose()
     })
   })
-
 })
 
 test("rejects a duplicate native clipboard attachment in the V2 prompt store", async () => {
