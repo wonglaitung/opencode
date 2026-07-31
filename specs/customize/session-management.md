@@ -847,29 +847,28 @@ AI 使用: 对话 47轮 | $0.36 | 85K tokens
 
 工作流约束不修改 OpenCode 核心引擎，而是通过**会话级系统提示（system prompt）**注入规则。OpenCode 在创建会话时，将工作流规则作为系统提示的一部分下发给 LLM，Agent 在对话中遵循这些规则。
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                    会话创建时注入                         │
-│                                                         │
-│  System Prompt                                          │
-│  ┌───────────────────────────────────────────────────┐  │
-│  │ 你是 OpenCode 开发助手 ...                         │  │
-│  │                                                   │  │
-│  │ # Workflow 规则（会话级注入）                       │  │
-│  │ 1. 当前 workflow 状态: {stages}                   │  │
-│  │ 2. 阶段推进规则 ...                                │  │
-│  │ 3. 审查规则 ...                                    │  │
-│  │ ...                                               │  │
-│  └───────────────────────────────────────────────────┘  │
-│                         │                               │
-│                         ▼                               │
-│                    LLM (遵循规则)                        │
-│                         │                               │
-│                         ▼                               │
-│               Agent 在对话中遵守规则                      │
-│               通过 session.update 写入 WorkflowState     │
-│               通过 workflow schema 持久化状态             │
-└─────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph Session["会话创建"]
+        SP["System Prompt 组装"]
+        SP -->|"注入"| RULES["# Workflow 规则<br/>+ 当前 WorkflowState"]
+    end
+
+    subgraph Agent["Agent 循环"]
+        LLM["LLM（遵循规则）"]
+        ACTION["Agent 执行动作"]
+        WRITE["通过 session.update<br/>写入 WorkflowState"]
+    end
+
+    subgraph Storage["持久化"]
+        DB["SQLite<br/>SessionTable.workflow"]
+    end
+
+    RULES --> LLM
+    LLM --> ACTION
+    ACTION --> WRITE
+    WRITE --> DB
+    DB -->|"每轮刷新"| RULES
 ```
 
 关键点：
