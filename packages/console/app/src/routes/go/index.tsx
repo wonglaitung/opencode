@@ -24,9 +24,9 @@ const checkLoggedIn = query(async () => {
 
 const models = [
   "Grok 4.5",
+  "GPT 5.6 Luna",
   "GLM-5.2",
   "GLM-5.1",
-  "GPT 5.6 Luna",
   "Kimi K3",
   "Kimi K2.7 Code",
   "Kimi K2.6",
