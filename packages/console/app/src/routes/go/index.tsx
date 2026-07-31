@@ -135,9 +135,7 @@ function LimitsGraph(props: { href: string }) {
           style={{ height: `${h}px` }}
         >
           <g data-slot="grid">
-            <For each={ticks}>
-              {(t) => <line x1={x(t)} y1={top} x2={x(t)} y2={h - bottom} data-grid />}
-            </For>
+            <For each={ticks}>{(t) => <line x1={x(t)} y1={top} x2={x(t)} y2={h - bottom} data-grid />}</For>
           </g>
 
           <line x1={left} y1={top} x2={left} y2={h - bottom} data-stub />
