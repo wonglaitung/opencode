@@ -492,14 +492,14 @@ export default function Home() {
                   </div>
                   <div data-slot="faq-retention-notes">
                     <p>
-                      <strong>Grok 4.5:</strong> {i18n.t("go.faq.a5.grokRetention")} {" "}
+                      <strong>Grok 4.5:</strong> {i18n.t("go.faq.a5.grokRetention")}{" "}
                       <a href="https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr">
                         {i18n.t("go.faq.a5.learnMore")}
                       </a>
                       .
                     </p>
                     <p>
-                      <strong>GPT 5.6 Luna:</strong> {i18n.t("go.faq.a5.gptRetention")} {" "}
+                      <strong>GPT 5.6 Luna:</strong> {i18n.t("go.faq.a5.gptRetention")}{" "}
                       <a href="https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring">
                         {i18n.t("go.faq.a5.learnMore")}
                       </a>

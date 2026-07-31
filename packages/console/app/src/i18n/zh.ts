@@ -245,8 +245,7 @@ export const dict = {
 
   "go.title": "OpenCode Go | 人人可用的低成本编程模型",
   "go.banner.text": "GPT 5.6 Luna 限时享受 2 倍使用额度",
-  "go.meta.description":
-    "Go 首月 $5，之后 $10/月，提供充裕的使用限额，并可可靠访问领先的编程模型。",
+  "go.meta.description": "Go 首月 $5，之后 $10/月，提供充裕的使用限额，并可可靠访问领先的编程模型。",
   "go.hero.title": "人人可用的低成本编程模型",
   "go.hero.body":
     "Go 将代理编程带给全世界的程序员。提供充裕的限额和对最强大的开源模型的可靠访问，让您可以利用强大的代理进行构建，而无需担心成本或可用性。",
@@ -313,8 +312,7 @@ export const dict = {
   "go.faq.q2": "Go 包含哪些模型？",
   "go.faq.a2": "Go 包含下方列出的模型，提供充足的限额和可靠的访问。",
   "go.faq.q3": "Go 和 Zen 一样吗？",
-  "go.faq.a3":
-    "不。Zen 是按量付费，而 Go 首月 $5，之后 $10/月，提供充裕的限额，并可可靠访问精选模型阵容。",
+  "go.faq.a3": "不。Zen 是按量付费，而 Go 首月 $5，之后 $10/月，提供充裕的限额，并可可靠访问精选模型阵容。",
   "go.faq.q4": "Go 多少钱？",
   "go.faq.a4.p1.beforePricing": "Go 费用为",
   "go.faq.a4.p1.pricingLink": "首月 $5",
