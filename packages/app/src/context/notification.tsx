@@ -356,10 +356,8 @@ function createServerNotificationState(input: {
 
       const href = `/${base64Encode(directory)}/session/${sessionID}`
       if (settings.notifications.agent()) {
-        void platform.notify(
-          language.t("notification.session.responseReady.title"),
-          session.title ?? sessionID,
-          () => input.navigate(href),
+        void platform.notify(language.t("notification.session.responseReady.title"), session.title ?? sessionID, () =>
+          input.navigate(href),
         )
       }
     })
