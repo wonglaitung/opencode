@@ -71,6 +71,8 @@ graph LR
 
 **REST API 已完备**（大部分不需要改动）：`session.list`、`session.create`、`session.get`、`session.prompt`、`session.compact`、`session.interrupt`、`session.active`、`session.context`、`session.history`。
 
+**Project（项目）是自动关联的**：OpenCode 根据工作目录自动创建 Project（`ProjectTable`，含 `worktree` 路径、`name`、`icon` 等）。开发者在某个目录下启动 OpenCode 时，自动关联该目录对应的 Project。Session 创建时自动继承当前 Project 的 `project_id`。**开发者不需要手动设定或管理 Project**。
+
 **缺失的能力**：
 
 1. CLI 层没有 `opencode session` 子命令（`commands.ts` 只有 `api`、`debug`、`migrate`、`service`、`serve`）
@@ -231,7 +233,7 @@ graph TB
 | 层级 | 聚合维度 | 对应 CLI 参数 | 用途 |
 |------|----------|---------------|------|
 | 会话级 | 单会话 | `opencode session stats <id>` | 开发者自检 |
-| 项目级 | 按项目+时段 | `opencode session stats --project <id>` | 项目经理跟踪 |
+| 项目级 | 按项目+时段 | `opencode session stats --project "用户系统"`（或省略，自动检测 CWD） | 项目经理跟踪 |
 | 组级 | 按组聚合 | `opencode session stats --group <id>` | 组长管理、月度汇报 |
 | 团队级（组织级） | 按组织聚合 | `opencode session stats --team` | 领导汇报、预算决策 |
 
@@ -613,9 +615,12 @@ PATCH /api/session/sess_abc123
 
 ```
 GET /api/session/stats?scope=session&sessionID=<id>
-GET /api/session/stats?scope=project&project=<id>&period=7d
+GET /api/session/stats?scope=project&project=<name>&period=7d
 GET /api/session/stats?scope=group&groupID=<id>&period=30d
 GET /api/session/stats?scope=team&orgID=<id>&period=30d
+```
+
+**Project 自动检测**：CLI 的 `--project` 参数不传时，自动从当前工作目录（CWD）检测对应的 Project。传入时接受 Project 名称（如 `opencode session stats --project "用户系统"`）。
 ```
 
 ### 4.2 Core 层
@@ -650,7 +655,7 @@ opencode session compact    <sessionID>
 opencode session interrupt  <sessionID>
 opencode session tag        <sessionID> [--add <tag...>] [--remove <tag...>] [--list]
 opencode session workflow   <sessionID> [checklist|comprehension|stats]
-opencode session stats      [<sessionID>] [--project <id>] [--group <id>] [--team] [--period <nd>] [--json]
+opencode session stats      [<sessionID>] [--project <name>] [--group <id>] [--team] [--period <nd>] [--json]
 ```
 
 **合并说明**（从 18 个命令合并为 12 个）：
@@ -1187,7 +1192,7 @@ opencode session workflow <id>
 opencode session workflow <id> checklist
 opencode session resume <id>
 opencode session stats <id>
-opencode session stats --project <id> --period 7d
+opencode session stats --project "用户系统" --period 7d
 opencode session stats --group <id> --period 30d
 opencode session stats --team --period 30d --json
 ```
