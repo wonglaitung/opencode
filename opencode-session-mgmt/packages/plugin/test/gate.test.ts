@@ -10,6 +10,15 @@ describe("isCommitCommand", () => {
     expect(isCommitCommand("edit", { command: "git commit" })).toBe(false)
     expect(isCommitCommand("bash", {})).toBe(false)
   })
+
+  test("排除 commit-tree/commit-graph，兼容 git 选项与复合命令", () => {
+    expect(isCommitCommand("bash", { command: "git commit-tree abc" })).toBe(false)
+    expect(isCommitCommand("bash", { command: "git commit-graph write" })).toBe(false)
+    expect(isCommitCommand("bash", { command: "git log" })).toBe(false)
+    expect(isCommitCommand("bash", { command: "git -c user.name=x commit -m y" })).toBe(true)
+    expect(isCommitCommand("bash", { command: "cd repo && git commit --amend" })).toBe(true)
+    expect(isCommitCommand("bash", { command: "GIT_DIR=/x git commit" })).toBe(true)
+  })
 })
 
 describe("createCommitGate", () => {
