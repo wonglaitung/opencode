@@ -190,6 +190,11 @@ function printProjectStats(p: ReturnType<typeof aggregateProject>, label: string
 }
 
 /** 收集服务 GET /api/stats 返回的组/组织聚合视图（collector ScopeStats 的读侧投影）。 */
+interface TrendView {
+  from: number
+  to: number
+  direction: "up" | "down" | "flat"
+}
 interface ScopeAccountView {
   account: string
   sessions: number
@@ -197,6 +202,8 @@ interface ScopeAccountView {
   completionRate: number
   cost: number
   avgAcceptanceRate: number | null
+  avgTestCoverage: number | null
+  avgDurationMs: number
   overAcceptanceThreshold: number
   hitIterationLimit: number
 }
@@ -209,8 +216,12 @@ interface ScopeStatsView {
   completionRate: number
   totalCost: number
   avgAcceptanceRate: number | null
+  avgTestCoverage: number | null
+  avgReworkRate: number | null
+  avgDurationMs: number
   overAcceptanceThreshold: number
   hitIterationLimit: number
+  trends: { requirementRevision: TrendView | null; reworkRate: TrendView | null }
   perAccount: ScopeAccountView[]
 }
 
@@ -224,18 +235,44 @@ function printScopeStats(raw: unknown, scope: string): void {
       a.avgAcceptanceRate === null
         ? "采纳率N/A"
         : `采纳率${a.avgAcceptanceRate.toFixed(0)}%${a.avgAcceptanceRate > ACCEPTANCE_WARN_THRESHOLD ? " ⚠" : ""}`
+    const dur = `${fmtDuration(a.avgDurationMs ?? 0)}/会话`
+    const cov = a.avgTestCoverage === null ? "覆盖率N/A" : `覆盖率${a.avgTestCoverage.toFixed(0)}%`
     return `  ${a.account.padEnd(22)} ${String(a.sessions).padStart(3)}会话 ${(a.completionRate * 100)
       .toFixed(0)
-      .padStart(3)}%完成 $${a.cost.toFixed(4)} ${acc}`
+      .padStart(3)}%完成 $${a.cost.toFixed(4)} ${dur} ${acc} ${cov}`
   })
   process.stdout.write(
     `${isOrg ? "🏢" : "👥"} ${label} "${s.name}"\n` +
-      `成员: ${s.members} | 总会话: ${s.sessions} | 完成率: ${(s.completionRate * 100).toFixed(0)}% | 费用: $${s.totalCost.toFixed(4)}\n\n` +
+      `成员: ${s.members} | 总会话: ${s.sessions} | 完成率: ${(s.completionRate * 100).toFixed(0)}% | 费用: $${s.totalCost.toFixed(4)} | 平均周期: ${fmtDuration(s.avgDurationMs ?? 0)}\n\n` +
       (lines.length > 0 ? lines.join("\n") + "\n\n" : "") +
       `质量:\n` +
       `  平均采纳率: ${s.avgAcceptanceRate === null ? "N/A" : `${s.avgAcceptanceRate.toFixed(0)}%`}  超阈值(>45%)成员: ${s.overAcceptanceThreshold}/${s.members}\n` +
-      `  触达迭代上限(3轮): ${s.hitIterationLimit}/${s.sessions}\n`,
+      `  平均覆盖率: ${fmtPct(s.avgTestCoverage)}  平均返工率: ${fmtRework(s.avgReworkRate)}\n` +
+      `  触达迭代上限(3轮): ${s.hitIterationLimit}/${s.sessions}\n` +
+      formatTrends(s.trends),
   )
+}
+
+/** 返工率为 0-1 分数（CI 回写），展示为百分比。 */
+function fmtRework(v: number | null | undefined): string {
+  return v === null || v === undefined ? "N/A" : `${(v * 100).toFixed(0)}%`
+}
+
+function formatTrends(t: ScopeStatsView["trends"] | undefined): string {
+  if (!t) return ""
+  const arrow = (d: TrendView["direction"]): string => (d === "down" ? "↓" : d === "up" ? "↑" : "→")
+  const parts: string[] = []
+  if (t.requirementRevision) {
+    parts.push(
+      `需求迭代 ${arrow(t.requirementRevision.direction)}${t.requirementRevision.from.toFixed(1)}→${t.requirementRevision.to.toFixed(1)}`,
+    )
+  }
+  if (t.reworkRate) {
+    parts.push(
+      `返工率 ${arrow(t.reworkRate.direction)}${(t.reworkRate.from * 100).toFixed(0)}%→${(t.reworkRate.to * 100).toFixed(0)}%`,
+    )
+  }
+  return parts.length > 0 ? `趋势: ${parts.join(" | ")}\n` : ""
 }
 
 function fmtDuration(ms: number): string {

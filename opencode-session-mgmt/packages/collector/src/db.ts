@@ -28,8 +28,26 @@ export interface AccountAggregate {
   completionRate: number
   cost: number
   avgAcceptanceRate: number | null
+  /** 平均增量测试覆盖率（CI 回写，0-100；无数据为 null） */
+  avgTestCoverage: number | null
+  /** 平均会话耗时（毫秒，由汇报携带的阶段时间戳推算，§6.1） */
+  avgDurationMs: number
   overAcceptanceThreshold: number
   hitIterationLimit: number
+}
+
+/** 单一指标在统计窗口内「早半段 → 近半段」的走向。 */
+export interface Trend {
+  from: number
+  to: number
+  direction: "up" | "down" | "flat"
+}
+
+export interface ScopeTrends {
+  /** 需求阶段平均 revision（需求质量） */
+  requirementRevision: Trend | null
+  /** 平均返工率 */
+  reworkRate: Trend | null
 }
 
 export interface ScopeStats {
@@ -41,13 +59,61 @@ export interface ScopeStats {
   completionRate: number
   totalCost: number
   avgAcceptanceRate: number | null
+  /** 平均增量测试覆盖率（CI 回写，0-100；无数据为 null） */
+  avgTestCoverage: number | null
+  /** 平均返工率（CI 回写，0-1 分数；无数据为 null） */
+  avgReworkRate: number | null
+  /** 平均会话耗时（毫秒） */
+  avgDurationMs: number
   overAcceptanceThreshold: number
   hitIterationLimit: number
+  trends: ScopeTrends
   perAccount: AccountAggregate[]
 }
 
 const ACCEPTANCE_WARN_THRESHOLD = 45
 const ITERATION_LIMIT = 3
+
+/** reports.workflow JSON 的读侧投影（仅取聚合所需字段）。 */
+interface WorkflowLite {
+  stages?: Partial<
+    Record<
+      "requirements" | "design" | "implementation" | "testing" | "review",
+      { revision?: number; transitions?: Array<{ at: number }> }
+    >
+  >
+  quality?: { acceptanceRate?: number | null; iterationCount?: number | null }
+  commit?: { status?: string }
+}
+
+function parseWorkflow(json: string | null): WorkflowLite {
+  if (!json) return {}
+  try {
+    return JSON.parse(json) as WorkflowLite
+  } catch {
+    return {}
+  }
+}
+
+/** 会话耗时：全部阶段转换时间戳的最早到最晚（§6.1 时间戳即数据源）。 */
+function workflowDurationMs(wf: WorkflowLite): number {
+  const times: number[] = []
+  for (const stage of Object.values(wf.stages ?? {})) {
+    for (const t of stage?.transitions ?? []) {
+      if (typeof t?.at === "number") times.push(t.at)
+    }
+  }
+  return times.length > 0 ? Math.max(...times) - Math.min(...times) : 0
+}
+
+function avg(values: number[]): number | null {
+  return values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : null
+}
+
+function makeTrend(from: number | null, to: number | null): Trend | null {
+  if (from === null || to === null) return null
+  return { from, to, direction: to > from ? "up" : to < from ? "down" : "flat" }
+}
 
 export class CollectorDb {
   private constructor(private db: Database) {}
@@ -128,20 +194,22 @@ export class CollectorDb {
   statsGroup(group: string, periodMs: number | null): ScopeStats {
     const since = periodMs === null ? null : Date.now() - periodMs
     const rows = this.rowsFor("group_name = ?", [group], since)
-    return this.aggregate("group", group, rows)
+    return this.aggregate("group", group, rows, since, periodMs)
   }
 
   statsOrg(org: string, periodMs: number | null): ScopeStats {
     const since = periodMs === null ? null : Date.now() - periodMs
     const rows = this.rowsFor("org_name = ?", [org], since)
-    return this.aggregate("org", org, rows)
+    return this.aggregate("org", org, rows, since, periodMs)
   }
 
-  private aggregate(scope: "group" | "org", name: string, rows: ReportRaw[]): ScopeStats {
-    interface WorkflowLite {
-      quality?: { acceptanceRate?: number | null; iterationCount?: number | null }
-      commit?: { status?: string }
-    }
+  private aggregate(
+    scope: "group" | "org",
+    name: string,
+    rows: ReportRaw[],
+    since: number | null,
+    periodMs: number | null,
+  ): ScopeStats {
     const byAccount = new Map<string, ReportRaw[]>()
     for (const row of rows) {
       const key = row.account ?? "(unknown)"
@@ -149,22 +217,38 @@ export class CollectorDb {
       list.push(row)
       byAccount.set(key, list)
     }
+
+    // 趋势窗口：period 给定时按 reported_at 分早/近半段（mid = since + period/2）
+    const mid = since !== null && periodMs !== null ? since + periodMs / 2 : null
+
     const perAccount: AccountAggregate[] = []
     let completed = 0
     let totalCost = 0
     const acceptances: number[] = []
+    const coverages: number[] = []
+    const reworks: number[] = []
+    const durations: number[] = []
     let overThreshold = 0
     let hitLimit = 0
+    const revEarly: number[] = []
+    const revRecent: number[] = []
+    const reworkEarly: number[] = []
+    const reworkRecent: number[] = []
+
     for (const [account, list] of byAccount) {
       let accCompleted = 0
       let accCost = 0
       const accAcceptances: number[] = []
+      const accCoverages: number[] = []
+      const accDurations: number[] = []
       let accOver = 0
       let accLimit = 0
       for (const row of list) {
-        const workflow = row.workflow ? (JSON.parse(row.workflow) as WorkflowLite) : {}
+        const workflow = parseWorkflow(row.workflow)
         if (workflow.commit?.status === "allowed") accCompleted++
         accCost += row.cost ?? 0
+        accDurations.push(workflowDurationMs(workflow))
+
         const rate = workflow.quality?.acceptanceRate ?? null
         if (rate !== null && rate !== undefined) {
           accAcceptances.push(rate)
@@ -172,10 +256,27 @@ export class CollectorDb {
         }
         const iter = workflow.quality?.iterationCount ?? null
         if (iter !== null && iter !== undefined && iter >= ITERATION_LIMIT) accLimit++
+
+        if (row.test_coverage !== null && row.test_coverage !== undefined) accCoverages.push(row.test_coverage)
+        if (row.rework_rate !== null && row.rework_rate !== undefined) reworks.push(row.rework_rate)
+
+        // 趋势取样（需有汇报时间）
+        if (mid !== null && typeof row.reported_at === "number") {
+          const rev = workflow.stages?.requirements?.revision ?? 0
+          if (row.reported_at < mid) {
+            revEarly.push(rev)
+            if (row.rework_rate !== null && row.rework_rate !== undefined) reworkEarly.push(row.rework_rate)
+          } else {
+            revRecent.push(rev)
+            if (row.rework_rate !== null && row.rework_rate !== undefined) reworkRecent.push(row.rework_rate)
+          }
+        }
       }
       completed += accCompleted
       totalCost += accCost
       acceptances.push(...accAcceptances)
+      coverages.push(...accCoverages)
+      durations.push(...accDurations)
       overThreshold += accOver
       hitLimit += accLimit
       perAccount.push({
@@ -184,8 +285,9 @@ export class CollectorDb {
         completed: accCompleted,
         completionRate: list.length > 0 ? accCompleted / list.length : 0,
         cost: accCost,
-        avgAcceptanceRate:
-          accAcceptances.length > 0 ? accAcceptances.reduce((a, b) => a + b, 0) / accAcceptances.length : null,
+        avgAcceptanceRate: avg(accAcceptances),
+        avgTestCoverage: avg(accCoverages),
+        avgDurationMs: avg(accDurations) ?? 0,
         overAcceptanceThreshold: accOver,
         hitIterationLimit: accLimit,
       })
@@ -199,10 +301,16 @@ export class CollectorDb {
       completed,
       completionRate: rows.length > 0 ? completed / rows.length : 0,
       totalCost,
-      avgAcceptanceRate:
-        acceptances.length > 0 ? acceptances.reduce((a, b) => a + b, 0) / acceptances.length : null,
+      avgAcceptanceRate: avg(acceptances),
+      avgTestCoverage: avg(coverages),
+      avgReworkRate: avg(reworks),
+      avgDurationMs: avg(durations) ?? 0,
       overAcceptanceThreshold: overThreshold,
       hitIterationLimit: hitLimit,
+      trends: {
+        requirementRevision: makeTrend(avg(revEarly), avg(revRecent)),
+        reworkRate: makeTrend(avg(reworkEarly), avg(reworkRecent)),
+      },
       perAccount,
     }
   }
