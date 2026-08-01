@@ -34,10 +34,18 @@ export function createCommitGate(store: Store) {
     if (!row || !row.workflow) return
     const gate = recomputeCommit(row.workflow).commit
     if (gate.status === "allowed") return
+    // 一次性强制提交授权（§3.4 逃生口）：放行一次并标记已用（留痕，不删除）
+    if (gate.force && !gate.force.used) {
+      store.mutateWorkflow(input.sessionID, (wf) => {
+        if (wf.commit.force) wf.commit.force.used = true
+      })
+      return
+    }
     const pending = gate.blocked_by.map((s) => STAGE_LABELS[s as StageName]).join("、")
     throw new Error(
       `🔒 提交门禁：工作流尚有阶段未完成（${pending}）。` +
-        `请先在对话中完成并通过审查（review_submit），再提交。`,
+        `请先在对话中完成并通过审查（review_submit）再提交；` +
+        `如确需强制提交，说明原因并经开发者确认后调用 commit_force_unlock。`,
     )
   }
 }

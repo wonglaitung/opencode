@@ -55,4 +55,22 @@ describe("createCommitGate", () => {
     ).resolves.toBeUndefined()
     store.close()
   })
+
+  test("一次性强制提交授权：放行一次后失效（§3.4）", async () => {
+    const store = Store.memory()
+    store.mutateWorkflow("s1", (wf) => {
+      wf.commit.force = { reason: "紧急 hotfix", at: 1, used: false }
+    })
+    const gate = createCommitGate(store)
+    // 第一次：放行并标记已用
+    await expect(
+      gate({ tool: "bash", sessionID: "s1" }, { args: { command: "git commit" } }),
+    ).resolves.toBeUndefined()
+    expect(store.get("s1")!.workflow!.commit.force!.used).toBe(true)
+    // 第二次：授权已用，恢复阻断
+    await expect(
+      gate({ tool: "bash", sessionID: "s1" }, { args: { command: "git commit" } }),
+    ).rejects.toThrow(/提交门禁/)
+    store.close()
+  })
 })

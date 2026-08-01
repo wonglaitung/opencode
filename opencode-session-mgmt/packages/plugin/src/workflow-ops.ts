@@ -12,12 +12,13 @@ import {
 
 export class WorkflowOpError extends Error {}
 
-/** 依据五阶段 approved 状况重算提交门禁（§3.4）。 */
+/** 依据五阶段 approved 状况重算提交门禁（§3.4）；保留既有的一次性强制提交授权。 */
 export function recomputeCommit(workflow: WorkflowState): WorkflowState {
   const blockedBy = STAGE_ORDER.filter((name) => workflow.stages[name].status !== "approved")
   workflow.commit = {
     status: blockedBy.length === 0 ? "allowed" : "blocked",
     blocked_by: blockedBy,
+    ...(workflow.commit.force ? { force: workflow.commit.force } : {}),
   }
   return workflow
 }

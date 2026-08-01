@@ -65,9 +65,14 @@ export async function runWorkflow(args: ParsedArgs): Promise<void> {
       const stage = workflow.stages[name as StageName]
       return `  ${STAGE_LABELS[name as StageName].padEnd(6, " ")} ${stage.status.padEnd(12)} revision=${stage.revision}`
     })
+    const force = workflow.commit.force
+    const forceLine = force
+      ? `\n强制提交授权: ${force.used ? "已使用" : "待使用"}（原因: ${force.reason}）`
+      : ""
     process.stdout.write(
       `工作流（${sessionID}）\n${lines.join("\n")}\n提交门禁: ${workflow.commit.status}` +
         (workflow.commit.blocked_by.length ? `（未完成: ${workflow.commit.blocked_by.join("、")}）` : "") +
+        forceLine +
         "\n",
     )
   } finally {
