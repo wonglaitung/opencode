@@ -315,7 +315,7 @@ flowchart LR
 - **experimental hook 稳定性**：`experimental.chat.system.transform` 带 experimental 前缀，上游可能调整签名。缓解：插件是唯一受影响面，上游升级后只需改插件代码并回归测试，成本远低于核心合并冲突。插件内以适配层封装 hook，集中变更点。
 - **rename（重命名会话）**：上游无会话标题更新 API（标题自动生成）。本方案不提供 rename；如将来必须支持，它是全部定制中唯一值得引入的小核心补丁，单独评估。
 - **身份变更是快照语义**：汇报携带当时的 account/group/org 快照。开发者调组后重跑 `opencode-sm init`，只影响此后的汇报，历史统计归属不追溯变更。
-- **收集服务不可用**：插件在本地缓冲未送达的汇报，服务恢复后补推；期间单机会话/项目级统计不受影响（直读本地插件库）。
+- **收集服务不可用**：插件在本地缓冲未送达的汇报（同一会话仅保留最新一条快照，避免堆积），服务恢复后补推；期间单机会话/项目级统计的工作流/质量数据不受影响（直读本地插件库），但 cost/tokens 经上游 daemon 取得，daemon 不可达时统计示 `N/A`（而非误导的 $0）。
 - **插件 DB 孤儿记录**：会话被上游删除后，插件 DB 中对应的扩展数据成为孤儿记录。`opencode-sm` 与插件定期以 `session.list` 比对清理（惰性清理即可，不影响功能）。
 
 ---
@@ -404,7 +404,7 @@ export const WorkflowSessionTable = sqliteTable("workflow_session", {
 
 **快照语义**：三层关联随汇报固化在聚合库记录里。开发者调组后重跑 `opencode-sm init`，只影响此后的汇报与本机新会话的打标，**历史统计归属不追溯变更**。本机 `workflow_session.account_id` 亦为创建时快照。
 
-**孤儿记录清理**：上游删除会话后，`workflow_session` 中对应记录成为孤儿。插件与 `opencode-sm` 以 `session.list` 定期比对，惰性清理，不影响功能。
+**孤儿记录清理**：上游删除会话后，`workflow_session` 中对应记录成为孤儿。插件**启动时**以 `session.list` 比对惰性清理（保守策略：上游不可达或返回空列表时不清理，防瞬时不可达误删），不影响功能。
 
 ### 3.2 WorkflowState Schema
 
@@ -548,6 +548,8 @@ interface ComprehensionRecord {
 ```
 
 **为什么这能解决"三个月后没人看得懂"的问题**：`ComprehensionRecord[]` 本身就是一个可检索的知识库。三个月后接手这段代码的人，不需要从零阅读代码——先读 `explanation`，理解设计意图；再读代码，验证实现是否匹配意图；如果有疑问，`explanation` 中的"替代方案和风险"能帮助判断改动的安全边界。
+
+**无代码变更的会话**：若本会话没有 AI 代码编辑（`iterationCount=0`，如纯讨论/咨询），审查阶段无代码可理解，无需理解确认片段即可通过；一旦有 AI 代码编辑，`review_submit` 强制要求先 `comprehension_add` 登记片段并逐段确认（以 `iterationCount` 作为"是否有代码编辑"的门控信号，兼顾防绕过）。`review_submit` 幂等：审查已通过后重复调用不再报错。
 
 **QualityMetrics — 质量维度数据**：
 
@@ -711,7 +713,7 @@ GET  /api/session/:id/history         session.history
 | 会话级 / 项目级 | `opencode-sm` 本机组合：插件库（工作流/会话内质量）+ 上游 `session.list`/`session.get`（cost/tokens/project），按 sessionID 关联 |
 | 组级 / 组织级 | `opencode-sm` 查询 **org 收集服务的查询端点**（`GET {collector_url}/api/stats?scope=group&group=前端组`），聚合库已含各人汇报与 CI 回写 |
 
-`--project` 参数不传时，自动从当前工作目录（CWD）聚合本项目数据。**因本地插件库按项目目录存放（`<project>/.opencode/session-mgmt.db`），`--project` 接受项目目录路径**以查看他处项目（如 `opencode-sm stats --project ~/work/user-service`）；传入名称而非已存在目录时，无法据此定位库，退化为按 CWD 聚合并仅用作展示标签。`--group` 接受组名（如 `--group "前端组"`）；`--org` 使用 identity.json 中配置的组织。
+`--project` 参数不传时，自动从当前工作目录（CWD）聚合本项目数据。**因本地插件库按项目目录存放（`<project>/.opencode/session-mgmt.db`），`--project` 接受项目目录路径**以查看他处项目（如 `opencode-sm stats --project ~/work/user-service`），明确的目录以**只读**方式打开（库不存在则提示、不创建，避免在任意目录留下 `.opencode/`）；传入名称而非已存在目录时，无法据此定位库，退化为按 CWD 聚合并仅用作展示标签。`--group` 接受组名（如 `--group "前端组"`）；`--org` 使用 identity.json 中配置的组织。
 
 ---
 
