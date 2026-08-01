@@ -479,6 +479,13 @@ classDiagram
     class CommitGate {
         +blocked|allowed status
         +string[] blocked_by
+        +CommitForce force
+    }
+
+    class CommitForce {
+        +string reason
+        +number at
+        +boolean used
     }
 
     class QualityMetrics {
@@ -486,10 +493,12 @@ classDiagram
         +number reworkRate
         +number iterationCount
         +number testCoverage
+        +Record iterationByFile
     }
 
     WorkflowState *-- Stages
     WorkflowState *-- CommitGate
+    CommitGate *-- "0..1" CommitForce
     WorkflowState *-- QualityMetrics
     Stages *-- StageRecord : requirements
     Stages *-- StageRecord : design
@@ -558,7 +567,7 @@ interface ComprehensionRecord {
 | 字段 | 写入方 | 写入时机 | 写入方式 |
 |------|--------|----------|----------|
 | `acceptanceRate` | Agent | 审查阶段，实时更新 | Agent 调用插件工具 `quality_report`，写入插件 DB |
-| `iterationCount` | 插件 | 每次代码生成-修改循环，实时更新 | 插件 `tool.execute.after` hook 计数后写入插件 DB |
+| `iterationCount` | 插件 | 每次代码生成-修改循环，实时更新 | 插件 `tool.execute.after` hook 按文件（write/edit/apply_patch）累计，取各文件最大值写入插件 DB；本机另存 `iterationByFile` 明细 |
 | `reworkRate` | 外部 CI 管道 | 合并后，当检测到同一会话产出的代码被再次修改 | CI 按 sessionID 回写 org 收集服务（见 4.3） |
 | `testCoverage` | 外部 CI 管道 | 合并后，SonarQube/覆盖率工具生成报告时 | CI 按 sessionID 回写 org 收集服务（见 4.3） |
 
@@ -577,6 +586,8 @@ Agent 负责会话内指标（acceptanceRate、iterationCount，写本机插件�
 | 开发者以人工重写的方式提交了新版本 | 文件变更超过 50% 行数，且包含非 Agent 的 commit author |
 
 仅靠 Agent 在对话中说"已修改"不足以触发重置——必须有文件级的实际变更证据。这防止开发者口头绕过迭代上限。
+
+**重置检测的 Phase 范围**：上表三条重置条件均需"文件级实际变更证据"（识别非 Agent 的 diff 来源、检查 git commit author），这超出插件 Hook 的能力面（需文件系统监听或 git 作者检查），列为 **Phase 3+**。在此之前 `iterationCount` 只增不减，且**刻意不提供口头/工具重置**——与规则 20 一致，防止开发者口头绕过迭代上限。`iterationByFile` 仅存本机插件库用于计数，汇报投影已剥离（不外传文件路径，见 §12）。
 
 ### 3.3 状态转换规则
 
@@ -638,6 +649,8 @@ flowchart TD
 
 **执行点**：门禁落在插件侧——Agent 调用 `commit_gate_check` 工具获取检查结果；即使 LLM 不遵守规则，`tool.execute.before` hook 也会拦截未过审查的 `git commit`（见 7.3），硬约束不依赖 LLM 自觉。
 
+**强制提交（逃生口）**：对应上图「强制提交（需填写原因）」分支，经 `commit_force_unlock` 工具授权：必须 `developer_confirmed=true` 且填写原因，写入 `commit.force = {reason, at, used:false}`。门禁遇到未使用的授权放行**一次** `git commit`，随即置 `used=true`（不删除，留痕于 WorkflowState 并随汇报上行，使"绕过审查"在组/组织统计中可见）。授权为一次性，此后恢复阻断；再次强制需重新授权。
+
 ---
 
 ## 4. 接口设计（插件工具 + 复用上游 API + org 收集服务端点，上游零修改）
@@ -655,6 +668,7 @@ flowchart TD
 | `review_submit` | 提交审查清单四项结果 | 四项全部 true 且所有片段已确认，否则拒绝 |
 | `quality_report` | 上报 acceptanceRate 等会话内指标 | 增量合并写入 `workflow.quality` |
 | `commit_gate_check` | 提交前门禁检查 | 返回未完成阶段列表；未通过时 `tool.execute.before` 阻断 `git commit` |
+| `commit_force_unlock` | 强制提交授权（§3.4 逃生口） | `developer_confirmed` 必须为 true、原因必填；写入一次性授权，门禁放行一次后置 `used` 留痕 |
 
 工具定义遵循上游插件 `ToolDefinition` 接口（`packages/plugin/src/tool.ts`），由 `tool` hook 注册后自动进入 LLM 可用工具集（上游 `tool/registry.ts` 已接线）。
 
@@ -697,7 +711,7 @@ GET  /api/session/:id/history         session.history
 | 会话级 / 项目级 | `opencode-sm` 本机组合：插件库（工作流/会话内质量）+ 上游 `session.list`/`session.get`（cost/tokens/project），按 sessionID 关联 |
 | 组级 / 组织级 | `opencode-sm` 查询 **org 收集服务的查询端点**（`GET {collector_url}/api/stats?scope=group&group=前端组`），聚合库已含各人汇报与 CI 回写 |
 
-`--project` 参数不传时，自动从当前工作目录（CWD）检测对应的 Project；传入时接受 Project 名称（如 `opencode-sm stats --project "用户系统"`）。`--group` 接受组名（如 `--group "前端组"`）；`--org` 使用 identity.json 中配置的组织。
+`--project` 参数不传时，自动从当前工作目录（CWD）聚合本项目数据。**因本地插件库按项目目录存放（`<project>/.opencode/session-mgmt.db`），`--project` 接受项目目录路径**以查看他处项目（如 `opencode-sm stats --project ~/work/user-service`）；传入名称而非已存在目录时，无法据此定位库，退化为按 CWD 聚合并仅用作展示标签。`--group` 接受组名（如 `--group "前端组"`）；`--org` 使用 identity.json 中配置的组织。
 
 ---
 
@@ -728,7 +742,7 @@ opencode                                  # 进入 TUI，交互式恢复任意�
 opencode-sm init       # 每台机器一次：交互式四问（账号/组/组织/收集服务地址），写入全局 identity.json
 opencode-sm tag        <sessionID> [--add <tag...>] [--remove <tag...>] [--list]
 opencode-sm workflow   <sessionID> [checklist|comprehension|stats]
-opencode-sm stats      [<sessionID>] [--project <name>] [--group "组名"] [--org] [--period <nd>] [--json]
+opencode-sm stats      [<sessionID>] [--project <dir>] [--group "组名"] [--org] [--period <nd>] [--json]
 opencode-sm list       [--status <s>] [--tag <t>] [--json]     # 在上游 session.list 结果上叠加插件库的 status/tag 过滤
 ```
 
@@ -1169,7 +1183,7 @@ Agent:  ⚠ 此段代码已达到 3 轮 AI 迭代上限。
 | `src/db/index.ts` | 插件 SQLite 初始化与迁移（bun:sqlite，WAL 模式） |
 | `src/identity.ts` | 读全局 `identity.json`，会话首次活动时打标 `account_id` |
 | `src/prompt.ts` | system prompt 注入片段：规则全文 + 当前状态压缩 JSON |
-| `src/tools/workflow.ts` | `workflow_advance` / `workflow_revisit` / `commit_gate_check` 工具 |
+| `src/tools/workflow.ts` | `workflow_advance` / `workflow_revisit` / `commit_gate_check` / `commit_force_unlock` 工具 |
 | `src/tools/review.ts` | `comprehension_confirm` / `comprehension_ask` / `review_submit` 工具（含防批量确认校验） |
 | `src/tools/quality.ts` | `quality_report` 工具 + 迭代计数逻辑 |
 | `src/gate.ts` | `tool.execute.before` 提交门禁拦截（git commit 阻断） |
@@ -1320,6 +1334,8 @@ opencode-sm init                                  # 3. 四问：账号 / 组 / �
 ## 12. 安全与隐私
 
 - 本机会话数据存储于本地插件 SQLite；跨机汇聚仅传输**流程摘要**（阶段时间戳、cost/tokens、质量指标、身份字段），**不含代码内容**
+- 迭代计数明细 `iterationByFile`（键为文件路径）仅存本机插件库，汇报投影（`summarizeWorkflow`）已剥离——与理解确认片段剥离 `file`/`lines`/`explanation` 的口径一致，文件路径不上行
+- 强制提交授权 `commit.force`（原因、时间、是否已用）随汇报上行：原因是开发者口述的流程元数据、非代码内容；上行是为让"绕过审查的提交"在组/组织统计中可见，服务于退出风险监控
 - 汇报携带的账号邮箱属个人信息：收集服务应仅内网可达、最小化留存，访问权限限于组/组织管理者
 - 组织级分析基于收集服务聚合库（各人汇报快照），不读上游账号体系
 - 开发者可关闭汇报（不配置/停用 `collector_url`），退化为本机会话/项目级统计，功能不受影响
