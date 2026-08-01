@@ -1,0 +1,12 @@
+# org 收集服务部署示例（设计文档 §10.1）：每组织部署一个，仅内网可达
+services:
+  collector:
+    build: ../packages/collector
+    ports:
+      - "8787:8787" # 建议以防火墙限制为内网可访问
+    volumes:
+      - collector-data:/data
+    restart: unless-stopped
+
+volumes:
+  collector-data:

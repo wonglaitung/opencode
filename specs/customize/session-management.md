@@ -375,7 +375,7 @@ erDiagram
 ```
 
 ```typescript
-// plugins/session-mgmt/src/db/schema.ts — 插件库（bun:sqlite / drizzle），每项目一个
+// opencode-session-mgmt/packages/plugin/src/db/schema.ts — 插件库（bun:sqlite / drizzle），每项目一个
 export const WorkflowSessionTable = sqliteTable("workflow_session", {
   session_id: text("session_id").primaryKey(),  // 上游 SessionTable.id
   tags: text({ mode: "json" }).$type<string[]>().$default(() => []),
@@ -388,7 +388,7 @@ export const WorkflowSessionTable = sqliteTable("workflow_session", {
 // { "account": "alice@example.com", "group": "前端组", "org": "Engineering",
 //   "collector_url": "http://10.0.1.20:8787" }
 
-// 收集服务侧聚合库（tools/opencode-sm-collector）：reports 表按 session_id 主键
+// 收集服务侧聚合库（opencode-session-mgmt/packages/collector）：reports 表按 session_id 主键
 // 接收汇报快照（account/group/org + 阶段时间戳 + cost/tokens + 质量指标），不含代码内容
 ```
 
@@ -408,7 +408,7 @@ export const WorkflowSessionTable = sqliteTable("workflow_session", {
 
 ### 3.2 WorkflowState Schema
 
-**文件**: `plugins/session-mgmt/src/schema/workflow.ts`（插件包内）
+**文件**: `opencode-session-mgmt/packages/shared/src/workflow.ts`（契约包，插件/CLI/收集服务共用）
 
 ```mermaid
 classDiagram
@@ -1145,12 +1145,20 @@ Agent:  ⚠ 此段代码已达到 3 轮 AI 迭代上限。
 
 不修改、不新增任何上游包（`packages/*`）内的文件。仅依赖上游已有的插件 Hook 体系与 session REST API（见 2.4、4.2）。
 
-### 插件包 `plugins/session-mgmt/`（新建，我们拥有）
+### 契约包 `opencode-session-mgmt/packages/shared/`（新建，三包共用）
+
+| 文件 | 用途 |
+|------|------|
+| `src/workflow.ts` | WorkflowState schema（含 ReviewChecklist、ComprehensionRecord、QualityMetrics）——插件写、收集服务收、CLI 读，单点定义 |
+| `src/report.ts` | 汇报与 CI 回写 payload schema |
+| `src/identity.ts` | identity.json 类型与读写 |
+| `src/merge.ts` | DeepPartial 增量合并语义（插件工具与收集服务共用） |
+
+### 插件包 `opencode-session-mgmt/packages/plugin/`（新建，我们拥有）
 
 | 文件 | 用途 |
 |------|------|
 | `src/index.ts` | 插件入口：注册 hooks（`experimental.chat.system.transform`、`tool`、`tool.execute.before/after`、`chat.message`、`event`） |
-| `src/schema/workflow.ts` | WorkflowState schema（含 ReviewChecklist、ComprehensionRecord、QualityMetrics） |
 | `src/db/schema.ts` | 插件库表定义（仅 `workflow_session` 一张表） |
 | `src/db/index.ts` | 插件 SQLite 初始化与迁移（bun:sqlite，WAL 模式） |
 | `src/identity.ts` | 读全局 `identity.json`，会话首次活动时打标 `account_id` |
@@ -1164,7 +1172,7 @@ Agent:  ⚠ 此段代码已达到 3 轮 AI 迭代上限。
 | `test/*.test.ts` | 工具校验逻辑、合并语义、门禁、汇报缓冲的单元测试 |
 | `package.json` | 插件包定义（入口、依赖） |
 
-### 独立 CLI `tools/opencode-sm/`（新建，我们拥有）
+### 独立 CLI `opencode-session-mgmt/packages/cli/`（新建，我们拥有）
 
 | 文件 | 用途 |
 |------|------|
@@ -1177,7 +1185,7 @@ Agent:  ⚠ 此段代码已达到 3 轮 AI 迭代上限。
 | `src/api.ts` | 上游 opencode SDK 封装 + 收集服务查询客户端 |
 | `test/*.test.ts` | 格式化与聚合的单元测试 |
 
-### 组织收集服务 `tools/opencode-sm-collector/`（新建，每 org 部署一个）
+### 组织收集服务 `opencode-session-mgmt/packages/collector/`（新建，每 org 部署一个）
 
 | 文件 | 用途 |
 |------|------|
@@ -1190,7 +1198,7 @@ Agent:  ⚠ 此段代码已达到 3 轮 AI 迭代上限。
 项目级 `opencode.json`（或等效配置）启用插件，无需改动上游：
 
 ```json
-{ "plugin": ["./plugins/session-mgmt"] }
+{ "plugin": ["./opencode-session-mgmt/packages/plugin"] }
 ```
 
 ---
@@ -1246,7 +1254,51 @@ gantt
 
 ---
 
-## 10. 升级兼容性（上游同步）
+## 10. 部署与分发
+
+**核心原则：开发者零编译**。三个包由团队构建发布一次，开发者只做安装与配置。
+
+| 包 | 分发方式 | 开发者侧动作 |
+|---|---|---|
+| 插件 `session-mgmt` | 发布到 npm（或内部 registry）；daemon 基于 bun，TS 可直接加载，建议团队侧预编译为 JS 发布以屏蔽 bun 版本差异 | 无——OpenCode 按 `config.plugin` 自动拉取 |
+| `opencode-sm` CLI | npm 包，或 `bun build --compile` 单文件二进制经内部分发 | `npm i -g @yourorg/opencode-sm`（或接收二进制） |
+| `opencode-sm-collector` | 运维在 org 内网服务器部署一次（docker/systemd） | 无——仅在 init 时填写其地址 |
+
+### 10.1 组织管理员（一次性）
+
+```bash
+# 内网服务器部署收集服务（示例）
+docker run -d --name opencode-sm-collector -p 8787:8787 \
+  -v collector-data:/data @yourorg/opencode-sm-collector
+# 将地址（如 http://10.0.1.20:8787）与组名约定告知全体成员
+```
+
+### 10.2 开发者（一次性，约 2 分钟）
+
+```bash
+npm i -g @yourorg/opencode-sm                    # 1. 装独立 CLI
+# 2. opencode 配置启用插件（opencode.json，可由团队标准配置预置）：
+#    { "plugin": ["@yourorg/opencode-session-mgmt"] }
+opencode-sm init                                  # 3. 四问：账号 / 组 / 组织 / 收集服务地址
+```
+
+此后开发者照常使用 `opencode`（TUI）——工作流规则随 system prompt 自动注入，阶段推进、审查、理解确认全部在对话中完成；外部查看用 `opencode-sm workflow/stats`。
+
+### 10.3 升级路径
+
+| 场景 | 操作 | 影响面 |
+|------|------|--------|
+| 插件 / CLI 升级 | 团队发新版；开发者 `npm update`（插件亦可由 OpenCode 启动时自动拉新） | 仅定制三包 |
+| OpenCode 上游升级 | 开发者照常升级本体 | 与定制互不干扰，无合并、无迁移（见 §11） |
+
+### 10.4 环境决策点
+
+- **有内部 npm registry**：插件与 CLI 均走 npm，最省心；**无 registry**：插件以 git 路径/本地目录分发（上游 loader 支持本地路径），CLI 以 `bun build --compile` 二进制分发
+- **插件发布形态**：建议团队侧编译为 JS 后发布（不受目标机 bun 版本影响）；此构建对开发者透明
+
+---
+
+## 11. 升级兼容性（上游同步）
 
 本方案的核心目标是**让后续同步 OpenCode 上游更新没有合并冲突**：
 
@@ -1259,7 +1311,7 @@ gantt
 
 ---
 
-## 11. 安全与隐私
+## 12. 安全与隐私
 
 - 本机会话数据存储于本地插件 SQLite；跨机汇聚仅传输**流程摘要**（阶段时间戳、cost/tokens、质量指标、身份字段），**不含代码内容**
 - 汇报携带的账号邮箱属个人信息：收集服务应仅内网可达、最小化留存，访问权限限于组/组织管理者
@@ -1269,7 +1321,7 @@ gantt
 
 ---
 
-## 12. 验证方式
+## 13. 验证方式
 
 上游命令与 `opencode-sm` 均通过 daemon 自动启动机制工作，无需手动操作。
 
@@ -1296,7 +1348,7 @@ opencode-sm stats --org --period 30d --json
 opencode
 ```
 
-单元测试：插件包 `plugins/session-mgmt/test/`（工具校验、防批量确认、合并语义、门禁拦截）、`tools/opencode-sm/test/`（格式化与聚合）。
+单元测试：插件包 `opencode-session-mgmt/packages/plugin/test/`（工具校验、防批量确认、合并语义、门禁拦截）、`opencode-session-mgmt/packages/cli/test/`（格式化与聚合）。
 
 上游回归：因上游零修改，只需确认插件启用/卸载两种状态下上游既有测试（`packages/core/test/session-*.test.ts`、`packages/tui/test/`、`packages/sdk/js`）均通过。
 
