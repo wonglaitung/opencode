@@ -712,9 +712,15 @@ GET  /api/session/:id/history         session.history
 ```
 opencode session list                     # 会话列表（上游已有）
 opencode session delete <sessionID>       # 删除会话（上游已有）
+opencode -c                               # 回到当前目录最近一次会话（--continue，上游已有）
+opencode -s <sessionID>                   # 恢复指定会话（--session，上游已有）
 opencode stats [--days <n>]               # token/费用统计（上游已有）
 opencode                                  # 进入 TUI，交互式恢复任意会话（上游已有）
 ```
+
+> **恢复中断会话**：`-c`/`--continue` 按**当前工作目录**匹配该目录下最近一次会话，因此须回到当初的项目目录执行；若中断后在该目录又开过新会话，`-c` 接的是最新那个而非中断的那个，此时用 `opencode session list` 查出 ID 再 `opencode -s <sessionID>` 精确恢复。`-s`/`--session` 只认 session ID，不接受会话名。
+>
+> `opencode session list` 默认以表格输出三列——**Session ID / Title / Updated**：Title 为上游自动生成的会话标题、Updated 为更新时间，凭标题与时间即可辨认目标会话，再取其 ID 传给 `-s`；`--format json` 另含 created、projectId 等字段，`--max-count <n>` 限制条数。
 
 **`opencode-sm` 独立命令（定制，读插件库 + 调上游 API + 查收集服务）**：
 
