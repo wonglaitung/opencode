@@ -68,7 +68,15 @@ export function createReporter(
             headers: { "Content-Type": "application/json" },
             body: item.payload,
           })
-          if (!res.ok) break // 服务异常，留待下次补推
+          if (!res.ok) {
+            if (res.status >= 400 && res.status < 500) {
+              // 4xx 为永久失败（如 payload 非法），重试无益：丢弃以免堵塞后续汇报
+              console.warn(`[session-mgmt] 汇报被收集服务拒绝（HTTP ${res.status}），丢弃 outbox#${item.id}`)
+              store.markSent(item.id)
+              continue
+            }
+            break // 5xx：服务异常，留待下次补推
+          }
           store.markSent(item.id)
           sent++
         } catch {

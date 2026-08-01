@@ -8,7 +8,7 @@ import { statSync } from "node:fs"
 import { basename, resolve } from "node:path"
 import { readIdentity } from "sm-shared"
 import type { WorkflowSessionRow } from "sm-plugin/src/db/schema"
-import { aggregateProject, sessionStats, type SessionStats } from "sm-plugin/src/stats"
+import { ACCEPTANCE_WARN_THRESHOLD, aggregateProject, sessionStats, type SessionStats } from "sm-plugin/src/stats"
 import {
   collectorQuery,
   createClient,
@@ -86,13 +86,24 @@ export async function runStats(args: ParsedArgs): Promise<void> {
       return
     }
     const scope = args.flags.org ? "org" : "group"
-    const result = await collectorQuery(identity, {
-      scope,
-      group: typeof args.flags.group === "string" ? args.flags.group : undefined,
-      org: args.flags.org ? identity.org : undefined,
-      period,
-    })
-    process.stdout.write(JSON.stringify(result, null, 2) + "\n")
+    let result: unknown
+    try {
+      result = await collectorQuery(identity, {
+        scope,
+        group: typeof args.flags.group === "string" ? args.flags.group : undefined,
+        org: args.flags.org ? identity.org : undefined,
+        period,
+      })
+    } catch (err) {
+      process.stderr.write(`组/组织级统计查询失败：${err instanceof Error ? err.message : String(err)}\n`)
+      process.exitCode = 1
+      return
+    }
+    if (json) {
+      process.stdout.write(JSON.stringify(result, null, 2) + "\n")
+    } else {
+      printScopeStats(result, scope)
+    }
     return
   }
 
@@ -175,6 +186,55 @@ function printProjectStats(p: ReturnType<typeof aggregateProject>, label: string
       `质量:\n` +
       `  平均采纳率: ${fmtPct(p.avgAcceptanceRate)}  超阈值(>45%)会话: ${p.overAcceptanceThreshold}/${p.sessions}\n` +
       `  触达迭代上限(3轮): ${p.hitIterationLimit} 会话\n`,
+  )
+}
+
+/** 收集服务 GET /api/stats 返回的组/组织聚合视图（collector ScopeStats 的读侧投影）。 */
+interface ScopeAccountView {
+  account: string
+  sessions: number
+  completed: number
+  completionRate: number
+  cost: number
+  avgAcceptanceRate: number | null
+  overAcceptanceThreshold: number
+  hitIterationLimit: number
+}
+interface ScopeStatsView {
+  scope: "group" | "org"
+  name: string
+  members: number
+  sessions: number
+  completed: number
+  completionRate: number
+  totalCost: number
+  avgAcceptanceRate: number | null
+  overAcceptanceThreshold: number
+  hitIterationLimit: number
+  perAccount: ScopeAccountView[]
+}
+
+/** 组/组织级统计的人类可读排版（§6.2）；数据来自收集服务聚合视图。 */
+function printScopeStats(raw: unknown, scope: string): void {
+  const s = raw as ScopeStatsView
+  const isOrg = scope === "org"
+  const label = isOrg ? "组织" : "组"
+  const lines = (s.perAccount ?? []).map((a) => {
+    const acc =
+      a.avgAcceptanceRate === null
+        ? "采纳率N/A"
+        : `采纳率${a.avgAcceptanceRate.toFixed(0)}%${a.avgAcceptanceRate > ACCEPTANCE_WARN_THRESHOLD ? " ⚠" : ""}`
+    return `  ${a.account.padEnd(22)} ${String(a.sessions).padStart(3)}会话 ${(a.completionRate * 100)
+      .toFixed(0)
+      .padStart(3)}%完成 $${a.cost.toFixed(4)} ${acc}`
+  })
+  process.stdout.write(
+    `${isOrg ? "🏢" : "👥"} ${label} "${s.name}"\n` +
+      `成员: ${s.members} | 总会话: ${s.sessions} | 完成率: ${(s.completionRate * 100).toFixed(0)}% | 费用: $${s.totalCost.toFixed(4)}\n\n` +
+      (lines.length > 0 ? lines.join("\n") + "\n\n" : "") +
+      `质量:\n` +
+      `  平均采纳率: ${s.avgAcceptanceRate === null ? "N/A" : `${s.avgAcceptanceRate.toFixed(0)}%`}  超阈值(>45%)成员: ${s.overAcceptanceThreshold}/${s.members}\n` +
+      `  触达迭代上限(3轮): ${s.hitIterationLimit}/${s.sessions}\n`,
   )
 }
 
