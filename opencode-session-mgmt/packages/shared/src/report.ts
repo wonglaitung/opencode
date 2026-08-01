@@ -30,9 +30,12 @@ export interface ReviewStageSummary extends StageSummary {
   }
 }
 
+/** 质量指标的汇报投影：剔除 iterationByFile（键为文件路径，§12 不外传代码相关标识）。 */
+export type QualitySummary = Omit<QualityMetrics, "iterationByFile">
+
 /**
- * WorkflowState 的汇报投影：剔除代码相关内容（comprehension.explanation、file/lines），
- * 只保留流程时间戳、迭代、审查结论与质量指标。
+ * WorkflowState 的汇报投影：剔除代码相关内容（comprehension.explanation、file/lines，
+ * 以及 quality.iterationByFile 的文件路径），只保留流程时间戳、迭代、审查结论与质量指标。
  */
 export interface WorkflowSummary {
   stages: {
@@ -43,7 +46,7 @@ export interface WorkflowSummary {
     review: ReviewStageSummary
   }
   commit: CommitGate
-  quality: QualityMetrics
+  quality: QualitySummary
 }
 
 function summarizeStage(stage: StageRecord): StageSummary {
@@ -67,7 +70,13 @@ export function summarizeWorkflow(workflow: WorkflowState): WorkflowSummary {
       },
     },
     commit: workflow.commit,
-    quality: workflow.quality,
+    // 显式投影：不外传 iterationByFile（其键为文件路径，§12）。
+    quality: {
+      acceptanceRate: workflow.quality.acceptanceRate,
+      iterationCount: workflow.quality.iterationCount,
+      reworkRate: workflow.quality.reworkRate,
+      testCoverage: workflow.quality.testCoverage,
+    },
   }
 }
 

@@ -21,15 +21,14 @@ export const ACCEPTANCE_WARN_THRESHOLD = 45
 export function createQualityTools(store: Store): Record<string, ToolDefinition> {
   const quality_report = tool({
     description:
-      "上报会话内质量指标（acceptanceRate 采纳率 0-100、iterationCount 迭代轮次），增量合并写入 workflow.quality。",
+      "上报会话内质量指标（acceptanceRate 采纳率 0-100），增量合并写入 workflow.quality。" +
+      "迭代轮次 iterationCount 由插件按文件自动计数（tool.execute.after），不通过本工具设置。",
     args: {
       acceptanceRate: z.number().min(0).max(100).optional().describe("代码建议采纳率（%）"),
-      iterationCount: z.number().int().min(0).optional().describe("当前迭代轮次"),
     },
     async execute(args, context) {
-      const patch: { quality: { acceptanceRate?: number; iterationCount?: number } } = { quality: {} }
+      const patch: { quality: { acceptanceRate?: number } } = { quality: {} }
       if (args.acceptanceRate !== undefined) patch.quality.acceptanceRate = args.acceptanceRate
-      if (args.iterationCount !== undefined) patch.quality.iterationCount = args.iterationCount
       const saved = store.updateWorkflow(context.sessionID, patch)
       const rate = saved.quality.acceptanceRate
       const warning =

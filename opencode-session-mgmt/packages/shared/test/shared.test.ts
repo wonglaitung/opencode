@@ -70,9 +70,16 @@ describe("summarizeWorkflow", () => {
       developerConfirmed: true,
       confirmedAt: 123,
     })
+    // 本机库记录按文件的迭代计数（键为文件路径）
+    state.quality.iterationByFile = { "secret/path/a.ts": 3 }
+    state.quality.iterationCount = 3
     const summary = summarizeWorkflow(state)
     expect(summary.stages.review.comprehension).toEqual({ total: 1, confirmed: 1 })
     // 摘要不含 explanation 正文
     expect(JSON.stringify(summary)).not.toContain("秘密解释正文")
+    // 质量投影保留 iterationCount，但剔除 iterationByFile（文件路径不外传，§12）
+    expect(summary.quality.iterationCount).toBe(3)
+    expect(JSON.stringify(summary.quality)).not.toContain("iterationByFile")
+    expect(JSON.stringify(summary)).not.toContain("secret/path/a.ts")
   })
 })
