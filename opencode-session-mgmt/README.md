@@ -35,7 +35,8 @@ opencode-sm init                              # 3. 四问：账号 / 组 / 组�
 
 ```bash
 bun install          # workspace 依赖
-bun test             # 各包单元测试
+bun test             # 各包单元测试（自动发现 *.test.ts）
+bun run typecheck    # 四包严格类型检查（strict，零 any）
 bun run build:cli    # 构建 opencode-sm 单二进制（bun build --compile）
 ```
 

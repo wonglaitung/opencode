@@ -1,5 +1,5 @@
 {
-  "name": "opencode-session-mgmt",
+  "name": "sm-plugin",
   "version": "0.0.0",
   "type": "module",
   "main": "src/index.ts",
@@ -8,5 +8,9 @@
   },
   "dependencies": {
     "sm-shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "^1.18.10",
+    "@opencode-ai/sdk": "^1.18.10"
   }
 }

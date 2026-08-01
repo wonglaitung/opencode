@@ -8,18 +8,80 @@
  *   - tool.execute.after                  迭代计数
  *   - chat.message                        会话首次活动打 account_id（§3.1）+ 汇报触发
  */
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin, PluginInput } from "@opencode-ai/plugin"
+import { readIdentity } from "sm-shared"
+import { Store } from "./db"
+import { createCommitGate } from "./gate"
+import { stampSessionAccount } from "./identity"
+import { createSystemTransform } from "./prompt"
+import { createReporter, type Usage } from "./report"
+import { createIterationCounter, createQualityTools } from "./tools/quality"
+import { createReviewTools } from "./tools/review"
+import { createWorkflowTools } from "./tools/workflow"
+
+/** 经上游 SDK 汇总会话 cost/tokens（step-finish 分段求和；失败返回空值，§3.1）。 */
+function createUsageProvider(client: PluginInput["client"]) {
+  return async (sessionID: string): Promise<Usage> => {
+    const empty: Usage = { cost: null, tokensInput: null, tokensOutput: null }
+    try {
+      const res = await client.session.messages({ path: { id: sessionID } })
+      const messages = res.data
+      if (!messages) return empty
+      let cost = 0
+      let input = 0
+      let output = 0
+      let seen = false
+      for (const msg of messages) {
+        for (const part of msg.parts) {
+          if (part.type !== "step-finish") continue
+          seen = true
+          cost += part.cost
+          input += part.tokens.input
+          output += part.tokens.output
+        }
+      }
+      if (!seen) return empty
+      return { cost, tokensInput: input, tokensOutput: output }
+    } catch {
+      return empty
+    }
+  }
+}
 
 const SessionMgmtPlugin: Plugin = async (input) => {
-  // TODO: 初始化插件库（db/）、读 identity.json（identity.ts）
+  const store = Store.open(input.directory)
+  const usageProvider = createUsageProvider(input.client)
+  const reporter = createReporter(store, () => readIdentity(), usageProvider)
+
+  // 启动时补推缓冲汇报，并定时刷新（收集服务不可用期间本地暂存，§2.4）。
+  void reporter.flushOutbox()
+  const timer = setInterval(() => {
+    void reporter.flushOutbox()
+  }, 5 * 60 * 1000)
+
   return {
-    // TODO: "experimental.chat.system.transform": 见 prompt.ts
-    // TODO: tool: { workflow_advance, workflow_revisit, commit_gate_check,
-    //               comprehension_confirm, comprehension_ask, review_submit,
-    //               quality_report }
-    // TODO: "tool.execute.before": 见 gate.ts
-    // TODO: "tool.execute.after": 迭代计数（见 tools/quality.ts）
-    // TODO: "chat.message": 打标 + 汇报（见 identity.ts、report.ts）
+    "experimental.chat.system.transform": createSystemTransform(store),
+
+    tool: {
+      ...createWorkflowTools(store),
+      ...createReviewTools(store),
+      ...createQualityTools(store),
+    },
+
+    "tool.execute.before": createCommitGate(store),
+
+    "tool.execute.after": createIterationCounter(store),
+
+    "chat.message": async (hookInput) => {
+      stampSessionAccount(store, hookInput.sessionID)
+      await reporter.enqueueReport(hookInput.sessionID)
+    },
+
+    dispose: async () => {
+      clearInterval(timer)
+      await reporter.flushOutbox()
+      store.close()
+    },
   }
 }
 
