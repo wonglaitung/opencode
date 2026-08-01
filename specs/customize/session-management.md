@@ -73,6 +73,8 @@ graph LR
 
 **Project（项目）是自动关联的**：OpenCode 根据工作目录自动创建 Project（`ProjectTable`，含 `worktree` 路径、`name`、`icon` 等）。开发者在某个目录下启动 OpenCode 时，自动关联该目录对应的 Project。Session 创建时自动继承当前 Project 的 `project_id`。**开发者不需要手动设定或管理 Project**。
 
+> **例**：Alice 在 `~/work/user-service` 下执行 `opencode`，OpenCode 自动创建 Project（`worktree=/home/alice/work/user-service`，`name=user-service`，`id=proj_a1b2c3`）；她在 TUI 里创建的会话自动继承 `project_id=proj_a1b2c3`。第二天她在 `~/work/frontend` 启动 OpenCode，会话自动归属另一个 Project。全程无任何配置操作。因此统计时 `ocsm stats --period 7d` 省略 `--project` 即按 CWD 自动聚合本项目数据；只有人为划定的组/组织层级（插件库数据，无法从 CWD 推断）才需要显式传 `--group`/`--org`。
+
 **缺失的能力**（均由本方案以插件 + 独立 CLI 补齐，不修改上游代码，见 2.4）：
 
 1. 没有工作流追踪机制（阶段推进、审查门禁、提交门禁）
@@ -385,6 +387,17 @@ export const AccountGroupTable = sqliteTable("account_group", {
 
 组层级支持两级：一级组（如"前端组"、"后端组"）直接挂载在 Org 下；二级组（如"前端-基础架构组"）通过 `parent_group_id` 挂载在一级组下。组织级聚合只读上游 `AccountStateTable.active_org_id`，与插件库的组映射组合。统计时支持按组/组织聚合，满足"各组 AI 使用程度和依赖程度"的汇报需求。
 
+**account / group / org 的关联时机**：
+
+| 关联 | 写入方 | 时机 | 方式 |
+|------|--------|------|------|
+| `workflow_session.account_id` | 插件 | 会话首次活动（`chat.message` hook） | 自动打标：读上游当前登录账号（`AccountStateTable.active_account_id` → `AccountTable.email`，只读），兜底取 `git user.email` |
+| `account_group`（account → 组） | 组长/管理员 | 一次性配置 | `ocsm group member <groupID> --add <email...>`（见 5.1） |
+| `group`（组 → org） | 组长/管理员 | 组建组时 | `ocsm group create <name> --org <orgID>` |
+| org 标识 | 上游 | 账号登录时已有 | 只读 `AccountStateTable.active_org_id`，插件不写 |
+
+三层关联**不在会话创建时预铺，而在统计时 JOIN**：`ocsm stats --group <id>` 沿 `workflow_session.account_id → account_group → group` 聚合；`--org` 再经 `group.org_id` 与上游 `active_org_id` 组合。会话 ↔ account 自动（开发者无感，与 Project 同理），account ↔ group ↔ org 是人为划定、一次配置。
+
 **孤儿记录清理**：上游删除会话后，`workflow_session` 中对应记录成为孤儿。插件与 `ocsm` 以 `session.list` 定期比对，惰性清理，不影响功能。
 
 ### 3.2 WorkflowState Schema
@@ -694,7 +707,11 @@ ocsm tag        <sessionID> [--add <tag...>] [--remove <tag...>] [--list]
 ocsm workflow   <sessionID> [checklist|comprehension|stats]
 ocsm stats      [<sessionID>] [--project <name>] [--group <id>] [--org] [--period <nd>] [--json]
 ocsm list       [--status <s>] [--tag <t>] [--json]     # 在上游 session.list 结果上叠加插件库的 status/tag 过滤
+ocsm group      list | create <name> --org <orgID> [--parent <groupID>]
+ocsm group      member <groupID> [--add <email...>] [--remove <email...>] [--list]
 ```
+
+`ocsm group` 是组长/管理员的一次性配置命令，维护组结构与成员映射（写入插件库 `group`/`account_group` 表，见 3.1），供 `--group`/`--org` 统计聚合使用。
 
 **说明**：
 
@@ -1123,6 +1140,7 @@ Agent:  ⚠ 此段代码已达到 3 轮 AI 迭代上限。
 | `src/commands/workflow.ts` | 工作流状态外部查看（含 checklist/comprehension/stats） |
 | `src/commands/stats.ts` | 四级统计（组合插件库 + 上游 session API） |
 | `src/commands/list.ts` | 会话列表（上游 list + 插件库 status/tag 过滤） |
+| `src/commands/group.ts` | 组/成员配置（写插件库 group、account_group） |
 | `src/api.ts` | 上游 opencode SDK 封装 |
 | `test/*.test.ts` | 格式化与聚合的单元测试 |
 
