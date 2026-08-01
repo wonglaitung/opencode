@@ -38,4 +38,12 @@ describe("recomputeCommit", () => {
     expect(state.commit.status).toBe("blocked")
     expect(state.commit.blocked_by).toEqual(["review"])
   })
+
+  test("重算门禁保留一次性强制提交授权", () => {
+    const state = createWorkflowState()
+    state.commit.force = { reason: "紧急 hotfix", at: 1, used: false }
+    recomputeCommit(state)
+    expect(state.commit.status).toBe("blocked")
+    expect(state.commit.force).toEqual({ reason: "紧急 hotfix", at: 1, used: false })
+  })
 })

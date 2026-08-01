@@ -72,9 +72,44 @@ export function createWorkflowTools(store: Store): Record<string, ToolDefinition
         return "✓ 全部五个阶段已 approved，允许提交。"
       }
       const pending = saved.commit.blocked_by.map((s) => STAGE_LABELS[s as StageName]).join("、")
-      return `✗ 尚不可提交，未完成阶段：${pending}`
+      const forceNote =
+        saved.commit.force && !saved.commit.force.used
+          ? `\n⚠ 已有一次性强制提交授权（原因：${saved.commit.force.reason}），下次 git commit 将放行。`
+          : ""
+      return `✗ 尚不可提交，未完成阶段：${pending}${forceNote}`
     },
   })
 
-  return { workflow_advance, workflow_revisit, commit_gate_check }
+  const commit_force_unlock = tool({
+    description:
+      "强制提交授权（§3.4 逃生口）：仅当开发者明确要求强制提交并说明原因时调用。" +
+      "写入一次性授权后，下一次 git commit 将被门禁放行（即使仍有未完成阶段），授权随即标记已用并留痕。",
+    args: {
+      reason: z.string().describe("强制提交原因（开发者口述，必填，将留痕于 WorkflowState）"),
+      developer_confirmed: z.boolean().describe("必须为 true，表示开发者已明确要求强制提交"),
+    },
+    async execute(args, context) {
+      if (args.developer_confirmed !== true) {
+        throw new WorkflowOpError("强制提交需开发者明确要求：developer_confirmed 必须为 true")
+      }
+      const reason = args.reason.trim()
+      if (reason === "") {
+        throw new WorkflowOpError("强制提交必须填写原因")
+      }
+      const saved = store.mutateWorkflow(context.sessionID, (workflow) => {
+        recomputeCommit(workflow)
+        workflow.commit.force = { reason, at: Date.now(), used: false }
+      })
+      if (saved.commit.status === "allowed") {
+        return "工作流本已全部 approved，无需强制提交，直接 git commit 即可。"
+      }
+      const pending = saved.commit.blocked_by.map((s) => STAGE_LABELS[s as StageName]).join("、")
+      return (
+        `⚠ 已授权一次性强制提交（原因：${reason}）。未完成阶段：${pending}。\n` +
+        `下一次 git commit 将被放行，授权随即失效；此操作已在 WorkflowState 留痕。`
+      )
+    },
+  })
+
+  return { workflow_advance, workflow_revisit, commit_gate_check, commit_force_unlock }
 }

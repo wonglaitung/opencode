@@ -44,6 +44,11 @@ export interface ReviewStageRecord extends StageRecord {
 export interface CommitGate {
   status: "blocked" | "allowed"
   blocked_by: string[]
+  /**
+   * 一次性强制提交授权（§3.4 逃生口）：开发者明确要求并给出原因后由
+   * commit_force_unlock 写入；门禁放行一次后置 used=true 留痕（不删除，供统计审计）。
+   */
+  force?: { reason: string; at: number; used: boolean }
 }
 
 export interface QualityMetrics {
