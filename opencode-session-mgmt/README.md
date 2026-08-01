@@ -3,7 +3,10 @@
 OpenCode 会话管理定制：**标准化开发流程、理解保障与效能分析**。
 以插件 + 独立 CLI + 组织收集服务的形态实现，对 OpenCode 上游**零修改**，便于持续同步上游更新。
 
-> 设计文档：[`../specs/customize/session-management.md`](../specs/customize/session-management.md)
+## 文档
+
+- **设计文档**：[`docs/session-management.md`](docs/session-management.md)
+- **上游同步方案**：[`docs/upstream-sync.md`](docs/upstream-sync.md)（remote 布局、同步命令、冲突预案、同步记录）
 
 ## 结构
 
