@@ -75,4 +75,13 @@ describe("flushOutbox 补推策略", () => {
     expect(sent).toBe(0)
     expect(store.pendingReports().length).toBe(1)
   })
+
+  test("同一会话多次汇报仅保留最新一条待发送（去重）", () => {
+    const store = Store.memory()
+    store.enqueueReport(report)
+    store.enqueueReport({ ...report, cost: 5 })
+    const pending = store.pendingReports()
+    expect(pending.length).toBe(1)
+    expect((JSON.parse(pending[0]!.payload) as SessionReport).cost).toBe(5)
+  })
 })

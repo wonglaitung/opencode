@@ -110,8 +110,10 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
         const review = workflow.stages.review
         const total = review.comprehension.length
         const confirmed = review.comprehension.filter((c) => c.developerConfirmed).length
-        if (total === 0) {
-          throw new WorkflowOpError("尚无任何理解确认片段，请先 comprehension_add 登记 AI 代码变更")
+        const hadCodeEdits = (workflow.quality.iterationCount ?? 0) > 0
+        // 有 AI 代码编辑就必须登记理解确认片段；纯讨论会话（无代码）可无片段通过
+        if (hadCodeEdits && total === 0) {
+          throw new WorkflowOpError("本会话存在 AI 代码编辑，但未登记任何理解确认片段，请先 comprehension_add")
         }
         if (confirmed < total) {
           throw new WorkflowOpError(`仍有 ${total - confirmed} 个片段未确认理解，不可提交审查`)
@@ -132,10 +134,13 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
             .join("、")
           throw new WorkflowOpError(`审查清单未全部通过（缺：${failed}），请回到编码/测试阶段补齐`)
         }
-        if (review.status === "not_started") {
-          applyTransition(workflow, "review", "enter", Date.now(), "进入审查")
+        // 幂等：已 approved 时不重复转换（重复 review_submit 不再报错）
+        if (review.status !== "approved") {
+          if (review.status === "not_started") {
+            applyTransition(workflow, "review", "enter", Date.now(), "进入审查")
+          }
+          applyTransition(workflow, "review", "approve", Date.now(), "审查清单四项通过且片段全部确认")
         }
-        applyTransition(workflow, "review", "approve", Date.now(), "审查清单四项通过且片段全部确认")
         recomputeCommit(workflow)
       })
       return (

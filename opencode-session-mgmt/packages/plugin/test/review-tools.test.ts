@@ -49,14 +49,36 @@ describe("comprehension 工具", () => {
 })
 
 describe("review_submit 门禁", () => {
-  test("无片段时拒绝", async () => {
+  test("纯讨论会话（无代码编辑）无片段也可通过", async () => {
     const { store, tools } = setup()
+    await tools.review_submit!.execute(
+      { businessIntent: true, logicExplainable: true, behaviorVerifiable: true } as never,
+      ctx,
+    )
+    expect(store.get("s1")!.workflow!.stages.review.status).toBe("approved")
+    store.close()
+  })
+
+  test("有代码编辑但无片段时拒绝", async () => {
+    const { store, tools } = setup()
+    store.mutateWorkflow("s1", (wf) => {
+      wf.quality.iterationCount = 2 // 模拟本会话已有 AI 代码编辑
+    })
     await expect(
       tools.review_submit!.execute(
         { businessIntent: true, logicExplainable: true, behaviorVerifiable: true } as never,
         ctx,
       ),
     ).rejects.toThrow(/片段/)
+    store.close()
+  })
+
+  test("重复 review_submit 幂等（已 approved 不再报错）", async () => {
+    const { store, tools } = setup()
+    const args = { businessIntent: true, logicExplainable: true, behaviorVerifiable: true } as never
+    await tools.review_submit!.execute(args, ctx)
+    await expect(tools.review_submit!.execute(args, ctx)).resolves.toBeDefined()
+    expect(store.get("s1")!.workflow!.stages.review.status).toBe("approved")
     store.close()
   })
 

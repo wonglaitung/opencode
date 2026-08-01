@@ -16,6 +16,11 @@ export function openPluginStore(directory: string): Store {
   return Store.open(directory)
 }
 
+/** 仅当项目已有插件库时打开（不创建）；否则返回 null。用于 --project 只读跨项目查看。 */
+export function openPluginStoreIfExists(directory: string): Store | null {
+  return Store.openIfExists(directory)
+}
+
 /** 解析 daemon 地址：环境变量 OPENCODE_SM_SERVER 优先；未配置返回 null（退化为仅本机数据）。 */
 export function resolveServerUrl(): string | null {
   const url = process.env.OPENCODE_SM_SERVER

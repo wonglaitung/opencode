@@ -47,6 +47,9 @@ export const MIGRATIONS: string[] = [
     sent INTEGER NOT NULL DEFAULT 0
   );
   CREATE INDEX IF NOT EXISTS idx_outbox_sent ON outbox(sent);`,
+  // v2：outbox 按会话去重——同一会话仅保留最新一条待发送汇报（§2.4，避免每消息堆积）
+  `ALTER TABLE outbox ADD COLUMN session_id TEXT;
+  CREATE INDEX IF NOT EXISTS idx_outbox_session ON outbox(session_id);`,
 ]
 
 export const SCHEMA_VERSION = MIGRATIONS.length

@@ -13,6 +13,7 @@ import {
   collectorQuery,
   createClient,
   openPluginStore,
+  openPluginStoreIfExists,
   resolveServerUrl,
   sessionUsage,
 } from "../api"
@@ -51,25 +52,28 @@ interface ProjectInfo {
   label: string
   /** 需要向用户说明的退化提示（无则 null） */
   note: string | null
+  /** --project 是否解析为一个明确的项目目录（是则只读打开、不创建库） */
+  explicit: boolean
 }
 
 /**
  * 解析 --project（§1.4、§4.3）。本地插件库按项目目录存放，故：
  * - 缺省：按当前工作目录（CWD）聚合；
- * - 给的是已存在的目录：打开该目录的插件库（跨项目查看的真实路径）；
+ * - 给的是已存在的目录：只读打开该目录的插件库（跨项目查看，不创建库）；
  * - 给的是名称但非目录：无法据此定位目录，退化为 CWD 聚合，仅作展示标签并提示。
  */
 export function resolveProjectInfo(projectFlag: string | undefined): ProjectInfo {
   const cwd = process.cwd()
-  if (!projectFlag) return { dir: cwd, label: basename(cwd), note: null }
+  if (!projectFlag) return { dir: cwd, label: basename(cwd), note: null, explicit: false }
   if (isExistingDir(projectFlag)) {
     const dir = resolve(projectFlag)
-    return { dir, label: basename(dir), note: null }
+    return { dir, label: basename(dir), note: null, explicit: true }
   }
   return {
     dir: cwd,
     label: projectFlag,
     note: "本地插件库按项目目录存放，未匹配到该目录时按当前工作目录聚合（可改传项目目录路径）。",
+    explicit: false,
   }
 }
 
@@ -111,7 +115,12 @@ export async function runStats(args: ParsedArgs): Promise<void> {
   // --project 可给项目目录路径（本地插件库按项目存放，§1.4）；缺省按 CWD。
   const projectFlag = typeof args.flags.project === "string" ? args.flags.project : undefined
   const projInfo = resolveProjectInfo(projectFlag)
-  const store = openPluginStore(projInfo.dir)
+  // 明确的 --project 目录只读打开（不在任意目录创建库）；CWD 则照常打开
+  const store = projInfo.explicit ? openPluginStoreIfExists(projInfo.dir) : openPluginStore(projInfo.dir)
+  if (!store) {
+    process.stdout.write(`项目 "${projInfo.label}" 尚无会话管理数据库（${projInfo.dir}）。\n`)
+    return
+  }
   const client = createClient(resolveServerUrl())
   try {
     const sessionID = args.positionals[0]
@@ -173,7 +182,7 @@ function printSessionStats(s: SessionStats): void {
       `质量:\n` +
       `  采纳率: ${fmtPct(s.acceptanceRate)}  迭代轮次: ${s.iterationCount ?? "N/A"}/3  覆盖率: ${fmtPct(s.testCoverage)}\n` +
       `  返工率: ${fmtPct(s.reworkRate)}  审查清单: ${s.checklistPassed}/4  理解确认: ${s.comprehension.confirmed}/${s.comprehension.total}\n\n` +
-      `AI 使用: $${(s.cost ?? 0).toFixed(4)} | ${fmtTokens(s.tokensInput)} in / ${fmtTokens(s.tokensOutput)} out\n`,
+      `AI 使用: ${s.cost === null ? "$N/A" : `$${s.cost.toFixed(4)}`} | ${fmtTokens(s.tokensInput)} in / ${fmtTokens(s.tokensOutput)} out\n`,
   )
 }
 
@@ -182,7 +191,7 @@ function printProjectStats(p: ReturnType<typeof aggregateProject>, label: string
     `📊 项目 "${label}" 统计\n` +
       (note ? `（${note}）\n` : "") +
       `会话: ${p.sessions} | 完成率: ${(p.completionRate * 100).toFixed(0)}% | 平均周期: ${fmtDuration(p.avgDurationMs)}\n` +
-      `费用: $${p.totalCost.toFixed(4)} 总计\n` +
+      `费用: ${p.hasCostData ? `$${p.totalCost.toFixed(4)} 总计` : "N/A（daemon 不可达或未配置 OPENCODE_SM_SERVER）"}\n` +
       `质量:\n` +
       `  平均采纳率: ${fmtPct(p.avgAcceptanceRate)}  超阈值(>45%)会话: ${p.overAcceptanceThreshold}/${p.sessions}\n` +
       `  触达迭代上限(3轮): ${p.hitIterationLimit} 会话\n`,

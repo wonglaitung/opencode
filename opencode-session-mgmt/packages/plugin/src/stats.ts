@@ -49,6 +49,8 @@ export interface ProjectStats {
   completionRate: number
   avgDurationMs: number
   totalCost: number
+  /** 是否有任何会话取到费用（daemon 不可达时全为 null，统计应示 N/A 而非 $0） */
+  hasCostData: boolean
   avgAcceptanceRate: number | null
   overAcceptanceThreshold: number
   hitIterationLimit: number
@@ -133,6 +135,7 @@ export function aggregateProject(rows: WorkflowSessionRow[], usageOf: (id: strin
     completionRate: n > 0 ? completed / n : 0,
     avgDurationMs: n > 0 ? durations.reduce((a, b) => a + b, 0) / n : 0,
     totalCost: stats.reduce((sum, s) => sum + (s.cost ?? 0), 0),
+    hasCostData: stats.some((s) => s.cost !== null),
     avgAcceptanceRate: acceptances.length > 0 ? acceptances.reduce((a, b) => a + b, 0) / acceptances.length : null,
     overAcceptanceThreshold: stats.filter(
       (s) => s.acceptanceRate !== null && s.acceptanceRate > ACCEPTANCE_WARN_THRESHOLD,
