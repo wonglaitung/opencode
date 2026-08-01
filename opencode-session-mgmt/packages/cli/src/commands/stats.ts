@@ -4,6 +4,8 @@
  * 组级/组织级：查 org 收集服务（§5.2 alt 分支二）
  * --project 省略时从 CWD 自动检测（§1.4）。
  */
+import { statSync } from "node:fs"
+import { basename, resolve } from "node:path"
 import { readIdentity } from "sm-shared"
 import type { WorkflowSessionRow } from "sm-plugin/src/db/schema"
 import { aggregateProject, sessionStats, type SessionStats } from "sm-plugin/src/stats"
@@ -34,6 +36,43 @@ function firstTransitionAt(row: WorkflowSessionRow): number | null {
   return times.length > 0 ? Math.min(...times) : null
 }
 
+function isExistingDir(path: string): boolean {
+  try {
+    return statSync(path).isDirectory()
+  } catch {
+    return false
+  }
+}
+
+interface ProjectInfo {
+  /** 插件库所在项目目录 */
+  dir: string
+  /** 展示用项目名 */
+  label: string
+  /** 需要向用户说明的退化提示（无则 null） */
+  note: string | null
+}
+
+/**
+ * 解析 --project（§1.4、§4.3）。本地插件库按项目目录存放，故：
+ * - 缺省：按当前工作目录（CWD）聚合；
+ * - 给的是已存在的目录：打开该目录的插件库（跨项目查看的真实路径）；
+ * - 给的是名称但非目录：无法据此定位目录，退化为 CWD 聚合，仅作展示标签并提示。
+ */
+export function resolveProjectInfo(projectFlag: string | undefined): ProjectInfo {
+  const cwd = process.cwd()
+  if (!projectFlag) return { dir: cwd, label: basename(cwd), note: null }
+  if (isExistingDir(projectFlag)) {
+    const dir = resolve(projectFlag)
+    return { dir, label: basename(dir), note: null }
+  }
+  return {
+    dir: cwd,
+    label: projectFlag,
+    note: "本地插件库按项目目录存放，未匹配到该目录时按当前工作目录聚合（可改传项目目录路径）。",
+  }
+}
+
 export async function runStats(args: ParsedArgs): Promise<void> {
   const json = Boolean(args.flags.json)
   const period = typeof args.flags.period === "string" ? args.flags.period : undefined
@@ -58,7 +97,10 @@ export async function runStats(args: ParsedArgs): Promise<void> {
   }
 
   // 会话级/项目级：本机插件库 + 上游 SDK（§5.2 alt 分支一）
-  const store = openPluginStore(process.cwd())
+  // --project 可给项目目录路径（本地插件库按项目存放，§1.4）；缺省按 CWD。
+  const projectFlag = typeof args.flags.project === "string" ? args.flags.project : undefined
+  const projInfo = resolveProjectInfo(projectFlag)
+  const store = openPluginStore(projInfo.dir)
   const client = createClient(resolveServerUrl())
   try {
     const sessionID = args.positionals[0]
@@ -102,7 +144,7 @@ export async function runStats(args: ParsedArgs): Promise<void> {
     if (json) {
       process.stdout.write(JSON.stringify(project, null, 2) + "\n")
     } else {
-      printProjectStats(project)
+      printProjectStats(project, projInfo.label, projInfo.note)
     }
   } finally {
     store.close()
@@ -124,9 +166,10 @@ function printSessionStats(s: SessionStats): void {
   )
 }
 
-function printProjectStats(p: ReturnType<typeof aggregateProject>): void {
+function printProjectStats(p: ReturnType<typeof aggregateProject>, label: string, note: string | null): void {
   process.stdout.write(
-    `📊 项目级统计（CWD）\n` +
+    `📊 项目 "${label}" 统计\n` +
+      (note ? `（${note}）\n` : "") +
       `会话: ${p.sessions} | 完成率: ${(p.completionRate * 100).toFixed(0)}% | 平均周期: ${fmtDuration(p.avgDurationMs)}\n` +
       `费用: $${p.totalCost.toFixed(4)} 总计\n` +
       `质量:\n` +

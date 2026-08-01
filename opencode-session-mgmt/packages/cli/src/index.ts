@@ -68,6 +68,10 @@ const USAGE = `opencode-sm —— OpenCode 会话管理 CLI
   opencode-sm stats [<sessionID>] [--project <name>] [--group "组名"] [--org] [--period <nd>] [--json]
   opencode-sm list [--status <s>] [--tag <t>] [--json]
 
+说明:
+  --project   本地插件库按项目目录存放：缺省按当前工作目录聚合；可传项目目录
+              路径以查看他处项目；传名称（非目录）时退化为 CWD 并仅作展示标签。
+
 环境变量:
   OPENCODE_SM_SERVER   上游 daemon 地址（未设置时 cost/tokens/会话列表不可用，退化为本机数据）
 `

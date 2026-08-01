@@ -49,10 +49,17 @@ export interface CommitGate {
 export interface QualityMetrics {
   /** 会话内追踪（插件写本机库，随汇报上行） */
   acceptanceRate: number | null
+  /** 「同一段代码/文件」的最大生成-修改循环次数（§3.2），取 iterationByFile 各文件最大值 */
   iterationCount: number | null
   /** 合并后由 CI 按 sessionID 回写收集服务（设计文档 §4.3） */
   reworkRate: number | null
   testCoverage: number | null
+  /**
+   * 按文件的 AI 生成-修改循环计数（§3.2「同一段代码」语义）。键为文件路径；
+   * 无单一文件的工具（如 apply_patch）归入 "(<工具名>)" 桶。
+   * 可选字段：首次计数前缺省（不改 createWorkflowState 既有形状），随汇报上行。
+   */
+  iterationByFile?: Record<string, number>
 }
 
 export interface Stages {

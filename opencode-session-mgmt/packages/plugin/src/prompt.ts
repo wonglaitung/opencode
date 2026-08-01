@@ -37,6 +37,9 @@ export function buildSystemFragment(workflow: WorkflowState): string {
   const review = workflow.stages.review
   const confirmed = review.comprehension.filter((c) => c.developerConfirmed).length
   const iteration = workflow.quality.iterationCount ?? 0
+  // 最热文件（迭代轮次来源，§3.2 按文件计数）
+  const byFile = Object.entries(workflow.quality.iterationByFile ?? {})
+  const hottest = byFile.sort((a, b) => b[1] - a[1])[0]
   const parts = [
     RULES,
     "",
@@ -59,7 +62,9 @@ export function buildSystemFragment(workflow: WorkflowState): string {
     ),
     "```",
     "",
-    `迭代轮次：${iteration}/3${iteration >= 3 ? "（已达上限，需人工重写，勿再生成）" : ""}`,
+    `迭代轮次：${iteration}/3${hottest ? `（最热文件 ${hottest[0]} ×${hottest[1]}）` : ""}${
+      iteration >= 3 ? "，已达上限需人工重写，勿再生成" : ""
+    }`,
     `提交门禁：${workflow.commit.status}${
       workflow.commit.blocked_by.length > 0 ? `（未完成：${workflow.commit.blocked_by.join("、")}）` : ""
     }`,
