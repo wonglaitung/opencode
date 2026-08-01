@@ -69,17 +69,16 @@ graph LR
 
 **TUI 已有完善的会话管理**（不需要改动）：创建、列表、删除、重命名、快速切换（`<leader>1-9`）、分叉、后台运行、压缩、中断、恢复。
 
-**REST API 已完备**（大部分不需要改动）：`session.list`、`session.create`、`session.get`、`session.prompt`、`session.compact`、`session.interrupt`、`session.active`、`session.context`、`session.history`。
+**REST API 已完备**（全部复用，不修改）：`session.list`、`session.create`、`session.get`、`session.prompt`、`session.compact`、`session.interrupt`、`session.active`、`session.context`、`session.history`。上游 CLI 也已有 `opencode session list|delete`、`opencode stats`（token/费用统计）。
 
 **Project（项目）是自动关联的**：OpenCode 根据工作目录自动创建 Project（`ProjectTable`，含 `worktree` 路径、`name`、`icon` 等）。开发者在某个目录下启动 OpenCode 时，自动关联该目录对应的 Project。Session 创建时自动继承当前 Project 的 `project_id`。**开发者不需要手动设定或管理 Project**。
 
-**缺失的能力**：
+**缺失的能力**（均由本方案以插件 + 独立 CLI 补齐，不修改上游代码，见 2.4）：
 
-1. CLI 层没有 `opencode session` 子命令（`commands.ts` 只有 `api`、`debug`、`migrate`、`service`、`serve`）
-2. 协议层没有 `session.update` 端点（SDK 中存在但协议组缺失）
-3. 会话数据模型没有 tags、status、workflow、account_id 字段
-4. 没有工作流追踪机制
-5. 没有使用统计分析
+1. 没有工作流追踪机制（阶段推进、审查门禁、提交门禁）
+2. 没有理解保障机制（代码片段级的理解确认记录）
+3. 没有会话标签与扩展属性（tags、status）
+4. 没有组/组织级的使用统计与质量分析
 
 ---
 
@@ -216,7 +215,7 @@ graph TB
         G1d["组级质量趋势"]
     end
 
-    subgraph Team["团队级（组织级）"]
+    subgraph Org["组织级（org）"]
         T1["按组织聚合"]
         T1a["组间排行"]
         T1b["完成率趋势"]
@@ -225,7 +224,7 @@ graph TB
 
     Session -->|"聚合"| Project
     Project -->|"聚合"| Group
-    Group -->|"聚合"| Team
+    Group -->|"聚合"| Org
 ```
 
 **统计层级说明**：
@@ -235,96 +234,162 @@ graph TB
 | 会话级 | 单会话 | `opencode session stats <id>` | 开发者自检 |
 | 项目级 | 按项目+时段 | `opencode session stats --project "用户系统"`（或省略，自动检测 CWD） | 项目经理跟踪 |
 | 组级 | 按组聚合 | `opencode session stats --group <id>` | 组长管理、月度汇报 |
-| 团队级（组织级） | 按组织聚合 | `opencode session stats --team` | 领导汇报、预算决策 |
+| 组织级（org） | 按组织聚合 | `opencode session stats --org` | 领导汇报、预算决策 |
 
 组级统计是核心汇报层级——回应"各组 AI 使用程度和依赖程度"的需求。组级视图展示：成员排行、采纳率分布、返工率对比、触达迭代上限的会话数。
 
 **数据来源决策**：零额外采集。工作流状态变更的时间戳即为分析数据源。
 
-**身份关联决策**：复用现有 `AccountTable`（`account.ts`，含 `id`、`email`、`active_org_id`）和 `Org`（`id`、`name`），在 `SessionTable` 添加 `account_id`。同时新增 `GroupTable` 支持组/团队层级聚合，`AccountTable` 通过 `group_id` 关联到组，组可嵌套（`parent_group_id` 支持子组）。
+**身份关联决策**：复用现有 `AccountTable`（`account.ts`，含 `id`、`email`、`active_org_id`）和 `Org`（`id`、`name`）。组（Group）与组织（Org）的层级映射存放在插件自有数据库中（见 2.4、3.1）：account → group → org 三级身份层级，组可嵌套（`parent_group_id` 支持子组）。
+
+### 2.4 部署架构选择：插件 + 独立 CLI（上游零修改）
+
+#### 决策原则
+
+团队后续需要持续同步 OpenCode 上游更新。**核心文件（session.ts、prompt.ts、sql.ts、protocol）是上游改动最频繁的文件**，任何直接修改都会导致每次同步产生合并冲突，核心 schema 迁移（给 SessionTable 加列）的风险尤其高。因此本方案的硬约束是：**所有定制不修改上游代码，收敛到我们自己的两个包里**。
+
+#### 关键发现：上游插件体系已覆盖所需能力
+
+OpenCode 插件运行在 daemon 进程内，生命周期与 daemon 一致，通过 `config.plugin` 按 npm 名或本地路径加载。插件 `Hooks` 接口（`packages/plugin/src/index.ts`）提供的能力与接线位置如下（均已核实上游源码，无需任何上游改动即可使用）：
+
+| 所需能力 | 插件 Hook | 上游已接线位置 |
+|----------|-----------|----------------|
+| 每轮注入 WorkflowState 到 system prompt | `experimental.chat.system.transform`（修改 `output.system: string[]`） | `agent/agent.ts`、`session/llm/request.ts` |
+| 注册工作流工具（LLM 在对话中调用） | `tool`（ToolDefinition 字典） | `tool/registry.ts` |
+| 硬门禁：阻断未过审查的提交 | `tool.execute.before`（抛错即令工具失败） | `session/tools.ts` |
+| 统计工具执行（迭代计数、采纳率） | `tool.execute.after` | `session/tools.ts` |
+| 时间戳采集（阶段耗时数据源） | `chat.message` / `event` | `session/prompt.ts`、事件总线 |
+| 读取会话数据（cost/tokens） | `PluginInput.client`（SDK） | 插件入参 |
+
+#### 架构总览
+
+```mermaid
+flowchart LR
+    subgraph Upstream["OpenCode 上游（零修改）"]
+        Daemon["Daemon + 插件 Hook 体系"]
+        CoreDB["核心 SQLite<br/>session/cost/tokens"]
+        UpCLI["上游 CLI<br/>session list/delete、stats"]
+    end
+
+    subgraph Custom["定制（我们拥有）"]
+        Plugin["session-mgmt 插件<br/>config.plugin 加载<br/>运行于 daemon 内"]
+        PluginDB["插件自有 SQLite<br/>.opencode/session-mgmt.db"]
+        OCSM["独立 CLI（ocsm）<br/>单独安装"]
+    end
+
+    TUI["TUI 对话"] -->|"调用插件工具"| Plugin
+    Plugin -->|"system.transform<br/>注入状态与规则"| Daemon
+    Plugin --> PluginDB
+    Plugin -.->|"SDK 只读"| CoreDB
+    OCSM -->|"只读"| PluginDB
+    OCSM -->|"session REST API"| Daemon
+    CI["CI 流水线"] -->|"回写质量指标"| PluginDB
+```
+
+#### 设计点映射
+
+| 需求 | 零侵入实现方式 |
+|------|----------------|
+| WorkflowState 每轮注入 system prompt | 插件 `experimental.chat.system.transform`，从插件 DB 读最新状态追加 |
+| 会话 tags、status、workflow 扩展属性 | 存插件自有 SQLite，以核心 sessionID 为主键关联，不动 SessionTable |
+| Group/Org 层级与 account 映射 | 存插件 DB（定制数据，无需进核心 schema）；组织级聚合只读上游 `active_org_id` |
+| 阶段推进 / 审查 / 理解确认 | 插件注册工具（`workflow_advance`、`comprehension_confirm`、`review_submit`），Agent 在 TUI 对话中调用，校验逻辑在工具 handler 内——天然服务端强制 |
+| 迭代上限（3 轮）与提交门禁 | `tool.execute.after` 计数每阶段代码编辑；`tool.execute.before` 对未过审查的 `git commit` 抛错阻断；system prompt 提示剩余额度 |
+| QualityMetrics 采集 | 会话内指标由插件工具/`chat.message` hook 记录；合并后指标由 CI 直接写插件 DB（WAL） |
+| 外部管理（tag/workflow/stats） | 独立 CLI `ocsm`：读插件 DB + 调上游 session REST API 组合；通用会话操作（list/delete/stats）直接用上游已有命令 |
+
+#### 风险与取舍
+
+- **experimental hook 稳定性**：`experimental.chat.system.transform` 带 experimental 前缀，上游可能调整签名。缓解：插件是唯一受影响面，上游升级后只需改插件代码并回归测试，成本远低于核心合并冲突。插件内以适配层封装 hook，集中变更点。
+- **rename（重命名会话）**：上游无会话标题更新 API（标题自动生成）。本方案不提供 rename；如将来必须支持，它是全部定制中唯一值得引入的小核心补丁，单独评估。
+- **插件 DB 与核心 DB 的一致性**：会话被上游删除后，插件 DB 中对应的扩展数据成为孤儿记录。`ocsm` 与插件定期以 `session.list` 比对清理（惰性清理即可，不影响功能）。
 
 ---
 
 ## 3. 数据模型设计
 
-### 3.1 SessionTable 新增列
+### 3.1 插件数据模型（插件自有 SQLite，上游零修改）
 
-**文件**: `packages/core/src/session/sql.ts`
+**存储位置**：`<project>/.opencode/session-mgmt.db`（插件启动时自动建表，迁移由插件自管）
+
+所有定制数据存放在插件自有的 SQLite 数据库中，**不修改上游 SessionTable / AccountTable**。通过核心 `sessionID` 与上游会话关联；费用、Token 等核心指标经 SDK（`session.list`/`session.get`）或只读核心 DB 获取，与插件数据在统计时组合。
 
 ```mermaid
 erDiagram
     SessionTable {
-        text id PK "已有"
-        text project_id FK "已有"
-        text title "已有"
-        real cost "已有"
-        int tokens_input "已有"
-        int tokens_output "已有"
-        text tags "新增 - JSON string[]"
-        text status "新增 - 状态标签"
-        text workflow "新增 - JSON WorkflowState"
-        text account_id FK "新增 - 关联 AccountTable"
+        text id PK "上游已有 - 不修改"
+        text project_id FK "上游已有"
+        text title "上游已有"
+        real cost "上游已有"
+        int tokens_input "上游已有"
+        int tokens_output "上游已有"
     }
 
     AccountTable {
-        text id PK
-        text email
-        text active_org_id
-        text group_id FK "新增 - 关联 GroupTable"
+        text id PK "上游已有 - 不修改"
+        text email "上游已有"
+        text active_org_id "上游已有"
+    }
+
+    WorkflowSessionTable {
+        text session_id PK "插件库 - 关联上游会话"
+        text tags "JSON string[]"
+        text status "状态标签"
+        text workflow "JSON WorkflowState"
+        text account_id "开发者标识"
     }
 
     GroupTable {
-        text id PK "新增"
+        text id PK "插件库"
         text name "组名"
         text org_id FK "所属组织"
         text parent_group_id FK "上级组（可空）"
     }
 
-    OrgTable {
-        text id PK
-        text name "已有"
+    AccountGroupTable {
+        text account_id PK "插件库 - account→组映射"
+        text group_id FK "关联 GroupTable"
     }
 
-    SessionTable }o--o| AccountTable : "account_id"
-    AccountTable }o--o| GroupTable : "group_id"
-    GroupTable }o--o| OrgTable : "org_id"
+    SessionTable ||--o| WorkflowSessionTable : "session_id（逻辑关联）"
+    AccountGroupTable }o--o| GroupTable : "group_id"
     GroupTable }o--o| GroupTable : "parent_group_id"
 ```
 
 ```typescript
-// 新增列（全部有默认值，向后兼容）
-tags: text({ mode: "json" }).$type<string[]>().$default(() => []),
-status: text(),   // "todo"|"analysis"|"design"|"coding"|"testing"|"review"|"done"|"archived"|null
-workflow: text({ mode: "json" }).$type<WorkflowState>(),
-account_id: text().$type<AccountV2.ID>(),
-```
+// plugins/session-mgmt/src/db/schema.ts — 插件自有表（bun:sqlite / drizzle）
 
-**AccountTable 新增列**：
+// 会话扩展表：以核心 sessionID 为主键
+export const WorkflowSessionTable = sqliteTable("workflow_session", {
+  session_id: text("session_id").primaryKey(),  // 上游 SessionTable.id
+  tags: text({ mode: "json" }).$type<string[]>().$default(() => []),
+  status: text(),   // "todo"|"analysis"|"design"|"coding"|"testing"|"review"|"done"|"archived"|null
+  workflow: text({ mode: "json" }).$type<WorkflowState>(),
+  account_id: text(),  // 开发者标识（email 或 AccountTable.id）
+})
 
-```typescript
-// packages/core/src/account/sql.ts — 新增列
-group_id: text().$type<GroupTable.ID>(),  // 关联 GroupTable
-```
-
-**GroupTable（新建）**：
-
-```typescript
-// packages/core/src/group/sql.ts — 新建
-import { text } from "drizzle-orm/sqlite-core"
-
+// 组表：支持组/组织层级聚合
 export const GroupTable = sqliteTable("group", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
-  org_id: text("org_id").notNull().references(() => OrgTable.id),
+  org_id: text("org_id").notNull(),     // 对应上游 active_org_id 的组织标识
   parent_group_id: text("parent_group_id"),  // 可空，支持子组嵌套
+})
+
+// account → 组 映射
+export const AccountGroupTable = sqliteTable("account_group", {
+  account_id: text("account_id").primaryKey(),
+  group_id: text("group_id").notNull().references(() => GroupTable.id),
 })
 ```
 
-组层级支持两级：一级组（如"前端组"、"后端组"）直接挂载在 Org 下；二级组（如"前端-基础架构组"）通过 `parent_group_id` 挂载在一级组下。统计时支持按组聚合，满足"各组 AI 使用程度和依赖程度"的汇报需求。
+组层级支持两级：一级组（如"前端组"、"后端组"）直接挂载在 Org 下；二级组（如"前端-基础架构组"）通过 `parent_group_id` 挂载在一级组下。组织级聚合只读上游 `AccountStateTable.active_org_id`，与插件库的组映射组合。统计时支持按组/组织聚合，满足"各组 AI 使用程度和依赖程度"的汇报需求。
+
+**孤儿记录清理**：上游删除会话后，`workflow_session` 中对应记录成为孤儿。插件与 `ocsm` 以 `session.list` 定期比对，惰性清理，不影响功能。
 
 ### 3.2 WorkflowState Schema
 
-**新文件**: `packages/schema/src/session-workflow.ts`
+**文件**: `plugins/session-mgmt/src/schema/workflow.ts`（插件包内）
 
 ```mermaid
 classDiagram
@@ -473,12 +538,12 @@ interface ComprehensionRecord {
 
 | 字段 | 写入方 | 写入时机 | 写入方式 |
 |------|--------|----------|----------|
-| `acceptanceRate` | Agent | 审查阶段，实时更新 | Agent 通过 `session.update` 更新 workflow.quality |
-| `iterationCount` | Agent | 每次代码生成-修改循环，实时更新 | Agent 通过 `session.update` 更新 workflow.quality |
-| `reworkRate` | 外部 CI 管道 | 合并后，当检测到同一会话产出的代码被再次修改 | CI 通过 `session.update` API 回写 |
-| `testCoverage` | 外部 CI 管道 | 合并后，SonarQube/覆盖率工具生成报告时 | CI 通过 `session.update` API 回写 |
+| `acceptanceRate` | Agent | 审查阶段，实时更新 | Agent 调用插件工具 `quality_report`，写入插件 DB |
+| `iterationCount` | 插件 | 每次代码生成-修改循环，实时更新 | 插件 `tool.execute.after` hook 计数后写入插件 DB |
+| `reworkRate` | 外部 CI 管道 | 合并后，当检测到同一会话产出的代码被再次修改 | CI 直接写插件 SQLite（WAL 模式），或经插件暴露的本地接口 |
+| `testCoverage` | 外部 CI 管道 | 合并后，SonarQube/覆盖率工具生成报告时 | CI 直接写插件 SQLite（WAL 模式），或经插件暴露的本地接口 |
 
-`session.update` 的 payload 已支持 `workflow` 字段（见 4.1），外部系统通过写入 `workflow.quality` 完成数据回写。Agent 负责会话内指标（acceptanceRate、iterationCount），外部 CI 负责合并后指标（reworkRate、testCoverage）。两者互不依赖，写入同一数据模型，统计时统一聚合。
+Agent 负责会话内指标（acceptanceRate、iterationCount），外部 CI 负责合并后指标（reworkRate、testCoverage）。两者写入同一插件库的 `workflow.quality`，采用增量合并语义（见 4.3），互不覆盖，统计时统一聚合。
 
 **Phase 1 的范围**：`acceptanceRate` 和 `iterationCount` 随 Phase 2 Agent 规则一起实现。`reworkRate` 和 `testCoverage` 依赖外部 CI 集成，标记为 Phase 3+，在不接入外部 CI 的情况下，这两个字段默认为 `null`，统计输出中显示为 `N/A`，不影响其他功能。
 
@@ -554,88 +619,56 @@ flowchart TD
 
 ---
 
-## 4. API 变更
+## 4. 接口设计（插件工具 + 复用上游 API，上游零修改）
 
-### 4.1 新增端点
+### 4.1 插件工具（Agent 在 TUI 对话中调用）
 
-```mermaid
-graph LR
-    subgraph New["新增 API"]
-        U["PATCH /api/session/:id<br/>session.update"]
-        ST["GET /api/session/stats<br/>session.stats"]
-    end
+工作流的所有状态变更不经过 REST API，而是通过插件注册的**工具（tool）**完成。Agent 在对话中调用这些工具，校验逻辑写在工具的 handler 内——运行在 daemon 进程里，天然具备服务端强制性。
 
-    subgraph Extended["扩展的 API"]
-        C["POST /api/session<br/>+tags +status +workflow"]
-    end
+| 工具 | 用途 | 服务端校验 |
+|------|------|-----------|
+| `workflow_advance` | 提议进入下一阶段 / 标记当前阶段 approved | 必须携带开发者确认语义；AI 不可在无确认时调用成功 |
+| `workflow_revisit` | 回退到指定阶段（revision++） | 目标阶段必须存在 |
+| `comprehension_confirm` | 确认单个代码片段已理解 | **单次调用只接受一个 `codeSegmentId`**，防止批量确认（见 7.3） |
+| `comprehension_ask` | 对片段追问，问答追加到 explanation | 片段必须存在 |
+| `review_submit` | 提交审查清单四项结果 | 四项全部 true 且所有片段已确认，否则拒绝 |
+| `quality_report` | 上报 acceptanceRate 等会话内指标 | 增量合并写入 `workflow.quality` |
+| `commit_gate_check` | 提交前门禁检查 | 返回未完成阶段列表；未通过时 `tool.execute.before` 阻断 `git commit` |
 
-    subgraph Existing["现有 API（不变）"]
-        L["GET /api/session"]
-        G["GET /api/session/:id"]
-        P["POST /api/session/:id/prompt"]
-    end
+工具定义遵循上游插件 `ToolDefinition` 接口（`packages/plugin/src/tool.ts`），由 `tool` hook 注册后自动进入 LLM 可用工具集（上游 `tool/registry.ts` 已接线）。
+
+### 4.2 复用的上游 API（不修改）
+
+`ocsm` 与插件通过上游 SDK 调用以下已有端点，不新增、不修改任何上游端点：
+
+```
+GET  /api/session                     session.list
+POST /api/session                     session.create
+GET  /api/session/:id                 session.get      （含 cost / tokens）
+GET  /api/session/active              session.active
+POST /api/session/:id/prompt          session.prompt   （resume 一次性模式）
+POST /api/session/:id/compact         session.compact
+POST /api/session/:id/interrupt       session.interrupt
+GET  /api/session/:id/context         session.context
+GET  /api/session/:id/history         session.history
 ```
 
-#### session.update
+### 4.3 插件库写入与外部回写
 
-```typescript
-// session.update 采用 PATCH 语义 — 增量合并，不覆盖未传入的字段
-HttpApiEndpoint.patch("session.update", "/api/session/:sessionID", {
-  params: { sessionID: Session.ID },
-  payload: Schema.Struct({
-    title: Schema.String.pipe(Schema.optional),
-    tags: Schema.Array(Schema.String).pipe(Schema.optional),
-    status: Schema.String.pipe(Schema.optional),
-    workflow: Schema.DeepPartial(WorkflowState).pipe(Schema.optional),
-  }),
-  success: Schema.Struct({ data: Session.Info }),
-  error: SessionNotFoundError,
-})
-```
-
-**PATCH 增量合并语义**：
-
-`workflow` 字段使用 `DeepPartial`，即只传入需要更新的字段，服务端与现有值做深度合并。例如：
+**增量合并语义**：插件工具与 CI 对 `workflow` 字段的写入采用深度合并（等价于 PATCH DeepPartial），只更新传入的字段。例如 CI 只回写 `reworkRate`：
 
 ```json
-// CI 管道只回写 reworkRate，不覆盖 Agent 维护的 acceptanceRate
-PATCH /api/session/sess_abc123
-{
-  "workflow": {
-    "quality": {
-      "reworkRate": 0.08
-    }
-  }
-}
+// CI 写入插件库 workflow_session.workflow（合并，不覆盖 Agent 维护的字段）
+{ "quality": { "reworkRate": 0.08 } }
 ```
 
-服务端合并后：`quality.acceptanceRate` 保持 Agent 写入的值，`quality.reworkRate` 更新为 0.08。这确保 Agent 和 CI 管道各自维护自己的指标，互不覆盖。
+合并后 `quality.acceptanceRate` 保持 Agent 写入的值，`quality.reworkRate` 更新为 0.08。Agent 与 CI 各自维护自己的指标，互不覆盖。
 
-#### session.stats
+**CI 回写通道**：CI 管道以两种方式之一写入合并后指标：
+1. 直接连接插件 SQLite（WAL 模式，支持并发读写），对 `workflow_session.workflow` 做 JSON 合并更新；
+2. 调用插件可选暴露的本地 HTTP 接口（仅 127.0.0.1，daemon 生命周期内可用）。
 
-```
-GET /api/session/stats?scope=session&sessionID=<id>
-GET /api/session/stats?scope=project&project=<name>&period=7d
-GET /api/session/stats?scope=group&groupID=<id>&period=30d
-GET /api/session/stats?scope=team&orgID=<id>&period=30d
-```
-
-**Project 自动检测**：CLI 的 `--project` 参数不传时，自动从当前工作目录（CWD）检测对应的 Project。传入时接受 Project 名称（如 `opencode session stats --project "用户系统"`）。
-```
-
-### 4.2 Core 层
-
-**文件**: `packages/core/src/session.ts` — Interface 追加：
-
-```typescript
-readonly update: (input: {
-  sessionID: SessionSchema.ID
-  title?: string
-  tags?: string[]
-  status?: string
-  workflow?: WorkflowState
-}) => Effect.Effect<SessionSchema.Info, NotFoundError>
-```
+**统计查询**：统计不新增核心 API，由 `ocsm` 本地组合——插件库提供工作流/质量/组数据，上游 `session.list`/`session.get` 提供 cost/tokens/project 数据，按 sessionID 关联聚合。`--project` 参数不传时，自动从当前工作目录（CWD）检测对应的 Project；传入时接受 Project 名称（如 `ocsm stats --project "用户系统"`）。
 
 ---
 
@@ -643,41 +676,38 @@ readonly update: (input: {
 
 ### 5.1 命令清单
 
+命令分两部分：**上游已有命令直接复用**（不新增），**`ocsm` 独立 CLI**（我们自己的包，承载定制数据的查看）。
+
+**复用上游 OpenCode 命令（零开发）**：
+
 ```
-opencode session list       [--search <q>] [--limit <n>] [--status <s>] [--tag <t>] [--json]
-opencode session create     [--title <title>] [--agent <agent>] [--model <model>] [--json]
-opencode session get        <sessionID> [--json] [--context]
-opencode session rename     <sessionID> <title>
-opencode session delete     <sessionID> [--yes]
-opencode session resume     <sessionID> [message]
-opencode session active     [--json]
-opencode session compact    <sessionID>
-opencode session interrupt  <sessionID>
-opencode session tag        <sessionID> [--add <tag...>] [--remove <tag...>] [--list]
-opencode session workflow   <sessionID> [checklist|comprehension|stats]
-opencode session stats      [<sessionID>] [--project <name>] [--group <id>] [--team] [--period <nd>] [--json]
+opencode session list                     # 会话列表（上游已有）
+opencode session delete <sessionID>       # 删除会话（上游已有）
+opencode stats [--days <n>]               # token/费用统计（上游已有）
+opencode                                  # 进入 TUI，交互式恢复任意会话（上游已有）
 ```
 
-**合并说明**（从 18 个命令合并为 12 个）：
+**`ocsm` 独立命令（定制，读插件库 + 调上游 API）**：
 
-| 原命令 | 合并到 | 方式 |
-|--------|--------|------|
-| `prompt` | `resume` | `resume <id> "消息"` 即等价于原 `prompt` |
-| `untag` | `tag` | `tag <id> --remove <tag>` |
-| `status` | `get` + `workflow` | 查看：`get <id>` 已包含状态；设置：`workflow` 阶段变更已隐含状态切换 |
-| `context` | `get` | `get <id> --context` 查看对话历史 |
-| `review` | `workflow` | `workflow <id> checklist|comprehension|stats` |
+```
+ocsm tag        <sessionID> [--add <tag...>] [--remove <tag...>] [--list]
+ocsm workflow   <sessionID> [checklist|comprehension|stats]
+ocsm stats      [<sessionID>] [--project <name>] [--group <id>] [--org] [--period <nd>] [--json]
+ocsm list       [--status <s>] [--tag <t>] [--json]     # 在上游 session.list 结果上叠加插件库的 status/tag 过滤
+```
 
-**resume 命令说明**：
+**说明**：
 
-| 用法 | 行为 |
-|------|------|
-| `opencode session resume <id>` | 打开 TUI，直接进入该会话的交互模式 |
-| `opencode session resume <id> "消息"` | CLI 一次性模式：发送消息、输出进度摘要+回复、退出 |
+| 事项 | 处理方式 |
+|------|----------|
+| resume（继续开发） | 主路径是 TUI 内切换会话（上游已有，`<leader>1-9` 快速切换）；一次性发消息用上游 `session.prompt` API 或 `opencode run` |
+| create / get / active / compact / interrupt | 上游 REST API 已完备，TUI 与 `ocsm` 直接调用，不包装重复命令 |
+| rename | 不提供。上游无标题更新 API，标题自动生成（见 2.4 取舍） |
+| review | 并入 `ocsm workflow <id> checklist\|comprehension\|stats` |
 
 **workflow 命令说明**：
 
-工作流的推进（进入阶段、确认、回退）通过 **TUI 内自然语言对话**完成，不走 CLI。开发者只需在对话中说"需求确认了"、"回到设计阶段"等，Agent 按规则执行。CLI 的 `workflow` 仅用于**从外部查看状态**：
+工作流的推进（进入阶段、确认、回退）通过 **TUI 内自然语言对话**完成（Agent 调用插件工具，见 4.1），不走 CLI。开发者只需在对话中说"需求确认了"、"回到设计阶段"等。`ocsm workflow` 仅用于**从外部查看状态**：
 
 | 子命令 | 行为 |
 |--------|------|
@@ -686,27 +716,24 @@ opencode session stats      [<sessionID>] [--project <name>] [--group <id>] [--t
 | `comprehension` | 列出理解确认记录，支持 `--unconfirmed` 过滤未确认片段 |
 | `stats` | 查看当前会话的采纳率、迭代轮次、覆盖率等质量指标 |
 
-### 5.2 处理器实现模式
+### 5.2 ocsm 实现模式
 
-所有处理器遵循 `packages/cli/src/commands/handlers/api.ts` 的模式：
+`ocsm` 是独立安装的二进制（我们自己的包），组合两个数据源：
 
 ```mermaid
 sequenceDiagram
-    participant CLI as CLI Handler
-    participant Daemon as Daemon.Service
-    participant API as REST API
-    participant DB as SQLite
+    participant CLI as ocsm
+    participant PDB as 插件库<br/>session-mgmt.db
+    participant Daemon as Daemon REST API<br/>（上游，不修改）
 
-    CLI->>Daemon: daemon.transport()
-    Note over Daemon: 自动检查/启动 daemon
-    Daemon-->>CLI: { url, headers }
-    CLI->>API: fetch(url + path, headers)
-    API->>DB: query
-    DB-->>API: result
-    API-->>CLI: JSON response
-    CLI->>CLI: format output
+    CLI->>PDB: 读 workflow/tags/质量/组数据（只读）
+    PDB-->>CLI: 定制数据
+    CLI->>Daemon: SDK 调 session.list/get（cost/tokens）
+    Daemon-->>CLI: 核心数据
+    CLI->>CLI: 按 sessionID 关联聚合、格式化
     CLI-->>User: 表格/文本/JSON
 ```
+
 
 ---
 
@@ -722,15 +749,15 @@ sequenceDiagram
 
 ```mermaid
 graph LR
-    subgraph Source["数据来源（已有/新增字段）"]
-        WF["workflow.transitions[]<br/>时间戳"]
-        REV["workflow.stages.*.revision<br/>迭代次数"]
-        COST["cost<br/>费用（已有）"]
-        TOK["tokens_*<br/>Token（已有）"]
-        DIFF["summary_additions/deletions<br/>代码量（已有）"]
-        ACCT["account_id<br/>开发者（新增）"]
-        QM["workflow.quality<br/>质量指标（新增）"]
-        RV["workflow.stages.review<br/>审查数据（新增）"]
+    subgraph Source["数据来源（上游已有 + 插件库）"]
+        WF["workflow.transitions[]<br/>时间戳（插件库）"]
+        REV["workflow.stages.*.revision<br/>迭代次数（插件库）"]
+        COST["cost<br/>费用（上游已有）"]
+        TOK["tokens_*<br/>Token（上游已有）"]
+        DIFF["代码量<br/>（上游已有）"]
+        ACCT["account/组/组织映射<br/>（插件库 + 上游 active_org_id）"]
+        QM["workflow.quality<br/>质量指标（插件库）"]
+        RV["workflow.stages.review<br/>审查数据（插件库）"]
     end
 
     subgraph Metrics["统计指标"]
@@ -808,10 +835,10 @@ AI 使用: 对话 47轮 | $0.36 | 85K tokens
 趋势: 需求迭代 ↓1.5→0.9 | AI效率 ↑$0.04→$0.02/行 | 返工率 ↓10%→6%
 ```
 
-**团队级**：
+**组织级**：
 
 ```
-👥 团队 "Engineering" - 最近 30 天
+👥 组织 "Engineering" - 最近 30 天
 成员: 8 | 总会话: 156 | 完成率: 82%
 
   alice  24会话 92%完成 $12.30 2.1天/会话 采纳率31% 覆盖率84%
@@ -819,8 +846,8 @@ AI 使用: 对话 47轮 | $0.36 | 85K tokens
   carol  22会话 85%完成 $11.20 2.3天/会话 采纳率29% 覆盖率79%
 
 质量:
-  团队平均采纳率: 34% (健康)  |  超阈值(>45%)成员: 1/8 ⚠
-  团队返工率: 7%  |  变更失败率: 3%
+  组织平均采纳率: 34% (健康)  |  超阈值(>45%)成员: 1/8 ⚠
+  组织返工率: 7%  |  变更失败率: 3%
   触达迭代上限会话: 2/156 (1.3%)
 
 趋势: 需求迭代 ↓1.3→0.8 | AI效率 ↑$0.03→$0.02/行 | 返工率 ↓12%→7%
@@ -850,23 +877,23 @@ AI 使用: 对话 47轮 | $0.36 | 85K tokens
 
 ### 7.1 实现机制
 
-工作流约束不修改 OpenCode 核心引擎，而是通过**会话级系统提示（system prompt）**注入规则。OpenCode 在创建会话时，将工作流规则作为系统提示的一部分下发给 LLM，Agent 在对话中遵循这些规则。
+工作流约束不修改 OpenCode 核心引擎，而是通过**插件 + 会话级系统提示（system prompt）**实现：插件通过上游已有的 `experimental.chat.system.transform` hook（上游在组装 system prompt 时触发，见 2.4），每轮将工作流规则与当前状态注入 system prompt；状态变更通过插件注册的工具完成，写入插件库。
 
 ```mermaid
 flowchart TD
-    subgraph Session["会话创建"]
-        SP["System Prompt 组装"]
-        SP -->|"注入"| RULES["# Workflow 规则<br/>+ 当前 WorkflowState"]
+    subgraph Turn["每轮对话"]
+        SP["上游 System Prompt 组装"]
+        SP -->|"触发 system.transform hook"| RULES["插件注入：<br/># Workflow 规则<br/>+ 当前 WorkflowState"]
     end
 
     subgraph Agent["Agent 循环"]
         LLM["LLM（遵循规则）"]
         ACTION["Agent 执行动作"]
-        WRITE["通过 session.update<br/>写入 WorkflowState"]
+        WRITE["调用插件工具<br/>workflow_advance /<br/>comprehension_confirm ..."]
     end
 
     subgraph Storage["持久化"]
-        DB["SQLite<br/>SessionTable.workflow"]
+        DB["插件 SQLite<br/>workflow_session.workflow"]
     end
 
     RULES --> LLM
@@ -877,9 +904,9 @@ flowchart TD
 ```
 
 关键点：
-- **规则注入**：会话创建时，OpenCode 从 `session-workflow` schema 读取当前状态，将规则 + 当前状态一起注入 system prompt
-- **状态持久化**：Agent 通过 `session.update` API 写入 `WorkflowState`（阶段变更、审查清单、理解记录），不依赖 LLM 记忆
-- **状态同步**：每次对话轮次开始时，OpenCode 将最新的 `WorkflowState` 刷新到 system prompt 中，确保 Agent 始终知道当前进度
+- **规则注入**：上游每一步 Agent 循环都会重新组装 system prompt 并触发 `experimental.chat.system.transform`，插件在此 hook 中从插件库读取当前会话的 `WorkflowState`，将规则 + 当前状态追加到 `output.system`——无需修改 `prompt.ts`
+- **状态持久化**：Agent 通过插件工具（4.1）写入 `WorkflowState`（阶段变更、审查清单、理解记录），不依赖 LLM 记忆
+- **状态同步**：每轮 hook 触发时读取的都是插件库中的最新状态，确保 Agent 始终知道当前进度
 
 ### 7.2 实际效果：开发者看到什么
 
@@ -991,10 +1018,11 @@ Agent:  ⚠ 此段代码已达到 3 轮 AI 迭代上限。
 
 | 风险 | 措施 |
 |------|------|
-| Agent 忘记当前阶段 | 每轮对话开始时将最新 `WorkflowState` 刷新到 system prompt |
-| Agent 自行推进阶段 | 规则重复强调"绝不自行判断"，且 `approve` 操作在服务端校验：只有开发者回复中包含明确确认词（"确认"/"approve"/"ok"）时才执行 |
-| Agent 跳过审查交互 | 审查阶段是独立的系统提示块，规则优先级最高；提交门禁在服务端二次校验 `ReviewChecklist` |
-| Agent 批量跳过逐段确认 | **服务端防篡改**：`session.update` 处理 `workflow.stages.review.comprehension` 时，单次请求只允许更新一个 `ComprehensionRecord` 的 `developerConfirmed` 字段。Payload 中必须携带 `codeSegmentId` 精确匹配，防止 LLM 在开发者回复"看起来不错"时将全部片段批量设为 `confirmed` |
+| Agent 忘记当前阶段 | 每轮 `system.transform` hook 将最新 `WorkflowState` 刷新到 system prompt |
+| Agent 自行推进阶段 | 规则重复强调"绝不自行判断"，且 `workflow_advance` 工具在服务端（插件 handler）校验：只有开发者回复中包含明确确认词（"确认"/"approve"/"ok"）时才执行成功 |
+| Agent 跳过审查交互 | 审查阶段是独立的系统提示块，规则优先级最高；`review_submit` 工具在服务端二次校验 `ReviewChecklist`，未全部通过则拒绝 |
+| Agent 批量跳过逐段确认 | **服务端防篡改**：`comprehension_confirm` 工具单次调用只接受一个 `codeSegmentId`，批量传入直接报错，防止 LLM 在开发者回复"看起来不错"时将全部片段批量设为 `confirmed` |
+| Agent 绕过门禁直接提交 | `tool.execute.before` hook 拦截 `bash` 中的 `git commit`，未通过 `commit_gate_check` 时抛错阻断——这是插件层的硬约束，不依赖 LLM 自觉 |
 | LLM 上下文窗口不足 | 工作流状态压缩在 JSON 中，system prompt 中只注入当前阶段规则，历史规则不重复注入 |
 
 ### 7.4 规则全文
@@ -1065,41 +1093,46 @@ Agent:  ⚠ 此段代码已达到 3 轮 AI 迭代上限。
 
 ## 8. 文件清单
 
-### 修改的现有文件
+### 上游 OpenCode（零修改）
 
-| 文件 | 变更 |
-|------|------|
-| `packages/cli/src/commands/commands.ts` | 添加 `session` 命令组 |
-| `packages/cli/src/index.ts` | 注册 session 处理器映射 |
-| `packages/schema/src/session.ts` | `Info` 添加 tags、status、workflow |
-| `packages/core/src/session/sql.ts` | `SessionTable` 添加 tags、status、workflow、account_id |
-| `packages/core/src/session.ts` | `Interface` 添加 `update` |
-| `packages/protocol/src/groups/session.ts` | 添加 `session.update`，扩展 `session.create` |
-| `packages/server/src/handlers/session.ts` | 添加 `session.update` 处理器 |
-| `packages/core/src/account/sql.ts` | `AccountTable` 添加 `group_id` |
+不修改、不新增任何上游包（`packages/*`）内的文件。仅依赖上游已有的插件 Hook 体系与 session REST API（见 2.4、4.2）。
 
-### 新建的文件
+### 插件包 `plugins/session-mgmt/`（新建，我们拥有）
 
 | 文件 | 用途 |
 |------|------|
-| `packages/schema/src/session-workflow.ts` | WorkflowState schema |
-| `packages/cli/src/commands/handlers/session/format.ts` | 格式化工具 |
-| `packages/cli/src/commands/handlers/session/list.ts` | 列表 |
-| `packages/cli/src/commands/handlers/session/create.ts` | 创建 |
-| `packages/cli/src/commands/handlers/session/get.ts` | 详情 |
-| `packages/cli/src/commands/handlers/session/rename.ts` | 重命名 |
-| `packages/cli/src/commands/handlers/session/delete.ts` | 删除 |
-| `packages/cli/src/commands/handlers/session/resume.ts` | 恢复/发送消息 |
-| `packages/cli/src/commands/handlers/session/active.ts` | 活跃会话 |
-| `packages/cli/src/commands/handlers/session/compact.ts` | 压缩 |
-| `packages/cli/src/commands/handlers/session/interrupt.ts` | 中断 |
-| `packages/cli/src/commands/handlers/session/tag.ts` | 标签（含增/删/列） |
-| `packages/cli/src/commands/handlers/session/workflow.ts` | 工作流 + 审查 |
-| `packages/cli/src/commands/handlers/session/stats.ts` | 统计 |
-| `packages/server/src/handlers/session-stats.ts` | 统计 API |
-| `packages/cli/test/commands/handlers/session/format.test.ts` | 单元测试 |
-| `packages/core/src/group/sql.ts` | GroupTable 定义 |
-| `packages/core/src/group.ts` | Group 接口 |
+| `src/index.ts` | 插件入口：注册 hooks（`experimental.chat.system.transform`、`tool`、`tool.execute.before/after`、`chat.message`、`event`） |
+| `src/schema/workflow.ts` | WorkflowState schema（含 ReviewChecklist、ComprehensionRecord、QualityMetrics） |
+| `src/db/schema.ts` | 插件库表定义（workflow_session、group、account_group） |
+| `src/db/index.ts` | 插件 SQLite 初始化与迁移（bun:sqlite，WAL 模式） |
+| `src/prompt.ts` | system prompt 注入片段：规则全文 + 当前状态压缩 JSON |
+| `src/tools/workflow.ts` | `workflow_advance` / `workflow_revisit` / `commit_gate_check` 工具 |
+| `src/tools/review.ts` | `comprehension_confirm` / `comprehension_ask` / `review_submit` 工具（含防批量确认校验） |
+| `src/tools/quality.ts` | `quality_report` 工具 + 迭代计数逻辑 |
+| `src/gate.ts` | `tool.execute.before` 提交门禁拦截（git commit 阻断） |
+| `src/stats.ts` | 统计聚合查询（供插件本地接口与 ocsm 复用） |
+| `test/*.test.ts` | 工具校验逻辑、合并语义、门禁的单元测试 |
+| `package.json` | 插件包定义（入口、依赖） |
+
+### 独立 CLI `tools/ocsm/`（新建，我们拥有）
+
+| 文件 | 用途 |
+|------|------|
+| `src/index.ts` | 入口与命令注册 |
+| `src/commands/tag.ts` | 标签管理（读写插件库） |
+| `src/commands/workflow.ts` | 工作流状态外部查看（含 checklist/comprehension/stats） |
+| `src/commands/stats.ts` | 四级统计（组合插件库 + 上游 session API） |
+| `src/commands/list.ts` | 会话列表（上游 list + 插件库 status/tag 过滤） |
+| `src/api.ts` | 上游 opencode SDK 封装 |
+| `test/*.test.ts` | 格式化与聚合的单元测试 |
+
+### 部署配置
+
+项目级 `opencode.json`（或等效配置）启用插件，无需改动上游：
+
+```json
+{ "plugin": ["./plugins/session-mgmt"] }
+```
 
 ---
 
@@ -1110,93 +1143,94 @@ gantt
     title 实施路线图
     dateFormat YYYY-MM-DD
 
-    section Phase 1: CLI 子命令
-    命令定义 (commands.ts)           :p1a, 2026-08-01, 1d
-    处理器注册 (index.ts)            :p1b, after p1a, 1d
-    格式化工具 (format.ts)           :p1c, after p1a, 1d
-    基础处理器 (list/create/get)      :p1d, after p1c, 2d
-    管理处理器 (rename/delete/active) :p1e, after p1d, 2d
-    交互处理器 (prompt/compact/interrupt/context) :p1f, after p1e, 2d
+    section Phase 1: 插件骨架
+    插件包脚手架 + config 加载验证      :p1a, 2026-08-01, 1d
+    插件库 schema + 初始化/迁移          :p1b, after p1a, 1d
+    WorkflowState schema                 :p1c, after p1a, 1d
+    system.transform 注入（规则+状态）    :p1d, after p1b, 2d
 
-    section Phase 2: 数据模型 + 工作流
-    WorkflowState schema             :p2a, after p1f, 1d
-    SQL 列 + Schema 字段             :p2b, after p2a, 1d
-    GroupTable + Account 关联         :p2b2, after p2b, 1d
-    Core update 方法                  :p2c, after p2b2, 1d
-    Protocol + Server 端点            :p2d, after p2c, 2d
-    CLI 子命令 (tag/workflow) :p2e, after p2d, 2d
+    section Phase 2: 工具与门禁
+    workflow 工具 (advance/revisit)       :p2a, after p1d, 2d
+    审查工具 (comprehension/review_submit) :p2b, after p2a, 2d
+    迭代计数 + quality_report             :p2c, after p2b, 1d
+    提交门禁 (tool.execute.before)        :p2d, after p2c, 1d
 
-    section Phase 3: 统计分析
-    统计 API (session-stats.ts)       :p3a, after p2e, 2d
-    CLI stats 子命令                  :p3b, after p3a, 2d
-    list 过滤 (--status/--tag)        :p3c, after p3b, 1d
-    组级聚合统计                      :p3d, after p3c, 1d
+    section Phase 3: 统计与 ocsm
+    统计聚合查询 (stats.ts)               :p3a, after p2d, 2d
+    ocsm: tag/workflow/list               :p3b, after p3a, 2d
+    ocsm: stats（四级 + 质量维度）          :p3c, after p3b, 2d
+    CI 回写通道 + 组/组织聚合              :p3d, after p3c, 1d
 ```
 
-### Phase 1: CLI session 子命令
+### Phase 1: 插件骨架
 
-1. `commands.ts` 添加命令定义
-2. `index.ts` 注册处理器
-3. `format.ts` 格式化工具
-4. 处理器：list → create → get → rename → delete → active → compact → interrupt → tag → resume → workflow → stats
+1. 插件包脚手架，`config.plugin` 加载验证（确认 hook 在 daemon 内触发）
+2. 插件库 schema（workflow_session、group、account_group）+ 初始化/迁移
+3. `schema/workflow.ts`（含 ReviewChecklist、ComprehensionRecord、QualityMetrics）
+4. `system.transform` hook：规则全文 + 当前状态压缩 JSON 注入
 
-### Phase 2: 数据模型 + 工作流
+### Phase 2: 工具与门禁
 
-1. `session-workflow.ts` schema（含 ReviewChecklist、QualityMetrics）
-2. `schema/session.ts` 新字段
-3. `core/session/sql.ts` 新列
-4. `core/group/sql.ts` GroupTable 新建
-5. `core/account/sql.ts` 添加 group_id
-6. `core/session.ts` update 方法
-7. `protocol/groups/session.ts` update 端点
-8. `server/handlers/session.ts` 处理器（含 QualityMetrics 外部回写路径）
-9. CLI：tag、workflow（含阶段操作 + 审查子命令）
+1. `workflow_advance` / `workflow_revisit` 工具（含开发者确认校验）
+2. `comprehension_confirm` / `comprehension_ask` / `review_submit` 工具（防批量确认、清单二次校验）
+3. 迭代计数（`tool.execute.after`）+ `quality_report` 工具
+4. 提交门禁：`tool.execute.before` 拦截未过审查的 `git commit`
 
-### Phase 3: 统计分析
+### Phase 3: 统计与 ocsm
 
-1. `server/handlers/session-stats.ts`（含质量维度聚合）
-2. CLI：stats（含 --group 选项）
-3. list 过滤
-4. 组级聚合统计
+1. `stats.ts` 统计聚合（插件库 + 上游 session API 组合）
+2. `ocsm`：tag、workflow（含 checklist/comprehension/stats）、list 过滤
+3. `ocsm`：stats 四级输出（会话/项目/组/组织）+ 质量维度
+4. CI 回写通道（直连插件库 WAL / 本地接口）+ 组/组织聚合
 
 ---
 
-## 10. 向后兼容性
+## 10. 升级兼容性（上游同步）
 
-- 所有新增 SQL 列有默认值，不影响现有行
-- `session.update` 是新增端点，不影响现有消费者
-- `Session.Info` 新增字段均为 `optional`，现有解码不受影响
-- CLI 子命令纯新增，不修改现有命令
-- TUI 通过 SDK 调用 API，新增字段 optional，不受影响
+本方案的核心目标是**让后续同步 OpenCode 上游更新没有合并冲突**：
+
+- **上游零修改**：不改任何上游包内文件，上游版本升级等同正常更新，无核心文件冲突、无核心 schema 迁移对齐负担
+- **数据独立**：定制数据全部在插件自有 SQLite，表结构迁移由插件自管，与上游 schema 演进互不影响；对上游会话仅以 `sessionID` 逻辑关联
+- **接口稳定面小**：仅依赖上游插件 Hook 与 session REST API 两类公开接口
+- **experimental hook 风险受控**：`experimental.chat.system.transform` 若被上游调整签名，影响面仅插件包 `src/prompt.ts` 一处适配层，升级后回归测试即可，成本远低于核心合并
+- **上游行为不变**：TUI、上游 CLI、上游 API 消费者均不受影响；卸载插件（移除 `config.plugin` 条目）即完全还原
 
 ---
 
 ## 11. 安全与隐私
 
-- 统计数据存储在本地 SQLite，不上传外部服务器
-- 团队级分析通过本地 `AccountTable.active_org_id` 聚合
+- 统计数据存储在本地插件 SQLite，不上传外部服务器
+- 组织级分析只读本地 `AccountStateTable.active_org_id` 聚合
 - 统计的是流程数据（时间、次数、费用），不记录代码内容
-- API 仅本地可访问（Daemon 绑定 `127.0.0.1`）
+- 上游 API 与插件本地接口仅本地可访问（Daemon 绑定 `127.0.0.1`）
 
 ---
 
 ## 12. 验证方式
 
-所有命令通过 `daemon.transport()` 自动启动 daemon，无需手动操作。
+上游命令与 `ocsm` 均通过 daemon 自动启动机制工作，无需手动操作。
+
 
 ```bash
+# 上游命令（复用，验证未被定制影响）
 opencode session list
-opencode session create --title "用户认证模块"
-opencode session tag <id> --add feature auth
-opencode session workflow <id>
-opencode session workflow <id> checklist
-opencode session resume <id>
-opencode session stats <id>
-opencode session stats --project "用户系统" --period 7d
-opencode session stats --group <id> --period 30d
-opencode session stats --team --period 30d --json
+opencode stats --days 7
+
+# 定制命令（ocsm）
+ocsm tag <id> --add feature auth
+ocsm workflow <id>
+ocsm workflow <id> checklist
+ocsm workflow <id> comprehension --unconfirmed
+ocsm stats <id>
+ocsm stats --project "用户系统" --period 7d
+ocsm stats --group <id> --period 30d
+ocsm stats --org --period 30d --json
+
+# TUI 内对话验证（工作流推进、理解确认、提交门禁按 7.2 场景走通）
+opencode
 ```
 
-单元测试：`packages/cli/test/commands/handlers/session/format.test.ts`（遵循 `test/cli/account.test.ts` 模式）。
+单元测试：插件包 `plugins/session-mgmt/test/`（工具校验、防批量确认、合并语义、门禁拦截）、`tools/ocsm/test/`（格式化与聚合）。
 
-现有测试回归：`packages/core/test/session-*.test.ts`、`packages/tui/test/component/dialog-session-list.test.ts`、`packages/sdk/js` 测试。
+上游回归：因上游零修改，只需确认插件启用/卸载两种状态下上游既有测试（`packages/core/test/session-*.test.ts`、`packages/tui/test/`、`packages/sdk/js`）均通过。
+
