@@ -68,3 +68,55 @@ export interface WorkflowState {
   commit: CommitGate
   quality: QualityMetrics
 }
+
+/** 五个阶段键（提交门禁要求全部 approved，§3.4）。 */
+export const STAGE_ORDER = ["requirements", "design", "implementation", "testing", "review"] as const
+
+export type StageName = (typeof STAGE_ORDER)[number]
+
+/** 阶段中文名（供工具回显与统计展示）。 */
+export const STAGE_LABELS: Record<StageName, string> = {
+  requirements: "需求分析",
+  design: "设计",
+  implementation: "编码",
+  testing: "测试",
+  review: "审查",
+}
+
+function createStageRecord(): StageRecord {
+  return { status: "not_started", revision: 0, transitions: [] }
+}
+
+function createReviewStageRecord(): ReviewStageRecord {
+  return {
+    ...createStageRecord(),
+    checklist: {
+      businessIntent: false,
+      logicExplainable: false,
+      behaviorVerifiable: false,
+      designRationale: false,
+      acceptanceRate: null,
+    },
+    comprehension: [],
+  }
+}
+
+/** 会话开始时初始化的全新工作流状态（所有阶段 not_started，§7.4 规则 1）。 */
+export function createWorkflowState(): WorkflowState {
+  return {
+    stages: {
+      requirements: createStageRecord(),
+      design: createStageRecord(),
+      implementation: createStageRecord(),
+      testing: createStageRecord(),
+      review: createReviewStageRecord(),
+    },
+    commit: { status: "blocked", blocked_by: [...STAGE_ORDER] },
+    quality: {
+      acceptanceRate: null,
+      iterationCount: null,
+      reworkRate: null,
+      testCoverage: null,
+    },
+  }
+}
