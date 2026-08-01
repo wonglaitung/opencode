@@ -1,0 +1,13 @@
+{
+  "name": "opencode-session-mgmt",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "test": "bun test packages/*/test",
+    "build:plugin": "bun build packages/plugin/src/index.ts --outdir dist/plugin --target bun",
+    "build:cli": "bun build packages/cli/src/index.ts --compile --outfile dist/opencode-sm",
+    "build:collector": "bun build packages/collector/src/index.ts --outdir dist/collector --target bun"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "opencode-session-mgmt",
+  "version": "0.0.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "peerDependencies": {
+    "@opencode-ai/plugin": "*"
+  },
+  "dependencies": {
+    "sm-shared": "workspace:*"
+  }
+}
