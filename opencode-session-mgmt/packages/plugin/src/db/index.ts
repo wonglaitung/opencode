@@ -5,7 +5,7 @@
  * 统一使用 `?` 位置绑定（bun:sqlite）。
  */
 import { Database } from "bun:sqlite"
-import { mkdirSync } from "node:fs"
+import { existsSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
 import {
   createWorkflowState,
@@ -41,6 +41,17 @@ export class Store {
   /** 供测试使用：内存库。 */
   static memory(): Store {
     const db = new Database(":memory:")
+    const store = new Store(db)
+    store.migrate()
+    return store
+  }
+
+  /** 仅当 <directory>/.opencode/session-mgmt.db 已存在时打开（不创建）；否则返回 null。供只读跨项目查看。 */
+  static openIfExists(directory: string): Store | null {
+    const path = join(directory, ".opencode", "session-mgmt.db")
+    if (!existsSync(path)) return null
+    const db = new Database(path, { create: false })
+    db.exec("PRAGMA journal_mode = WAL;")
     const store = new Store(db)
     store.migrate()
     return store
@@ -151,10 +162,11 @@ export class Store {
   // ---- 汇报 outbox（收集服务不可用时的本地缓冲，§2.4 风险与取舍） ----
 
   enqueueReport(report: SessionReport): void {
-    this.db.query("INSERT INTO outbox (payload, created_at, sent) VALUES (?, ?, 0)").run(
-      JSON.stringify(report),
-      Date.now(),
-    )
+    // 同一会话仅保留最新一条待发送汇报（幂等去重，避免每消息堆积，§2.4）
+    this.db.query("DELETE FROM outbox WHERE session_id = ? AND sent = 0").run(report.sessionID)
+    this.db
+      .query("INSERT INTO outbox (session_id, payload, created_at, sent) VALUES (?, ?, ?, 0)")
+      .run(report.sessionID, JSON.stringify(report), Date.now())
   }
 
   pendingReports(): OutboxRow[] {

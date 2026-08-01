@@ -70,8 +70,12 @@ export function createReporter(
           })
           if (!res.ok) {
             if (res.status >= 400 && res.status < 500) {
-              // 4xx 为永久失败（如 payload 非法），重试无益：丢弃以免堵塞后续汇报
-              console.warn(`[session-mgmt] 汇报被收集服务拒绝（HTTP ${res.status}），丢弃 outbox#${item.id}`)
+              // 4xx 为永久失败，重试无益：丢弃以免堵塞后续汇报
+              const hint =
+                res.status === 401 || res.status === 403
+                  ? "（鉴权失败，请核对 identity.json 的 collector_url）"
+                  : "（payload 非法）"
+              console.warn(`[session-mgmt] 汇报被收集服务拒绝 HTTP ${res.status}${hint}，丢弃 outbox#${item.id}`)
               store.markSent(item.id)
               continue
             }
