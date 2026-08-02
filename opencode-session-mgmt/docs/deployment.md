@@ -43,8 +43,8 @@
 | 开发者 | 装 ① OpenCode、启用 ② 插件、装 ③ CLI、跑一次 `opencode-sm init` | 第 1–4、6 章 |
 | 组长 / 领导 | 装 ③ CLI、跑一次 `opencode-sm init`（至少配好收集服务地址），即可用 `opencode-sm stats --group/--org` 查远端聚合统计（无需装 OpenCode/插件） | 4.2、6.3 节 |
 
-> **依赖互联网的部分只有三处**：① OpenCode 本体的安装、② 插件/CLI 的 npm 依赖、① 的大模型。
-> 本项目自己的代码（插件、CLI、收集服务）**完全不需要外网**。内网隔离环境怎么把这三处搬进去，见第 9 章。
+> **依赖互联网的部分只有三处**：① OpenCode 本体的安装、② 插件的 npm 依赖（`bun install`）、③ 大模型。
+> CLI 经 `pack:cli` 打成**自包含压缩包**，目标机安装**不需要任何 npm 依赖**。本项目自己的代码（插件、CLI、收集服务）**完全不需要外网**。内网隔离环境怎么把这三处搬进去，见第 9 章。
 
 ---
 
@@ -53,7 +53,7 @@
 | 工具 | 用途 | 检查命令 | 说明 |
 |------|------|----------|------|
 | **bun** ≥ 1.1 | 运行插件源码、构建、跑收集服务 | `bun --version` | 核心依赖。安装：`curl -fsSL https://bun.sh/install \| bash` |
-| **node + npm**（可选） | 用 npm 装 OpenCode / CLI | `node -v && npm -v` | 有 bun 时可不要 |
+| **node + npm**（可选） | 用 npm 装 OpenCode、`npm install -g` 装 CLI 压缩包 | `node -v && npm -v` | **运行时**不需要 node（CLI 压缩包自包含）；只是安装动作要 npm，也可手动解包把二进制放进 PATH |
 | **git** | 拉取本项目代码 | `git --version` | |
 | **docker + compose**（仅管理员） | 部署收集服务 | `docker --version` | 不用 docker 也能跑（见 5.3 节） |
 | **大模型提供方** | OpenCode 的大脑 | — | 公司账号的 API key，或内网自建模型网关（9.3 节） |
@@ -219,11 +219,26 @@ opencode-sm --help
 
 **正式发布后**（团队构建一次，开发者直接装）：
 
+推荐用打包脚本生成**可用 `npm install` 安装的压缩包**——包内是自包含单二进制，目标机**无需 node/bun**：
+
 ```bash
-# 团队侧构建单文件二进制（不需要目标机装 bun）
-bun run build:cli        # 产出 dist/opencode-sm
-# 把 dist/opencode-sm 拷到 PATH（如 /usr/local/bin/）即可，或发布到内网 npm：
-npm i -g opencode-sm
+# 团队侧（联网构建机，按目标平台各打一份）：
+bun run pack:cli                       # 默认当前平台 → dist/opencode-sm-<版本>-<平台>.tgz
+bash scripts/pack-cli.sh windows-x64   # 交叉编译其它平台：darwin-arm64 / darwin-x64 / windows-x64 / linux-arm64
+VERSION=0.1.0 bash scripts/pack-cli.sh # 覆盖版本号（默认读 packages/cli/package.json）
+
+# 开发者侧（把对应平台的 tgz 拷过去后；文件名里的 0.1.0 为当前版本，以 packages/cli/package.json 实际版本为准）：
+npm install -g ./opencode-sm-0.1.0-linux-x64.tgz
+opencode-sm --help                     # 全局可用
+```
+
+> 压缩包是**平台相关**的：一个 tgz 对应一个 OS/CPU（包内 `os`/`cpu` 字段会让 npm 在装错平台时报错提示）。多平台就各打各的、各装各的。
+
+也可以只出裸二进制、手动放进 PATH（不经 npm）：
+
+```bash
+bun run build:cli        # 产出 dist/opencode-sm（单文件，目标机无需 bun）
+# 拷到 PATH，如 /usr/local/bin/opencode-sm
 ```
 
 ### 4.2 配置身份：opencode-sm init（每台机器一次）
@@ -406,11 +421,12 @@ bun run typecheck    # 四包严格类型检查
 | 现象 | 原因与处理 |
 |------|-----------|
 | TUI 里 AI 完全不提工作流 | 插件没加载。检查 `opencode.json` 的 `plugin` 路径是否相对 opencode.json 正确、该目录下有 `package.json`、且已 `bun install`。 |
-| `opencode-sm: command not found` | CLI 没装好。开发期在 `packages/cli` 下 `bun link`；或用构建出的 `dist/opencode-sm` 放进 PATH。从源码跑还需 PATH 里有 `bun`。 |
+| `opencode-sm: command not found` | CLI 没装好。正式用：`npm install -g ./opencode-sm-<版本>-<平台>.tgz`（见 4.1 节）；开发期在 `packages/cli` 下 `bun link`；或把构建出的 `dist/opencode-sm` 放进 PATH。从源码跑还需 PATH 里有 `bun`。 |
 | 统计里费用显示 `N/A` | 上游 daemon 不可达（没在跑 / 会话没有 usage 数据）。工作流/质量数据不受影响，仍读本机库。 |
 | 组/组织统计报错或为空 | 收集服务不可达，或 `identity.json` 里 `collector_url` 写错、组名与别人不一致。先 `curl {collector_url}/healthz`。 |
 | 收集服务挂了会丢数据吗 | 不会。插件在本地缓冲未送达的汇报（同一会话只留最新一条），服务恢复后自动补推。 |
 | 改了 `opencode-sm init` 后历史统计没变 | 正常。身份是**汇报快照**，只影响此后的汇报，历史归属不追溯。 |
+| 先用了插件（已建库/走过会话）才跑 `init` | 不会出错。身份只用于 **account 打标**与**向收集服务汇报**，建库、五阶段门禁、理解确认、会话/项目级统计都与身份无关；无身份时打标静默跳过、不产生汇报。补配 `init` 后：本地数据全在；`account` 会在该会话**下次活动时自动补打**（仅当原为空）；但 `init` 之前已结束、此后再没活动的会话不补汇报、不进组/组织统计。建议次序仍是先 `init` 再用。 |
 | 想彻底还原成原生 OpenCode | 删掉 `opencode.json` 里的 `plugin` 条目即可；本项目数据都在插件自有库与收集服务，不碰上游任何数据。 |
 | 收集服务端口/库路径要改 | 见 5.3 节 环境变量 `PORT` / `OPENCODE_SM_COLLECTOR_DB`。 |
 | 会话能改名吗 | 不能。上游无标题更新 API，标题自动生成；用标签（`opencode-sm tag`）和会话 ID 来辨认。 |
@@ -493,7 +509,7 @@ brew fetch --bottle-tag=... anomalyco/tap/opencode
 
 > 具体哪种最省事取决于内网基线操作系统；原则就是把「安装器 + 它要下载的二进制/包」一起在联网区备齐再拷入。
 
-**插件依赖**（`@opencode-ai/plugin`、`@opencode-ai/sdk`、`zod` 等）：
+**插件依赖**（`@opencode-ai/plugin`、`@opencode-ai/sdk` 等）：
 
 ```bash
 # 联网区：装好后把整个含 node_modules 的仓库目录打包
@@ -530,7 +546,9 @@ tar xzf opencode-session-mgmt.tgz
 
 ```bash
 # 联网构建机：
-bun run build:cli          # → dist/opencode-sm（单文件二进制，目标机无需 bun）
+# CLI 推荐打成 npm 安装包（内网逐机 npm install -g 即可，目标机无需 node/bun）
+bun run pack:cli           # → dist/opencode-sm-<版本>-<平台>.tgz（按内网平台打，多平台见 4.1 节）
+# 或仅出裸二进制：bun run build:cli → dist/opencode-sm（单文件，目标机无需 bun）
 bun run build:collector    # → dist/collector/
 
 # 收集服务做成镜像后离线搬运：
@@ -571,6 +589,7 @@ docker save opencode-sm-collector -o collector-image.tar
 | `bun test` / `bun run typecheck` | 测试 / 四包严格类型检查 |
 | `bun run build:plugin` | `dist/plugin/`（插件编译为 JS，屏蔽目标机 bun 版本差异） |
 | `bun run build:cli` | `dist/opencode-sm`（单文件二进制） |
+| `bun run pack:cli` | `dist/opencode-sm-<版本>-<平台>.tgz`（可 `npm install -g` 的安装包；`bash scripts/pack-cli.sh <平台>` 交叉编译多平台） |
 | `bun run build:collector` | `dist/collector/`（供 Dockerfile COPY） |
 
 **进一步阅读**：设计原理 [`session-management.md`](session-management.md)；上游同步流程 [`upstream-sync.md`](upstream-sync.md)。
