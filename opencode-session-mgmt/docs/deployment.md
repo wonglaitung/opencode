@@ -184,6 +184,22 @@ opencode        # 进入 TUI
 若 AI 调用了 `commit_gate_check` / `workflow_advance` 之类工具并回显出「五个阶段、当前均 not_started」，说明插件已生效。
 同时该项目目录下会出现本地库：`<项目>/.opencode/session-mgmt.db`（插件自动建表，无需手动操作）。
 
+### 3.4 桌面版 / IDE 扩展同样适用（插件在服务端，与界面无关）
+
+OpenCode 除 TUI 外还有**桌面版**和 **IDE 扩展**。它们与 TUI 一样，都只是连到同一个本地服务端（Daemon）的客户端外壳；而本插件经 `config.plugin` 加载、**运行在服务端进程内**，所有 Hook（system prompt 注入、工作流工具、`git commit` 门禁、迭代计数、account 打标与汇报）都在服务端触发——**与用哪个界面无关**。因此：
+
+- TUI 里能用的一切（五阶段门禁、逐段理解确认、强制提交、统计），在桌面版 / IDE 扩展里**同样生效**，无需额外配置。
+- 官方文档确认 `opencode.json`（含 `plugin`）在 TUI / 桌面 / IDE 之间共享，插件体系是跨界面共用的一套。
+- 配套的 `opencode-sm` CLI、本机插件库、收集服务不依赖界面，照常工作。
+
+**三个注意点**：
+
+1. **前提**：桌面版 / IDE 要连到（或运行）那份加载了插件的服务端，即使用同一份 `opencode.json`；若连的是另一台远程服务端，那台也要配插件。
+2. **experimental 签名**：`experimental.chat.system.transform` 是实验性接口，桌面版若附带不同版本的服务端，升级后回归一次即可（适配层集中在 `prompt.ts`）。
+3. **唯一的 bun 耦合点**：整个插件包唯一的 bun 专属依赖是 `db/index.ts` 里的 `bun:sqlite`。当前 OpenCode 服务端基于 bun，无碍；社区方向是桌面 / 服务端逐步「去 bun 转原生 Node」，一旦服务端不再跑在 bun 上，需把 DB 适配层换成 `node:sqlite` 或 `better-sqlite3`——耦合只此一处，改动面很小。（收集服务另用 `Bun.serve`，但它是自带 bun 运行时的独立内网服务，不受影响。）
+
+**桌面版冒烟验证**：进桌面版 → 让 AI「看一下当前工作流状态」（确认注入与工具生效）→ 让它提交一段未过审查的代码（确认门禁拦截）。三步都过即可放心。
+
 ---
 
 ## 4. 第三步：安装 opencode-sm CLI 并配置身份
@@ -398,6 +414,7 @@ bun run typecheck    # 四包严格类型检查
 | 想彻底还原成原生 OpenCode | 删掉 `opencode.json` 里的 `plugin` 条目即可；本项目数据都在插件自有库与收集服务，不碰上游任何数据。 |
 | 收集服务端口/库路径要改 | 见 5.3 节 环境变量 `PORT` / `OPENCODE_SM_COLLECTOR_DB`。 |
 | 会话能改名吗 | 不能。上游无标题更新 API，标题自动生成；用标签（`opencode-sm tag`）和会话 ID 来辨认。 |
+| 桌面版 / IDE 扩展能用吗 | 能。插件跑在服务端、与界面无关，TUI 能用的都生效；前提是用同一份 `opencode.json` 连到配了插件的服务端。详见 3.4 节。 |
 
 ---
 
