@@ -1,5 +1,5 @@
 /**
- * 会话摘要汇报（设计文档 §2.4、§4.3、§12）。
+ * 会话摘要汇报（设计文档 2.4、4.3、12）。
  * 推送至 identity.collector_url：阶段事件触发 + 定时，增量汇报。
  * 收集服务不可用时写本地缓冲（插件库 outbox 表），恢复后补推。
  * 仅流程摘要（经 summarizeWorkflow 剥离代码内容），不含代码。
@@ -8,7 +8,7 @@ import { summarizeWorkflow, type Identity, type SessionReport } from "sm-shared"
 import type { Store } from "./db"
 import type { WorkflowSessionRow } from "./db/schema"
 
-/** 会话的 cost/tokens（经上游 SDK 取得，§3.1：插件不直读上游库）。 */
+/** 会话的 cost/tokens（经上游 SDK 取得，3.1：插件不直读上游库）。 */
 export interface Usage {
   cost: number | null
   tokensInput: number | null
@@ -17,7 +17,7 @@ export interface Usage {
 
 export type UsageProvider = (sessionID: string) => Promise<Usage>
 
-/** 组装一条汇报（身份取当前快照，§3.1）。 */
+/** 组装一条汇报（身份取当前快照，3.1）。 */
 export function buildReport(row: WorkflowSessionRow, identity: Identity, usage: Usage): SessionReport | null {
   if (!row.workflow) return null
   return {
@@ -58,7 +58,7 @@ export function createReporter(
 
     async flushOutbox() {
       const identity = getIdentity()
-      if (!identity || !identity.collector_url) return 0 // 退化为仅本机统计（§12）
+      if (!identity || !identity.collector_url) return 0 // 退化为仅本机统计（12）
       const pending = store.pendingReports()
       let sent = 0
       for (const item of pending) {

@@ -1,5 +1,5 @@
 /**
- * 插件 SQLite 初始化与迁移（设计文档 §3.1）。
+ * 插件 SQLite 初始化与迁移（设计文档 3.1）。
  * 插件启动时自动建表，迁移由插件自管，与上游 schema 演进互不影响。
  * 对外暴露 Store：工作流状态、标签、身份打标的类型化读写 + 汇报 outbox。
  * 统一使用 `?` 位置绑定（bun:sqlite）。
@@ -79,7 +79,7 @@ export class Store {
     return raw ? rowFromRaw(raw) : null
   }
 
-  /** 取或创建会话行（创建时初始化全新 WorkflowState，§7.4 规则 1）。 */
+  /** 取或创建会话行（创建时初始化全新 WorkflowState，7.4 规则 1）。 */
   ensure(sessionID: string): WorkflowSessionRow {
     const existing = this.get(sessionID)
     if (existing) return existing
@@ -89,7 +89,7 @@ export class Store {
     return this.get(sessionID)!
   }
 
-  /** 深度合并更新工作流状态（§4.3 增量合并语义），返回合并后的状态。 */
+  /** 深度合并更新工作流状态（4.3 增量合并语义），返回合并后的状态。 */
   updateWorkflow(sessionID: string, patch: DeepPartial<WorkflowState>): WorkflowState {
     const row = this.ensure(sessionID)
     const base = row.workflow ?? createWorkflowState()
@@ -116,7 +116,7 @@ export class Store {
     return workflow
   }
 
-  /** 幂等打标：仅当 account_id 为空时写入，返回是否本次写入（§3.1 快照语义）。 */
+  /** 幂等打标：仅当 account_id 为空时写入，返回是否本次写入（3.1 快照语义）。 */
   stampAccount(sessionID: string, account: string): boolean {
     this.ensure(sessionID)
     const result = this.db
@@ -148,7 +148,7 @@ export class Store {
     return rows.map(rowFromRaw)
   }
 
-  /** 删除孤儿会话（上游已删除者，§3.1）。返回删除条数。 */
+  /** 删除孤儿会话（上游已删除者，3.1）。返回删除条数。 */
   removeSessions(sessionIDs: string[]): number {
     if (sessionIDs.length === 0) return 0
     const stmt = this.db.query("DELETE FROM workflow_session WHERE session_id = ?")
@@ -159,10 +159,10 @@ export class Store {
     return removed
   }
 
-  // ---- 汇报 outbox（收集服务不可用时的本地缓冲，§2.4 风险与取舍） ----
+  // ---- 汇报 outbox（收集服务不可用时的本地缓冲，2.4 风险与取舍） ----
 
   enqueueReport(report: SessionReport): void {
-    // 同一会话仅保留最新一条待发送汇报（幂等去重，避免每消息堆积，§2.4）
+    // 同一会话仅保留最新一条待发送汇报（幂等去重，避免每消息堆积，2.4）
     this.db.query("DELETE FROM outbox WHERE session_id = ? AND sent = 0").run(report.sessionID)
     this.db
       .query("INSERT INTO outbox (session_id, payload, created_at, sent) VALUES (?, ?, ?, 0)")

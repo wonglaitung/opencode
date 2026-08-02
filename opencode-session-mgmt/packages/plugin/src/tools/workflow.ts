@@ -1,5 +1,5 @@
 /**
- * 工作流工具（设计文档 §4.1）。
+ * 工作流工具（设计文档 4.1）。
  * workflow_advance   —— 进入下一阶段 / 标记 approved（校验开发者确认语义）
  * workflow_revisit   —— 回退阶段（revision++）
  * commit_gate_check  —— 提交门禁检查，返回未完成阶段列表
@@ -82,7 +82,7 @@ export function createWorkflowTools(store: Store): Record<string, ToolDefinition
 
   const commit_force_unlock = tool({
     description:
-      "强制提交授权（§3.4 逃生口）：仅当开发者明确要求强制提交并说明原因时调用。" +
+      "强制提交授权（3.4 逃生口）：仅当开发者明确要求强制提交并说明原因时调用。" +
       "写入一次性授权后，下一次 git commit 将被门禁放行（即使仍有未完成阶段），授权随即标记已用并留痕。",
     args: {
       reason: z.string().describe("强制提交原因（开发者口述，必填，将留痕于 WorkflowState）"),

@@ -1,5 +1,5 @@
 /**
- * org 级收集服务（设计文档 §2.4、§4.3、§10.1）。每组织部署一个，仅内网可达。
+ * org 级收集服务（设计文档 2.4、4.3、10.1）。每组织部署一个，仅内网可达。
  * 三个端点：
  *   POST /api/report       —— 插件汇报会话摘要（sm-shared 的 SessionReport）
  *   POST /api/ci-quality   —— CI 按 sessionID 回写 reworkRate/testCoverage

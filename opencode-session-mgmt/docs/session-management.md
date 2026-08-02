@@ -589,7 +589,7 @@ Agent 负责会话内指标（acceptanceRate、iterationCount，写本机插件�
 
 仅靠 Agent 在对话中说"已修改"不足以触发重置——必须有文件级的实际变更证据。这防止开发者口头绕过迭代上限。
 
-**重置检测的 Phase 范围**：上表三条重置条件均需"文件级实际变更证据"（识别非 Agent 的 diff 来源、检查 git commit author），这超出插件 Hook 的能力面（需文件系统监听或 git 作者检查），列为 **Phase 3+**。在此之前 `iterationCount` 只增不减，且**刻意不提供口头/工具重置**——与规则 20 一致，防止开发者口头绕过迭代上限。`iterationByFile` 仅存本机插件库用于计数，汇报投影已剥离（不外传文件路径，见 §12）。
+**重置检测的 Phase 范围**：上表三条重置条件均需"文件级实际变更证据"（识别非 Agent 的 diff 来源、检查 git commit author），这超出插件 Hook 的能力面（需文件系统监听或 git 作者检查），列为 **Phase 3+**。在此之前 `iterationCount` 只增不减，且**刻意不提供口头/工具重置**——与规则 20 一致，防止开发者口头绕过迭代上限。`iterationByFile` 仅存本机插件库用于计数，汇报投影已剥离（不外传文件路径，见第 12 章）。
 
 ### 3.3 状态转换规则
 
@@ -671,7 +671,7 @@ flowchart TD
 | `review_submit` | 提交审查清单四项结果 | 四项全部 true 且所有片段已确认，否则拒绝 |
 | `quality_report` | 上报 acceptanceRate 等会话内指标 | 增量合并写入 `workflow.quality` |
 | `commit_gate_check` | 提交前门禁检查 | 返回未完成阶段列表；未通过时 `tool.execute.before` 阻断 `git commit` |
-| `commit_force_unlock` | 强制提交授权（§3.4 逃生口） | `developer_confirmed` 必须为 true、原因必填；写入一次性授权，门禁放行一次后置 `used` 留痕 |
+| `commit_force_unlock` | 强制提交授权（3.4 逃生口） | `developer_confirmed` 必须为 true、原因必填；写入一次性授权，门禁放行一次后置 `used` 留痕 |
 
 工具定义遵循上游插件 `ToolDefinition` 接口（`packages/plugin/src/tool.ts`），由 `tool` hook 注册后自动进入 LLM 可用工具集（上游 `tool/registry.ts` 已接线）。
 
@@ -1189,7 +1189,7 @@ Agent:  ⚠ 此段代码已达到 3 轮 AI 迭代上限。
 | `src/tools/workflow.ts` | `workflow_advance` / `workflow_revisit` / `commit_gate_check` / `commit_force_unlock` 工具 |
 | `src/tools/review.ts` | `comprehension_add` / `comprehension_confirm` / `comprehension_ask` / `review_submit` 工具（含防批量确认校验） |
 | `src/tools/quality.ts` | `quality_report` 工具 + 迭代计数逻辑 |
-| `src/workflow-ops.ts` | 阶段转换（enter/approve/revisit，§3.3）与提交门禁重算（§3.4），工具与门禁共用的状态机 |
+| `src/workflow-ops.ts` | 阶段转换（enter/approve/revisit，3.3）与提交门禁重算（3.4），工具与门禁共用的状态机 |
 | `src/gate.ts` | `tool.execute.before` 提交门禁拦截（git commit 阻断） |
 | `src/report.ts` | 会话摘要汇报：推送至 `collector_url`，不可用时本地缓冲、恢复补推 |
 | `src/stats.ts` | 本机统计聚合查询（供 opencode-sm 复用） |
@@ -1313,7 +1313,7 @@ opencode-sm init                                  # 3. 四问：账号 / 组 / �
 | 场景 | 操作 | 影响面 |
 |------|------|--------|
 | 插件 / CLI 升级 | 团队发新版；开发者 `npm update`（插件亦可由 OpenCode 启动时自动拉新） | 仅定制三包 |
-| OpenCode 上游升级 | 开发者照常升级本体 | 与定制互不干扰，无合并、无迁移（见 §11） |
+| OpenCode 上游升级 | 开发者照常升级本体 | 与定制互不干扰，无合并、无迁移（见第 11 章） |
 
 ### 10.4 环境决策点
 

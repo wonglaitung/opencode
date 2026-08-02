@@ -1,5 +1,5 @@
 /**
- * 插件库表定义（设计文档 §3.1）。
+ * 插件库表定义（设计文档 3.1）。
  * 位置：<project>/.opencode/session-mgmt.db，每项目一个，bun:sqlite + WAL。
  * 两张表：workflow_session（会话工作流数据，以核心 sessionID 为主键）、
  *         outbox（汇报缓冲，收集服务不可用时暂存，见 report.ts）。
@@ -47,7 +47,7 @@ export const MIGRATIONS: string[] = [
     sent INTEGER NOT NULL DEFAULT 0
   );
   CREATE INDEX IF NOT EXISTS idx_outbox_sent ON outbox(sent);`,
-  // v2：outbox 按会话去重——同一会话仅保留最新一条待发送汇报（§2.4，避免每消息堆积）
+  // v2：outbox 按会话去重——同一会话仅保留最新一条待发送汇报（2.4，避免每消息堆积）
   `ALTER TABLE outbox ADD COLUMN session_id TEXT;
   CREATE INDEX IF NOT EXISTS idx_outbox_session ON outbox(session_id);`,
 ]

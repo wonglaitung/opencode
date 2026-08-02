@@ -1,5 +1,5 @@
 /**
- * 质量指标工具与迭代计数（设计文档 §3.2、§4.3、§7.4 规则 15-20）。
+ * 质量指标工具与迭代计数（设计文档 3.2、4.3、7.4 规则 15-20）。
  * quality_report —— Agent 上报 acceptanceRate，增量合并写 workflow.quality
  * 迭代计数 —— tool.execute.after 统计代码编辑轮次，达 3 轮由 system prompt 提示人工介入
  */
@@ -15,7 +15,7 @@ const z = tool.schema
  */
 export const CODE_EDIT_TOOLS = new Set(["write", "edit", "apply_patch"])
 
-/** 业界健康采纳率上限；超过则提示可能未充分审查（§7.4 规则 16）。 */
+/** 业界健康采纳率上限；超过则提示可能未充分审查（7.4 规则 16）。 */
 export const ACCEPTANCE_WARN_THRESHOLD = 45
 
 export function createQualityTools(store: Store): Record<string, ToolDefinition> {
@@ -58,12 +58,12 @@ function fileKey(toolName: string, args: unknown): string {
 /**
  * 生成 tool.execute.after 处理器：按文件累计 AI 代码编辑轮次。
  *
- * 计数语义（§3.2 / §7.4 规则 17）：iterationCount 是「同一段代码/文件」的
+ * 计数语义（3.2 / 7.4 规则 17）：iterationCount 是「同一段代码/文件」的
  * 生成-修改循环次数，而非全会话编辑总数——故按 input.args 的文件路径分桶，
  * iterationCount 取各文件最大值。这样"达到 3 轮"指某文件被 AI 连改 3 次，
  * 与文档"第 4 轮起人工重写该段"的含义一致。
  *
- * 重置规则受限说明（§3.2 重置表 / §7.4 规则 20）：三条重置条件均需"文件级
+ * 重置规则受限说明（3.2 重置表 / 7.4 规则 20）：三条重置条件均需"文件级
  * 实际变更证据"（非 Agent 的 diff 来源 / >50% 行变更 + 非 Agent commit author），
  * 这超出插件 Hook 的能力面（需文件系统监听或 git author 检查），列为 Phase 3+。
  * 本实现刻意不提供"口头/工具重置"——规则 20 明确"仅靠对话中说'已修改'不足以
@@ -82,5 +82,5 @@ export function createIterationCounter(store: Store) {
   }
 }
 
-/** 供测试与提示：迭代轮次上限（§3.2，达 3 轮拒绝继续生成）。 */
+/** 供测试与提示：迭代轮次上限（3.2，达 3 轮拒绝继续生成）。 */
 export const ITERATION_LIMIT = 3

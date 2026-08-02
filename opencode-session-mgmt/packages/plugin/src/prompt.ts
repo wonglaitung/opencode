@@ -1,5 +1,5 @@
 /**
- * system prompt 注入（设计文档 §7.1、§7.4）。
+ * system prompt 注入（设计文档 7.1、7.4）。
  * experimental.chat.system.transform hook 的实现：
  * 从插件库读当前会话 WorkflowState，将规则全文 + 状态压缩 JSON 追加到 output.system。
  */
@@ -37,7 +37,7 @@ export function buildSystemFragment(workflow: WorkflowState): string {
   const review = workflow.stages.review
   const confirmed = review.comprehension.filter((c) => c.developerConfirmed).length
   const iteration = workflow.quality.iterationCount ?? 0
-  // 最热文件（迭代轮次来源，§3.2 按文件计数）
+  // 最热文件（迭代轮次来源，3.2 按文件计数）
   const byFile = Object.entries(workflow.quality.iterationByFile ?? {})
   const hottest = byFile.sort((a, b) => b[1] - a[1])[0]
   const parts = [

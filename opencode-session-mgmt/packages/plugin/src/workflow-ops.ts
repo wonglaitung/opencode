@@ -1,5 +1,5 @@
 /**
- * 工作流状态的纯函数操作（设计文档 §3.3、§3.4）。
+ * 工作流状态的纯函数操作（设计文档 3.3、3.4）。
  * 阶段转换（enter/approve/revisit）、审查回退与提交门禁重算——
  * 集中于此供插件工具复用与单元测试，不触碰数据库。
  */
@@ -12,7 +12,7 @@ import {
 
 export class WorkflowOpError extends Error {}
 
-/** 依据五阶段 approved 状况重算提交门禁（§3.4）；保留既有的一次性强制提交授权。 */
+/** 依据五阶段 approved 状况重算提交门禁（3.4）；保留既有的一次性强制提交授权。 */
 export function recomputeCommit(workflow: WorkflowState): WorkflowState {
   const blockedBy = STAGE_ORDER.filter((name) => workflow.stages[name].status !== "approved")
   workflow.commit = {
@@ -27,7 +27,7 @@ export function recomputeCommit(workflow: WorkflowState): WorkflowState {
  * 对指定阶段施加一次转换，返回（原地修改后的）状态。
  * - enter:   not_started/in_progress → in_progress
  * - approve: → approved
- * - revisit: → in_progress，revision++（§3.3）
+ * - revisit: → in_progress，revision++（3.3）
  */
 export function applyTransition(
   workflow: WorkflowState,

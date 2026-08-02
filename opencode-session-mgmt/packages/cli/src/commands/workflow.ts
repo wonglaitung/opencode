@@ -1,6 +1,6 @@
 /**
  * opencode-sm workflow <sessionID> [checklist|comprehension|stats]
- * 工作流状态外部查看（设计文档 §5.1）。只读本机插件库。
+ * 工作流状态外部查看（设计文档 5.1）。只读本机插件库。
  */
 import { STAGE_LABELS, STAGE_ORDER, type StageName } from "sm-shared"
 import { openPluginStore } from "../api"
