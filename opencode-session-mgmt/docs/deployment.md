@@ -206,20 +206,7 @@ OpenCode 除 TUI 外还有**桌面版**和 **IDE 扩展**。它们与 TUI 一样
 
 ### 4.1 安装 CLI
 
-CLI 包名 `opencode-sm`，入口带 `#!/usr/bin/env bun`（从源码跑需要 PATH 里有 bun）。
-
-```bash
-cd opencode-session-mgmt
-
-# 开发期：把 workspace 里的 CLI 链接为全局命令
-cd packages/cli && bun link && cd -
-# 之后任意目录都能用：
-opencode-sm --help
-```
-
-**正式发布后**（团队构建一次，开发者直接装）：
-
-推荐用打包脚本生成**可用 `npm install` 安装的压缩包**——包内是自包含单二进制，目标机**无需 node/bun**：
+团队构建一次、开发者直接装：打包脚本生成**可用 `npm install` 安装的压缩包**——包内是自包含单二进制，目标机**无需 node/bun**。
 
 ```bash
 # 团队侧（联网构建机，按目标平台各打一份）：
@@ -234,12 +221,7 @@ opencode-sm --help                     # 全局可用
 
 > 压缩包是**平台相关**的：一个 tgz 对应一个 OS/CPU（包内 `os`/`cpu` 字段会让 npm 在装错平台时报错提示）。多平台就各打各的、各装各的。
 
-也可以只出裸二进制、手动放进 PATH（不经 npm）：
-
-```bash
-bun run build:cli        # 产出 dist/opencode-sm（单文件，目标机无需 bun）
-# 拷到 PATH，如 /usr/local/bin/opencode-sm
-```
+> 开发 / 维护者从源码跑：在 `packages/cli` 下 `bun link`（需 PATH 里有 bun）；只想要裸二进制见第 10 章 `build:cli`。
 
 ### 4.2 配置身份：opencode-sm init（每台机器一次）
 
