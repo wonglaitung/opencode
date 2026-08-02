@@ -5,6 +5,7 @@ OpenCode 会话管理定制：**标准化开发流程、理解保障与效能分
 
 ## 文档
 
+- **部署与使用手册**：[`docs/deployment.md`](docs/deployment.md)（从零上手：装 OpenCode、启用插件、CLI、收集服务、内网隔离部署、FAQ）——**新人先看这个**
 - **设计文档**：[`docs/session-management.md`](docs/session-management.md)
 - **上游同步方案**：[`docs/upstream-sync.md`](docs/upstream-sync.md)（remote 布局、同步命令、冲突预案、同步记录）
 
