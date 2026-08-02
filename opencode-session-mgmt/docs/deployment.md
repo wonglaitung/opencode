@@ -52,13 +52,13 @@
 
 | 工具 | 用途 | 检查命令 | 说明 |
 |------|------|----------|------|
-| **bun** ≥ 1.1 | 运行插件源码、构建、跑收集服务 | `bun --version` | 核心依赖。安装：`curl -fsSL https://bun.sh/install \| bash` |
+| **bun** ≥ 1.1 | 运行插件源码、构建、跑收集服务 | `bun --version` | 核心依赖。安装：`curl -fsSL https://bun.sh/install \| bash`，或 `npm install -g bun`（需先有 node，跨平台可用） |
 | **node + npm**（可选） | 用 npm 装 OpenCode、`npm install -g` 装 CLI 压缩包 | `node -v && npm -v` | **运行时**不需要 node（CLI 压缩包自包含）；只是安装动作要 npm，也可手动解包把二进制放进 PATH |
 | **git** | 拉取本项目代码 | `git --version` | |
 | **docker + compose**（仅管理员） | 部署收集服务 | `docker --version` | 不用 docker 也能跑（见 5.3 节） |
 | **大模型提供方** | OpenCode 的大脑 | — | 公司账号的 API key，或内网自建模型网关（9.3 节） |
 
-> Windows 用户：建议在 WSL2（Ubuntu）里操作，命令与 Linux 一致；原生 Windows 也可用 bun 的 PowerShell 安装脚本。
+> Windows 用户：建议在 WSL2（Ubuntu）里操作，命令与 Linux 一致。原生 Windows 装 bun：已有 node 的话 `npm install -g bun` 最省事，或用官方 PowerShell 安装脚本；**装完重开一个终端** PATH 才生效（当前窗口仍会报「不是内部或外部命令」）。
 
 ---
 
@@ -145,6 +145,8 @@ git clone <本仓库地址> ~/tools/opencode-session-mgmt
 cd opencode-session-mgmt
 bun install
 ```
+
+> **内网 / 离线机器？** 上面的 `bun install` 要连 npm registry。若目标机无外网：在联网机装好依赖后连 `node_modules` 一起打包搬入、解包即用，内网机免再 `bun install`——详见 9.2 节「做法二」（或整包便携的「做法一」）。
 
 ### 3.2 写 opencode.json 启用插件
 
