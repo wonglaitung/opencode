@@ -437,6 +437,46 @@ bun run typecheck    # 四包严格类型检查
 
 ### 9.2 把 OpenCode 本体与依赖搬进去
 
+有两种搬法。**想要「解压即用」用做法一（整包便携）**；只想最小改动、逐机安装用做法二（分开搬）。
+
+#### 做法一：整包便携（推荐，解压即用）
+
+在外网一台**与内网同平台**的机器上，把「运行时 + OpenCode + 本插件 + 依赖」装进**一个自包含目录**，整体打包拷入，解压后配好模型网关即可用。
+
+目录骨架：
+
+```
+opencode-bundle/
+├── bin/                    # 随包的 bun（或 node）二进制——运行时必须一起带
+├── opencode/               # OpenCode：用 --prefix 装进此处，或放独立二进制
+├── opencode-session-mgmt/  # 本仓库（已 bun install，含 node_modules）
+├── opencode.json           # plugin 指向上面的相对路径
+└── run.sh                  # export PATH="$HERE/bin:..." 后启动 opencode
+```
+
+打包 / 解包：
+
+```bash
+# 外网打包机（务必与内网同 OS / 同架构 / glibc 相近）：
+tar czf opencode-bundle.tgz opencode-bundle/
+
+# 内网开发机：
+tar xzf opencode-bundle.tgz
+cd opencode-bundle && ./run.sh      # 进 TUI 验证插件已加载
+opencode-sm init                    # 每台机一次：四问配身份（见 4.2 节）
+```
+
+**「解压即用」必须满足的四点**（少一个就会装上却跑不起来）：
+
+1. **运行时一起打包**：不能只打 `node_modules`——目标机未必有兼容的 bun/node，`bin/` 里要带上那个运行时二进制，`run.sh` 用它启动。
+2. **同平台构建**：打包机与内网机须同 OS、同 CPU 架构、glibc 别差太多，否则运行时或原生依赖加载失败。
+3. **OpenCode 可重定位**：全局 `npm i -g` 的 bin shim 含绝对路径、换机会断；用 `--prefix` 装进包内（或独立二进制）+ 启动脚本设 PATH 才稳。
+4. **插件侧最省心**：插件无自带原生模块（`bun:sqlite` 是 bun 内置），workspace 软链是相对路径、随 tar 走；只要运行时在、`opencode.json` 的 `plugin` 路径指对即可加载。
+
+> 注意：**模型后端 tar 不进来**——软件搬进去 ≠ 能对话，内网仍须把 OpenCode 指向内部模型网关（见 9.3 节）。另外 OpenCode 配置（`~/.config/opencode`）与会话数据（`~/.local/share` 一带）在各人 home、不在包内，故每台机解包后仍需 `opencode-sm init`（身份本就按机器配，见 4.2 节）。
+
+#### 做法二：分开搬（逐机安装）
+
 **OpenCode 本体**（三选一，均在联网机下载后拷入内网）：
 
 ```bash
@@ -453,7 +493,7 @@ brew fetch --bottle-tag=... anomalyco/tap/opencode
 
 > 具体哪种最省事取决于内网基线操作系统；原则就是把「安装器 + 它要下载的二进制/包」一起在联网区备齐再拷入。
 
-**npm 依赖**（插件运行需要 `@opencode-ai/plugin`、`@opencode-ai/sdk`、`zod` 等）：
+**插件依赖**（`@opencode-ai/plugin`、`@opencode-ai/sdk`、`zod` 等）：
 
 ```bash
 # 联网区：装好后把整个含 node_modules 的仓库目录打包
