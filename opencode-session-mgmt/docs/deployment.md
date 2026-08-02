@@ -170,6 +170,8 @@ OpenCode 读取 `opencode.json` 配置。可放两处：
 { "plugin": ["/home/alice/tools/opencode-session-mgmt/packages/plugin"] }
 ```
 
+> **Windows 绝对路径注意**：JSON 里反斜杠 `\` 是转义字符，`C:\Users\...` 会因 `\U`、`\n` 等非法转义把配置读坏。两种正确写法——**反斜杠翻倍**：`"C:\\Users\\...\\packages\\plugin"`；或更省事，**改用正斜杠**（Windows 同样识别，且无需转义）：`"C:/Users/.../packages/plugin"`。路径里的空格（如 `My Tools`）是普通字符，不用处理。
+
 ### 3.3 验证插件已加载
 
 ```bash
