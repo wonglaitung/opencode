@@ -39,12 +39,12 @@
 
 | 角色 | 要做的事 | 对应章节 |
 |------|----------|----------|
-| 组织管理员 / 运维 | 内网服务器上部署 ④ 收集服务；把收集服务地址与组名约定告诉全员 | §5、§9 |
-| 开发者 | 装 ① OpenCode、启用 ② 插件、装 ③ CLI、跑一次 `opencode-sm init` | §1–§4、§6 |
-| 组长 / 领导 | 用 `opencode-sm stats --group/--org` 看聚合统计（无需装插件） | §6.3 |
+| 组织管理员 / 运维 | 内网服务器上部署 ④ 收集服务；把收集服务地址与组名约定告诉全员 | 第 5、9 章 |
+| 开发者 | 装 ① OpenCode、启用 ② 插件、装 ③ CLI、跑一次 `opencode-sm init` | 第 1–4、6 章 |
+| 组长 / 领导 | 用 `opencode-sm stats --group/--org` 看聚合统计（无需装插件） | 6.3 节 |
 
 > **依赖互联网的部分只有三处**：① OpenCode 本体的安装、② 插件/CLI 的 npm 依赖、① 的大模型。
-> 本项目自己的代码（插件、CLI、收集服务）**完全不需要外网**。内网隔离环境怎么把这三处搬进去，见 §9。
+> 本项目自己的代码（插件、CLI、收集服务）**完全不需要外网**。内网隔离环境怎么把这三处搬进去，见第 9 章。
 
 ---
 
@@ -55,8 +55,8 @@
 | **bun** ≥ 1.1 | 运行插件源码、构建、跑收集服务 | `bun --version` | 核心依赖。安装：`curl -fsSL https://bun.sh/install \| bash` |
 | **node + npm**（可选） | 用 npm 装 OpenCode / CLI | `node -v && npm -v` | 有 bun 时可不要 |
 | **git** | 拉取本项目代码 | `git --version` | |
-| **docker + compose**（仅管理员） | 部署收集服务 | `docker --version` | 不用 docker 也能跑（见 §5.3） |
-| **大模型提供方** | OpenCode 的大脑 | — | 公司账号的 API key，或内网自建模型网关（§9.3） |
+| **docker + compose**（仅管理员） | 部署收集服务 | `docker --version` | 不用 docker 也能跑（见 5.3 节） |
+| **大模型提供方** | OpenCode 的大脑 | — | 公司账号的 API key，或内网自建模型网关（9.3 节） |
 
 > Windows 用户：建议在 WSL2（Ubuntu）里操作，命令与 Linux 一致；原生 Windows 也可用 bun 的 PowerShell 安装脚本。
 
@@ -102,7 +102,7 @@ opencode auth login
 export ANTHROPIC_API_KEY=sk-ant-xxxx
 ```
 
-> **内网自建模型**（如公司内部 vLLM / Ollama / OpenAI 兼容网关）：在 `opencode.json` 里配置一个自定义 provider，指向内网地址，见 §9.3。
+> **内网自建模型**（如公司内部 vLLM / Ollama / OpenAI 兼容网关）：在 `opencode.json` 里配置一个自定义 provider，指向内网地址，见 9.3 节。
 
 ### 2.3 首次启动，确认 Daemon 正常
 
@@ -129,7 +129,7 @@ opencode        # 进入 TUI
 插件/CLI/收集服务都在同一个仓库里（一个 bun workspace）。把它放到你机器上，例如：
 
 ```bash
-# 方式 A：在你的项目目录里克隆为子目录（这样 §3.2 的示例路径开箱即用）
+# 方式 A：在你的项目目录里克隆为子目录（这样 3.2 节 的示例路径开箱即用）
 cd ~/work/your-project
 git clone <本仓库地址> opencode-session-mgmt
 
@@ -139,7 +139,7 @@ git clone <本仓库地址> ~/tools/opencode-session-mgmt
 
 > 本仓库本身是独立 bun workspace，不会被 OpenCode 上游的 workspace 收录，放在上游源码树里也不会互相干扰。
 
-在仓库目录装依赖（插件运行需要 `@opencode-ai/plugin`、`sm-shared` 等，见 §9.2 的内网做法）：
+在仓库目录装依赖（插件运行需要 `@opencode-ai/plugin`、`sm-shared` 等，见 9.2 节 的内网做法）：
 
 ```bash
 cd opencode-session-mgmt
@@ -161,7 +161,7 @@ OpenCode 读取 `opencode.json` 配置。可放两处：
 
 **路径规则**：`plugin` 里的路径是**相对于 opencode.json 所在目录**的。
 
-- 若按 §3.1 方式 A 把仓库克隆成项目子目录 `opencode-session-mgmt`，上面这行**原样可用**。
+- 若按 3.1 节 方式 A 把仓库克隆成项目子目录 `opencode-session-mgmt`，上面这行**原样可用**。
 - 若克隆在别处（方式 B），改用**绝对路径**：
 
 ```json
@@ -229,7 +229,7 @@ opencode-sm init
 要点：
 
 - 组名/组织名由组织内**口头约定**（如「前端组」），子组用 `前端组/基础架构组` 这种命名约定，没有 ID、没有花名册。
-- 收集服务地址由**管理员告知**（就是 §5 部署出来的那台机器的内网地址）。暂时没部署收集服务也能填，插件会把汇报先缓存在本地。
+- 收集服务地址由**管理员告知**（就是第 5 章部署出来的那台机器的内网地址）。暂时没部署收集服务也能填，插件会把汇报先缓存在本地。
 - **人员变动（调组、换邮箱）时重跑 `opencode-sm init` 即可**；身份是「汇报快照」，只影响此后的统计归属，历史不追溯。
 
 ---
@@ -319,7 +319,7 @@ OPENCODE_SM_COLLECTOR_DB=/var/lib/opencode-sm/collector.db PORT=8787 \
 - **提交门禁是硬拦截**：即便 AI「想」提交，`git commit` 也会被插件拦下，除非走完审查；确有特殊情况可让 AI 调 `commit_force_unlock`（需你确认 + 填原因，一次性，且会留痕进统计）。
 - **同一段代码 AI 迭代到 3 轮**会被要求停手、转人工重写。
 
-完整对话示例见设计文档 §7.2。
+完整对话示例见设计文档 7.2 节。
 
 ### 6.2 在 TUI 之外查看（opencode-sm）
 
@@ -396,7 +396,7 @@ bun run typecheck    # 四包严格类型检查
 | 收集服务挂了会丢数据吗 | 不会。插件在本地缓冲未送达的汇报（同一会话只留最新一条），服务恢复后自动补推。 |
 | 改了 `opencode-sm init` 后历史统计没变 | 正常。身份是**汇报快照**，只影响此后的汇报，历史归属不追溯。 |
 | 想彻底还原成原生 OpenCode | 删掉 `opencode.json` 里的 `plugin` 条目即可；本项目数据都在插件自有库与收集服务，不碰上游任何数据。 |
-| 收集服务端口/库路径要改 | 见 §5.3 环境变量 `PORT` / `OPENCODE_SM_COLLECTOR_DB`。 |
+| 收集服务端口/库路径要改 | 见 5.3 节 环境变量 `PORT` / `OPENCODE_SM_COLLECTOR_DB`。 |
 | 会话能改名吗 | 不能。上游无标题更新 API，标题自动生成；用标签（`opencode-sm tag`）和会话 ID 来辨认。 |
 
 ---
@@ -415,7 +415,7 @@ bun run typecheck    # 四包严格类型检查
 3. 打包依赖（node_modules 或 bun 缓存）►  拷入开发机，插件/CLI 才能跑
 4. 构建 dist/opencode-sm、dist/collector
    及收集服务 docker 镜像        ──────►  拷入：CLI 二进制分发；镜像 docker load 起收集服务
-5. 内网自建模型网关（vLLM/Ollama 等）──►  OpenCode 指向它（§9.3）
+5. 内网自建模型网关（vLLM/Ollama 等）──►  OpenCode 指向它（9.3 节）
 ```
 
 ### 9.2 把 OpenCode 本体与依赖搬进去
@@ -484,7 +484,7 @@ docker save opencode-sm-collector -o collector-image.tar
 ```
 
 > docker 基础镜像 `oven/bun:1` 也需在联网区 `docker pull` 后 `docker save` 一并带入，否则内网 `docker build` 拉不到基础镜像。
-> 不想用 docker：把 `dist/collector/` 和一个 bun 运行时拷进内网服务器，按 §5.3 直接 `bun dist/collector/index.js` 跑。
+> 不想用 docker：把 `dist/collector/` 和一个 bun 运行时拷进内网服务器，按 5.3 节 直接 `bun dist/collector/index.js` 跑。
 
 ### 9.5 内网下的身份与汇报
 

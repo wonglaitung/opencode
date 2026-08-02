@@ -1,12 +1,12 @@
 /**
- * 插件入口（设计文档 §2.4、§8）。
+ * 插件入口（设计文档 2.4、8）。
  * 由 opencode config.plugin 加载，运行于 daemon 进程内。
  * 注册 5 类 hooks：
- *   - experimental.chat.system.transform  每轮注入规则 + WorkflowState（§7.1）
- *   - tool                                工作流工具集（§4.1）
- *   - tool.execute.before                 提交门禁硬拦截（§7.3）
+ *   - experimental.chat.system.transform  每轮注入规则 + WorkflowState（7.1）
+ *   - tool                                工作流工具集（4.1）
+ *   - tool.execute.before                 提交门禁硬拦截（7.3）
  *   - tool.execute.after                  迭代计数
- *   - chat.message                        会话首次活动打 account_id（§3.1）+ 汇报触发
+ *   - chat.message                        会话首次活动打 account_id（3.1）+ 汇报触发
  */
 import type { Plugin, PluginInput } from "@opencode-ai/plugin"
 import { readIdentity } from "sm-shared"
@@ -19,7 +19,7 @@ import { createIterationCounter, createQualityTools } from "./tools/quality"
 import { createReviewTools } from "./tools/review"
 import { createWorkflowTools } from "./tools/workflow"
 
-/** 经上游 SDK 汇总会话 cost/tokens（step-finish 分段求和；失败返回空值，§3.1）。 */
+/** 经上游 SDK 汇总会话 cost/tokens（step-finish 分段求和；失败返回空值，3.1）。 */
 function createUsageProvider(client: PluginInput["client"]) {
   return async (sessionID: string): Promise<Usage> => {
     const empty: Usage = { cost: null, tokensInput: null, tokensOutput: null }
@@ -49,7 +49,7 @@ function createUsageProvider(client: PluginInput["client"]) {
 }
 
 /**
- * 惰性清理孤儿记录（§3.1）：移除插件库中上游已删除的会话。
+ * 惰性清理孤儿记录（3.1）：移除插件库中上游已删除的会话。
  * 保守策略：拿不到确切的非空会话列表时不清理，避免上游瞬时不可达导致误删。
  */
 async function cleanupOrphans(store: Store, client: PluginInput["client"]): Promise<void> {
@@ -73,9 +73,9 @@ const SessionMgmtPlugin: Plugin = async (input) => {
   const usageProvider = createUsageProvider(input.client)
   const reporter = createReporter(store, () => readIdentity(), usageProvider)
 
-  // 启动时补推缓冲汇报，并定时刷新（收集服务不可用期间本地暂存，§2.4）。
+  // 启动时补推缓冲汇报，并定时刷新（收集服务不可用期间本地暂存，2.4）。
   void reporter.flushOutbox()
-  // 启动时惰性清理孤儿记录（§3.1）。
+  // 启动时惰性清理孤儿记录（3.1）。
   void cleanupOrphans(store, input.client)
   const timer = setInterval(() => {
     void reporter.flushOutbox()

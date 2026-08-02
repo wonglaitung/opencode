@@ -1,5 +1,5 @@
 /**
- * 审查与理解确认工具（设计文档 §4.1、§3.2、§7.3、§7.4 规则 9-14）。
+ * 审查与理解确认工具（设计文档 4.1、3.2、7.3、7.4 规则 9-14）。
  * comprehension_add     —— 登记一个代码片段及其自然语言解释（developerConfirmed=false）
  * comprehension_confirm —— 单次只接受一个 codeSegmentId（防批量确认，服务端强制）
  * comprehension_ask     —— 追问片段，问答追加到 explanation

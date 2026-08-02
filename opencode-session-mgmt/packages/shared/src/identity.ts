@@ -1,5 +1,5 @@
 /**
- * 全局身份配置 identity.json 的类型与读写（设计文档 §3.1、§5.1）。
+ * 全局身份配置 identity.json 的类型与读写（设计文档 3.1、5.1）。
  * 位置：~/.config/opencode/session-mgmt/identity.json
  * 由 opencode-sm init 四问写入，每机器一份。
  */

@@ -1,5 +1,5 @@
 /**
- * 聚合库（设计文档 §3.1）。
+ * 聚合库（设计文档 3.1）。
  * reports 表按 session_id 主键：接收各机器汇报快照（account/group/org +
  * 阶段时间戳 + cost/tokens + 会话内质量），与 CI 回写指标按 session 合并。
  * 组/组织结构由各人汇报自然形成，GROUP BY group_name / org_name 即得。
@@ -30,7 +30,7 @@ export interface AccountAggregate {
   avgAcceptanceRate: number | null
   /** 平均增量测试覆盖率（CI 回写，0-100；无数据为 null） */
   avgTestCoverage: number | null
-  /** 平均会话耗时（毫秒，由汇报携带的阶段时间戳推算，§6.1） */
+  /** 平均会话耗时（毫秒，由汇报携带的阶段时间戳推算，6.1） */
   avgDurationMs: number
   overAcceptanceThreshold: number
   hitIterationLimit: number
@@ -95,7 +95,7 @@ function parseWorkflow(json: string | null): WorkflowLite {
   }
 }
 
-/** 会话耗时：全部阶段转换时间戳的最早到最晚（§6.1 时间戳即数据源）。 */
+/** 会话耗时：全部阶段转换时间戳的最早到最晚（6.1 时间戳即数据源）。 */
 function workflowDurationMs(wf: WorkflowLite): number {
   const times: number[] = []
   for (const stage of Object.values(wf.stages ?? {})) {

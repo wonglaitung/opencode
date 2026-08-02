@@ -1,8 +1,8 @@
 /**
- * opencode-sm init —— 每台机器一次的自助配置（设计文档 §5.1）。
+ * opencode-sm init —— 每台机器一次的自助配置（设计文档 5.1）。
  * 交互式四问：账号 / 组 / 组织 / 收集服务地址，写入全局
  * ~/.config/opencode/session-mgmt/identity.json（sm-shared 的 writeIdentity）。
- * 快照语义（§3.1）：重跑只影响此后的汇报归属，不追溯历史。
+ * 快照语义（3.1）：重跑只影响此后的汇报归属，不追溯历史。
  */
 import { createInterface } from "node:readline/promises"
 import { identityPath, readIdentity, writeIdentity, type Identity } from "sm-shared"

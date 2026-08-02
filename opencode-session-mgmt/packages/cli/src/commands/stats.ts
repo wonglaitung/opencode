@@ -1,8 +1,8 @@
 /**
  * opencode-sm stats [<sessionID>] [--project <dir>] [--group "组名"] [--org] [--period <nd>] [--json]
- * 会话级/项目级：本机插件库 + 上游 SDK 组合（§5.2 alt 分支一）
- * 组级/组织级：查 org 收集服务（§5.2 alt 分支二）
- * --project 省略时从 CWD 自动检测（§1.4）。
+ * 会话级/项目级：本机插件库 + 上游 SDK 组合（5.2 alt 分支一）
+ * 组级/组织级：查 org 收集服务（5.2 alt 分支二）
+ * --project 省略时从 CWD 自动检测（1.4）。
  */
 import { statSync } from "node:fs"
 import { basename, resolve } from "node:path"
@@ -57,7 +57,7 @@ interface ProjectInfo {
 }
 
 /**
- * 解析 --project（§1.4、§4.3）。本地插件库按项目目录存放，故：
+ * 解析 --project（1.4、4.3）。本地插件库按项目目录存放，故：
  * - 缺省：按当前工作目录（CWD）聚合；
  * - 给的是已存在的目录：只读打开该目录的插件库（跨项目查看，不创建库）；
  * - 给的是名称但非目录：无法据此定位目录，退化为 CWD 聚合，仅作展示标签并提示。
@@ -81,7 +81,7 @@ export async function runStats(args: ParsedArgs): Promise<void> {
   const json = Boolean(args.flags.json)
   const period = typeof args.flags.period === "string" ? args.flags.period : undefined
 
-  // 组/组织级：查收集服务（§5.2 alt 分支二）
+  // 组/组织级：查收集服务（5.2 alt 分支二）
   if (args.flags.group || args.flags.org) {
     const identity = readIdentity()
     if (!identity) {
@@ -111,8 +111,8 @@ export async function runStats(args: ParsedArgs): Promise<void> {
     return
   }
 
-  // 会话级/项目级：本机插件库 + 上游 SDK（§5.2 alt 分支一）
-  // --project 可给项目目录路径（本地插件库按项目存放，§1.4）；缺省按 CWD。
+  // 会话级/项目级：本机插件库 + 上游 SDK（5.2 alt 分支一）
+  // --project 可给项目目录路径（本地插件库按项目存放，1.4）；缺省按 CWD。
   const projectFlag = typeof args.flags.project === "string" ? args.flags.project : undefined
   const projInfo = resolveProjectInfo(projectFlag)
   // 明确的 --project 目录只读打开（不在任意目录创建库）；CWD 则照常打开
@@ -143,7 +143,7 @@ export async function runStats(args: ParsedArgs): Promise<void> {
       return
     }
 
-    // 项目级（CWD 自动聚合，§1.4）
+    // 项目级（CWD 自动聚合，1.4）
     const cutoff = parsePeriodMs(period)
     let rows = store.listAll()
     if (cutoff !== null) {
@@ -234,7 +234,7 @@ interface ScopeStatsView {
   perAccount: ScopeAccountView[]
 }
 
-/** 组/组织级统计的人类可读排版（§6.2）；数据来自收集服务聚合视图。 */
+/** 组/组织级统计的人类可读排版（6.2）；数据来自收集服务聚合视图。 */
 function printScopeStats(raw: unknown, scope: string): void {
   const s = raw as ScopeStatsView
   const isOrg = scope === "org"

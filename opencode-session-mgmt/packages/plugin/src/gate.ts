@@ -1,5 +1,5 @@
 /**
- * 提交门禁硬拦截（设计文档 §3.4、§7.3）。
+ * 提交门禁硬拦截（设计文档 3.4、7.3）。
  * tool.execute.before hook：识别 bash 工具中的 git commit，
  * 未通过 commit_gate_check（有未 approved 阶段）时抛错阻断。
  * 这是插件层硬约束，不依赖 LLM 自觉。
@@ -34,7 +34,7 @@ export function createCommitGate(store: Store) {
     if (!row || !row.workflow) return
     const gate = recomputeCommit(row.workflow).commit
     if (gate.status === "allowed") return
-    // 一次性强制提交授权（§3.4 逃生口）：放行一次并标记已用（留痕，不删除）
+    // 一次性强制提交授权（3.4 逃生口）：放行一次并标记已用（留痕，不删除）
     if (gate.force && !gate.force.used) {
       store.mutateWorkflow(input.sessionID, (wf) => {
         if (wf.commit.force) wf.commit.force.used = true
