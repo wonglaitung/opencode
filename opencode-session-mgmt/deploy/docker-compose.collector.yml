@@ -1,7 +1,8 @@
-# org 收集服务部署示例（设计文档 §10.1）：每组织部署一个，仅内网可达
+# org 收集服务部署示例（设计文档第 10 章）：每组织部署一个，仅内网可达
 services:
   collector:
     build: ../packages/collector
+    image: opencode-sm-collector # 确定化镜像名，供 docker save/load 离线搬运（见 9.4 节）
     ports:
       - "8787:8787" # 建议以防火墙限制为内网可访问
     volumes:
