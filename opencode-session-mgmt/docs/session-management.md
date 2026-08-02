@@ -665,6 +665,7 @@ flowchart TD
 |------|------|-----------|
 | `workflow_advance` | 提议进入下一阶段 / 标记当前阶段 approved | 必须携带开发者确认语义；AI 不可在无确认时调用成功 |
 | `workflow_revisit` | 回退到指定阶段（revision++） | 目标阶段必须存在 |
+| `comprehension_add` | 登记一个 AI 生成的代码片段及自然语言解释（做了什么、为什么、被放弃的替代方案、潜在风险） | 片段不可重复登记；登记后 `developerConfirmed=false`，待逐段确认 |
 | `comprehension_confirm` | 确认单个代码片段已理解 | **单次调用只接受一个 `codeSegmentId`**，防止批量确认（见 7.3） |
 | `comprehension_ask` | 对片段追问，问答追加到 explanation | 片段必须存在 |
 | `review_submit` | 提交审查清单四项结果 | 四项全部 true 且所有片段已确认，否则拒绝 |
@@ -1186,8 +1187,9 @@ Agent:  ⚠ 此段代码已达到 3 轮 AI 迭代上限。
 | `src/identity.ts` | 读全局 `identity.json`，会话首次活动时打标 `account_id` |
 | `src/prompt.ts` | system prompt 注入片段：规则全文 + 当前状态压缩 JSON |
 | `src/tools/workflow.ts` | `workflow_advance` / `workflow_revisit` / `commit_gate_check` / `commit_force_unlock` 工具 |
-| `src/tools/review.ts` | `comprehension_confirm` / `comprehension_ask` / `review_submit` 工具（含防批量确认校验） |
+| `src/tools/review.ts` | `comprehension_add` / `comprehension_confirm` / `comprehension_ask` / `review_submit` 工具（含防批量确认校验） |
 | `src/tools/quality.ts` | `quality_report` 工具 + 迭代计数逻辑 |
+| `src/workflow-ops.ts` | 阶段转换（enter/approve/revisit，§3.3）与提交门禁重算（§3.4），工具与门禁共用的状态机 |
 | `src/gate.ts` | `tool.execute.before` 提交门禁拦截（git commit 阻断） |
 | `src/report.ts` | 会话摘要汇报：推送至 `collector_url`，不可用时本地缓冲、恢复补推 |
 | `src/stats.ts` | 本机统计聚合查询（供 opencode-sm 复用） |
