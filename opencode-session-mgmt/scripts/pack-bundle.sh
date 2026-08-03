@@ -26,7 +26,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 # ---- 版本号 ----
-version="${VERSION:-$(node -p "require('./packages/cli/package.json').version" 2>/dev/null || echo "0.0.0")}"
+version="${VERSION:-$(grep -m1 '"version"' packages/cli/package.json | sed 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')}"
+version="${version:-0.0.0}"
 if [ "$version" = "0.0.0" ]; then
   echo "提示：当前版本为 0.0.0，可用 VERSION=x.y.z 覆盖"
 fi
@@ -46,7 +47,32 @@ rm -rf node_modules
 rm -rf packages/*/node_modules
 
 echo "==> bun install（hoisted 模式）"
-bun install
+# 某些 bun 版本在 hoisted 模式下链接 workspace 包时报 EINVAL（WSL / 部分 Linux 已知），
+# 但外部依赖仍安装成功。容错此错误，后续手动补齐 workspace 包。
+if ! bun install; then
+  echo "警告：bun install 报错（可能为 workspace EINVAL），将尝试补齐 workspace 包后继续" >&2
+fi
+
+echo "==> 补齐 workspace 包到 node_modules"
+# 在 hoisted 模式下，外部依赖已扁平安装至根 node_modules/；
+# 但 workspace 包（sm-shared / sm-plugin / opencode-sm / opencode-sm-collector）
+# 可能因 EINVAL 未被链接。手动以真实文件拷贝替代，确保打包后可跨机器使用。
+for ws_pkg in shared plugin cli collector; do
+  pkg_dir="packages/${ws_pkg}"
+  if [ ! -d "$pkg_dir" ]; then
+    continue
+  fi
+  pkg_name=$(grep -m1 '"name"' "${pkg_dir}/package.json" | sed 's/.*"name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+  if [ -z "$pkg_name" ]; then
+    echo "警告：无法读取 ${pkg_dir}/package.json 的 name，跳过" >&2
+    continue
+  fi
+  # 移除 bun 可能创建的空目录或符号链接
+  rm -rf "node_modules/${pkg_name}"
+  # 以真实文件拷贝方式放入 node_modules（-r 递归，-L 解引用符号链接）
+  cp -rL "$pkg_dir" "node_modules/${pkg_name}"
+  echo "  ✓ ${pkg_name} → node_modules/${pkg_name}"
+done
 
 echo "==> 验证无符号链接"
 symlinks=$(find node_modules -type l 2>/dev/null || true)
