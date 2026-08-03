@@ -8,7 +8,7 @@ import { statSync } from "node:fs"
 import { basename, resolve } from "node:path"
 import { readIdentity } from "sm-shared"
 import type { WorkflowSessionRow } from "sm-plugin/src/db/schema"
-import { ACCEPTANCE_WARN_THRESHOLD, aggregateProject, sessionStats, type SessionStats } from "sm-plugin/src/stats"
+import { ACCEPTANCE_WARN_THRESHOLD, ITERATION_LIMIT, aggregateProject, sessionStats, type SessionStats } from "sm-plugin/src/stats"
 import {
   collectorQuery,
   createClient,
@@ -183,7 +183,7 @@ function printSessionStats(s: SessionStats): void {
       `开发者: ${s.account ?? "N/A"}  周期: ${fmtDuration(s.durationMs)}  ${s.complete ? "✓ 已完成" : "进行中"}\n\n` +
       `工作流:\n${stageLines}\n\n` +
       `质量:\n` +
-      `  采纳率: ${fmtPct(s.acceptanceRate)}  迭代轮次: ${s.iterationCount ?? "N/A"}/3  覆盖率: ${fmtPct(s.testCoverage)}\n` +
+      `  采纳率: ${fmtPct(s.acceptanceRate)}  迭代轮次: ${fmtIterations(s.iterationCount)}  覆盖率: ${fmtPct(s.testCoverage)}\n` +
       `  返工率: ${fmtPct(s.reworkRate)}  审查清单: ${s.checklistPassed}/4  理解确认: ${s.comprehension.confirmed}/${s.comprehension.total}\n\n` +
       `AI 使用: ${s.cost === null ? "$N/A" : `$${s.cost.toFixed(4)}`} | ${fmtTokens(s.tokensInput)} in / ${fmtTokens(s.tokensOutput)} out\n`,
   )
@@ -219,13 +219,19 @@ function printProjectStats(
       const status = s.complete ? "✓完成" : s.status ?? "进行中"
       const dur = fmtDuration(s.durationMs)
       const acc = fmtPct(s.acceptanceRate)
-      const iter = s.iterationCount !== null ? `${s.iterationCount}/3` : "N/A"
+      const iter =
+        s.iterationCount === null
+          ? "N/A"
+          : s.iterationCount >= ITERATION_LIMIT
+            ? `${s.iterationCount}⚠`
+            : `${s.iterationCount}`
       const cost = s.cost === null ? "N/A" : `$${s.cost.toFixed(4)}`
       lines.push(
         `  ${id.padEnd(12)} ${status.padEnd(8)} ${dur.padStart(6)} ${acc.padStart(6)} ${iter.padStart(4)} ${cost.padStart(8)}`,
       )
     }
     lines.push("")
+    lines.push("  迭代 = 单文件被 AI 连改的最高次数（上限 3 轮，⚠ 表示已达上限；不是全会话编辑总数）")
     lines.push("  查看单个会话详情：opencode-sm stats <sessionID>")
   }
 
@@ -328,6 +334,13 @@ function fmtDuration(ms: number): string {
 
 function fmtPct(v: number | null): string {
   return v === null ? "N/A" : `${v}%`
+}
+
+/** 迭代轮次：AI 对单个文件的最大编辑次数（按文件分桶取最大值，非全会话总数），上限 3 轮。 */
+function fmtIterations(v: number | null): string {
+  if (v === null) return "N/A"
+  const warn = v >= ITERATION_LIMIT ? "，已达上限，建议人工重写该文件" : ""
+  return `${v} 轮（单文件被 AI 连改的最高次数，上限 3 轮${warn}）`
 }
 
 function fmtTokens(v: number | null): string {
