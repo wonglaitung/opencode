@@ -115,8 +115,9 @@ cd ~/work/your-project
 opencode        # 进入 TUI
 ```
 
-- 首次运行会**自动启动本地 Daemon**（REST API 只绑 `127.0.0.1`，不暴露到网络）。
-- 在 TUI 里随便问一句「你好」，模型能回复，说明本体 OK。按 `Ctrl+C` 两次退出 TUI（Daemon 会按需保留/退出，无需手动管理）。
+- 首次运行会**自动启动本地服务**（只绑 `127.0.0.1`，不暴露到网络）。
+- 在 TUI 里随便问一句「你好」，模型能回复，说明本体 OK。按 `Ctrl+C` 两次退出 TUI。
+- 注意：该服务进程**随 TUI 退出而结束，并不常驻**，且默认启动时不监听网络端口（进程内通信）。因此外部的 `opencode-sm` CLI 无法直接连上 TUI 里的服务——要让 CLI 能取会话标题/费用，需另起常驻的 `opencode serve` 并配置地址，见 4.3 节。
 
 > 到这里，**没有本项目你也能正常用 OpenCode**。下面三步是把「会话管理定制」加上去。
 
@@ -253,6 +254,37 @@ opencode-sm init
 - 收集服务地址由**管理员告知**（就是第 5 章部署出来的那台机器的内网地址）。暂时没部署收集服务也能填，插件会把汇报先缓存在本地。
 - **人员变动（调组、换邮箱）时重跑 `opencode-sm init` 即可**；身份是「汇报快照」，只影响此后的统计归属，历史不追溯。
 
+### 4.3 让 CLI 连上上游 daemon：`OPENCODE_SM_SERVER`（每机器一次）
+
+`opencode-sm list` / `stats` 里的会话**标题**、更新时间和费用/tokens 来自**上游 daemon**（标题由上游自动生成，本项目库里不存）。CLI 只通过环境变量 `OPENCODE_SM_SERVER` 获知 daemon 地址；**不设置就退化为本机数据**：`list` 显示「(上游不可达，标题略)」、`stats` 费用显示 `N/A`（是降级不是故障，见 8 节 FAQ）。
+
+推荐做法：用固定端口跑一个常驻 daemon，再把地址写进环境变量，一次配好：
+
+```bash
+# 1) 先 cd 进项目目录，再固定端口起 daemon（需常驻：单独开一个终端窗口，或交给系统服务管理；
+#    端口示例 4096，可自选）。请求未指明项目时 daemon 以「启动所在目录」为项目，
+#    所以务必在项目目录里启动；多个项目就各起一个（换不同端口），或临时查哪个起哪个。
+cd <你的项目目录>
+opencode serve --port 4096
+# 看到 "opencode server listening on http://127.0.0.1:4096" 即成功
+```
+
+```powershell
+# 2) Windows（PowerShell）：写入用户环境变量，新开终端生效
+[Environment]::SetEnvironmentVariable("OPENCODE_SM_SERVER", "http://127.0.0.1:4096", "User")
+```
+
+```bash
+# macOS / Linux：写入 shell 配置文件（zsh 改为 ~/.zshrc）
+echo 'export OPENCODE_SM_SERVER=http://127.0.0.1:4096' >> ~/.bashrc && source ~/.bashrc
+```
+
+验证：daemon 在跑的前提下执行 `opencode-sm list`，标题正常显示即配置成功。
+
+> 用 TUI 时自动拉起的 daemon 也可以：把 `OPENCODE_SM_SERVER` 指向它实际的监听地址即可。但其地址由上游自管、可能变化，不如 `opencode serve` 固定端口稳定。
+
+> **与 TUI 同时开着互不影响**：`opencode serve` 与 TUI 可共存——端口不冲突（默认 TUI 不监听网络端口），两者共享磁盘上的会话数据与插件库（WAL 模式），TUI 里跑过的会话从 serve 一样读得到；插件会在两个进程各加载一份，但汇报按会话幂等合并，不会脏数据。代价只是多一个常驻进程的内存。
+
 ---
 
 ## 5. 第四步：部署 org 收集服务（管理员，每组织一次）
@@ -356,6 +388,8 @@ opencode-sm list --status review --tag feature      # 按状态/标签过滤会�
 
 > 会话的创建/删除/恢复用**上游原生命令**，本项目不重复包装：`opencode session list`、`opencode session delete <id>`、`opencode -c`（回到本目录最近会话）、`opencode -s <id>`（按 ID 恢复）。
 
+> `list` 的会话标题、`stats` 的费用/tokens 需连上游 daemon（配置见 4.3 节）；未连上时标题显示「(上游不可达，标题略)」、费用显示 `N/A`，本机状态/标签数据不受影响。
+
 ### 6.3 统计（四级）
 
 ```bash
@@ -366,10 +400,16 @@ opencode-sm stats --group "前端组" --period 30d    # 组级：查收集服务
 opencode-sm stats --org --period 30d --json       # 组织级：查收集服务，JSON 输出
 ```
 
-数据来源：
+数据来源（**按级别分工、多源组合，不是逐级回退**；时序见设计文档 5.2 节）：
 
-- **会话级 / 项目级**：直读本机插件库 + 上游 daemon 的 cost/tokens——**离线可用**；daemon 不可达时费用显示 `N/A`（而非误导的 $0）。
-- **组级 / 组织级**：查收集服务 `GET /api/stats`——需要收集服务可达。
+| 级别 | 本机插件库 | 上游 daemon | 收集服务 |
+|------|-----------|-------------|----------|
+| 会话级 `stats <sessionID>` | ✅ 主源：五阶段工作流、质量指标 | ➕ 补 cost/tokens（不可达 → `N/A`） | ❌ 不参与 |
+| 项目级 `stats [--period]` | ✅ 主源（聚合整库） | ➕ 补 cost/tokens（不可达 → `N/A`） | ❌ 不参与 |
+| 组/组织级 `--group` / `--org` | ❌ | ❌ | ✅ 唯一来源：`GET /api/stats` |
+
+- 会话级 / 项目级**离线可用**：永远先读本机插件库（第一数据源），daemon 只补费用；daemon 不可达时费用显示 `N/A`（而非误导的 $0）。daemon 地址配置见 4.3 节。
+- 组/组织级只查收集服务，**没有本地回退**：不可达直接报错退出（且需先 `opencode-sm init` 配过身份）。
 
 ---
 
@@ -412,7 +452,10 @@ bun run typecheck    # 四包严格类型检查
 |------|-----------|
 | TUI 里 AI 完全不提工作流 | 插件没加载。检查 `opencode.json` 的 `plugin` 路径是否相对 opencode.json 正确、该目录下有 `package.json`、且已 `bun install`。 |
 | `opencode-sm: command not found` | CLI 没装好。正式用：`npm install -g ./opencode-sm-<版本>-<平台>.tgz`（见 4.1 节）；开发期在 `packages/cli` 下 `bun link`；或把构建出的 `dist/opencode-sm` 放进 PATH。从源码跑还需 PATH 里有 `bun`。 |
-| 统计里费用显示 `N/A` | 上游 daemon 不可达（没在跑 / 会话没有 usage 数据）。工作流/质量数据不受影响，仍读本机库。 |
+| 统计里费用显示 `N/A` | 上游 daemon 不可达（没在跑 / 未设置 `OPENCODE_SM_SERVER`，见 4.3 节），或该会话没有 usage 数据。工作流/质量数据不受影响，仍读本机库。 |
+| `opencode-sm list` 显示「(上游不可达，标题略)」 | 上游 daemon 不可达，标题取不到——标题由上游自动生成、只存在上游，本机插件库不存。按 4.3 节设置 `OPENCODE_SM_SERVER` 指向在跑的 daemon 即可恢复；只关心本机状态/标签的话可忽略。 |
+| TUI 开着时再开 `opencode serve` 会有影响吗 | 没有。端口不冲突（默认 TUI 不监听网络端口），两者共享磁盘上的会话数据与插件库（WAL），插件双份加载但汇报按会话幂等合并，不脏数据；只是多一个常驻进程。注意 serve 要在项目目录里启动（见 4.3 节）。 |
+| 组/组织统计报错，但本机数据都在 | 组/组织级只查收集服务、无本地回退（见 6.3 节数据来源表）。检查收集服务是否在跑、`identity.json` 的 `collector_url` 与组名是否正确。 |
 | 组/组织统计报错或为空 | 收集服务不可达，或 `identity.json` 里 `collector_url` 写错、组名与别人不一致。先 `curl {collector_url}/healthz`。 |
 | 收集服务挂了会丢数据吗 | 不会。插件在本地缓冲未送达的汇报（同一会话只留最新一条），服务恢复后自动补推。 |
 | 改了 `opencode-sm init` 后历史统计没变 | 正常。身份是**汇报快照**，只影响此后的汇报，历史归属不追溯。 |
