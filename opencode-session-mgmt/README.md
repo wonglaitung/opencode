@@ -44,5 +44,5 @@ bun run build:cli    # 构建 opencode-sm 单二进制（bun build --compile）
 ## 发布前 TODO
 
 - [ ] 确定 npm scope（`@yourorg/...`），统一四个包的 `name`
-- [ ] 插件发布形态：建议编译为 JS 发布（`build:plugin`），屏蔽目标机 bun 版本差异
+- [x] 插件发布形态：整包便携使用 `pack:bundle`（`scripts/pack-bundle.sh`），通过 `.npmrc` 的 `node-linker=hoisted` 确保 `node_modules` 可跨机器打包搬运（解决 Windows 硬链接断裂问题）
 - [ ] 收集服务镜像构建与内网部署流程

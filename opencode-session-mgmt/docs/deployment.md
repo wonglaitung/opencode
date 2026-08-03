@@ -59,6 +59,8 @@
 | **大模型提供方** | OpenCode 的大脑 | — | 公司账号的 API key，或内网自建模型网关（9.3 节） |
 
 > Windows 用户：建议在 WSL2（Ubuntu）里操作，命令与 Linux 一致。原生 Windows 装 bun：已有 node 的话 `npm install -g bun` 最省事，或用官方 PowerShell 安装脚本；**装完重开一个终端** PATH 才生效（当前窗口仍会报「不是内部或外部命令」）。
+>
+> **Windows 打包便携必读**：bun 默认使用 `isolated` 链接策略，在 Windows 上通过硬链接从全局缓存引用包文件——打包（tar/zip）后硬链接断裂，导致传递依赖丢失、插件加载失败。本项目已在根目录放置 `.npmrc`（`node-linker=hoisted`），让 `bun install` 生成真实文件拷贝而非硬链接，使 `node_modules` 可直接打包搬运。**务必不要删除 `.npmrc`**。
 
 ---
 
@@ -147,6 +149,8 @@ bun install
 ```
 
 > **内网 / 离线机器？** 上面的 `bun install` 要连 npm registry。若目标机无外网：在联网机装好依赖后连 `node_modules` 一起打包搬入、解包即用，内网机免再 `bun install`——详见 9.2 节「做法二」（或整包便携的「做法一」）。
+
+> **Windows / 整包便携用户**：本项目根目录的 `.npmrc` 已设置 `node-linker=hoisted`，`bun install` 会生成真实文件拷贝（非硬链接），`node_modules` 可直接打包搬运。若你之前已用默认模式安装过依赖（没有 `.npmrc`），须先删除旧 `node_modules` 再重装：`rm -rf node_modules packages/*/node_modules && bun install`。
 
 ### 3.2 写 opencode.json 启用插件
 
@@ -355,8 +359,8 @@ opencode-sm list --status review --tag feature      # 按状态/标签过滤会�
 ### 6.3 统计（四级）
 
 ```bash
-opencode-sm stats <sessionID>                 # 会话级：读本机插件库
-opencode-sm stats --period 7d                 # 项目级：省略 --project 即按当前目录聚合
+opencode-sm stats <sessionID>                 # 会话级：五阶段详情 + 质量指标 + AI 用量
+opencode-sm stats --period 7d                 # 项目级：聚合摘要 + 逐会话明细表（省略 --project 即按当前目录）
 opencode-sm stats --project ~/work/user-service   # 项目级：--project 接【目录路径】（只读打开）
 opencode-sm stats --group "前端组" --period 30d    # 组级：查收集服务
 opencode-sm stats --org --period 30d --json       # 组织级：查收集服务，JSON 输出
@@ -417,6 +421,7 @@ bun run typecheck    # 四包严格类型检查
 | 收集服务端口/库路径要改 | 见 5.3 节 环境变量 `PORT` / `OPENCODE_SM_COLLECTOR_DB`。 |
 | 会话能改名吗 | 不能。上游无标题更新 API，标题自动生成；用标签（`opencode-sm tag`）和会话 ID 来辨认。 |
 | 桌面版 / IDE 扩展能用吗 | 能。插件跑在服务端、与界面无关，TUI 能用的都生效；前提是用同一份 `opencode.json` 连到配了插件的服务端。详见 3.4 节。 |
+| Windows 打包/移动目录后插件加载失败（`Cannot find package 'zod'` 等） | bun 默认 `isolated` 模式在 Windows 上使用硬链接引用全局缓存中的包文件，打包（tar/zip）或移动目录后硬链接断裂。**修复**：确保根目录有 `.npmrc`（内容 `node-linker=hoisted`），然后删除旧依赖重装：`rm -rf node_modules packages/*/node_modules && bun install`。之后重新打包即可。**预防**：打包前运行 `bun run pack:bundle`，脚本会自动完成清理→重装→打包（见 9.2 节做法一）。 |
 
 ---
 
@@ -468,12 +473,13 @@ cd opencode-bundle && ./run.sh      # 进 TUI 验证插件已加载
 opencode-sm init                    # 每台机一次：四问配身份（见 4.2 节）
 ```
 
-**「解压即用」必须满足的四点**（少一个就会装上却跑不起来）：
+**「解压即用」必须满足的五点**（少一个就会装上却跑不起来）：
 
 1. **运行时一起打包**：不能只打 `node_modules`——目标机未必有兼容的 bun/node，`bin/` 里要带上那个运行时二进制，`run.sh` 用它启动。
 2. **同平台构建**：打包机与内网机须同 OS、同 CPU 架构、glibc 别差太多，否则运行时或原生依赖加载失败。
 3. **OpenCode 可重定位**：全局 `npm i -g` 的 bin shim 含绝对路径、换机会断；用 `--prefix` 装进包内（或独立二进制）+ 启动脚本设 PATH 才稳。
 4. **插件侧最省心**：插件无自带原生模块（`bun:sqlite` 是 bun 内置），workspace 软链是相对路径、随 tar 走；只要运行时在、`opencode.json` 的 `plugin` 路径指对即可加载。
+5. **`node_modules` 必须是 hoisted 模式**（Windows 关键）：bun 默认的 `isolated` 模式在 Windows 上使用硬链接，打包时硬链接无法保留，导致传递依赖（如 `zod`）断裂。本项目 `.npmrc` 已设 `node-linker=hoisted`（真实文件拷贝），**打包前务必确认**——若之前用默认模式安装过，须先 `rm -rf node_modules packages/*/node_modules && bun install` 重装。可用打包脚本一键完成：`bun run pack:bundle`。
 
 > 注意：**模型后端 tar 不进来**——软件搬进去 ≠ 能对话，内网仍须把 OpenCode 指向内部模型网关（见 9.3 节）。另外 OpenCode 配置（`~/.config/opencode`）与会话数据（`~/.local/share` 一带）在各人 home、不在包内，故每台机解包后仍需 `opencode-sm init`（身份本就按机器配，见 4.2 节）。
 
