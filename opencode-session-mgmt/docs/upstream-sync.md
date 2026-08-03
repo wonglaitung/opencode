@@ -1,13 +1,13 @@
 # 上游同步方案
 
-本仓库（`wonglaitung/opencode`）从 [anomalyco/opencode](https://github.com/anomalyco/opencode.git) 复制而来，以 fork 方式维护：持续跟随上游更新，同时承载会话管理定制——**全部定制收敛在 `opencode-session-mgmt/` 一个目录内**（`docs/` 设计文档 + `packages/` 工程）。
+本仓库（`wonglaitung/opencode`）从 [anomalyco/opencode](https://github.com/anomalyco/opencode.git) 复制而来，以 fork 方式维护：**按需手动同步上游**（不自动、不随每次 git pull 同步），同时承载会话管理定制——**全部定制收敛在 `opencode-session-mgmt/` 一个目录内**（`docs/` 设计文档 + `packages/` 工程）。
 
 ## Remote 布局
 
 | remote | 仓库 | 用途 |
 |--------|------|------|
-| `origin` | wonglaitung/opencode（自己的仓库） | 日常 push |
-| `upstream` | anomalyco/opencode（原项目） | 只 fetch 取更新；**push 已禁用**（`set-url --push upstream DISABLED`）防手滑 |
+| `origin` | wonglaitung/opencode（自己的仓库） | 日常 pull / push，**日常唯一用到的 remote** |
+| `upstream` | anomalyco/opencode（原项目） | 仅手工同步上游时 fetch；**push 已禁用**（`set-url --push upstream DISABLED`）防手滑。只配置 remote 不执行 fetch/merge 就不会发生任何同步 |
 
 新机器初始化：
 
@@ -18,7 +18,15 @@ git remote add upstream https://github.com/anomalyco/opencode.git
 git remote set-url --push upstream DISABLED-no-push-to-upstream
 ```
 
-## 日常同步（两条命令）
+## 日常同步（默认只走 origin，不碰上游）
+
+```bash
+git pull                    # 只同步 origin（wonglaitung/opencode），并合入本地修改
+```
+
+**铁律：默认不同步 anomalyco/opencode。** 除非明确要求（例如说「同步上游」「合并上游更新」），不要主动执行 `git fetch upstream`、`git merge upstream/dev` 等任何上游同步命令；`git pull` 一律只针对 origin。
+
+## 手工同步上游（仅在明确要求时执行）
 
 ```bash
 git fetch upstream          # 取原项目更新
@@ -40,7 +48,7 @@ git push origin dev         # 推到自己仓库
 
 ## 同步节奏与版本策略
 
-- **频率**：周级或双周级；不宜积压过久（不冲突，但回归测试面随提交量变宽）
+- **频率**：按需手工触发，无定时/自动同步；建议不宜积压过久（不冲突，但回归测试面随提交量变宽）
 - **生产锚点**：跟随上游 tag（`git fetch upstream --tags`，合并 `v0.x.y`）锚定稳定版本，比追 dev 每个提交更稳
 - **同步后检查清单**：
   1. 跑上游既有测试确认无回归
