@@ -158,13 +158,16 @@ export async function runStats(args: ParsedArgs): Promise<void> {
     for (const r of rows) {
       usageCache.set(r.session_id, await sessionUsage(client, r.session_id))
     }
-    const project = aggregateProject(rows, (id) =>
-      usageCache.get(id) ?? { cost: null, tokensInput: null, tokensOutput: null },
-    )
+    const usageOf = (id: string) =>
+      usageCache.get(id) ?? { cost: null, tokensInput: null, tokensOutput: null }
+    const project = aggregateProject(rows, usageOf)
+    const sessionDetails = rows
+      .map((r) => sessionStats(r, usageOf(r.session_id)))
+      .filter((s): s is SessionStats => s !== null)
     if (json) {
-      process.stdout.write(JSON.stringify(project, null, 2) + "\n")
+      process.stdout.write(JSON.stringify({ ...project, perSession: sessionDetails }, null, 2) + "\n")
     } else {
-      printProjectStats(project, projInfo.label, projInfo.note)
+      printProjectStats(project, projInfo.label, projInfo.note, sessionDetails)
     }
   } finally {
     store.close()
@@ -186,16 +189,47 @@ function printSessionStats(s: SessionStats): void {
   )
 }
 
-function printProjectStats(p: ReturnType<typeof aggregateProject>, label: string, note: string | null): void {
-  process.stdout.write(
-    `📊 项目 "${label}" 统计\n` +
-      (note ? `（${note}）\n` : "") +
-      `会话: ${p.sessions} | 完成率: ${(p.completionRate * 100).toFixed(0)}% | 平均周期: ${fmtDuration(p.avgDurationMs)}\n` +
-      `费用: ${p.hasCostData ? `$${p.totalCost.toFixed(4)} 总计` : "N/A（daemon 不可达或未配置 OPENCODE_SM_SERVER）"}\n` +
-      `质量:\n` +
-      `  平均采纳率: ${fmtPct(p.avgAcceptanceRate)}  超阈值(>45%)会话: ${p.overAcceptanceThreshold}/${p.sessions}\n` +
-      `  触达迭代上限(3轮): ${p.hitIterationLimit} 会话\n`,
-  )
+function printProjectStats(
+  p: ReturnType<typeof aggregateProject>,
+  label: string,
+  note: string | null,
+  sessions: SessionStats[],
+): void {
+  const lines: string[] = [
+    `📊 项目 "${label}" 统计`,
+    ...(note ? [`（${note}）`] : []),
+    `会话: ${p.sessions} | 完成率: ${(p.completionRate * 100).toFixed(0)}% | 平均周期: ${fmtDuration(p.avgDurationMs)}`,
+    `费用: ${p.hasCostData ? `$${p.totalCost.toFixed(4)} 总计` : "N/A（daemon 不可达或未配置 OPENCODE_SM_SERVER）"}`,
+    `质量:`,
+    `  平均采纳率: ${fmtPct(p.avgAcceptanceRate)}  超阈值(>45%)会话: ${p.overAcceptanceThreshold}/${p.sessions}`,
+    `  触达迭代上限(3轮): ${p.hitIterationLimit} 会话`,
+  ]
+
+  // 逐会话明细表
+  if (sessions.length > 0) {
+    lines.push("")
+    lines.push("逐会话明细:")
+    // 表头
+    lines.push(
+      `  ${"会话ID".padEnd(12)} ${"状态".padEnd(8)} ${"周期".padStart(6)} ${"采纳率".padStart(6)} ${"迭代".padStart(4)} ${"费用".padStart(8)}`,
+    )
+    lines.push(`  ${"─".repeat(12)} ${"─".repeat(8)} ${"─".repeat(6)} ${"─".repeat(6)} ${"─".repeat(4)} ${"─".repeat(8)}`)
+    for (const s of sessions) {
+      const id = s.sessionID.length > 12 ? s.sessionID.slice(0, 12) + "…" : s.sessionID
+      const status = s.complete ? "✓完成" : s.status ?? "进行中"
+      const dur = fmtDuration(s.durationMs)
+      const acc = fmtPct(s.acceptanceRate)
+      const iter = s.iterationCount !== null ? `${s.iterationCount}/3` : "N/A"
+      const cost = s.cost === null ? "N/A" : `$${s.cost.toFixed(4)}`
+      lines.push(
+        `  ${id.padEnd(12)} ${status.padEnd(8)} ${dur.padStart(6)} ${acc.padStart(6)} ${iter.padStart(4)} ${cost.padStart(8)}`,
+      )
+    }
+    lines.push("")
+    lines.push("  查看单个会话详情：opencode-sm stats <sessionID>")
+  }
+
+  process.stdout.write(lines.join("\n") + "\n")
 }
 
 /** 收集服务 GET /api/stats 返回的组/组织聚合视图（collector ScopeStats 的读侧投影）。 */
