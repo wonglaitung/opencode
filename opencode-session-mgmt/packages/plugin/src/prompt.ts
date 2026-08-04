@@ -5,6 +5,7 @@
  */
 import { STAGE_LABELS, STAGE_ORDER, type StageName, type WorkflowState } from "sm-shared"
 import type { Store } from "./db"
+import { getStuckFiles } from "./tools/quality"
 
 const RULES = `# Workflow Agent 规则
 
@@ -25,10 +26,14 @@ const RULES = `# Workflow Agent 规则
 
 ## 采纳率与迭代上限
 11. 跟踪 acceptanceRate；单会话 >45% 时提醒开发者可能未充分审查。
-12. 同一段代码 AI 生成-修改循环达 3 轮时，拒绝继续生成，提示人工重写。`
+12. 检测连续重复编辑模式（同一文件连续 3 次以上相同参数的 AI 编辑，或同一文件被编辑 6 次以上），提醒开发者审查是否陷入无效循环，但不拒绝生成。
 
-/** 将当前工作流压缩为注入片段：规则 + 阶段进度 + 质量指标 + 剩余额度。 */
-export function buildSystemFragment(workflow: WorkflowState): string {
+## SDLC 完结与下一需求
+13. 提交门禁放行（commit.status=allowed）且 git commit 成功后，主动提醒开发者：
+    "本需求 SDLC 已完成。建议执行 /new 开始下一个需求，以保持统计隔离。"`
+
+/** 将当前工作流压缩为注入片段：规则 + 阶段进度 + 质量指标 + stuck 警告。 */
+export function buildSystemFragment(workflow: WorkflowState, stuck: Record<string, number> = {}): string {
   const lines: string[] = []
   for (const name of STAGE_ORDER) {
     const stage = workflow.stages[name as StageName]
@@ -62,13 +67,19 @@ export function buildSystemFragment(workflow: WorkflowState): string {
     ),
     "```",
     "",
-    `迭代轮次：${iteration}/3${hottest ? `（最热文件 ${hottest[0]} ×${hottest[1]}）` : ""}${
-      iteration >= 3 ? "，已达上限需人工重写，勿再生成" : ""
-    }`,
+    `迭代轮次：${iteration}${hottest ? `（最热文件 ${hottest[0]} ×${hottest[1]}）` : ""}`,
     `提交门禁：${workflow.commit.status}${
       workflow.commit.blocked_by.length > 0 ? `（未完成：${workflow.commit.blocked_by.join("、")}）` : ""
     }`,
   ]
+  const stuckEntries = Object.entries(stuck)
+  if (stuckEntries.length > 0) {
+    const details = stuckEntries.map(([f, n]) => `${f}（${n} 次）`).join("、")
+    parts.push("", `⚠ 检测到重复编辑模式：${details}，建议审查是否陷入无效循环，考虑人工介入修改。`)
+  }
+  if (workflow.commit.status === "allowed") {
+    parts.push("", "⚑ SDLC 已完成，请提醒开发者执行 /new 开始下一个需求（保持统计隔离）。")
+  }
   return parts.join("\n")
 }
 
@@ -82,6 +93,6 @@ export function createSystemTransform(store: Store) {
     const row = store.ensure(input.sessionID)
     const workflow = row.workflow
     if (!workflow) return
-    output.system.push(buildSystemFragment(workflow))
+    output.system.push(buildSystemFragment(workflow, getStuckFiles(input.sessionID)))
   }
 }
