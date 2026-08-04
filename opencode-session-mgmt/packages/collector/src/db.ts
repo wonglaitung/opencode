@@ -33,7 +33,7 @@ export interface AccountAggregate {
   /** 平均会话耗时（毫秒，由汇报携带的阶段时间戳推算，6.1） */
   avgDurationMs: number
   overAcceptanceThreshold: number
-  hitIterationLimit: number
+  highIterationCount: number
 }
 
 /** 单一指标在统计窗口内「早半段 → 近半段」的走向。 */
@@ -66,13 +66,13 @@ export interface ScopeStats {
   /** 平均会话耗时（毫秒） */
   avgDurationMs: number
   overAcceptanceThreshold: number
-  hitIterationLimit: number
+  highIterationCount: number
   trends: ScopeTrends
   perAccount: AccountAggregate[]
 }
 
 const ACCEPTANCE_WARN_THRESHOLD = 45
-const ITERATION_LIMIT = 3
+const HIGH_ITERATION_THRESHOLD = 5
 
 /** reports.workflow JSON 的读侧投影（仅取聚合所需字段）。 */
 interface WorkflowLite {
@@ -255,7 +255,7 @@ export class CollectorDb {
           if (rate > ACCEPTANCE_WARN_THRESHOLD) accOver++
         }
         const iter = workflow.quality?.iterationCount ?? null
-        if (iter !== null && iter !== undefined && iter >= ITERATION_LIMIT) accLimit++
+        if (iter !== null && iter !== undefined && iter >= HIGH_ITERATION_THRESHOLD) accLimit++
 
         if (row.test_coverage !== null && row.test_coverage !== undefined) accCoverages.push(row.test_coverage)
         if (row.rework_rate !== null && row.rework_rate !== undefined) reworks.push(row.rework_rate)
@@ -289,7 +289,7 @@ export class CollectorDb {
         avgTestCoverage: avg(accCoverages),
         avgDurationMs: avg(accDurations) ?? 0,
         overAcceptanceThreshold: accOver,
-        hitIterationLimit: accLimit,
+        highIterationCount: accLimit,
       })
     }
     perAccount.sort((a, b) => b.sessions - a.sessions)
@@ -306,7 +306,7 @@ export class CollectorDb {
       avgReworkRate: avg(reworks),
       avgDurationMs: avg(durations) ?? 0,
       overAcceptanceThreshold: overThreshold,
-      hitIterationLimit: hitLimit,
+      highIterationCount: hitLimit,
       trends: {
         requirementRevision: makeTrend(avg(revEarly), avg(revRecent)),
         reworkRate: makeTrend(avg(reworkEarly), avg(reworkRecent)),

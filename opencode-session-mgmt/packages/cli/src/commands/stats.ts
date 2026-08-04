@@ -8,7 +8,7 @@ import { statSync } from "node:fs"
 import { basename, resolve } from "node:path"
 import { readIdentity } from "sm-shared"
 import type { WorkflowSessionRow } from "sm-plugin/src/db/schema"
-import { ACCEPTANCE_WARN_THRESHOLD, ITERATION_LIMIT, aggregateProject, sessionStats, type SessionStats } from "sm-plugin/src/stats"
+import { ACCEPTANCE_WARN_THRESHOLD, HIGH_ITERATION_THRESHOLD, aggregateProject, sessionStats, type SessionStats } from "sm-plugin/src/stats"
 import {
   collectorQuery,
   createClient,
@@ -202,7 +202,7 @@ function printProjectStats(
     `费用: ${p.hasCostData ? `$${p.totalCost.toFixed(4)} 总计` : "N/A（daemon 不可达或未配置 OPENCODE_SM_SERVER）"}`,
     `质量:`,
     `  平均采纳率: ${fmtPct(p.avgAcceptanceRate)}  超阈值(>45%)会话: ${p.overAcceptanceThreshold}/${p.sessions}`,
-    `  触达迭代上限(3轮): ${p.hitIterationLimit} 会话`,
+    `  高迭代会话(≥${HIGH_ITERATION_THRESHOLD}轮): ${p.highIterationCount}`,
   ]
 
   // 逐会话明细表
@@ -222,7 +222,7 @@ function printProjectStats(
       const iter =
         s.iterationCount === null
           ? "N/A"
-          : s.iterationCount >= ITERATION_LIMIT
+          : s.iterationCount >= HIGH_ITERATION_THRESHOLD
             ? `${s.iterationCount}⚠`
             : `${s.iterationCount}`
       const cost = s.cost === null ? "N/A" : `$${s.cost.toFixed(4)}`
@@ -231,7 +231,7 @@ function printProjectStats(
       )
     }
     lines.push("")
-    lines.push("  迭代 = 单文件被 AI 连改的最高次数（上限 3 轮，⚠ 表示已达上限；不是全会话编辑总数）")
+    lines.push("  迭代 = 单文件被 AI 编辑的最高次数（⚠ 表示迭代较高；不是全会话编辑总数）")
     lines.push("  查看单个会话详情：opencode-sm stats <sessionID>")
   }
 
@@ -254,7 +254,7 @@ interface ScopeAccountView {
   avgTestCoverage: number | null
   avgDurationMs: number
   overAcceptanceThreshold: number
-  hitIterationLimit: number
+  highIterationCount: number
 }
 interface ScopeStatsView {
   scope: "group" | "org"
@@ -269,7 +269,7 @@ interface ScopeStatsView {
   avgReworkRate: number | null
   avgDurationMs: number
   overAcceptanceThreshold: number
-  hitIterationLimit: number
+  highIterationCount: number
   trends: { requirementRevision: TrendView | null; reworkRate: TrendView | null }
   perAccount: ScopeAccountView[]
 }
@@ -297,7 +297,7 @@ function printScopeStats(raw: unknown, scope: string): void {
       `质量:\n` +
       `  平均采纳率: ${s.avgAcceptanceRate === null ? "N/A" : `${s.avgAcceptanceRate.toFixed(0)}%`}  超阈值(>45%)成员: ${s.overAcceptanceThreshold}/${s.members}\n` +
       `  平均覆盖率: ${fmtPct(s.avgTestCoverage)}  平均返工率: ${fmtRework(s.avgReworkRate)}\n` +
-      `  触达迭代上限(3轮): ${s.hitIterationLimit}/${s.sessions}\n` +
+      `  高迭代会话(≥${HIGH_ITERATION_THRESHOLD}轮): ${s.highIterationCount}/${s.sessions}\n` +
       formatTrends(s.trends),
   )
 }
@@ -336,11 +336,11 @@ function fmtPct(v: number | null): string {
   return v === null ? "N/A" : `${v}%`
 }
 
-/** 迭代轮次：AI 对单个文件的最大编辑次数（按文件分桶取最大值，非全会话总数），上限 3 轮。 */
+/** 迭代轮次：AI 对单个文件的最大编辑次数（按文件分桶取最大值，非全会话总数）。 */
 function fmtIterations(v: number | null): string {
   if (v === null) return "N/A"
-  const warn = v >= ITERATION_LIMIT ? "，已达上限，建议人工重写该文件" : ""
-  return `${v} 轮（单文件被 AI 连改的最高次数，上限 3 轮${warn}）`
+  const warn = v >= HIGH_ITERATION_THRESHOLD ? "，迭代较高，建议审查是否陷入无效循环" : ""
+  return `${v} 轮（单文件被 AI 编辑的最高次数${warn}）`
 }
 
 function fmtTokens(v: number | null): string {

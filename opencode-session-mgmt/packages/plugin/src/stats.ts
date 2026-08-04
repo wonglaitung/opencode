@@ -14,7 +14,9 @@ import type { Usage } from "./report"
 import type { WorkflowSessionRow } from "./db/schema"
 
 export const ACCEPTANCE_WARN_THRESHOLD = 45
-export const ITERATION_LIMIT = 3
+
+/** 统计参考线：单文件编辑次数达到此值视为"迭代较高"（仅供统计展示，非硬上限）。 */
+export const HIGH_ITERATION_THRESHOLD = 5
 
 export interface StageStats {
   name: StageName
@@ -53,7 +55,7 @@ export interface ProjectStats {
   hasCostData: boolean
   avgAcceptanceRate: number | null
   overAcceptanceThreshold: number
-  hitIterationLimit: number
+  highIterationCount: number
   stageAvgDurationMs: Record<StageName, number>
 }
 
@@ -140,7 +142,7 @@ export function aggregateProject(rows: WorkflowSessionRow[], usageOf: (id: strin
     overAcceptanceThreshold: stats.filter(
       (s) => s.acceptanceRate !== null && s.acceptanceRate > ACCEPTANCE_WARN_THRESHOLD,
     ).length,
-    hitIterationLimit: stats.filter((s) => s.iterationCount !== null && s.iterationCount >= ITERATION_LIMIT).length,
+    highIterationCount: stats.filter((s) => s.iterationCount !== null && s.iterationCount >= HIGH_ITERATION_THRESHOLD).length,
     stageAvgDurationMs: stageAvg,
   }
 }
