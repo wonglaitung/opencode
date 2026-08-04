@@ -1,6 +1,6 @@
 # 上游同步方案
 
-本仓库（`wonglaitung/opencode`）从 [anomalyco/opencode](https://github.com/anomalyco/opencode.git) 复制而来，以 fork 方式维护：**按需手动同步上游**（不自动、不随每次 git pull 同步），同时承载会话管理定制——**全部定制收敛在 `opencode-session-mgmt/` 一个目录内**（`docs/` 设计文档 + `packages/` 工程）。
+本仓库（`wonglaitung/opencode`）从 [anomalyco/opencode](https://github.com/anomalyco/opencode.git) 复制而来，以 fork 方式维护：**按需手动同步上游**（不自动、不随每次 git pull 同步），同时承载定制工程——**全部定制收敛在两个目录内**：`opencode-session-mgmt/`（会话管理：`docs/` 设计文档 + `packages/` 工程）与 `opencode-edge-debug/`（按需 Edge 调试插件，独立工程）。
 
 ## Remote 布局
 
@@ -43,6 +43,7 @@ git push origin dev         # 推到自己仓库
 | 路径 | 内容 |
 |------|------|
 | `opencode-session-mgmt/` | 设计文档（`docs/`）+ 插件 / CLI / 收集服务工程（`packages/`，独立 bun workspace，不被上游根 workspace 收录） |
+| `opencode-edge-debug/` | 按需 Edge 调试插件（独立 bun 工程，零运行时依赖，同样不被上游根 workspace 收录） |
 
 **铁律：不修改 `packages/*` 下任何上游文件。** 只要守住这条，每次同步都是 git 自动合并，无人工冲突。
 
@@ -53,7 +54,7 @@ git push origin dev         # 推到自己仓库
 - **同步后检查清单**：
   1. 跑上游既有测试确认无回归
   2. 确认插件依赖的 hook 签名未变——唯一风险点是 `experimental.chat.system.transform`（experimental 前缀），变更时只需改插件 `packages/plugin/src/prompt.ts` 适配层
-  3. 确认上游根 `package.json` 的 workspace glob 仍不匹配 `opencode-session-mgmt/`
+  3. 确认上游根 `package.json` 的 workspace glob 仍不匹配 `opencode-session-mgmt/` 与 `opencode-edge-debug/`
 
 ## 万一出现冲突
 
@@ -61,7 +62,7 @@ git push origin dev         # 推到自己仓库
 
 | 情形 | 处理 |
 |------|------|
-| 上游恰好新增了 `opencode-session-mgmt/` 同名路径（极小概率） | 保留上游版本，将我们的目录改名迁移，更新文档引用 |
+| 上游恰好新增了 `opencode-session-mgmt/` 或 `opencode-edge-debug/` 同名路径（极小概率） | 保留上游版本，将我们的目录改名迁移，更新文档引用 |
 | 有人违规改了 `packages/*` 上游文件 | 冲突解决时一律取上游版本，定制改回插件实现 |
 
 ## 同步记录
