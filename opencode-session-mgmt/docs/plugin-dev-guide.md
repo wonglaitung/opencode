@@ -80,6 +80,7 @@ export default MyPlugin
 - **静默降级**:身份/配置缺失 → 关闭对应功能但不影响其余功能;上游不可达 → 跳过本次操作。故障不得扩散。
 - **远程上报必配 outbox**:服务不可用时写本地缓冲,启动补推 + 定时补推;**4xx 视为永久失败丢弃(留日志),5xx/网络错误保留重试**;同键去重防堆积。
 - **删除/清理操作保守化**:拿不到确切列表时不清理,防瞬时不可达导致误删。
+- **子进程副作用必须静默**:需 spawn 外部命令(定位浏览器、taskkill 强杀、which 探活等)时,一律用 `spawn`/`spawnSync` + `stdio:"ignore"`(或显式捕获 stderr)。**不要用 `execFileSync`/`execFileSync` 跑可能失败的命令**——实测它失败时会一并把子进程 stderr 泄漏打印到父进程 stderr,被 OpenCode 捕获后逐条显示在 TUI、盖住输入框。edge-debug 曾因此让 Windows `taskkill` 的 "ERROR: ... could not be terminated." 刷屏 TUI;成功路径的 stderr 同理丢弃。
 
 ## 8. 安全与隐私
 
@@ -99,7 +100,17 @@ export default MyPlugin
 - **每个源文件头部注释标注对应设计文档章节**,实现前先读该章节;行为变更同步更新设计文档与流程图。
 - 文档、注释、commit 用**中文**;禁用 `§` 符号(用「3.4 节」/裸编号);commit 遵循 conventional:`feat(plugin):`、`fix(plugin):`、`docs(...):`。
 
-## 11. 验证清单(新插件合并前)
+## 11. 打包与分发
+
+两个插件已对齐统一的两层打包(参见各自工程根的 `scripts/pack-bundle.sh`):
+
+- **`build:plugin`**:`bun build src/index.ts --outdir dist/plugin --target bun`——把插件编译成自包含 JS,屏蔽目标机 bun 版本差异。
+- **`pack:bundle`**:`scripts/pack-bundle.sh`——打成可移植 tarball(`dist/<插件>-bundle-<版本>.tgz`),供内网/离线「解压即用」。要点:
+  - 根目录必须有 `.npmrc`(`node-linker=hoisted`),否则 bun 默认 `isolated` 模式在 Windows 上使用硬链接,打包/移动后硬链接断裂、传递依赖丢失;
+  - 脚本自动完成「清旧依赖 → hoisted 重装 → 组装含 node_modules 的目录 → 附带 setup.sh/setup.ps1 环境校验」;
+  - **bundle 根直接可加载**:打包时给根 `package.json` 注入 `main` 指向插件入口(单插件工程为 `src/index.ts`,monorepo 为 `packages/plugin/src/index.ts`),opencode 直接指向解压目录即可,无需指到深层子目录,与 edge-debug 直接指根一致。
+
+## 12. 验证清单(新插件合并前)
 
 1. `bun test` 与 `bun run typecheck`(strict)全绿;
 2. 启用插件跑通核心路径,**移除插件条目后上游行为完全还原**;
