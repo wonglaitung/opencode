@@ -184,6 +184,7 @@ function printSessionStats(s: SessionStats): void {
       `工作流:\n${stageLines}\n\n` +
       `质量:\n` +
       `  一次通过率: ${fmtPct(s.firstPassRate)}  迭代轮次: ${fmtIterations(s.iterationCount)}  覆盖率: ${fmtPct(s.testCoverage)}\n` +
+      `  ${fmtLinesCategory(s.lines)}\n` +
       `  返工率: ${fmtPct(s.reworkRate)}  审查清单: ${s.checklistPassed}/4  理解确认: ${s.comprehension.confirmed}/${s.comprehension.total}\n\n` +
       `AI 使用: ${s.cost === null ? "$N/A" : `$${s.cost.toFixed(4)}`} | ${fmtTokens(s.tokensInput)} in / ${fmtTokens(s.tokensOutput)} out\n`,
   )
@@ -202,6 +203,7 @@ function printProjectStats(
     `费用: ${p.hasCostData ? `$${p.totalCost.toFixed(4)} 总计` : "N/A（daemon 不可达或未配置 OPENCODE_SM_SERVER）"}`,
     `质量:`,
     `  平均一次通过率: ${fmtPct(p.avgFirstPassRate)}  一次通过率过低会话(<${LOW_FIRST_PASS_THRESHOLD}%): ${p.lowFirstPassCount}/${p.sessions}`,
+    `  ${p.hasLinesData ? fmtLinesCategory(p.linesTotal) : "AI 净增行数: N/A"}`,
     `  高迭代会话(≥${HIGH_ITERATION_THRESHOLD}轮): ${p.highIterationCount}`,
   ]
 
@@ -270,6 +272,8 @@ interface ScopeStatsView {
   avgDurationMs: number
   lowFirstPassCount: number
   highIterationCount: number
+  /** AI 净增行数三分类求和（6.3；旧版收集服务响应可能缺失） */
+  linesTotal?: { business: number; test: number; config: number } | null
   trends: { requirementRevision: TrendView | null; reworkRate: TrendView | null }
   perAccount: ScopeAccountView[]
 }
@@ -296,6 +300,7 @@ function printScopeStats(raw: unknown, scope: string): void {
       (lines.length > 0 ? lines.join("\n") + "\n\n" : "") +
       `质量:\n` +
       `  平均一次通过率: ${s.avgFirstPassRate === null ? "N/A" : `${s.avgFirstPassRate.toFixed(0)}%`}  一次通过率过低成员(<${LOW_FIRST_PASS_THRESHOLD}%): ${s.lowFirstPassCount}/${s.members}\n` +
+      `  ${fmtLinesCategory(s.linesTotal ?? null)}\n` +
       `  平均覆盖率: ${fmtPct(s.avgTestCoverage)}  平均返工率: ${fmtRework(s.avgReworkRate)}\n` +
       `  高迭代会话(≥${HIGH_ITERATION_THRESHOLD}轮): ${s.highIterationCount}/${s.sessions}\n` +
       formatTrends(s.trends),
@@ -347,4 +352,17 @@ function fmtTokens(v: number | null): string {
   if (v === null) return "N/A"
   if (v >= 1000) return `${(v / 1000).toFixed(0)}K`
   return String(v)
+}
+
+/** 行数展示：≥1000 以 K 计（保留一位小数、去尾零），对齐 6.2 示例 5.8K/62K。 */
+function fmtLines(v: number): string {
+  if (v >= 1000) return `${(v / 1000).toFixed(1).replace(/\.0$/, "")}K`
+  return String(v)
+}
+
+/** 三分类行数行（6.2）：「AI 净增行数: 业务 X / 测试 Y / 配置 Z（合计 N）」；无数据显示 N/A。 */
+export function fmtLinesCategory(lines: { business: number; test: number; config: number } | null): string {
+  if (!lines) return "AI 净增行数: N/A"
+  const total = lines.business + lines.test + lines.config
+  return `AI 净增行数: 业务 ${fmtLines(lines.business)} / 测试 ${fmtLines(lines.test)} / 配置 ${fmtLines(lines.config)}（合计 ${fmtLines(total)}）`
 }

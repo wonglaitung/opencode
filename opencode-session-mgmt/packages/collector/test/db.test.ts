@@ -22,6 +22,23 @@ function report(sessionID: string, account: string, group: string, cost: number)
   }
 }
 
+/** 携带 linesByFile 的汇报（经 summarizeWorkflow 投影为三分类聚合） */
+function reportWithLines(sessionID: string, account: string, group: string, linesByFile: Record<string, number>): SessionReport {
+  const workflow = createWorkflowState()
+  workflow.quality.linesByFile = linesByFile
+  return {
+    sessionID,
+    account,
+    group,
+    org: "Eng",
+    workflow: summarizeWorkflow(workflow),
+    cost: null,
+    tokensInput: 0,
+    tokensOutput: 0,
+    reportedAt: Date.now(),
+  }
+}
+
 function withDb(fn: (db: CollectorDb) => void): void {
   const dir = mkdtempSync(join(tmpdir(), "sm-col-"))
   const db = CollectorDb.open(join(dir, "c.db"))
@@ -134,6 +151,26 @@ describe("CollectorDb", () => {
       const stats = db.statsGroup("前端组", PERIOD)
       expect(stats.trends.requirementRevision).toEqual({ from: 3, to: 1, direction: "down" })
       expect(stats.trends.reworkRate).toEqual({ from: 0.2, to: 0.05, direction: "down" })
+    })
+  })
+
+  describe("行数三分类聚合（6.3 累加型求和）", () => {
+    test("汇报携带三分类行数 → 范围统计求和", () => {
+      withDb((db) => {
+        db.upsertReport(reportWithLines("s1", "alice", "前端组", { "src/a.ts": 10, "src/a.test.ts": 5, "c.json": 1 }))
+        db.upsertReport(reportWithLines("s2", "bob", "前端组", { "src/b.ts": 3, "d.yaml": 2 }))
+        const stats = db.statsGroup("前端组", null)
+        expect(stats.linesTotal).toEqual({ business: 13, test: 5, config: 3 })
+      })
+    })
+
+    test("无行数会话不影响求和；组织级同样聚合", () => {
+      withDb((db) => {
+        db.upsertReport(report("s1", "alice", "前端组", 1)) // 无 linesByFile：投影 lines 为 null
+        db.upsertReport(reportWithLines("s2", "bob", "前端组", { "src/b.ts": 7 }))
+        expect(db.statsGroup("前端组", null).linesTotal).toEqual({ business: 7, test: 0, config: 0 })
+        expect(db.statsOrg("Eng", null).linesTotal).toEqual({ business: 7, test: 0, config: 0 })
+      })
     })
   })
 })

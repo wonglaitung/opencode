@@ -3,6 +3,7 @@
  * 插件 → 收集服务（POST /api/report）；CI → 收集服务（POST /api/ci-quality）。
  * 仅流程摘要，不含代码内容（12 安全与隐私）。
  */
+import { sumLinesByCategory, type LinesCategory } from "./loc"
 import type {
   CommitGate,
   QualityMetrics,
@@ -30,8 +31,14 @@ export interface ReviewStageSummary extends StageSummary {
   }
 }
 
-/** 质量指标的汇报投影：剔除 iterationByFile（键为文件路径，12 不外传代码相关标识）。 */
-export type QualitySummary = Omit<QualityMetrics, "iterationByFile">
+/**
+ * 质量指标的汇报投影：剔除 iterationByFile 与 linesByFile（键为文件路径，12 不外传代码相关标识），
+ * 行数改以业务/测试/配置三分类聚合上行（3.2）。
+ */
+export type QualitySummary = Omit<QualityMetrics, "iterationByFile" | "linesByFile"> & {
+  /** AI 净增行数三分类聚合；无 AI 代码编辑（无 linesByFile）时为 null */
+  lines: LinesCategory | null
+}
 
 /**
  * WorkflowState 的汇报投影：剔除代码相关内容（comprehension.explanation、file/lines，
@@ -70,12 +77,13 @@ export function summarizeWorkflow(workflow: WorkflowState): WorkflowSummary {
       },
     },
     commit: workflow.commit,
-    // 显式投影：不外传 iterationByFile（其键为文件路径，12）。
+    // 显式投影：不外传 iterationByFile/linesByFile（其键为文件路径，12）；行数只上行三分类聚合。
     quality: {
       firstPassRate: workflow.quality.firstPassRate,
       iterationCount: workflow.quality.iterationCount,
       reworkRate: workflow.quality.reworkRate,
       testCoverage: workflow.quality.testCoverage,
+      lines: workflow.quality.linesByFile ? sumLinesByCategory(workflow.quality.linesByFile) : null,
     },
   }
 }

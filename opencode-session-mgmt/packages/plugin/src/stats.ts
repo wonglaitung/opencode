@@ -6,6 +6,8 @@
 import {
   STAGE_LABELS,
   STAGE_ORDER,
+  sumLinesByCategory,
+  type LinesCategory,
   type StageName,
   type StageRecord,
   type WorkflowState,
@@ -38,6 +40,8 @@ export interface SessionStats {
   iterationCount: number | null
   reworkRate: number | null
   testCoverage: number | null
+  /** AI 净增行数三分类聚合（本机 linesByFile 明细经 sumLinesByCategory 逐文件 clamp 汇总）；无 AI 代码编辑为 null */
+  lines: LinesCategory | null
   comprehension: { total: number; confirmed: number }
   checklistPassed: number
   cost: number | null
@@ -57,6 +61,10 @@ export interface ProjectStats {
   avgFirstPassRate: number | null
   lowFirstPassCount: number
   highIterationCount: number
+  /** AI 净增行数三分类对各会话求和（累加型指标，不做平均，6.3） */
+  linesTotal: LinesCategory
+  /** 是否有任何会话有行数数据（无数据时统计应示 N/A 而非 0，同 hasCostData） */
+  hasLinesData: boolean
   stageAvgDurationMs: Record<StageName, number>
 }
 
@@ -111,6 +119,7 @@ export function sessionStats(row: WorkflowSessionRow, usage: Usage): SessionStat
     iterationCount: workflow.quality.iterationCount,
     reworkRate: workflow.quality.reworkRate,
     testCoverage: workflow.quality.testCoverage,
+    lines: workflow.quality.linesByFile ? sumLinesByCategory(workflow.quality.linesByFile) : null,
     comprehension: { total: review.comprehension.length, confirmed },
     checklistPassed,
     cost: usage.cost,
@@ -132,6 +141,14 @@ export function aggregateProject(rows: WorkflowSessionRow[], usageOf: (id: strin
     const vals = stats.map((s) => s.stages.find((x) => x.name === name)!.durationMs)
     stageAvg[name] = n > 0 ? vals.reduce((a, b) => a + b, 0) / n : 0
   }
+  // 行数为累加型指标：对各会话三分类求和（不做平均，6.3）
+  const linesTotal: LinesCategory = { business: 0, test: 0, config: 0 }
+  for (const s of stats) {
+    if (!s.lines) continue
+    linesTotal.business += s.lines.business
+    linesTotal.test += s.lines.test
+    linesTotal.config += s.lines.config
+  }
   return {
     sessions: n,
     completed,
@@ -144,6 +161,8 @@ export function aggregateProject(rows: WorkflowSessionRow[], usageOf: (id: strin
       (s) => s.firstPassRate !== null && s.firstPassRate < LOW_FIRST_PASS_THRESHOLD,
     ).length,
     highIterationCount: stats.filter((s) => s.iterationCount !== null && s.iterationCount >= HIGH_ITERATION_THRESHOLD).length,
+    linesTotal,
+    hasLinesData: stats.some((s) => s.lines !== null),
     stageAvgDurationMs: stageAvg,
   }
 }

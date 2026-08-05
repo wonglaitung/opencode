@@ -78,6 +78,13 @@ export interface QualityMetrics {
    * 可选字段：首次计数前缺省（不改 createWorkflowState 既有形状），随汇报上行。
    */
   iterationByFile?: Record<string, number>
+  /**
+   * 按文件的 AI 净增代码行数（3.2「AI 代码行数统计」，规则 26）：净增量口径、可为负，
+   * 同会话去重累计（write 整文件覆盖计、edit 新行−旧行、apply_patch +行−−行）。
+   * 可选字段：首次计数前缺省（不改 createWorkflowState 既有形状）。
+   * 键为文件路径仅存本机插件库，汇报投影剥离、只上行三分类聚合（12）。
+   */
+  linesByFile?: Record<string, number>
 }
 
 export interface Stages {

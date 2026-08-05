@@ -1,4 +1,5 @@
 export * from "./workflow"
+export * from "./loc"
 export * from "./report"
 export * from "./identity"
 export * from "./merge"

@@ -5,7 +5,7 @@
  * 组/组织结构由各人汇报自然形成，GROUP BY group_name / org_name 即得。
  */
 import { Database } from "bun:sqlite"
-import type { CiQualityReport, SessionReport } from "sm-shared"
+import type { CiQualityReport, LinesCategory, SessionReport } from "sm-shared"
 
 interface ReportRaw {
   session_id: string
@@ -67,6 +67,8 @@ export interface ScopeStats {
   avgDurationMs: number
   lowFirstPassCount: number
   highIterationCount: number
+  /** AI 净增行数三分类对各会话求和（累加型指标，不做平均，6.3；无数据时为 0） */
+  linesTotal: LinesCategory
   trends: ScopeTrends
   perAccount: AccountAggregate[]
 }
@@ -83,7 +85,12 @@ interface WorkflowLite {
       { revision?: number; transitions?: Array<{ at: number }> }
     >
   >
-  quality?: { firstPassRate?: number | null; iterationCount?: number | null }
+  quality?: {
+    firstPassRate?: number | null
+    iterationCount?: number | null
+    /** 汇报投影携带的三分类行数聚合（插件已剥离文件路径，12） */
+    lines?: Partial<LinesCategory> | null
+  }
   commit?: { status?: string }
 }
 
@@ -231,6 +238,8 @@ export class CollectorDb {
     const durations: number[] = []
     let lowCount = 0
     let hitLimit = 0
+    // 行数为累加型指标：对会话三分类求和（不做平均，6.3）
+    const linesTotal: LinesCategory = { business: 0, test: 0, config: 0 }
     const revEarly: number[] = []
     const revRecent: number[] = []
     const reworkEarly: number[] = []
@@ -257,6 +266,13 @@ export class CollectorDb {
         }
         const iter = workflow.quality?.iterationCount ?? null
         if (iter !== null && iter !== undefined && iter >= HIGH_ITERATION_THRESHOLD) accLimit++
+
+        const lines = workflow.quality?.lines
+        if (lines) {
+          linesTotal.business += lines.business ?? 0
+          linesTotal.test += lines.test ?? 0
+          linesTotal.config += lines.config ?? 0
+        }
 
         if (row.test_coverage !== null && row.test_coverage !== undefined) accCoverages.push(row.test_coverage)
         if (row.rework_rate !== null && row.rework_rate !== undefined) reworks.push(row.rework_rate)
@@ -308,6 +324,7 @@ export class CollectorDb {
       avgDurationMs: avg(durations) ?? 0,
       lowFirstPassCount: lowCount,
       highIterationCount: hitLimit,
+      linesTotal,
       trends: {
         requirementRevision: makeTrend(avg(revEarly), avg(revRecent)),
         reworkRate: makeTrend(avg(reworkEarly), avg(reworkRecent)),

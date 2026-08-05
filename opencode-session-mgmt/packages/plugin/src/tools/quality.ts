@@ -1,8 +1,10 @@
 /**
- * 迭代计数（设计文档 3.2、4.3、7.4 规则 15-20）。
+ * 迭代计数与 AI 代码行数累计（设计文档 3.2、4.3、7.4 规则 15-20、26-27）。
  * 一次通过率 firstPassRate 已由 review.ts 的 review_submit 自动计算，不再依赖 Agent 上报（quality_report 已移除）。
- * 迭代计数 —— tool.execute.after 统计代码编辑轮次，重复模式检测供 system prompt 提示人工介入。
+ * tool.execute.after 同一观测点：按文件迭代计数（iterationByFile）+ 净增量行数累计（linesByFile），
+ * 重复模式检测供 system prompt 提示人工介入。
  */
+import { countLines, parsePatchLines } from "sm-shared"
 import type { Store } from "../db"
 
 /**
@@ -12,17 +14,57 @@ import type { Store } from "../db"
  */
 export const CODE_EDIT_TOOLS = new Set(["write", "edit", "apply_patch"])
 
-/**
- * 从工具入参提取文件键：write/edit 携带 filePath；无单一文件路径的工具
- * （如 apply_patch，入参为 patchText）归入 "(<工具名>)" 工具级桶。
- */
-function fileKey(toolName: string, args: unknown): string {
+/** 从工具入参提取文件路径：write/edit 携带 filePath；缺失返回 null。 */
+function filePathOf(args: unknown): string | null {
   if (typeof args === "object" && args !== null) {
     const a = args as Record<string, unknown>
     const p = a.filePath ?? a.file_path ?? a.path
     if (typeof p === "string" && p !== "") return p
   }
-  return `(${toolName})`
+  return null
+}
+
+/**
+ * 迭代计数的文件键：无单一文件路径的工具（如 apply_patch，入参为 patchText）
+ * 归入 "(<工具名>)" 工具级桶。
+ */
+function fileKey(toolName: string, args: unknown): string {
+  return filePathOf(args) ?? `(${toolName})`
+}
+
+/**
+ * 按净增量口径累计 AI 净增行数（3.2、规则 26），原地写入 lines：
+ * - write 整文件覆盖写：直接替换该文件计数（AI 重写不重复累加）；
+ * - edit 新行−旧行累加；oldString="" 为新建文件语义，按 newString 整体计入；
+ *   replaceAll=true 出现次数未知，按单次计（已知轻微低估边界，3.2）；
+ * - apply_patch 解析 patchText 逐文件 +行−−行（与迭代计数不同：这里有真实文件路径）。
+ * 入参缺失（无路径/内容）时跳过，不影响迭代计数。
+ */
+function applyLineDelta(tool: string, args: unknown, lines: Record<string, number>): void {
+  if (typeof args !== "object" || args === null) return
+  const a = args as Record<string, unknown>
+  const path = filePathOf(args)
+  switch (tool) {
+    case "write": {
+      if (path === null || typeof a.content !== "string") return
+      lines[path] = countLines(a.content)
+      return
+    }
+    case "edit": {
+      if (path === null || typeof a.newString !== "string") return
+      const oldString = typeof a.oldString === "string" ? a.oldString : ""
+      const delta = oldString === "" ? countLines(a.newString) : countLines(a.newString) - countLines(oldString)
+      lines[path] = (lines[path] ?? 0) + delta
+      return
+    }
+    case "apply_patch": {
+      if (typeof a.patchText !== "string") return
+      for (const [file, delta] of Object.entries(parsePatchLines(a.patchText))) {
+        lines[file] = (lines[file] ?? 0) + delta
+      }
+      return
+    }
+  }
 }
 
 /**
@@ -49,6 +91,11 @@ export function createIterationCounter(store: Store) {
       byFile[key] = (byFile[key] ?? 0) + 1
       workflow.quality.iterationByFile = byFile
       workflow.quality.iterationCount = Math.max(...Object.values(byFile))
+      // AI 行数与迭代计数共用同一观测点（3.2）；无有效行数条目时保持 linesByFile 缺省，
+      // 汇报投影据此上行 null（与 iterationCount 的 null 语义一致）
+      const lines = workflow.quality.linesByFile ?? {}
+      applyLineDelta(input.tool, input.args, lines)
+      if (Object.keys(lines).length > 0) workflow.quality.linesByFile = lines
     })
 
     // 2. 内存短记忆 + 重复模式检测

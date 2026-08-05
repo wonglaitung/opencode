@@ -2,9 +2,10 @@
  * opencode-sm workflow <sessionID> [checklist|comprehension|stats]
  * 工作流状态外部查看（设计文档 5.1）。只读本机插件库。
  */
-import { STAGE_LABELS, STAGE_ORDER, type StageName } from "sm-shared"
+import { STAGE_LABELS, STAGE_ORDER, sumLinesByCategory, type StageName } from "sm-shared"
 import { openPluginStore } from "../api"
 import type { ParsedArgs } from "../index"
+import { fmtLinesCategory } from "./stats"
 
 export async function runWorkflow(args: ParsedArgs): Promise<void> {
   const sessionID = args.positionals[0]
@@ -54,6 +55,7 @@ export async function runWorkflow(args: ParsedArgs): Promise<void> {
       process.stdout.write(
         `质量指标（${sessionID}）\n` +
           `  一次通过率: ${fmtPct(q.firstPassRate)}  迭代轮次: ${q.iterationCount ?? "N/A"}/3\n` +
+          `  ${fmtLinesCategory(q.linesByFile ? sumLinesByCategory(q.linesByFile) : null)}\n` +
           `  返工率: ${fmtPct(q.reworkRate)}  测试覆盖率: ${fmtPct(q.testCoverage)}\n` +
           `  理解确认: ${confirmed}/${review.comprehension.length}\n`,
       )

@@ -50,11 +50,11 @@ export class Store {
   static openIfExists(directory: string): Store | null {
     const path = join(directory, ".opencode", "session-mgmt.db")
     if (!existsSync(path)) return null
-    const db = new Database(path, { create: false })
-    db.exec("PRAGMA journal_mode = WAL;")
-    const store = new Store(db)
-    store.migrate()
-    return store
+    // 只读打开（4.3 --project 只读语义）：readonly 既不在任意目录创建库，也不产生 WAL 写。
+    // 不用 {create:false}：bun 1.3.14 下该组合退化为 open flags 0，抛 SQLITE_MISUSE；
+    // 只读连接也无法执行迁移写入——本库 schema 由插件侧自管，读侧按现有结构直读即可。
+    const db = new Database(path, { readonly: true })
+    return new Store(db)
   }
 
   private migrate(): void {
