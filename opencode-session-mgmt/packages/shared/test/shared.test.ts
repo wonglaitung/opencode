@@ -87,4 +87,19 @@ describe("summarizeWorkflow", () => {
     expect(JSON.stringify(summary.quality)).not.toContain("iterationByFile")
     expect(JSON.stringify(summary)).not.toContain("secret/path/a.ts")
   })
+
+  test("行数只上行三分类聚合，linesByFile 文件路径不外传（3.2、12）", () => {
+    const state = createWorkflowState()
+    state.quality.linesByFile = { "secret/path/a.ts": 10, "secret/path/a.test.ts": -3, "c.json": 2 }
+    const summary = summarizeWorkflow(state)
+    // 负值逐文件 clamp ≥0：测试类 -3 → 0
+    expect(summary.quality.lines).toEqual({ business: 10, test: 0, config: 2 })
+    expect(JSON.stringify(summary)).not.toContain("secret/path")
+    expect(JSON.stringify(summary.quality)).not.toContain("linesByFile")
+  })
+
+  test("无 AI 代码编辑时行数为 null", () => {
+    const summary = summarizeWorkflow(createWorkflowState())
+    expect(summary.quality.lines).toBeNull()
+  })
 })

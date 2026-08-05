@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test"
+import { existsSync, mkdtempSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { Store } from "../src/db"
 
 describe("Store", () => {
@@ -51,5 +54,33 @@ describe("Store", () => {
     store.markSent(store.pendingReports()[0]!.id)
     expect(store.pendingReports()).toHaveLength(0)
     store.close()
+  })
+})
+
+describe("openIfExists 只读跨项目打开（4.3）", () => {
+  test("库不存在返回 null，且不留下 .opencode", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sm-openif-"))
+    try {
+      expect(Store.openIfExists(dir)).toBeNull()
+      expect(existsSync(join(dir, ".opencode"))).toBe(false)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("已有库只读打开可读会话数据", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sm-openif-"))
+    try {
+      const store = Store.open(dir)
+      store.mutateWorkflow("s1", (wf) => {
+        wf.quality.linesByFile = { "a.ts": 5 }
+      })
+      store.close()
+      const readonly = Store.openIfExists(dir)!
+      expect(readonly.get("s1")!.workflow!.quality.linesByFile).toEqual({ "a.ts": 5 })
+      readonly.close()
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })

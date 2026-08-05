@@ -7,7 +7,7 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { createWorkflowState, summarizeWorkflow, type Identity, type SessionReport } from "sm-shared"
 import { Store } from "../src/db"
-import { createReporter } from "../src/report"
+import { buildReport, createReporter } from "../src/report"
 
 const identity: Identity = {
   account: "alice@example.com",
@@ -83,5 +83,27 @@ describe("flushOutbox 补推策略", () => {
     const pending = store.pendingReports()
     expect(pending.length).toBe(1)
     expect((JSON.parse(pending[0]!.payload) as SessionReport).cost).toBe(5)
+  })
+})
+
+describe("行数汇报投影（3.2、12）", () => {
+  const emptyUsage = { cost: null, tokensInput: null, tokensOutput: null }
+
+  test("行数只上行三分类聚合，文件路径不出本机", () => {
+    const store = Store.memory()
+    store.mutateWorkflow("s9", (wf) => {
+      wf.quality.linesByFile = { "secret/path/a.ts": 10, "secret/path/a.test.ts": -3, "c.json": 2 }
+    })
+    const built = buildReport(store.get("s9")!, identity, emptyUsage)!
+    expect(built.workflow.quality.lines).toEqual({ business: 10, test: 0, config: 2 })
+    expect(JSON.stringify(built)).not.toContain("secret/path")
+    expect(JSON.stringify(built.workflow.quality)).not.toContain("linesByFile")
+  })
+
+  test("无 linesByFile 时行数为 null（纯讨论会话）", () => {
+    const store = Store.memory()
+    store.ensure("s10")
+    const built = buildReport(store.get("s10")!, identity, emptyUsage)!
+    expect(built.workflow.quality.lines).toBeNull()
   })
 })
