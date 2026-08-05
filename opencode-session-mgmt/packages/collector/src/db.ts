@@ -69,6 +69,8 @@ export interface ScopeStats {
   highIterationCount: number
   /** AI 净增行数三分类对各会话求和（累加型指标，不做平均，6.3；无数据时为 0） */
   linesTotal: LinesCategory
+  /** 是否有任何会话上报行数数据（无数据时展示侧应示 N/A 而非 0，同项目级 hasLinesData） */
+  hasLinesData: boolean
   trends: ScopeTrends
   perAccount: AccountAggregate[]
 }
@@ -240,6 +242,7 @@ export class CollectorDb {
     let hitLimit = 0
     // 行数为累加型指标：对会话三分类求和（不做平均，6.3）
     const linesTotal: LinesCategory = { business: 0, test: 0, config: 0 }
+    let hasLinesData = false
     const revEarly: number[] = []
     const revRecent: number[] = []
     const reworkEarly: number[] = []
@@ -269,6 +272,7 @@ export class CollectorDb {
 
         const lines = workflow.quality?.lines
         if (lines) {
+          hasLinesData = true
           linesTotal.business += lines.business ?? 0
           linesTotal.test += lines.test ?? 0
           linesTotal.config += lines.config ?? 0
@@ -325,6 +329,7 @@ export class CollectorDb {
       lowFirstPassCount: lowCount,
       highIterationCount: hitLimit,
       linesTotal,
+      hasLinesData,
       trends: {
         requirementRevision: makeTrend(avg(revEarly), avg(revRecent)),
         reworkRate: makeTrend(avg(reworkEarly), avg(reworkRecent)),

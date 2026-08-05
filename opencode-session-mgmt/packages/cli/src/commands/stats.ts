@@ -274,6 +274,8 @@ interface ScopeStatsView {
   highIterationCount: number
   /** AI 净增行数三分类求和（6.3；旧版收集服务响应可能缺失） */
   linesTotal?: { business: number; test: number; config: number } | null
+  /** 是否有任何会话上报行数数据（旧版收集服务响应可能缺失）；无数据时示 N/A 而非 0 */
+  hasLinesData?: boolean
   trends: { requirementRevision: TrendView | null; reworkRate: TrendView | null }
   perAccount: ScopeAccountView[]
 }
@@ -300,7 +302,7 @@ function printScopeStats(raw: unknown, scope: string): void {
       (lines.length > 0 ? lines.join("\n") + "\n\n" : "") +
       `质量:\n` +
       `  平均一次通过率: ${s.avgFirstPassRate === null ? "N/A" : `${s.avgFirstPassRate.toFixed(0)}%`}  一次通过率过低成员(<${LOW_FIRST_PASS_THRESHOLD}%): ${s.lowFirstPassCount}/${s.members}\n` +
-      `  ${fmtLinesCategory(s.linesTotal ?? null)}\n` +
+      `  ${s.hasLinesData && s.linesTotal ? fmtLinesCategory(s.linesTotal) : "AI 净增行数: N/A"}\n` +
       `  平均覆盖率: ${fmtPct(s.avgTestCoverage)}  平均返工率: ${fmtRework(s.avgReworkRate)}\n` +
       `  高迭代会话(≥${HIGH_ITERATION_THRESHOLD}轮): ${s.highIterationCount}/${s.sessions}\n` +
       formatTrends(s.trends),

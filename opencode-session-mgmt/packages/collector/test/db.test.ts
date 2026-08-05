@@ -161,6 +161,7 @@ describe("CollectorDb", () => {
         db.upsertReport(reportWithLines("s2", "bob", "前端组", { "src/b.ts": 3, "d.yaml": 2 }))
         const stats = db.statsGroup("前端组", null)
         expect(stats.linesTotal).toEqual({ business: 13, test: 5, config: 3 })
+        expect(stats.hasLinesData).toBe(true)
       })
     })
 
@@ -169,7 +170,17 @@ describe("CollectorDb", () => {
         db.upsertReport(report("s1", "alice", "前端组", 1)) // 无 linesByFile：投影 lines 为 null
         db.upsertReport(reportWithLines("s2", "bob", "前端组", { "src/b.ts": 7 }))
         expect(db.statsGroup("前端组", null).linesTotal).toEqual({ business: 7, test: 0, config: 0 })
+        expect(db.statsGroup("前端组", null).hasLinesData).toBe(true)
         expect(db.statsOrg("Eng", null).linesTotal).toEqual({ business: 7, test: 0, config: 0 })
+      })
+    })
+
+    test("无任何行数会话时 hasLinesData 为 false（展示侧示 N/A）", () => {
+      withDb((db) => {
+        db.upsertReport(report("s1", "alice", "前端组", 1))
+        db.upsertReport(report("s2", "bob", "前端组", 2))
+        expect(db.statsGroup("前端组", null).linesTotal).toEqual({ business: 0, test: 0, config: 0 })
+        expect(db.statsGroup("前端组", null).hasLinesData).toBe(false)
       })
     })
   })
