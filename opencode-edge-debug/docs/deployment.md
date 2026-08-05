@@ -279,10 +279,24 @@ bun run typecheck    # 严格类型检查
 
 ### 8.2 把插件与依赖搬进去
 
-由于零运行时依赖，插件只需**一份含 `node_modules` 的目录**即可运行：
+由于零运行时依赖，插件只需**一份含 `node_modules` 的目录**即可运行。推荐用一键打包脚本（与 `opencode-session-mgmt` 的 `pack:bundle` 对齐），它会自动清理重装依赖、附带 `setup.sh`/`setup.ps1` 环境校验：
 
 ```bash
-# 联网区：装好依赖后把整个含 node_modules 的插件目录打包
+# 联网区：一键打成可移植 tarball（含 node_modules + 源码 + setup 脚本）
+cd opencode-edge-debug
+bun run pack:bundle        # → dist/opencode-edge-debug-bundle-<版本>.tgz
+
+# 内网开发机：解包即用，无需联网
+tar xzf opencode-edge-debug-bundle-0.0.1.tgz
+cd opencode-edge-debug-bundle-0.0.1
+bash setup.sh              # Windows 用 .\setup.ps1
+# 然后在 opencode.json 中把 plugin 指向解压目录（含 package.json）
+```
+
+不想用脚本、只手动打包也可以——装好依赖后把整个含 `node_modules` 的插件目录 tar 走即可：
+
+```bash
+# 联网区
 cd opencode-edge-debug && bun install && cd ..
 tar czf opencode-edge-debug.tgz opencode-edge-debug
 
@@ -345,5 +359,7 @@ npm pack opencode-ai                 # 得到 opencode-ai-<版本>.tgz
 |------|------|
 | `bun test` | 单测（logs 纯函数全覆盖 + Bun.serve 假 CDP 服务真 WebSocket 验证） |
 | `bun run typecheck` | tsc 严格类型检查 |
+| `bun run build:plugin` | `dist/plugin/index.js`（插件编译为自包含 JS，屏蔽目标机 bun 版本差异） |
+| `bun run pack:bundle` | `dist/opencode-edge-debug-bundle-<版本>.tgz`（可移植 tarball，内网/离线分发，见 8.2 节） |
 
 **进一步阅读**：架构与决策记录 [`design.md`](design.md)；工程规约 [`CLAUDE.md`](../CLAUDE.md)；跨插件通用开发规范 [`../opencode-session-mgmt/docs/plugin-dev-guide.md`](../../opencode-session-mgmt/docs/plugin-dev-guide.md)。
