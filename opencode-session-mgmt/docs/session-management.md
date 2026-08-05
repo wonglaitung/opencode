@@ -545,10 +545,11 @@ stateDiagram-v2
     pending --> accepted: confirm
     pending --> rejected: reject(+feedback)
     rejected --> pending: rewrite (rewrites++)
+    rejected --> accepted: confirm(复议)
     rejected --> manual: manual(+resolution)
     accepted --> [*]
     manual --> [*]
-    note right of rejected : 开发者补充意见,大部分要求 AI 重写;<br/>小部分由开发者自己处理
+    note right of rejected : 开发者补充意见,大部分要求 AI 重写;<br/>小部分由开发者自己处理;<br/>讨论后认可原实现可直接 confirm 复议
 ```
 
 1. AI 将每个代码变更拆分为可理解的片段（按方法/类/模块），每个片段一个 `ComprehensionRecord`
@@ -559,6 +560,7 @@ stateDiagram-v2
 4. 被拒绝的片段：
    - **大部分**由 AI 按意见**重写**（`comprehension_rewrite`）→ 回到 `pending`，`rewrites++`，重新审查
    - **小部分**由开发者**自己处理**（`comprehension_manual`，如自己写/删除，须声明 `resolution`）→ 终态
+   - 讨论后认可原实现的，可直接 `comprehension_confirm` 复议为 `accepted`（不计重写，`rewrites` 不变）
 5. 开发者可以对任意片段追问"为什么这样写"，追问和回答追加到 `explanation` 中
 6. 审查通过（`review_submit`）要求：**所有片段必须处于 `accepted` 或 `manual` 终态，不允许 `pending`/`rejected` 悬空**；此时 `designRationale` 才可标记为 `true`
 

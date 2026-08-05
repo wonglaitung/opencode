@@ -29,7 +29,6 @@ export async function runWorkflow(args: ParsedArgs): Promise<void> {
         `logicExplainable:   ${mark(c.logicExplainable)}`,
         `behaviorVerifiable: ${mark(c.behaviorVerifiable)}`,
         `designRationale:    ${mark(c.designRationale)}`,
-        `acceptanceRate:     ${c.acceptanceRate ?? "N/A"}`,
       ]
       process.stdout.write(`审查清单（${sessionID}）\n${lines.join("\n")}\n`)
       return
@@ -54,7 +53,7 @@ export async function runWorkflow(args: ParsedArgs): Promise<void> {
       const confirmed = review.comprehension.filter((c) => c.developerConfirmed).length
       process.stdout.write(
         `质量指标（${sessionID}）\n` +
-          `  采纳率: ${fmtPct(q.acceptanceRate)}  迭代轮次: ${q.iterationCount ?? "N/A"}/3\n` +
+          `  一次通过率: ${fmtPct(q.firstPassRate)}  迭代轮次: ${q.iterationCount ?? "N/A"}/3\n` +
           `  返工率: ${fmtPct(q.reworkRate)}  测试覆盖率: ${fmtPct(q.testCoverage)}\n` +
           `  理解确认: ${confirmed}/${review.comprehension.length}\n`,
       )

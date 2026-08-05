@@ -8,7 +8,7 @@ import { CollectorDb } from "../src/db"
 function report(sessionID: string, account: string, group: string, cost: number): SessionReport {
   const workflow = createWorkflowState()
   workflow.stages.requirements.status = "approved"
-  workflow.quality.acceptanceRate = 50 // 超阈值，用于告警计数
+  workflow.quality.firstPassRate = 50 // 低于 70 参考线，用于返工信号计数
   return {
     sessionID,
     account,
@@ -54,7 +54,7 @@ describe("CollectorDb", () => {
     })
   })
 
-  test("组聚合：成员排行与告警计数", () => {
+  test("组聚合：成员排行与低一次通过率计数", () => {
     withDb((db) => {
       db.upsertReport(report("s1", "alice", "前端组", 1))
       db.upsertReport(report("s2", "alice", "前端组", 2))
@@ -64,7 +64,8 @@ describe("CollectorDb", () => {
       expect(stats.sessions).toBe(3)
       expect(stats.perAccount[0]!.account).toBe("alice") // 会话多者排前
       expect(stats.perAccount[0]!.sessions).toBe(2)
-      expect(stats.overAcceptanceThreshold).toBe(3) // acceptanceRate=50 > 45
+      expect(stats.lowFirstPassCount).toBe(3) // firstPassRate=50 < 70
+      expect(stats.avgFirstPassRate).toBe(50)
     })
   })
 

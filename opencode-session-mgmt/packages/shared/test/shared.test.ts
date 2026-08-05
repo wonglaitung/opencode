@@ -16,8 +16,8 @@ import {
 describe("deepMerge", () => {
   test("只覆盖出现的键，保留其余", () => {
     const base: WorkflowState = createWorkflowState()
-    const next = deepMerge(base, { quality: { acceptanceRate: 40 } })
-    expect(next.quality.acceptanceRate).toBe(40)
+    const next = deepMerge(base, { quality: { firstPassRate: 40 } })
+    expect(next.quality.firstPassRate).toBe(40)
     expect(next.quality.iterationCount).toBeNull()
     expect(next.stages.requirements.status).toBe("not_started")
   })
@@ -67,8 +67,13 @@ describe("summarizeWorkflow", () => {
       file: "a.ts",
       lines: [1, 2],
       explanation: "秘密解释正文",
+      decision: "accepted",
       developerConfirmed: true,
       confirmedAt: 123,
+      feedback: null,
+      rejectedAt: null,
+      rewrites: 0,
+      resolution: null,
     })
     // 本机库记录按文件的迭代计数（键为文件路径）
     state.quality.iterationByFile = { "secret/path/a.ts": 3 }
@@ -77,7 +82,7 @@ describe("summarizeWorkflow", () => {
     expect(summary.stages.review.comprehension).toEqual({ total: 1, confirmed: 1 })
     // 摘要不含 explanation 正文
     expect(JSON.stringify(summary)).not.toContain("秘密解释正文")
-    // 质量投影保留 iterationCount，但剔除 iterationByFile（文件路径不外传，§12）
+    // 质量投影保留 iterationCount，但剔除 iterationByFile（文件路径不外传，12）
     expect(summary.quality.iterationCount).toBe(3)
     expect(JSON.stringify(summary.quality)).not.toContain("iterationByFile")
     expect(JSON.stringify(summary)).not.toContain("secret/path/a.ts")

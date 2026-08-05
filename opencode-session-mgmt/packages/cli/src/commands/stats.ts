@@ -8,7 +8,7 @@ import { statSync } from "node:fs"
 import { basename, resolve } from "node:path"
 import { readIdentity } from "sm-shared"
 import type { WorkflowSessionRow } from "sm-plugin/src/db/schema"
-import { ACCEPTANCE_WARN_THRESHOLD, HIGH_ITERATION_THRESHOLD, aggregateProject, sessionStats, type SessionStats } from "sm-plugin/src/stats"
+import { HIGH_ITERATION_THRESHOLD, LOW_FIRST_PASS_THRESHOLD, aggregateProject, sessionStats, type SessionStats } from "sm-plugin/src/stats"
 import {
   collectorQuery,
   createClient,
@@ -183,7 +183,7 @@ function printSessionStats(s: SessionStats): void {
       `开发者: ${s.account ?? "N/A"}  周期: ${fmtDuration(s.durationMs)}  ${s.complete ? "✓ 已完成" : "进行中"}\n\n` +
       `工作流:\n${stageLines}\n\n` +
       `质量:\n` +
-      `  采纳率: ${fmtPct(s.acceptanceRate)}  迭代轮次: ${fmtIterations(s.iterationCount)}  覆盖率: ${fmtPct(s.testCoverage)}\n` +
+      `  一次通过率: ${fmtPct(s.firstPassRate)}  迭代轮次: ${fmtIterations(s.iterationCount)}  覆盖率: ${fmtPct(s.testCoverage)}\n` +
       `  返工率: ${fmtPct(s.reworkRate)}  审查清单: ${s.checklistPassed}/4  理解确认: ${s.comprehension.confirmed}/${s.comprehension.total}\n\n` +
       `AI 使用: ${s.cost === null ? "$N/A" : `$${s.cost.toFixed(4)}`} | ${fmtTokens(s.tokensInput)} in / ${fmtTokens(s.tokensOutput)} out\n`,
   )
@@ -201,7 +201,7 @@ function printProjectStats(
     `会话: ${p.sessions} | 完成率: ${(p.completionRate * 100).toFixed(0)}% | 平均周期: ${fmtDuration(p.avgDurationMs)}`,
     `费用: ${p.hasCostData ? `$${p.totalCost.toFixed(4)} 总计` : "N/A（daemon 不可达或未配置 OPENCODE_SM_SERVER）"}`,
     `质量:`,
-    `  平均采纳率: ${fmtPct(p.avgAcceptanceRate)}  超阈值(>45%)会话: ${p.overAcceptanceThreshold}/${p.sessions}`,
+    `  平均一次通过率: ${fmtPct(p.avgFirstPassRate)}  一次通过率过低会话(<${LOW_FIRST_PASS_THRESHOLD}%): ${p.lowFirstPassCount}/${p.sessions}`,
     `  高迭代会话(≥${HIGH_ITERATION_THRESHOLD}轮): ${p.highIterationCount}`,
   ]
 
@@ -211,14 +211,14 @@ function printProjectStats(
     lines.push("逐会话明细:")
     // 表头
     lines.push(
-      `  ${"会话ID".padEnd(12)} ${"状态".padEnd(8)} ${"周期".padStart(6)} ${"采纳率".padStart(6)} ${"迭代".padStart(4)} ${"费用".padStart(8)}`,
+      `  ${"会话ID".padEnd(12)} ${"状态".padEnd(8)} ${"周期".padStart(6)} ${"一次通过率".padStart(6)} ${"迭代".padStart(4)} ${"费用".padStart(8)}`,
     )
     lines.push(`  ${"─".repeat(12)} ${"─".repeat(8)} ${"─".repeat(6)} ${"─".repeat(6)} ${"─".repeat(4)} ${"─".repeat(8)}`)
     for (const s of sessions) {
       const id = s.sessionID.length > 12 ? s.sessionID.slice(0, 12) + "…" : s.sessionID
       const status = s.complete ? "✓完成" : s.status ?? "进行中"
       const dur = fmtDuration(s.durationMs)
-      const acc = fmtPct(s.acceptanceRate)
+      const acc = fmtPct(s.firstPassRate)
       const iter =
         s.iterationCount === null
           ? "N/A"
@@ -250,10 +250,10 @@ interface ScopeAccountView {
   completed: number
   completionRate: number
   cost: number
-  avgAcceptanceRate: number | null
+  avgFirstPassRate: number | null
   avgTestCoverage: number | null
   avgDurationMs: number
-  overAcceptanceThreshold: number
+  lowFirstPassCount: number
   highIterationCount: number
 }
 interface ScopeStatsView {
@@ -264,11 +264,11 @@ interface ScopeStatsView {
   completed: number
   completionRate: number
   totalCost: number
-  avgAcceptanceRate: number | null
+  avgFirstPassRate: number | null
   avgTestCoverage: number | null
   avgReworkRate: number | null
   avgDurationMs: number
-  overAcceptanceThreshold: number
+  lowFirstPassCount: number
   highIterationCount: number
   trends: { requirementRevision: TrendView | null; reworkRate: TrendView | null }
   perAccount: ScopeAccountView[]
@@ -281,9 +281,9 @@ function printScopeStats(raw: unknown, scope: string): void {
   const label = isOrg ? "组织" : "组"
   const lines = (s.perAccount ?? []).map((a) => {
     const acc =
-      a.avgAcceptanceRate === null
-        ? "采纳率N/A"
-        : `采纳率${a.avgAcceptanceRate.toFixed(0)}%${a.avgAcceptanceRate > ACCEPTANCE_WARN_THRESHOLD ? " ⚠" : ""}`
+      a.avgFirstPassRate === null
+        ? "一次通过率N/A"
+        : `一次通过率${a.avgFirstPassRate.toFixed(0)}%${a.avgFirstPassRate < LOW_FIRST_PASS_THRESHOLD ? " ⚠" : ""}`
     const dur = `${fmtDuration(a.avgDurationMs ?? 0)}/会话`
     const cov = a.avgTestCoverage === null ? "覆盖率N/A" : `覆盖率${a.avgTestCoverage.toFixed(0)}%`
     return `  ${a.account.padEnd(22)} ${String(a.sessions).padStart(3)}会话 ${(a.completionRate * 100)
@@ -295,7 +295,7 @@ function printScopeStats(raw: unknown, scope: string): void {
       `成员: ${s.members} | 总会话: ${s.sessions} | 完成率: ${(s.completionRate * 100).toFixed(0)}% | 费用: $${s.totalCost.toFixed(4)} | 平均周期: ${fmtDuration(s.avgDurationMs ?? 0)}\n\n` +
       (lines.length > 0 ? lines.join("\n") + "\n\n" : "") +
       `质量:\n` +
-      `  平均采纳率: ${s.avgAcceptanceRate === null ? "N/A" : `${s.avgAcceptanceRate.toFixed(0)}%`}  超阈值(>45%)成员: ${s.overAcceptanceThreshold}/${s.members}\n` +
+      `  平均一次通过率: ${s.avgFirstPassRate === null ? "N/A" : `${s.avgFirstPassRate.toFixed(0)}%`}  一次通过率过低成员(<${LOW_FIRST_PASS_THRESHOLD}%): ${s.lowFirstPassCount}/${s.members}\n` +
       `  平均覆盖率: ${fmtPct(s.avgTestCoverage)}  平均返工率: ${fmtRework(s.avgReworkRate)}\n` +
       `  高迭代会话(≥${HIGH_ITERATION_THRESHOLD}轮): ${s.highIterationCount}/${s.sessions}\n` +
       formatTrends(s.trends),

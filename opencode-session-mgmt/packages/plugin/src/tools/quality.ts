@@ -1,12 +1,9 @@
 /**
- * 质量指标工具与迭代计数（设计文档 3.2、4.3、7.4 规则 15-20）。
- * quality_report —— Agent 上报 acceptanceRate，增量合并写 workflow.quality
- * 迭代计数 —— tool.execute.after 统计代码编辑轮次，达 3 轮由 system prompt 提示人工介入
+ * 迭代计数（设计文档 3.2、4.3、7.4 规则 15-20）。
+ * 一次通过率 firstPassRate 已由 review.ts 的 review_submit 自动计算，不再依赖 Agent 上报（quality_report 已移除）。
+ * 迭代计数 —— tool.execute.after 统计代码编辑轮次，重复模式检测供 system prompt 提示人工介入。
  */
-import { tool, type ToolDefinition } from "@opencode-ai/plugin"
 import type { Store } from "../db"
-
-const z = tool.schema
 
 /**
  * 视为"AI 代码编辑"的上游工具名（计入迭代轮次）。
@@ -14,33 +11,6 @@ const z = tool.schema
  * （shell 工具名是 "bash"，read/grep 等只读工具不计）。
  */
 export const CODE_EDIT_TOOLS = new Set(["write", "edit", "apply_patch"])
-
-/** 业界健康采纳率上限；超过则提示可能未充分审查（7.4 规则 16）。 */
-export const ACCEPTANCE_WARN_THRESHOLD = 45
-
-export function createQualityTools(store: Store): Record<string, ToolDefinition> {
-  const quality_report = tool({
-    description:
-      "上报会话内质量指标（acceptanceRate 采纳率 0-100），增量合并写入 workflow.quality。" +
-      "迭代轮次 iterationCount 由插件按文件自动计数（tool.execute.after），不通过本工具设置。",
-    args: {
-      acceptanceRate: z.number().min(0).max(100).optional().describe("代码建议采纳率（%）"),
-    },
-    async execute(args, context) {
-      const patch: { quality: { acceptanceRate?: number } } = { quality: {} }
-      if (args.acceptanceRate !== undefined) patch.quality.acceptanceRate = args.acceptanceRate
-      const saved = store.updateWorkflow(context.sessionID, patch)
-      const rate = saved.quality.acceptanceRate
-      const warning =
-        rate !== null && rate > ACCEPTANCE_WARN_THRESHOLD
-          ? `\n⚠ 采纳率 ${rate}% 超过健康阈值（${ACCEPTANCE_WARN_THRESHOLD}%），请逐段回顾变更，确认能独立解释其原理。`
-          : ""
-      return `已记录质量指标：acceptanceRate=${rate ?? "N/A"}，iterationCount=${saved.quality.iterationCount ?? "N/A"}${warning}`
-    },
-  })
-
-  return { quality_report }
-}
 
 /**
  * 从工具入参提取文件键：write/edit 携带 filePath；无单一文件路径的工具

@@ -72,7 +72,7 @@ export function summarizeWorkflow(workflow: WorkflowState): WorkflowSummary {
     commit: workflow.commit,
     // 显式投影：不外传 iterationByFile（其键为文件路径，12）。
     quality: {
-      acceptanceRate: workflow.quality.acceptanceRate,
+      firstPassRate: workflow.quality.firstPassRate,
       iterationCount: workflow.quality.iterationCount,
       reworkRate: workflow.quality.reworkRate,
       testCoverage: workflow.quality.testCoverage,

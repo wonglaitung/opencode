@@ -11,15 +11,17 @@ function setup() {
 }
 
 describe("comprehension 工具", () => {
-  test("add 后 confirm 置真", async () => {
+  test("add 后 confirm 置真且定论为 accepted", async () => {
     const { store, tools } = setup()
     await tools.comprehension_add!.execute(
       { codeSegmentId: "a.ts:1-2", file: "a.ts", lineStart: 1, lineEnd: 2, explanation: "解释" } as never,
       ctx,
     )
+    expect(store.get("s1")!.workflow!.stages.review.comprehension[0]!.decision).toBe("pending")
     await tools.comprehension_confirm!.execute({ codeSegmentId: "a.ts:1-2" } as never, ctx)
-    const review = store.get("s1")!.workflow!.stages.review
-    expect(review.comprehension[0]!.developerConfirmed).toBe(true)
+    const rec = store.get("s1")!.workflow!.stages.review.comprehension[0]!
+    expect(rec.developerConfirmed).toBe(true)
+    expect(rec.decision).toBe("accepted")
     store.close()
   })
 
@@ -44,6 +46,114 @@ describe("comprehension 工具", () => {
     const explanation = store.get("s1")!.workflow!.stages.review.comprehension[0]!.explanation
     expect(explanation).toContain("为何?")
     expect(explanation).toContain("因为X")
+    store.close()
+  })
+})
+
+describe("评审状态机（reject/rewrite/manual）", () => {
+  test("reject：pending → rejected，feedback 留痕", async () => {
+    const { store, tools } = setup()
+    await tools.comprehension_add!.execute(
+      { codeSegmentId: "a", file: "a.ts", lineStart: 1, lineEnd: 2, explanation: "e" } as never,
+      ctx,
+    )
+    await tools.comprehension_reject!.execute({ codeSegmentId: "a", feedback: "应处理空值" } as never, ctx)
+    const rec = store.get("s1")!.workflow!.stages.review.comprehension[0]!
+    expect(rec.decision).toBe("rejected")
+    expect(rec.feedback).toBe("应处理空值")
+    expect(rec.rejectedAt).not.toBeNull()
+    store.close()
+  })
+
+  test("reject 非 pending 片段报错", async () => {
+    const { store, tools } = setup()
+    await tools.comprehension_add!.execute(
+      { codeSegmentId: "a", file: "a.ts", lineStart: 1, lineEnd: 2, explanation: "e" } as never,
+      ctx,
+    )
+    await tools.comprehension_confirm!.execute({ codeSegmentId: "a" } as never, ctx)
+    await expect(
+      tools.comprehension_reject!.execute({ codeSegmentId: "a", feedback: "x" } as never, ctx),
+    ).rejects.toThrow(/仅 pending 可拒绝/)
+    store.close()
+  })
+
+  test("rewrite：rejected → pending，rewrites++", async () => {
+    const { store, tools } = setup()
+    await tools.comprehension_add!.execute(
+      { codeSegmentId: "a", file: "a.ts", lineStart: 1, lineEnd: 2, explanation: "e" } as never,
+      ctx,
+    )
+    await tools.comprehension_reject!.execute({ codeSegmentId: "a", feedback: "f" } as never, ctx)
+    await tools.comprehension_rewrite!.execute({ codeSegmentId: "a" } as never, ctx)
+    const rec = store.get("s1")!.workflow!.stages.review.comprehension[0]!
+    expect(rec.decision).toBe("pending")
+    expect(rec.rewrites).toBe(1)
+    expect(rec.developerConfirmed).toBe(false)
+    store.close()
+  })
+
+  test("rewrite 非 rejected 片段报错", async () => {
+    const { store, tools } = setup()
+    await tools.comprehension_add!.execute(
+      { codeSegmentId: "a", file: "a.ts", lineStart: 1, lineEnd: 2, explanation: "e" } as never,
+      ctx,
+    )
+    await expect(tools.comprehension_rewrite!.execute({ codeSegmentId: "a" } as never, ctx)).rejects.toThrow(
+      /仅 rejected 可重写/,
+    )
+    store.close()
+  })
+
+  test("manual：rejected → manual，resolution 留痕", async () => {
+    const { store, tools } = setup()
+    await tools.comprehension_add!.execute(
+      { codeSegmentId: "a", file: "a.ts", lineStart: 1, lineEnd: 2, explanation: "e" } as never,
+      ctx,
+    )
+    await tools.comprehension_reject!.execute({ codeSegmentId: "a", feedback: "f" } as never, ctx)
+    await tools.comprehension_manual!.execute({ codeSegmentId: "a", resolution: "已人工重写" } as never, ctx)
+    const rec = store.get("s1")!.workflow!.stages.review.comprehension[0]!
+    expect(rec.decision).toBe("manual")
+    expect(rec.resolution).toBe("已人工重写")
+    store.close()
+  })
+
+  test("manual 非 rejected 片段报错", async () => {
+    const { store, tools } = setup()
+    await tools.comprehension_add!.execute(
+      { codeSegmentId: "a", file: "a.ts", lineStart: 1, lineEnd: 2, explanation: "e" } as never,
+      ctx,
+    )
+    await expect(
+      tools.comprehension_manual!.execute({ codeSegmentId: "a", resolution: "r" } as never, ctx),
+    ).rejects.toThrow(/仅 rejected 可由开发者 manual 处理/)
+    store.close()
+  })
+
+  test("rejected 片段可复议 confirm 为 accepted", async () => {
+    const { store, tools } = setup()
+    await tools.comprehension_add!.execute(
+      { codeSegmentId: "a", file: "a.ts", lineStart: 1, lineEnd: 2, explanation: "e" } as never,
+      ctx,
+    )
+    await tools.comprehension_reject!.execute({ codeSegmentId: "a", feedback: "f" } as never, ctx)
+    await tools.comprehension_confirm!.execute({ codeSegmentId: "a" } as never, ctx)
+    expect(store.get("s1")!.workflow!.stages.review.comprehension[0]!.decision).toBe("accepted")
+    store.close()
+  })
+
+  test("manual 终态不可再 confirm", async () => {
+    const { store, tools } = setup()
+    await tools.comprehension_add!.execute(
+      { codeSegmentId: "a", file: "a.ts", lineStart: 1, lineEnd: 2, explanation: "e" } as never,
+      ctx,
+    )
+    await tools.comprehension_reject!.execute({ codeSegmentId: "a", feedback: "f" } as never, ctx)
+    await tools.comprehension_manual!.execute({ codeSegmentId: "a", resolution: "r" } as never, ctx)
+    await expect(tools.comprehension_confirm!.execute({ codeSegmentId: "a" } as never, ctx)).rejects.toThrow(
+      /已 manual 终态/,
+    )
     store.close()
   })
 })
@@ -82,7 +192,7 @@ describe("review_submit 门禁", () => {
     store.close()
   })
 
-  test("片段未全部确认时拒绝", async () => {
+  test("存在 pending 片段时拒绝（未定论悬空）", async () => {
     const { store, tools } = setup()
     await tools.comprehension_add!.execute(
       { codeSegmentId: "a", file: "a.ts", lineStart: 1, lineEnd: 2, explanation: "e" } as never,
@@ -93,7 +203,23 @@ describe("review_submit 门禁", () => {
         { businessIntent: true, logicExplainable: true, behaviorVerifiable: true } as never,
         ctx,
       ),
-    ).rejects.toThrow(/未确认/)
+    ).rejects.toThrow(/未定论/)
+    store.close()
+  })
+
+  test("存在 rejected 片段时拒绝（须 rewrite/manual 定论）", async () => {
+    const { store, tools } = setup()
+    await tools.comprehension_add!.execute(
+      { codeSegmentId: "a", file: "a.ts", lineStart: 1, lineEnd: 2, explanation: "e" } as never,
+      ctx,
+    )
+    await tools.comprehension_reject!.execute({ codeSegmentId: "a", feedback: "f" } as never, ctx)
+    await expect(
+      tools.review_submit!.execute(
+        { businessIntent: true, logicExplainable: true, behaviorVerifiable: true } as never,
+        ctx,
+      ),
+    ).rejects.toThrow(/未定论/)
     store.close()
   })
 
@@ -128,6 +254,80 @@ describe("review_submit 门禁", () => {
     expect(wf.stages.review.status).toBe("approved")
     expect(wf.stages.review.checklist.designRationale).toBe(true)
     expect(wf.commit.blocked_by).not.toContain("review")
+    store.close()
+  })
+})
+
+describe("firstPassRate 自动计算", () => {
+  test("一次通过片段计入分子；重写后 accepted 不计入", async () => {
+    const { store, tools } = setup()
+    // a：直接 confirm → 一次通过
+    await tools.comprehension_add!.execute(
+      { codeSegmentId: "a", file: "a.ts", lineStart: 1, lineEnd: 2, explanation: "e" } as never,
+      ctx,
+    )
+    await tools.comprehension_confirm!.execute({ codeSegmentId: "a" } as never, ctx)
+    // b：reject → rewrite → confirm → 非一次通过
+    await tools.comprehension_add!.execute(
+      { codeSegmentId: "b", file: "b.ts", lineStart: 1, lineEnd: 2, explanation: "e" } as never,
+      ctx,
+    )
+    await tools.comprehension_reject!.execute({ codeSegmentId: "b", feedback: "f" } as never, ctx)
+    await tools.comprehension_rewrite!.execute({ codeSegmentId: "b" } as never, ctx)
+    await tools.comprehension_confirm!.execute({ codeSegmentId: "b" } as never, ctx)
+    await tools.review_submit!.execute(
+      { businessIntent: true, logicExplainable: true, behaviorVerifiable: true } as never,
+      ctx,
+    )
+    // 2 段定论，仅 a 一次通过 → 50%
+    expect(store.get("s1")!.workflow!.quality.firstPassRate).toBe(50)
+    store.close()
+  })
+
+  test("manual 片段计入分母但不计入分子", async () => {
+    const { store, tools } = setup()
+    await tools.comprehension_add!.execute(
+      { codeSegmentId: "a", file: "a.ts", lineStart: 1, lineEnd: 2, explanation: "e" } as never,
+      ctx,
+    )
+    await tools.comprehension_confirm!.execute({ codeSegmentId: "a" } as never, ctx)
+    await tools.comprehension_add!.execute(
+      { codeSegmentId: "b", file: "b.ts", lineStart: 1, lineEnd: 2, explanation: "e" } as never,
+      ctx,
+    )
+    await tools.comprehension_reject!.execute({ codeSegmentId: "b", feedback: "f" } as never, ctx)
+    await tools.comprehension_manual!.execute({ codeSegmentId: "b", resolution: "已废弃" } as never, ctx)
+    await tools.review_submit!.execute(
+      { businessIntent: true, logicExplainable: true, behaviorVerifiable: true } as never,
+      ctx,
+    )
+    // a accepted(rewrites=0) + b manual → 1/2 = 50%
+    expect(store.get("s1")!.workflow!.quality.firstPassRate).toBe(50)
+    store.close()
+  })
+
+  test("纯讨论会话无片段时 firstPassRate 保持 null", async () => {
+    const { store, tools } = setup()
+    await tools.review_submit!.execute(
+      { businessIntent: true, logicExplainable: true, behaviorVerifiable: true } as never,
+      ctx,
+    )
+    expect(store.get("s1")!.workflow!.quality.firstPassRate).toBeNull()
+    store.close()
+  })
+
+  test("全部一次通过时为 100", async () => {
+    const { store, tools } = setup()
+    await tools.comprehension_add!.execute(
+      { codeSegmentId: "a", file: "a.ts", lineStart: 1, lineEnd: 2, explanation: "e" } as never,
+      ctx,
+    )
+    await tools.comprehension_confirm!.execute({ codeSegmentId: "a" } as never, ctx)
+    await tools.review_submit!.execute(
+      { businessIntent: true, logicExplainable: true, behaviorVerifiable: true } as never,
+      ctx,
+    )
+    expect(store.get("s1")!.workflow!.quality.firstPassRate).toBe(100)
     store.close()
   })
 })

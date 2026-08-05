@@ -24,16 +24,28 @@ export interface ReviewChecklist {
   logicExplainable: boolean
   behaviorVerifiable: boolean
   designRationale: boolean
-  acceptanceRate: number | null
 }
+
+/** 片段评审去留状态机（3.2 审查）：add→pending；confirm→accepted；reject→rejected；rewrite→pending；manual→manual。终态为 accepted / manual。 */
+export type ComprehensionDecision = "pending" | "accepted" | "rejected" | "manual"
 
 export interface ComprehensionRecord {
   codeSegmentId: string
   file: string
   lines: [number, number]
   explanation: string
+  /** 片段当前去留状态（3.2）。 */
+  decision: ComprehensionDecision
+  /** 旧确认语义保留：accepted 时为 true（统计/展示的 confirmed 口径不变）。 */
   developerConfirmed: boolean
   confirmedAt: number | null
+  /** reject 时开发者补充的意见（rewrite 的依据）。 */
+  feedback: string | null
+  rejectedAt: number | null
+  /** 被拒绝后经 rewrite 重写的次数（一次通过率判定：accepted 且 rewrites===0 视为一次通过）。 */
+  rewrites: number
+  /** manual 终态时开发者自处理的结果说明。 */
+  resolution: string | null
 }
 
 export interface ReviewStageRecord extends StageRecord {
@@ -52,8 +64,9 @@ export interface CommitGate {
 }
 
 export interface QualityMetrics {
-  /** 会话内追踪（插件写本机库，随汇报上行） */
-  acceptanceRate: number | null
+  /** 一次通过率（3.2）：未重写即 accepted 的片段数 ÷ 全部定论片段数(accepted+manual)。
+   *  review_submit 通过时由插件自动计算写回，不依赖 Agent 上报。纯讨论会话（无片段）保持 null。 */
+  firstPassRate: number | null
   /** 「同一段代码/文件」的最大生成-修改循环次数（3.2），取 iterationByFile 各文件最大值 */
   iterationCount: number | null
   /** 合并后由 CI 按 sessionID 回写收集服务（设计文档 4.3） */
@@ -107,7 +120,6 @@ function createReviewStageRecord(): ReviewStageRecord {
       logicExplainable: false,
       behaviorVerifiable: false,
       designRationale: false,
-      acceptanceRate: null,
     },
     comprehension: [],
   }
@@ -125,7 +137,7 @@ export function createWorkflowState(): WorkflowState {
     },
     commit: { status: "blocked", blocked_by: [...STAGE_ORDER] },
     quality: {
-      acceptanceRate: null,
+      firstPassRate: null,
       iterationCount: null,
       reworkRate: null,
       testCoverage: null,
