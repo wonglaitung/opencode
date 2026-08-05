@@ -44,6 +44,8 @@ bun install
 
 移除该条目即可完全卸载，不改变上游任何行为。
 
+> 从零到能用的完整安装、验证与排查见 [docs/deployment.md](./docs/deployment.md)。
+
 ## 开发
 
 ```bash
