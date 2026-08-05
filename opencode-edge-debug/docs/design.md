@@ -52,7 +52,10 @@ flowchart LR
   `--remote-debugging-port=<port> --user-data-dir=<dir> --no-first-run --no-default-browser-check <url>`，
   `detached: true, stdio: "ignore"` + `unref()`（自成进程组，守护进程不挂起）。
 - `killProcessTree(child)`：CDP 优雅关闭失败时的兜底。posix 经 `-pid` 整组 SIGKILL（失败退化为单进程），
-  win32 `taskkill /pid <pid> /T /F`；已退出进程跳过，一切错误吞掉。
+  win32 `spawn("taskkill", ["/pid", pid, "/T", "/F"], { stdio: "ignore" })` 静默终止——taskkill 终止复杂进程树
+  （如 Edge）常失败，其 stderr 会打印多条 "ERROR: ... could not be terminated."，必须用 `stdio:"ignore"`
+  彻底丢弃（不能用 `execFileSync`：它失败时会把子进程 stderr 泄漏打印到父进程 stderr，被 OpenCode 捕获后
+  一条条显示在 TUI、盖住输入框）；已退出进程跳过。
 
 ### 3.2 Console 日志采集与序列化（logs.ts / controller.ts）
 

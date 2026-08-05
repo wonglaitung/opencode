@@ -3,19 +3,21 @@
  * 三平台二进制定位、以专用 profile spawn、进程树清理。
  * 优雅关闭(Browser.close)由 controller 编排,本模块只提供杀进程兜底。
  */
-import { execFileSync, spawn, type ChildProcess } from "node:child_process"
+import { spawn, spawnSync, type ChildProcess } from "node:child_process"
 import { existsSync } from "node:fs"
 import { join } from "node:path"
 import { EdgeDebugError } from "./errors"
 
-/** 在 PATH 中查找可执行文件;未找到返回 null。 */
+/**
+ * 在 PATH 中查找可执行文件;未找到返回 null。
+ * 用 spawnSync 且 stdio 忽略 stderr——不能用 execFileSync:它失败时会把子进程
+ * 的 stderr 一并泄漏打印到父进程 stderr(会被 OpenCode 捕获显示在 TUI,污染界面)。
+ */
 function which(name: string): string | null {
-  try {
-    const out = execFileSync("which", [name], { encoding: "utf8" }).trim()
-    return out === "" ? null : out
-  } catch {
-    return null
-  }
+  const res = spawnSync("which", [name], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })
+  if (res.status !== 0) return null
+  const out = (res.stdout ?? "").trim()
+  return out === "" ? null : out
 }
 
 /**
@@ -84,18 +86,27 @@ export function killProcessTree(child: ChildProcess | null): void {
   if (!child || child.pid === undefined) return
   if (child.exitCode !== null || child.signalCode !== null) return
   const pid = child.pid
+  if (process.platform === "win32") {
+    // spawn + stdio:"ignore" 彻底丢弃 taskkill 输出。不能用 execFileSync:
+    // taskkill 终止复杂进程树(如 Edge)时常失败,其 stderr 会打印
+    // "ERROR: The process with PID X (child process of PID Y) could not be
+    // terminated.",而 execFileSync 失败时会把子进程 stderr 一并泄漏到父进程
+    // stderr,被 OpenCode 捕获后一条条显示在 TUI,盖住输入框。此处静默吞掉。
+    const killer = spawn("taskkill", ["/pid", String(pid), "/T", "/F"], {
+      stdio: "ignore",
+      windowsHide: true,
+    })
+    killer.once("error", () => {})
+    return
+  }
   try {
-    if (process.platform === "win32") {
-      execFileSync("taskkill", ["/pid", String(pid), "/T", "/F"])
-      return
-    }
+    process.kill(-pid, "SIGKILL")
+  } catch {
     try {
-      process.kill(-pid, "SIGKILL")
-    } catch {
       // 非进程组 leader 或组已消失:退化为单进程 kill
       process.kill(pid, "SIGKILL")
+    } catch {
+      // 进程可能已退出,忽略
     }
-  } catch {
-    // 进程可能已退出,忽略
   }
 }
