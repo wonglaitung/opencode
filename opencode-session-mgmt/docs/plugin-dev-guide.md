@@ -54,7 +54,7 @@ export default MyPlugin
 | `chat.message` | 副作用必须幂等(如「仅当字段为空时写入」) |
 
 - **experimental hook 风险隔离**:`experimental.*` hook 的签名适配集中在单独一个文件(参照 `prompt.ts`),上游同步后优先核对该文件即可,不散落各处。
-- 识别上游工具名(如哪些是代码编辑工具)时,以注释记录依据的上游注册位置,上游升级后需复核。
+- 识别上游工具名(如哪些是代码编辑工具)或**解析上游数据格式**(如 apply_patch 的补丁文本)时,以注释记录依据的上游位置(注册处/解析器源文件),上游升级后需复核;不 import 上游模块而自写轻量解析器时,行为必须对照上游实现核对,勿凭想象。
 
 ## 5. 工具(tool)开发规范
 
@@ -74,6 +74,7 @@ export default MyPlugin
   - 增量合并(对象递归合并、数组整体替换)——适合指标类字段;
   - 命令式读-改-写(`mutateWorkflow` 模式)——适合数组追加/计数。
 - Store 必须提供 `Store.memory()`(内存库)供测试。
+- **只读打开用 `{ readonly: true }`,不要用 `{ create: false }`**:bun 1.3.14 下后者退化为 open flags 0,抛 SQLITE_MISUSE(实测);且只读连接无法执行迁移写入,只读路径不得混入 migrate。
 
 ## 7. 健壮性与降级
 
@@ -85,6 +86,7 @@ export default MyPlugin
 ## 8. 安全与隐私
 
 - 任何离开本机的数据必须是**显式构造的白名单投影**:不含代码内容、不含文件路径(含路径的明细只存本机)。
+- **投影与契约同步维护**:契约类型新增含文件路径/内容的字段时,汇报投影必须显式排除——`Omit` 式排除清单不会自动覆盖新字段,漏排即泄漏;汇报测试同步补「序列化结果不含敏感子串」断言兜底。
 - 涉及个人信息的字段最小化;配套服务仅内网部署,daemon 交互只走 `127.0.0.1`。
 
 ## 9. 测试规范
@@ -107,6 +109,7 @@ export default MyPlugin
 - **`build:plugin`**:`bun build src/index.ts --outdir dist/plugin --target bun`——把插件编译成自包含 JS,屏蔽目标机 bun 版本差异。
 - **`pack:bundle`**:`scripts/pack-bundle.sh`——打成可移植 tarball(`dist/<插件>-bundle-<版本>.tgz`),供内网/离线「解压即用」。要点:
   - 根目录必须有 `.npmrc`(`node-linker=hoisted`),否则 bun 默认 `isolated` 模式在 Windows 上使用硬链接,打包/移动后硬链接断裂、传递依赖丢失;
+  - **hoisted 的开发侧影响**:node_modules 内 workspace 包是真实拷贝而非链接,改完某包源码(尤其 shared 契约)后,其他包的测试/CLI 可能仍解析旧拷贝,且普通 `bun install` 不一定重拷(实测)——跨包联调前 `rm -rf node_modules && bun install` 刷新;
   - 脚本自动完成「清旧依赖 → hoisted 重装 → 组装含 node_modules 的目录 → 附带 setup.sh/setup.ps1 环境校验」;
   - **bundle 根直接可加载**:打包时给根 `package.json` 注入 `main` 指向插件入口(单插件工程为 `src/index.ts`,monorepo 为 `packages/plugin/src/index.ts`),opencode 直接指向解压目录即可,无需指到深层子目录,与 edge-debug 直接指根一致。
 
