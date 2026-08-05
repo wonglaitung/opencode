@@ -6,7 +6,9 @@
   "main": "src/index.ts",
   "scripts": {
     "test": "bun test",
-    "typecheck": "tsc -p ."
+    "typecheck": "tsc -p .",
+    "build:plugin": "bun build src/index.ts --outdir dist/plugin --target bun",
+    "pack:bundle": "bash scripts/pack-bundle.sh"
   },
   "peerDependencies": {
     "@opencode-ai/plugin": "*"

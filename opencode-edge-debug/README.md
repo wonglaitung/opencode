@@ -51,6 +51,8 @@ bun install
 ```bash
 bun test            # 测试（零 mock，Bun.serve 假 CDP 服务真实验证）
 bun run typecheck   # tsc 类型检查
+bun run build:plugin  # 编译为自包含 JS → dist/plugin/index.js
+bun run pack:bundle   # 打成可移植 tarball → dist/opencode-edge-debug-bundle-<版本>.tgz
 ```
 
 - 工程规约见 [CLAUDE.md](./CLAUDE.md)；架构与决策记录见 [docs/design.md](./docs/design.md)。
