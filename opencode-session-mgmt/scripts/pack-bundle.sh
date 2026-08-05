@@ -96,6 +96,17 @@ cp bun.lock "$bundle_dir/"
 cp .npmrc "$bundle_dir/"
 cp -r packages "$bundle_dir/"
 
+# 让 bundle 根 package.json 兼作插件入口（与 edge-debug 一致，opencode 可直接指 bundle 根）。
+# 只改 bundle 里的副本，源码根 package.json 不动。
+bundle_main="packages/plugin/src/index.ts"
+BUNDLE_MAIN="$bundle_main" BUNDLE_PKG="$bundle_dir/package.json" bun -e '
+  const fs = require("node:fs");
+  const p = process.env.BUNDLE_PKG;
+  const j = JSON.parse(fs.readFileSync(p, "utf8"));
+  j.main = process.env.BUNDLE_MAIN;
+  fs.writeFileSync(p, JSON.stringify(j, null, 2) + "\n");
+'
+
 # 拷贝 node_modules（hoisted 模式，真实文件）
 cp -r node_modules "$bundle_dir/"
 
@@ -142,8 +153,8 @@ else
 fi
 
 echo ""
-echo "配置 opencode.json 指向插件："
-echo '  { "plugin": ["'"$here"'/packages/plugin"] }'
+echo "配置 opencode.json 指向插件（直接指向本目录即可）："
+echo '  { "plugin": ["'"$here"'"] }'
 SETUP_SH
 chmod +x "$bundle_dir/setup.sh"
 
@@ -180,8 +191,8 @@ if (Test-Path "$here\node_modules\zod") {
 }
 
 Write-Host ""
-Write-Host "配置 opencode.json 指向插件："
-$pluginPath = ($here -replace '\\', '/') + "/packages/plugin"
+Write-Host "配置 opencode.json 指向插件（直接指向本目录即可）："
+$pluginPath = $here -replace '\\', '/'
 Write-Host "  { `"plugin`": [`"$pluginPath`"] }"
 SETUP_PS1
 
@@ -210,7 +221,7 @@ bash setup.sh                              # 可选：校验环境
 在 \`opencode.json\`（项目级或 \`~/.config/opencode/opencode.json\`）中添加：
 
 \`\`\`json
-{ "plugin": ["/解压路径/packages/plugin"] }
+{ "plugin": ["/解压路径"] }
 \`\`\`
 
 Windows 注意：JSON 中路径用正斜杠 \`/\` 或双反斜杠 \`\\\\\`。
@@ -242,4 +253,4 @@ echo "目标机使用："
 echo "  tar xzf dist/${bundle_name}.tgz"
 echo "  cd ${bundle_name}"
 echo "  bash setup.sh              # 或 PowerShell: .\\setup.ps1"
-echo "  # 然后在 opencode.json 中配置 plugin 路径指向 packages/plugin"
+echo "  # 然后在 opencode.json 中配置 plugin 路径指向解压目录"
