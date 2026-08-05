@@ -238,7 +238,7 @@ graph TB
 | 组级 | 按组聚合 | `opencode-sm stats --group "前端组"` | 组长管理、月度汇报 |
 | 组织级（org） | 按组织聚合 | `opencode-sm stats --org` | 领导汇报、预算决策 |
 
-组级统计是核心汇报层级——回应"各组 AI 使用程度和依赖程度"的需求。组级视图展示：成员排行、一次通过率分布、返工率对比、高迭代会话数。
+组级统计是核心汇报层级——回应"各组 AI 使用程度和依赖程度"的需求。组级视图展示：成员排行、一次通过率分布、返工率对比、高迭代会话数、AI 净增行数（业务/测试/配置）。
 
 **数据来源决策**：零额外采集。工作流状态变更的时间戳即为分析数据源。
 
@@ -259,7 +259,7 @@ OpenCode 插件运行在 daemon 进程内，生命周期与 daemon 一致，通�
 | 每轮注入 WorkflowState 到 system prompt | `experimental.chat.system.transform`（修改 `output.system: string[]`） | `agent/agent.ts`、`session/llm/request.ts` |
 | 注册工作流工具（LLM 在对话中调用） | `tool`（ToolDefinition 字典） | `tool/registry.ts` |
 | 硬门禁：阻断未过审查的提交 | `tool.execute.before`（抛错即令工具失败） | `session/tools.ts` |
-| 统计工具执行（迭代计数、一次通过率） | `tool.execute.after` | `session/tools.ts` |
+| 统计工具执行（迭代计数、AI 代码行数） | `tool.execute.after` | `session/tools.ts` |
 | 时间戳采集（阶段耗时数据源） | `chat.message` / `event` | `session/prompt.ts`、事件总线 |
 | 读取会话数据（cost/tokens） | `PluginInput.client`（SDK） | 插件入参 |
 
@@ -307,7 +307,7 @@ flowchart LR
 | account / group / org 身份 | 开发者首次使用 `opencode-sm init` 四问自报，存全局 `identity.json`；组结构由各人汇报在 org 聚合库自然形成，组即名称字符串（见 3.1） |
 | 阶段推进 / 审查 / 理解确认 | 插件注册工具（`workflow_advance`、`comprehension_confirm`、`review_submit`），Agent 在 TUI 对话中调用，校验逻辑在工具 handler 内——天然服务端强制 |
 | 重复编辑模式检测与提交门禁 | `tool.execute.after` 计数每文件代码编辑（统计用）+ 内存短记忆检测连续重复/高频编辑模式；`tool.execute.before` 对未过审查的 `git commit` 抛错阻断；system prompt 注入 stuck 警告 |
-| QualityMetrics 采集 | 会话内指标（firstPassRate/iterationCount）由插件记录于本机插件库；合并后指标（reworkRate/testCoverage）由 CI 按 sessionID 回写 org 收集服务 |
+| QualityMetrics 采集 | 会话内指标（firstPassRate/iterationCount/linesByFile）由插件记录于本机插件库；合并后指标（reworkRate/testCoverage）由 CI 按 sessionID 回写 org 收集服务 |
 | 外部管理（tag/workflow/stats） | 独立 CLI `opencode-sm`：本地统计读插件库 + 上游 REST API；组/组织统计查 org 收集服务；通用会话操作（list/delete/stats）直接用上游已有命令 |
 
 #### 风险与取舍
@@ -444,7 +444,6 @@ classDiagram
         +boolean logicExplainable
         +boolean behaviorVerifiable
         +boolean designRationale
-        +number firstPassRate
     }
 
     class ComprehensionRecord {
@@ -452,8 +451,13 @@ classDiagram
         +string file
         +number[] lines
         +string explanation
+        +ComprehensionDecision decision
         +boolean developerConfirmed
         +number confirmedAt
+        +string feedback
+        +number rejectedAt
+        +number rewrites
+        +string resolution
     }
 
     class StageStatus {
@@ -494,6 +498,7 @@ classDiagram
         +number iterationCount
         +number testCoverage
         +Record iterationByFile
+        +Record linesByFile
     }
 
     WorkflowState *-- Stages
@@ -594,6 +599,7 @@ interface ComprehensionRecord {
 | `reworkRate` | 合并后的代码在后续触发修改/Bug 修复的比例 | 外部 CI 管道回写 |
 | `iterationCount` | 同一段代码的 AI 生成-修改循环次数 | Agent 会话内追踪 |
 | `testCoverage` | AI 参与模块的增量测试覆盖率 | 外部 CI 管道回写 |
+| `linesByFile` | AI 净增代码行数按文件分桶（本机明细），汇总时分为业务/测试/配置三类 | 插件自动累计（tool.execute.after） |
 
 **QualityMetrics 的写入机制**：
 
@@ -603,12 +609,13 @@ interface ComprehensionRecord {
 |------|--------|----------|----------|
 | `firstPassRate` | 插件 | 审查通过时 | 插件 `review_submit` 按「未重写即接受片段 ÷ 全部定论片段」自动计算写入插件 DB（不依赖 Agent 上报） |
 | `iterationCount` | 插件 | 每次代码生成-修改循环，实时更新 | 插件 `tool.execute.after` hook 按文件（write/edit/apply_patch）累计，取各文件最大值写入插件 DB；本机另存 `iterationByFile` 明细 |
+| `linesByFile` | 插件 | 每次 AI 代码编辑，实时更新 | 插件 `tool.execute.after` hook 按净增量口径累计（见下「AI 代码行数统计」） |
 | `reworkRate` | 外部 CI 管道 | 合并后，当检测到同一会话产出的代码被再次修改 | CI 按 sessionID 回写 org 收集服务（见 4.3） |
 | `testCoverage` | 外部 CI 管道 | 合并后，SonarQube/覆盖率工具生成报告时 | CI 按 sessionID 回写 org 收集服务（见 4.3） |
 
-插件负责会话内指标（`firstPassRate`、`iterationCount`，写本机插件库并随汇报上行），外部 CI 负责合并后指标（`reworkRate`、`testCoverage`，回写 org 收集服务）。两条通道在聚合库按 sessionID 合并，互不覆盖，统计时统一聚合（见 4.3）。
+插件负责会话内指标（`firstPassRate`、`iterationCount`、`linesByFile`，写本机插件库并随汇报上行），外部 CI 负责合并后指标（`reworkRate`、`testCoverage`，回写 org 收集服务）。两条通道在聚合库按 sessionID 合并，互不覆盖，统计时统一聚合（见 4.3）。
 
-**Phase 1 的范围**：`firstPassRate` 和 `iterationCount` 随 Phase 2 Agent 规则一起实现。`reworkRate` 和 `testCoverage` 依赖外部 CI 集成，标记为 Phase 3+，在不接入外部 CI 的情况下，这两个字段默认为 `null`，统计输出中显示为 `N/A`，不影响其他功能。
+**Phase 1 的范围**：`firstPassRate`、`iterationCount` 和 `linesByFile` 随 Phase 2 Agent 规则一起实现。`reworkRate` 和 `testCoverage` 依赖外部 CI 集成，标记为 Phase 3+，在不接入外部 CI 的情况下，这两个字段默认为 `null`，统计输出中显示为 `N/A`，不影响其他功能。
 
 **重复编辑模式检测**：插件通过内存短记忆（每 session 最近 20 次代码编辑调用）检测 AI 是否陷入无效循环，而非对编辑次数设硬上限。两个检测信号：
 
@@ -622,6 +629,31 @@ interface ComprehensionRecord {
 参数指纹通过 hash（全参数）提取，区分"重试同一操作"vs"不同目的的编辑"——例如对同一文件做 3 次不同目的的 edit 不会触发 stuck，但用相同 oldString/newString 重试 3 次会触发。
 
 `iterationByFile` 仅存本机插件库用于统计，汇报投影已剥离（不外传文件路径，见第 12 章）。
+
+**AI 代码行数统计（业务 / 单元测试 / 配置 三分类）**：
+
+`linesByFile` 按**净增量口径**记录每个文件在本会话内被 AI 净增的代码行数（`Record<文件路径, 行数>`，可为负），与 `iterationByFile` 共用同一观测点——`tool.execute.after` hook 中 write / edit / apply_patch 三个代码编辑工具的入参（插件不读磁盘文件、不依赖上游内部模块，只从入参推算）：
+
+| 工具 | 行数算法 | 说明 |
+|------|----------|------|
+| write | `linesByFile[路径] = 行数(content)` | 整文件覆盖写：直接替换该文件的计数（AI 重写不重复累加） |
+| edit | `delta = 行数(newString) − 行数(oldString)`，累加 | `oldString=""` 为新建文件语义（上游约束仅新文件可用），此时按 `行数(newString)` 整体计入；`replaceAll=true` 出现次数未知，按单次计（已知轻微低估边界） |
+| apply_patch | 解析 `patchText` 段落，逐文件 `+行数 − −行数` 累加 | `*** Add File:` 段数 `+` 行；`*** Update File:` 的 `@@` hunk 内 `+` 行加、`-` 行减；`*** Delete File:` 段数 `-` 行；`*** Move to:`（改名）不计行数。解析器为插件内约 30 行的轻量扫描器（铁律：不 import 上游解析模块） |
+
+同一文件多次编辑在同一会话内**去重累计**（如 write 100 行后 edit 净增 20 行，最终计 120 行）。行数取物理行（末尾换行不多计一行）。
+
+**三分类规则**（`classifyFile`，优先级 测试 → 配置 → 业务）：
+
+| 分类 | 判定 |
+|------|------|
+| 单元测试 | basename 匹配 `*.test.*` / `*.spec.*` / `*_test.*` / `*_spec.*` / `test_*.*`，或路径段为 `test` / `tests` / `__tests__`（大小写不敏感） |
+| 配置文件 | 扩展名 ∈ `.json/.jsonc/.yaml/.yml/.toml/.ini/.conf/.cfg/.properties/.env`，或 basename ∈ `.npmrc/.editorconfig/.gitignore/.prettierrc/.eslintrc/.prettierignore/.eslintignore/Dockerfile/Makefile` |
+| 业务代码 | 其余全部 |
+
+**汇总口径**：`sumLinesByCategory` 将 `linesByFile` 分类累加为 `{business, test, config}` 三个数字；**逐文件 clamp ≥ 0**——AI 净删除代码的文件不产生负贡献，避免「删代码」让会话行数出现反直觉的负值。项目/组/组织级对会话行数**求和**（累加型指标，不做平均）。
+
+**隐私**：`linesByFile` 的文件路径仅存本机插件库；汇报投影（`summarizeWorkflow`）剥离路径，只上行三类聚合数字（与 `iterationByFile` 的处理一致，见第 12 章）。行数指标**仅展示、不设告警阈值**。
+
 
 ### 3.3 状态转换规则
 
@@ -733,7 +765,7 @@ GET  /api/session/:id/history         session.history
 
 | 指标 | 通道 |
 |------|------|
-| firstPassRate / iterationCount | 插件工具写入本机插件库 `workflow.quality`，随会话摘要汇报到收集服务 |
+| firstPassRate / iterationCount / linesByFile | 插件工具写入本机插件库 `workflow.quality`，随会话摘要汇报到收集服务（行数仅上行三分类聚合，文件路径不上行） |
 | reworkRate / testCoverage | CI 管道按 sessionID **回写 org 收集服务**（`POST {collector_url}/api/ci-quality`），收集服务在聚合库按 session 合并 |
 
 ```json
@@ -814,7 +846,7 @@ $ opencode-sm init
 | *(默认)* | 查看当前工作流状态（阶段进度、当前阶段） |
 | `checklist` | 查看审查清单四项状态 |
 | `comprehension` | 列出理解确认记录，支持 `--unconfirmed` 过滤未确认片段 |
-| `stats` | 查看当前会话的一次通过率、迭代轮次、覆盖率等质量指标 |
+| `stats` | 查看当前会话的一次通过率、迭代轮次、AI 代码行数（业务/测试/配置）、覆盖率等质量指标 |
 
 ### 5.2 opencode-sm 实现模式
 
@@ -903,6 +935,7 @@ graph LR
 
 质量:
   一次通过率: 92%  |  迭代轮次: 2 轮（单文件被 AI 编辑的最高次数）  |  测试覆盖率: 82%
+  AI 净增行数: 业务 620 / 测试 310 / 配置 45（合计 975）
   返工标记: 无  |  审查清单: ✓全部通过(4/4)  |  理解确认: 5片段 ✓已确认
 
 AI 使用: 对话 47轮 | $0.36 | 85K tokens
@@ -919,6 +952,7 @@ AI 使用: 对话 47轮 | $0.36 | 85K tokens
 
 质量:
   平均一次通过率: 91%  |  一次通过率过低会话: 1/12 ⚠
+  AI 净增行数: 业务 5.8K / 测试 2.9K / 配置 0.4K（合计 9.1K）
   返工率: 8%  |  变更失败率: 2%  |  平均测试覆盖率: 78%
   高迭代会话(≥5轮): 0
 ```
@@ -935,6 +969,7 @@ AI 使用: 对话 47轮 | $0.36 | 85K tokens
 
 质量:
   组平均一次通过率: 91%  |  一次通过率过低成员: 1/5 ⚠
+  AI 净增行数: 业务 18.2K / 测试 9.5K / 配置 1.2K（合计 28.9K）
   组返工率: 6%  |  变更失败率: 2%  |  高迭代会话: 1/42 (2.4%)
 
 趋势: 需求迭代 ↓1.5→0.9 | AI效率 ↑$0.04→$0.02/行 | 返工率 ↓10%→6%
@@ -952,6 +987,7 @@ AI 使用: 对话 47轮 | $0.36 | 85K tokens
 
 质量:
   组织平均一次通过率: 91%  |  一次通过率过低成员: 1/8 ⚠
+  AI 净增行数: 业务 62K / 测试 31K / 配置 4K（合计 97K）
   组织返工率: 7%  |  变更失败率: 3%
   高迭代会话: 2/156 (1.3%)
 
@@ -965,6 +1001,7 @@ AI 使用: 对话 47轮 | $0.36 | 85K tokens
 | 指标 | 定义 | 计算公式 | 数据来源 | 告警阈值 |
 |------|------|----------|----------|----------|
 | 一次通过率 | 代码片段免重写即被接受的返工信号（会话内统计） | 未重写即被接受的片段数 / 全部定论片段数 × 100% | 插件自动统计（review 闭环） | 无硬阈值；作为返工信号展示，过低提示流程质量 |
+| AI 代码行数 | AI 净增代码量，按业务/测试/配置三分类（会话内统计） | write 整文件、edit 新行−旧行、apply_patch +行−−行，逐文件去重累计后分类汇总（逐文件 clamp ≥0） | 插件自动统计（tool.execute.after） | 无阈值；纯展示型指标（产出量参考，不与质量/绩效挂钩） |
 | 返工率 | 合并后触发修改/Bug 修复的比例 | 返工提交数 / 总会话提交数 × 100% | Git + CI 管道 | 连续 2 个月上升触发审查 |
 | 变更失败率 | 因 AI 生成代码引发的测试缺陷或生产故障 | 失败变更数 / 总变更数 × 100% | CI/CD + 缺陷跟踪 | 月度环比上升 >5% 触发告警 |
 | 测试覆盖率 | AI 参与模块的增量测试覆盖率 | 覆盖行数 / 总行数 × 100% | SonarQube / CI | <70% 触发告警，<80% 不可 approve review |
@@ -975,6 +1012,7 @@ AI 使用: 对话 47轮 | $0.36 | 85K tokens
 - **会话级**：展示具体数值，一次通过率过低时提示（如一次通过率 72% ↓）
 - **项目级**：展示平均值和分布，标记过低会话数
 - **组织级**：展示成员排行，标记过低成员，展示趋势
+- **AI 代码行数**为累加型指标：会话级展示三分类数值，项目/组/组织级展示各会话行数**求和**（不做平均），全层级仅展示、不告警
 
 ---
 
@@ -1192,6 +1230,10 @@ Agent:  ⚠ 检测到重复编辑模式：scheduler.py（连续相同操作 3 �
 23. ComprehensionRecord 不仅是审批流程的产物，更是可检索的知识库
 24. 三个月后接手代码的开发者，应先阅读 ComprehensionRecord[] 中的 explanation，再阅读代码
 25. 如果开发者未逐段确认理解就直接 approve，审查阶段会在下一次 augment 时被标记为"需重新审查"
+
+## AI 代码行数统计
+26. 插件在 `tool.execute.after` 按净增量口径累计各文件 AI 净增行数（linesByFile）：write 整文件覆盖计、edit 按新行−旧行、apply_patch 按 +行−−行（插件内轻量扫描器解析，不依赖上游模块）
+27. 行数按 业务/测试/配置 三分类汇总（测试路径/命名 → 配置扩展名 → 其余为业务），逐文件 clamp ≥0；行数仅展示、不设阈值告警，文件路径不外传（汇报只带三类聚合数字）
 ```
 
 ---
@@ -1207,6 +1249,7 @@ Agent:  ⚠ 检测到重复编辑模式：scheduler.py（连续相同操作 3 �
 | 文件 | 用途 |
 |------|------|
 | `src/workflow.ts` | WorkflowState schema（含 ReviewChecklist、ComprehensionRecord、QualityMetrics）——插件写、收集服务收、CLI 读，单点定义 |
+| `src/loc.ts` | AI 代码行数：行数计算、业务/测试/配置三分类（classifyFile）与分类汇总（sumLinesByCategory） |
 | `src/report.ts` | 汇报与 CI 回写 payload schema |
 | `src/identity.ts` | identity.json 类型与读写 |
 | `src/merge.ts` | DeepPartial 增量合并语义（插件工具与收集服务共用） |
@@ -1222,7 +1265,7 @@ Agent:  ⚠ 检测到重复编辑模式：scheduler.py（连续相同操作 3 �
 | `src/prompt.ts` | system prompt 注入片段：规则全文 + 当前状态压缩 JSON |
 | `src/tools/workflow.ts` | `workflow_advance` / `workflow_revisit` / `commit_gate_check` / `commit_force_unlock` 工具 |
 | `src/tools/review.ts` | `comprehension_add` / `comprehension_confirm` / `comprehension_reject` / `comprehension_rewrite` / `comprehension_manual` / `comprehension_ask` / `review_submit` 工具（含防批量确认校验与终态门禁） |
-| `src/tools/quality.ts` | 迭代计数逻辑（`quality_report` 已移除，firstPassRate 由 review.ts 自动计算） |
+| `src/tools/quality.ts` | 迭代计数 + AI 代码行数累计逻辑（`quality_report` 已移除，firstPassRate 由 review.ts 自动计算） |
 | `src/workflow-ops.ts` | 阶段转换（enter/approve/revisit，3.3）与提交门禁重算（3.4），工具与门禁共用的状态机 |
 | `src/gate.ts` | `tool.execute.before` 提交门禁拦截（git commit 阻断） |
 | `src/report.ts` | 会话摘要汇报：推送至 `collector_url`，不可用时本地缓冲、恢复补推 |
@@ -1278,7 +1321,7 @@ gantt
     section Phase 2: 工具与门禁
     workflow 工具 (advance/revisit)       :p2a, after p1e, 2d
     审查工具 (comprehension/review_submit) :p2b, after p2a, 2d
-    迭代计数 + firstPassRate 自动统计     :p2c, after p2b, 1d
+    迭代计数 + firstPassRate + 代码行数自动统计     :p2c, after p2b, 1d
     提交门禁 (tool.execute.before)        :p2d, after p2c, 1d
 
     section Phase 3: 统计与收集服务
@@ -1300,7 +1343,7 @@ gantt
 
 1. `workflow_advance` / `workflow_revisit` 工具（含开发者确认校验）
 2. `comprehension_confirm` / `comprehension_reject` / `comprehension_rewrite` / `comprehension_manual` / `comprehension_ask` / `review_submit` 工具（防批量确认、终态门禁、清单二次校验）
-3. 迭代计数（`tool.execute.after`）+ `review_submit` 自动统计 firstPassRate
+3. 迭代计数 + AI 代码行数累计（`tool.execute.after`）+ `review_submit` 自动统计 firstPassRate
 4. 提交门禁：`tool.execute.before` 拦截未过审查的 `git commit`
 
 ### Phase 3: 统计与收集服务
@@ -1372,7 +1415,7 @@ opencode-sm init                                  # 3. 四问：账号 / 组 / �
 ## 12. 安全与隐私
 
 - 本机会话数据存储于本地插件 SQLite；跨机汇聚仅传输**流程摘要**（阶段时间戳、cost/tokens、质量指标、身份字段），**不含代码内容**
-- 迭代计数明细 `iterationByFile`（键为文件路径）仅存本机插件库，汇报投影（`summarizeWorkflow`）已剥离——与理解确认片段剥离 `file`/`lines`/`explanation` 的口径一致，文件路径不上行
+- 迭代计数明细 `iterationByFile`、行数明细 `linesByFile`（键均为文件路径）仅存本机插件库，汇报投影（`summarizeWorkflow`）已剥离——与理解确认片段剥离 `file`/`lines`/`explanation` 的口径一致，文件路径不上行；行数仅以业务/测试/配置三类聚合数字上行
 - 强制提交授权 `commit.force`（原因、时间、是否已用）随汇报上行：原因是开发者口述的流程元数据、非代码内容；上行是为让"绕过审查的提交"在组/组织统计中可见，服务于退出风险监控
 - 汇报携带的账号邮箱属个人信息：收集服务应仅内网可达、最小化留存，访问权限限于组/组织管理者
 - 组织级分析基于收集服务聚合库（各人汇报快照），不读上游账号体系
