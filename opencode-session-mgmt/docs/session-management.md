@@ -213,7 +213,7 @@ graph TB
         G1["按组聚合"]
         G1a["组成员排行"]
         G1b["组间完成率对比"]
-        G1c["组间采纳率对比"]
+        G1c["组间一次通过率对比"]
         G1d["组级质量趋势"]
     end
 
@@ -238,7 +238,7 @@ graph TB
 | 组级 | 按组聚合 | `opencode-sm stats --group "前端组"` | 组长管理、月度汇报 |
 | 组织级（org） | 按组织聚合 | `opencode-sm stats --org` | 领导汇报、预算决策 |
 
-组级统计是核心汇报层级——回应"各组 AI 使用程度和依赖程度"的需求。组级视图展示：成员排行、采纳率分布、返工率对比、高迭代会话数。
+组级统计是核心汇报层级——回应"各组 AI 使用程度和依赖程度"的需求。组级视图展示：成员排行、一次通过率分布、返工率对比、高迭代会话数。
 
 **数据来源决策**：零额外采集。工作流状态变更的时间戳即为分析数据源。
 
@@ -259,7 +259,7 @@ OpenCode 插件运行在 daemon 进程内，生命周期与 daemon 一致，通�
 | 每轮注入 WorkflowState 到 system prompt | `experimental.chat.system.transform`（修改 `output.system: string[]`） | `agent/agent.ts`、`session/llm/request.ts` |
 | 注册工作流工具（LLM 在对话中调用） | `tool`（ToolDefinition 字典） | `tool/registry.ts` |
 | 硬门禁：阻断未过审查的提交 | `tool.execute.before`（抛错即令工具失败） | `session/tools.ts` |
-| 统计工具执行（迭代计数、采纳率） | `tool.execute.after` | `session/tools.ts` |
+| 统计工具执行（迭代计数、一次通过率） | `tool.execute.after` | `session/tools.ts` |
 | 时间戳采集（阶段耗时数据源） | `chat.message` / `event` | `session/prompt.ts`、事件总线 |
 | 读取会话数据（cost/tokens） | `PluginInput.client`（SDK） | 插件入参 |
 
@@ -307,7 +307,7 @@ flowchart LR
 | account / group / org 身份 | 开发者首次使用 `opencode-sm init` 四问自报，存全局 `identity.json`；组结构由各人汇报在 org 聚合库自然形成，组即名称字符串（见 3.1） |
 | 阶段推进 / 审查 / 理解确认 | 插件注册工具（`workflow_advance`、`comprehension_confirm`、`review_submit`），Agent 在 TUI 对话中调用，校验逻辑在工具 handler 内——天然服务端强制 |
 | 重复编辑模式检测与提交门禁 | `tool.execute.after` 计数每文件代码编辑（统计用）+ 内存短记忆检测连续重复/高频编辑模式；`tool.execute.before` 对未过审查的 `git commit` 抛错阻断；system prompt 注入 stuck 警告 |
-| QualityMetrics 采集 | 会话内指标（acceptanceRate/iterationCount）由插件记录于本机插件库；合并后指标（reworkRate/testCoverage）由 CI 按 sessionID 回写 org 收集服务 |
+| QualityMetrics 采集 | 会话内指标（firstPassRate/iterationCount）由插件记录于本机插件库；合并后指标（reworkRate/testCoverage）由 CI 按 sessionID 回写 org 收集服务 |
 | 外部管理（tag/workflow/stats） | 独立 CLI `opencode-sm`：本地统计读插件库 + 上游 REST API；组/组织统计查 org 收集服务；通用会话操作（list/delete/stats）直接用上游已有命令 |
 
 #### 风险与取舍
@@ -444,7 +444,7 @@ classDiagram
         +boolean logicExplainable
         +boolean behaviorVerifiable
         +boolean designRationale
-        +number acceptanceRate
+        +number firstPassRate
     }
 
     class ComprehensionRecord {
@@ -489,7 +489,7 @@ classDiagram
     }
 
     class QualityMetrics {
-        +number acceptanceRate
+        +number firstPassRate
         +number reworkRate
         +number iterationCount
         +number testCoverage
@@ -522,34 +522,65 @@ classDiagram
 | `businessIntent` | 公共方法必须有注释，说明业务意图而非只描述参数 | 审查清单 |
 | `logicExplainable` | 圈复杂度 > 10 的方法必须有行内注释 | 静态分析 + 审查 |
 | `behaviorVerifiable` | 每个 Service 方法至少有一个集成测试，测试即使用文档 | 审查清单 + 门禁 |
-| **`designRationale`** | **AI 必须为每个代码变更输出设计推导：为什么这样写、有哪些替代方案被放弃、潜在风险是什么** | **开发者逐段确认** |
+| **`designRationale`** | **AI 必须为每个代码变更输出设计推导：为什么这样写、有哪些替代方案被放弃、潜在风险是什么** | **开发者逐段定夺（accepted / manual）** |
 
-此外，审查阶段记录 `acceptanceRate`（代码建议采纳率），用于监控开发者是否在不经审查地接受 AI 代码。业界研究表明，接受率在 25-35% 为健康区间，超过 45% 表明开发者在不经审查地接受（来源：larridin.com 2026）。
+此外，审查阶段自动记录 **`firstPassRate`（AI 代码一次通过率）**：
+
+> **一次通过率 = 未重写即被接受的片段数 ÷ 全部定论片段数 × 100**
+
+它反映 **AI 一次把代码写对的能力**，而非"开发者接受建议的比例"。每个片段的最终去留只有两种：**一次通过**（`confirm` 直接接受）或**未一次通过**（经历过 `reject` 后由 AI `rewrite` 重写、或由开发者 `manual` 自己处理）。重写或自己处理都计入"未一次通过"，因此公式分母用**片段数**、分子用**未重写即接受**的片段数。
+
+该指标由 `review_submit` 审查通过时**插件自动计算**，不依赖 Agent 上报。它不设硬性预警阈值（重写频率因团队/任务而异），仅作**返工信号**展示：一次通过率过低提示 AI 返工偏多，应回溯 prompt 或该文件的重写轮次（`rewrites`）。纯讨论会话（无片段）不写，保持 `null`（显示 N/A）。
+
+> 说明：业界 Copilot 的 25–35% 健康接受率针对**行级补全建议**（开发者多数跳过），而本插件是**整段 AI 代码、开发者审查后决定去留**，一次通过率天然偏高，二者口径不同，故不套用该区间。
 
 **ComprehensionRecord — 理解确认记录**：
 
-`ComprehensionRecord` 是理解保障的核心数据。它不是简单的"审查通过"标记，而是**开发者逐段确认理解的凭证**。每次 AI 生成代码变更后，在审查阶段：
+`ComprehensionRecord` 是理解保障的核心数据。它不是简单的"审查通过"标记，而是**开发者逐段确认理解的凭证**。每次 AI 生成代码变更后，在审查阶段，每个片段经历一个**去留闭环**：
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> pending: add
+    pending --> accepted: confirm
+    pending --> rejected: reject(+feedback)
+    rejected --> pending: rewrite (rewrites++)
+    rejected --> manual: manual(+resolution)
+    accepted --> [*]
+    manual --> [*]
+    note right of rejected : 开发者补充意见,大部分要求 AI 重写;<br/>小部分由开发者自己处理
+```
 
 1. AI 将每个代码变更拆分为可理解的片段（按方法/类/模块），每个片段一个 `ComprehensionRecord`
 2. AI 为每个片段输出 `explanation`（自然语言解释：这段代码做了什么、为什么这样写、有哪些替代方案被放弃）
-3. 开发者必须逐段阅读 `explanation` 并确认 `developerConfirmed = true`
-4. 开发者可以对任意片段追问"为什么这样写"，追问和回答追加到 `explanation` 中
-5. 所有片段确认后，`ReviewChecklist` 的 `designRationale` 才可标记为 `true`
+3. 开发者逐段阅读 `explanation` 决定去留：
+   - **接受**（`comprehension_confirm`）：确认理解，片段一次通过
+   - **拒绝**（`comprehension_reject`）：附补充意见，进入 `rejected`
+4. 被拒绝的片段：
+   - **大部分**由 AI 按意见**重写**（`comprehension_rewrite`）→ 回到 `pending`，`rewrites++`，重新审查
+   - **小部分**由开发者**自己处理**（`comprehension_manual`，如自己写/删除，须声明 `resolution`）→ 终态
+5. 开发者可以对任意片段追问"为什么这样写"，追问和回答追加到 `explanation` 中
+6. 审查通过（`review_submit`）要求：**所有片段必须处于 `accepted` 或 `manual` 终态，不允许 `pending`/`rejected` 悬空**；此时 `designRationale` 才可标记为 `true`
 
 ```typescript
 interface ComprehensionRecord {
-  codeSegmentId: string       // 唯一标识
-  file: string                // 文件路径
-  lines: [number, number]     // 代码行范围
-  explanation: string         // AI 输出的自然语言解释（含设计推导、替代方案、风险）
-  developerConfirmed: boolean // 开发者确认已理解
-  confirmedAt: number         // 确认时间戳
+  codeSegmentId: string                 // 唯一标识
+  file: string                          // 文件路径
+  lines: [number, number]               // 代码行范围
+  explanation: string                   // AI 输出的自然语言解释（含设计推导、替代方案、风险）
+  developerConfirmed: boolean           // 兼容旧语义：accepted 时为 true
+  confirmedAt: number | null            // 接受时间戳
+  decision: "pending" | "accepted" | "rejected" | "manual"  // 片段去留定论
+  feedback: string | null               // reject 时开发者补充意见
+  rejectedAt: number | null             // 拒绝时间戳
+  rewrites: number                      // AI 重写轮次（默认 0；返工信号）
+  resolution: string | null             // manual 时人工处理声明（自己写/删除）
 }
 ```
 
 **为什么这能解决"三个月后没人看得懂"的问题**：`ComprehensionRecord[]` 本身就是一个可检索的知识库。三个月后接手这段代码的人，不需要从零阅读代码——先读 `explanation`，理解设计意图；再读代码，验证实现是否匹配意图；如果有疑问，`explanation` 中的"替代方案和风险"能帮助判断改动的安全边界。
 
-**无代码变更的会话**：若本会话没有 AI 代码编辑（`iterationCount=0`，如纯讨论/咨询），审查阶段无代码可理解，无需理解确认片段即可通过；一旦有 AI 代码编辑，`review_submit` 强制要求先 `comprehension_add` 登记片段并逐段确认（以 `iterationCount` 作为"是否有代码编辑"的门控信号，兼顾防绕过）。`review_submit` 幂等：审查已通过后重复调用不再报错。
+**无代码变更的会话**：若本会话没有 AI 代码编辑（`iterationCount=0`，如纯讨论/咨询），审查阶段无代码可理解，无需理解确认片段即可通过；一旦有 AI 代码编辑，`review_submit` 强制要求先 `comprehension_add` 登记片段、并让每个片段**处于终态**（`accepted` 或 `manual`），不允许 `pending`/`rejected` 悬空（以 `iterationCount` 作为"是否有代码编辑"的门控信号，兼顾防绕过）。`review_submit` 幂等：审查已通过后重复调用不再报错。
 
 **QualityMetrics — 质量维度数据**：
 
@@ -557,7 +588,7 @@ interface ComprehensionRecord {
 
 | 指标 | 定义 | 来源 |
 |------|------|------|
-| `acceptanceRate` | 开发者对 AI 代码建议的接受比例 | Agent 会话内追踪 |
+| `firstPassRate` | AI 代码一次通过率（未重写即接受的片段 ÷ 全部定论片段） | 插件自动计算（review 通过时） |
 | `reworkRate` | 合并后的代码在后续触发修改/Bug 修复的比例 | 外部 CI 管道回写 |
 | `iterationCount` | 同一段代码的 AI 生成-修改循环次数 | Agent 会话内追踪 |
 | `testCoverage` | AI 参与模块的增量测试覆盖率 | 外部 CI 管道回写 |
@@ -568,14 +599,14 @@ interface ComprehensionRecord {
 
 | 字段 | 写入方 | 写入时机 | 写入方式 |
 |------|--------|----------|----------|
-| `acceptanceRate` | Agent | 审查阶段，实时更新 | Agent 调用插件工具 `quality_report`，写入插件 DB |
+| `firstPassRate` | 插件 | 审查通过时 | 插件 `review_submit` 按「未重写即接受片段 ÷ 全部定论片段」自动计算写入插件 DB（不依赖 Agent 上报） |
 | `iterationCount` | 插件 | 每次代码生成-修改循环，实时更新 | 插件 `tool.execute.after` hook 按文件（write/edit/apply_patch）累计，取各文件最大值写入插件 DB；本机另存 `iterationByFile` 明细 |
 | `reworkRate` | 外部 CI 管道 | 合并后，当检测到同一会话产出的代码被再次修改 | CI 按 sessionID 回写 org 收集服务（见 4.3） |
 | `testCoverage` | 外部 CI 管道 | 合并后，SonarQube/覆盖率工具生成报告时 | CI 按 sessionID 回写 org 收集服务（见 4.3） |
 
-Agent 负责会话内指标（acceptanceRate、iterationCount，写本机插件库并随汇报上行），外部 CI 负责合并后指标（reworkRate、testCoverage，回写 org 收集服务）。两条通道在聚合库按 sessionID 合并，互不覆盖，统计时统一聚合（见 4.3）。
+插件负责会话内指标（`firstPassRate`、`iterationCount`，写本机插件库并随汇报上行），外部 CI 负责合并后指标（`reworkRate`、`testCoverage`，回写 org 收集服务）。两条通道在聚合库按 sessionID 合并，互不覆盖，统计时统一聚合（见 4.3）。
 
-**Phase 1 的范围**：`acceptanceRate` 和 `iterationCount` 随 Phase 2 Agent 规则一起实现。`reworkRate` 和 `testCoverage` 依赖外部 CI 集成，标记为 Phase 3+，在不接入外部 CI 的情况下，这两个字段默认为 `null`，统计输出中显示为 `N/A`，不影响其他功能。
+**Phase 1 的范围**：`firstPassRate` 和 `iterationCount` 随 Phase 2 Agent 规则一起实现。`reworkRate` 和 `testCoverage` 依赖外部 CI 集成，标记为 Phase 3+，在不接入外部 CI 的情况下，这两个字段默认为 `null`，统计输出中显示为 `N/A`，不影响其他功能。
 
 **重复编辑模式检测**：插件通过内存短记忆（每 session 最近 20 次代码编辑调用）检测 AI 是否陷入无效循环，而非对编辑次数设硬上限。两个检测信号：
 
@@ -664,11 +695,13 @@ flowchart TD
 |------|------|-----------|
 | `workflow_advance` | 提议进入下一阶段 / 标记当前阶段 approved | 必须携带开发者确认语义；AI 不可在无确认时调用成功 |
 | `workflow_revisit` | 回退到指定阶段（revision++） | 目标阶段必须存在 |
-| `comprehension_add` | 登记一个 AI 生成的代码片段及自然语言解释（做了什么、为什么、被放弃的替代方案、潜在风险） | 片段不可重复登记；登记后 `developerConfirmed=false`，待逐段确认 |
-| `comprehension_confirm` | 确认单个代码片段已理解 | **单次调用只接受一个 `codeSegmentId`**，防止批量确认（见 7.3） |
+| `comprehension_add` | 登记一个 AI 生成的代码片段及自然语言解释（做了什么、为什么、被放弃的替代方案、潜在风险） | 片段不可重复登记；登记后 `decision=pending`，待逐段定夺 |
+| `comprehension_confirm` | 接受单个片段（一次通过） | **单次调用只接受一个 `codeSegmentId`**，防止批量确认（见 7.3）；须处于 pending/rejected 才可接受 |
 | `comprehension_ask` | 对片段追问，问答追加到 explanation | 片段必须存在 |
-| `review_submit` | 提交审查清单四项结果 | 四项全部 true 且所有片段已确认，否则拒绝 |
-| `quality_report` | 上报 acceptanceRate 等会话内指标 | 增量合并写入 `workflow.quality` |
+| `comprehension_reject` | 拒绝单个片段并附补充意见 | 片段必须存在；`feedback` 必填（意见将用于 AI 重写） |
+| `comprehension_rewrite` | AI 按意见重写后该片段回到待审查 | 片段须处于 `rejected`；`rewrites++`，feedback 并入 explanation |
+| `comprehension_manual` | 开发者自己处理该片段（自己写/删除） | 片段须处于 `rejected`；`resolution` 必填；进入终态 `manual` |
+| `review_submit` | 提交审查清单四项结果 | 三项必 true 且 `designRationale` 满足（有片段时须已 `comprehension_add` 登记、且**所有片段处于终态 accepted/manual，不允许 pending/rejected 悬空**）；通过时自动计算 `firstPassRate` |
 | `commit_gate_check` | 提交前门禁检查 | 返回未完成阶段列表；未通过时 `tool.execute.before` 阻断 `git commit` |
 | `commit_force_unlock` | 强制提交授权（3.4 逃生口） | `developer_confirmed` 必须为 true、原因必填；写入一次性授权，门禁放行一次后置 `used` 留痕 |
 
@@ -698,7 +731,7 @@ GET  /api/session/:id/history         session.history
 
 | 指标 | 通道 |
 |------|------|
-| acceptanceRate / iterationCount | 插件工具写入本机插件库 `workflow.quality`，随会话摘要汇报到收集服务 |
+| firstPassRate / iterationCount | 插件工具写入本机插件库 `workflow.quality`，随会话摘要汇报到收集服务 |
 | reworkRate / testCoverage | CI 管道按 sessionID **回写 org 收集服务**（`POST {collector_url}/api/ci-quality`），收集服务在聚合库按 session 合并 |
 
 ```json
@@ -779,7 +812,7 @@ $ opencode-sm init
 | *(默认)* | 查看当前工作流状态（阶段进度、当前阶段） |
 | `checklist` | 查看审查清单四项状态 |
 | `comprehension` | 列出理解确认记录，支持 `--unconfirmed` 过滤未确认片段 |
-| `stats` | 查看当前会话的采纳率、迭代轮次、覆盖率等质量指标 |
+| `stats` | 查看当前会话的一次通过率、迭代轮次、覆盖率等质量指标 |
 
 ### 5.2 opencode-sm 实现模式
 
@@ -812,7 +845,7 @@ sequenceDiagram
 统计分析的定位是**投入产出评估与资源规划的数据基础**，服务于三个明确目标：
 
 1. **算力预算规划** — Token 消耗按场景/模型/组拆分，为下一次预算申请提供数据支撑
-2. **质量监控** — 跟踪采纳率、返工率、覆盖率，确保提效不以牺牲质量为代价
+2. **质量监控** — 跟踪一次通过率、返工率、覆盖率，确保提效不以牺牲质量为代价
 3. **流程优化** — 阶段耗时与迭代次数分析，识别瓶颈环节
 
 ### 6.1 数据来源（零额外采集）
@@ -864,10 +897,10 @@ graph LR
   设计     ██████░░░░  1.5h   ✓ approved (修改1次)
   编码     ████████████████  4.2h  ✓ approved (编码-测试循环3次)
   测试     ██████████░░  2.8h  ✓ approved
-  审查     ██████░░░░  1.2h  ✓ approved (采纳率 32%, 理解确认 5/5)
+  审查     ██████░░░░  1.2h  ✓ approved (一次通过率 92%, 理解确认 5/5)
 
 质量:
-  建议采纳率: 32% (健康)  |  迭代轮次: 2 轮（单文件被 AI 编辑的最高次数）  |  测试覆盖率: 82%
+  一次通过率: 92%  |  迭代轮次: 2 轮（单文件被 AI 编辑的最高次数）  |  测试覆盖率: 82%
   返工标记: 无  |  审查清单: ✓全部通过(4/4)  |  理解确认: 5片段 ✓已确认
 
 AI 使用: 对话 47轮 | $0.36 | 85K tokens
@@ -883,7 +916,7 @@ AI 使用: 对话 47轮 | $0.36 | 85K tokens
 费用: $4.32 总计 | $0.36/会话 | $0.02/行
 
 质量:
-  平均采纳率: 34%  |  超阈值(>45%)会话: 1/12 ⚠
+  平均一次通过率: 91%  |  一次通过率过低会话: 1/12 ⚠
   返工率: 8%  |  变更失败率: 2%  |  平均测试覆盖率: 78%
   高迭代会话(≥5轮): 0
 ```
@@ -894,12 +927,12 @@ AI 使用: 对话 47轮 | $0.36 | 85K tokens
 👥 组 "前端组" - 最近 30 天
 成员: 5 | 总会话: 42 | 完成率: 85%
 
-  alice  12会话 92%完成 $6.30  2.1天/会话 采纳率31% 覆盖率84%
-  bob     8会话 78%完成 $3.80  2.8天/会话 采纳率48% ⚠ 覆盖率71%
-  carol  10会话 89%完成 $5.20  2.3天/会话 采纳率29% 覆盖率79%
+  alice  12会话 92%完成 $6.30  2.1天/会话 一次通过率92% 覆盖率84%
+  bob     8会话 78%完成 $3.80  2.8天/会话 一次通过率72% ⚠ 覆盖率71%
+  carol  10会话 89%完成 $5.20  2.3天/会话 一次通过率89% 覆盖率79%
 
 质量:
-  组平均采纳率: 34% (健康)  |  超阈值(>45%)成员: 1/5 ⚠
+  组平均一次通过率: 91%  |  一次通过率过低成员: 1/5 ⚠
   组返工率: 6%  |  变更失败率: 2%  |  高迭代会话: 1/42 (2.4%)
 
 趋势: 需求迭代 ↓1.5→0.9 | AI效率 ↑$0.04→$0.02/行 | 返工率 ↓10%→6%
@@ -911,12 +944,12 @@ AI 使用: 对话 47轮 | $0.36 | 85K tokens
 👥 组织 "Engineering" - 最近 30 天
 成员: 8 | 总会话: 156 | 完成率: 82%
 
-  alice  24会话 92%完成 $12.30 2.1天/会话 采纳率31% 覆盖率84%
-  bob    18会话 78%完成 $9.80  2.8天/会话 采纳率48% ⚠ 覆盖率71%
-  carol  22会话 85%完成 $11.20 2.3天/会话 采纳率29% 覆盖率79%
+  alice  24会话 92%完成 $12.30 2.1天/会话 一次通过率92% 覆盖率84%
+  bob    18会话 78%完成 $9.80  2.8天/会话 一次通过率72% ⚠ 覆盖率71%
+  carol  22会话 85%完成 $11.20 2.3天/会话 一次通过率89% 覆盖率79%
 
 质量:
-  组织平均采纳率: 34% (健康)  |  超阈值(>45%)成员: 1/8 ⚠
+  组织平均一次通过率: 91%  |  一次通过率过低成员: 1/8 ⚠
   组织返工率: 7%  |  变更失败率: 3%
   高迭代会话: 2/156 (1.3%)
 
@@ -929,7 +962,7 @@ AI 使用: 对话 47轮 | $0.36 | 85K tokens
 
 | 指标 | 定义 | 计算公式 | 数据来源 | 告警阈值 |
 |------|------|----------|----------|----------|
-| 代码建议采纳率 | 开发者对 AI 代码建议的接受比例（会话内统计） | Agent 生成的代码变更中，被开发者直接接受的数量 / 总变更数 × 100% | Agent 会话内追踪 | 健康区间 25-35%，>45% 触发告警（不经审查地接受） |
+| 一次通过率 | 代码片段免重写即被接受的返工信号（会话内统计） | 未重写即被接受的片段数 / 全部定论片段数 × 100% | 插件自动统计（review 闭环） | 无硬阈值；作为返工信号展示，过低提示流程质量 |
 | 返工率 | 合并后触发修改/Bug 修复的比例 | 返工提交数 / 总会话提交数 × 100% | Git + CI 管道 | 连续 2 个月上升触发审查 |
 | 变更失败率 | 因 AI 生成代码引发的测试缺陷或生产故障 | 失败变更数 / 总变更数 × 100% | CI/CD + 缺陷跟踪 | 月度环比上升 >5% 触发告警 |
 | 测试覆盖率 | AI 参与模块的增量测试覆盖率 | 覆盖行数 / 总行数 × 100% | SonarQube / CI | <70% 触发告警，<80% 不可 approve review |
@@ -937,9 +970,9 @@ AI 使用: 对话 47轮 | $0.36 | 85K tokens
 | 审查清单通过率 | review.checklist 四项全部通过的会话比例 | 全部通过的会话数 / 总会话数 × 100% | workflow.stages.review.checklist | <90% 触发流程审查 |
 
 这些指标在三个统计层级中的呈现方式不同：
-- **会话级**：展示具体数值，标记是否超阈值（如采纳率 48% ⚠）
-- **项目级**：展示平均值和分布，标记超阈值会话数
-- **组织级**：展示成员排行，标记超阈值成员，展示趋势
+- **会话级**：展示具体数值，一次通过率过低时提示（如一次通过率 72% ↓）
+- **项目级**：展示平均值和分布，标记过低会话数
+- **组织级**：展示成员排行，标记过低成员，展示趋势
 
 ---
 
@@ -1045,7 +1078,7 @@ Agent:  ─── 片段 3/3: auth/model.ts:1-20 ───
        ✓ businessIntent   — 公共方法有业务意图注释
        ✓ logicExplainable  — 圈复杂度 >10 的方法有行内注释
        ✓ behaviorVerifiable — 每个 Service 方法有集成测试
-       ✓ designRationale   — 所有片段已确认理解
+       ✓ designRationale   — 所有片段已定论（accepted/manual）
        
        审查阶段通过。可以提交了。
 ```
@@ -1122,18 +1155,20 @@ Agent:  ⚠ 检测到重复编辑模式：scheduler.py（连续相同操作 3 �
     - 关联说明：这段代码与本会话其他代码片段的关系
 11. 开发者必须**逐段**确认理解，不可一键 approve 所有片段
 12. 开发者对任意片段追问"为什么这样写"时，Agent 必须详细解释，并将追问和回答追加到 explanation 中
-13. 所有片段 developerConfirmed = true 后，designRationale 才可标记为 true
+13. 所有片段处于终态（`accepted` / `manual`）后，designRationale 才可标记为 true
 14. 审查清单中其他三项（businessIntent、logicExplainable、behaviorVerifiable）同时验证
 
-## 代码建议采纳率监控
-15. Agent 在会话内跟踪代码建议采纳率（acceptanceRate）：
-    - 每次 Agent 生成代码变更后，记录为一次"建议"
-    - 开发者在审查阶段直接 accept（未修改、未追问）→ 计入"接受"
-    - 开发者要求修改、追问"为什么这样写"、或手动修改 → 计入"未接受"
-    - acceptanceRate = 接受数 / 总建议数 × 100%
-16. 当单会话采纳率 >45% 时，Agent 发出提醒：
-    "⚠ 本会话采纳率 {rate}%，超过健康阈值（45%）。过高的采纳率可能意味着未充分审查 AI 代码。
-    建议逐段回顾以下变更，确认每段你都能独立解释其工作原理。"
+## 一次通过率监控（返工信号）
+15. 一次通过率由插件在 `review` 闭环中**自动统计**，不依赖 Agent 主动上报：
+    - 每个片段在 `comprehension_add` 时置为 `decision = pending`
+    - 开发者 `comprehension_confirm` → 片段 `accepted`，计入"一次通过"
+    - 开发者 `comprehension_reject` 要求重写 → 片段进入 `rewrite` 循环，不计入"一次通过"
+    - 开发者 `comprehension_manual` 自行处理并声明 resolution → 片段 `manual`，不计入"一次通过"也不计入分母之外的返工
+    - firstPassRate = 一次通过片段数 / 全部定论片段数 × 100%
+16. 一次通过率**不设健康阈值/告警**，作为返工信号展示：
+    - 高值（接近 100%）是正常期望——AI 一次写对越少返工越好，不存在"过高=未充分审查"的语义（区别于业界"接受率"一行补全语境）
+    - 低值提示该会话返工多，可结合 rewrite 次数与反馈定位是需求理解偏差还是实现质量问题
+    - 会话级统计展示百分比与 rewrite 片段数；项目/组织级展示均值与过低会话数（不触发硬告警）
 
 ## 重复编辑模式检测规则
 17. 跟踪每个文件的 AI 代码编辑次数（iterationByFile / iterationCount，统计用）
@@ -1148,7 +1183,7 @@ Agent:  ⚠ 检测到重复编辑模式：scheduler.py（连续相同操作 3 �
     - businessIntent: 公共方法有业务意图注释
     - logicExplainable: 圈复杂度 >10 的方法有行内注释
     - behaviorVerifiable: 每个 Service 方法有至少一个集成测试
-    - designRationale: 所有代码片段有 ComprehensionRecord 且 developerConfirmed = true
+    - designRationale: 所有代码片段有 ComprehensionRecord 且处于终态（accepted/manual）
 22. 任一检查项未通过，审查阶段不可 approve，需回到编码或测试阶段
 
 ## 理解凭证的持久价值
@@ -1184,8 +1219,8 @@ Agent:  ⚠ 检测到重复编辑模式：scheduler.py（连续相同操作 3 �
 | `src/identity.ts` | 读全局 `identity.json`，会话首次活动时打标 `account_id` |
 | `src/prompt.ts` | system prompt 注入片段：规则全文 + 当前状态压缩 JSON |
 | `src/tools/workflow.ts` | `workflow_advance` / `workflow_revisit` / `commit_gate_check` / `commit_force_unlock` 工具 |
-| `src/tools/review.ts` | `comprehension_add` / `comprehension_confirm` / `comprehension_ask` / `review_submit` 工具（含防批量确认校验） |
-| `src/tools/quality.ts` | `quality_report` 工具 + 迭代计数逻辑 |
+| `src/tools/review.ts` | `comprehension_add` / `comprehension_confirm` / `comprehension_reject` / `comprehension_rewrite` / `comprehension_manual` / `comprehension_ask` / `review_submit` 工具（含防批量确认校验与终态门禁） |
+| `src/tools/quality.ts` | 迭代计数逻辑（`quality_report` 已移除，firstPassRate 由 review.ts 自动计算） |
 | `src/workflow-ops.ts` | 阶段转换（enter/approve/revisit，3.3）与提交门禁重算（3.4），工具与门禁共用的状态机 |
 | `src/gate.ts` | `tool.execute.before` 提交门禁拦截（git commit 阻断） |
 | `src/report.ts` | 会话摘要汇报：推送至 `collector_url`，不可用时本地缓冲、恢复补推 |
@@ -1241,7 +1276,7 @@ gantt
     section Phase 2: 工具与门禁
     workflow 工具 (advance/revisit)       :p2a, after p1e, 2d
     审查工具 (comprehension/review_submit) :p2b, after p2a, 2d
-    迭代计数 + quality_report             :p2c, after p2b, 1d
+    迭代计数 + firstPassRate 自动统计     :p2c, after p2b, 1d
     提交门禁 (tool.execute.before)        :p2d, after p2c, 1d
 
     section Phase 3: 统计与收集服务
@@ -1262,8 +1297,8 @@ gantt
 ### Phase 2: 工具与门禁
 
 1. `workflow_advance` / `workflow_revisit` 工具（含开发者确认校验）
-2. `comprehension_confirm` / `comprehension_ask` / `review_submit` 工具（防批量确认、清单二次校验）
-3. 迭代计数（`tool.execute.after`）+ `quality_report` 工具
+2. `comprehension_confirm` / `comprehension_reject` / `comprehension_rewrite` / `comprehension_manual` / `comprehension_ask` / `review_submit` 工具（防批量确认、终态门禁、清单二次校验）
+3. 迭代计数（`tool.execute.after`）+ `review_submit` 自动统计 firstPassRate
 4. 提交门禁：`tool.execute.before` 拦截未过审查的 `git commit`
 
 ### Phase 3: 统计与收集服务
