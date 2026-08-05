@@ -15,7 +15,7 @@ import { createCommitGate } from "./gate"
 import { stampSessionAccount } from "./identity"
 import { createSystemTransform } from "./prompt"
 import { createReporter, type Usage } from "./report"
-import { createIterationCounter, createQualityTools } from "./tools/quality"
+import { createIterationCounter } from "./tools/quality"
 import { createReviewTools } from "./tools/review"
 import { createWorkflowTools } from "./tools/workflow"
 
@@ -87,7 +87,6 @@ const SessionMgmtPlugin: Plugin = async (input) => {
     tool: {
       ...createWorkflowTools(store),
       ...createReviewTools(store),
-      ...createQualityTools(store),
     },
 
     "tool.execute.before": createCommitGate(store),

@@ -27,12 +27,12 @@ export interface AccountAggregate {
   completed: number
   completionRate: number
   cost: number
-  avgAcceptanceRate: number | null
+  avgFirstPassRate: number | null
   /** 平均增量测试覆盖率（CI 回写，0-100；无数据为 null） */
   avgTestCoverage: number | null
   /** 平均会话耗时（毫秒，由汇报携带的阶段时间戳推算，6.1） */
   avgDurationMs: number
-  overAcceptanceThreshold: number
+  lowFirstPassCount: number
   highIterationCount: number
 }
 
@@ -58,20 +58,21 @@ export interface ScopeStats {
   completed: number
   completionRate: number
   totalCost: number
-  avgAcceptanceRate: number | null
+  avgFirstPassRate: number | null
   /** 平均增量测试覆盖率（CI 回写，0-100；无数据为 null） */
   avgTestCoverage: number | null
   /** 平均返工率（CI 回写，0-1 分数；无数据为 null） */
   avgReworkRate: number | null
   /** 平均会话耗时（毫秒） */
   avgDurationMs: number
-  overAcceptanceThreshold: number
+  lowFirstPassCount: number
   highIterationCount: number
   trends: ScopeTrends
   perAccount: AccountAggregate[]
 }
 
-const ACCEPTANCE_WARN_THRESHOLD = 45
+/** 一次通过率偏低参考线：低于此值标记返工信号（仅展示，非硬阈值/告警）。 */
+const LOW_FIRST_PASS_THRESHOLD = 70
 const HIGH_ITERATION_THRESHOLD = 5
 
 /** reports.workflow JSON 的读侧投影（仅取聚合所需字段）。 */
@@ -82,7 +83,7 @@ interface WorkflowLite {
       { revision?: number; transitions?: Array<{ at: number }> }
     >
   >
-  quality?: { acceptanceRate?: number | null; iterationCount?: number | null }
+  quality?: { firstPassRate?: number | null; iterationCount?: number | null }
   commit?: { status?: string }
 }
 
@@ -224,11 +225,11 @@ export class CollectorDb {
     const perAccount: AccountAggregate[] = []
     let completed = 0
     let totalCost = 0
-    const acceptances: number[] = []
+    const firstPasses: number[] = []
     const coverages: number[] = []
     const reworks: number[] = []
     const durations: number[] = []
-    let overThreshold = 0
+    let lowCount = 0
     let hitLimit = 0
     const revEarly: number[] = []
     const revRecent: number[] = []
@@ -238,10 +239,10 @@ export class CollectorDb {
     for (const [account, list] of byAccount) {
       let accCompleted = 0
       let accCost = 0
-      const accAcceptances: number[] = []
+      const accFirstPasses: number[] = []
       const accCoverages: number[] = []
       const accDurations: number[] = []
-      let accOver = 0
+      let accLow = 0
       let accLimit = 0
       for (const row of list) {
         const workflow = parseWorkflow(row.workflow)
@@ -249,10 +250,10 @@ export class CollectorDb {
         accCost += row.cost ?? 0
         accDurations.push(workflowDurationMs(workflow))
 
-        const rate = workflow.quality?.acceptanceRate ?? null
+        const rate = workflow.quality?.firstPassRate ?? null
         if (rate !== null && rate !== undefined) {
-          accAcceptances.push(rate)
-          if (rate > ACCEPTANCE_WARN_THRESHOLD) accOver++
+          accFirstPasses.push(rate)
+          if (rate < LOW_FIRST_PASS_THRESHOLD) accLow++
         }
         const iter = workflow.quality?.iterationCount ?? null
         if (iter !== null && iter !== undefined && iter >= HIGH_ITERATION_THRESHOLD) accLimit++
@@ -274,10 +275,10 @@ export class CollectorDb {
       }
       completed += accCompleted
       totalCost += accCost
-      acceptances.push(...accAcceptances)
+      firstPasses.push(...accFirstPasses)
       coverages.push(...accCoverages)
       durations.push(...accDurations)
-      overThreshold += accOver
+      lowCount += accLow
       hitLimit += accLimit
       perAccount.push({
         account,
@@ -285,10 +286,10 @@ export class CollectorDb {
         completed: accCompleted,
         completionRate: list.length > 0 ? accCompleted / list.length : 0,
         cost: accCost,
-        avgAcceptanceRate: avg(accAcceptances),
+        avgFirstPassRate: avg(accFirstPasses),
         avgTestCoverage: avg(accCoverages),
         avgDurationMs: avg(accDurations) ?? 0,
-        overAcceptanceThreshold: accOver,
+        lowFirstPassCount: accLow,
         highIterationCount: accLimit,
       })
     }
@@ -301,11 +302,11 @@ export class CollectorDb {
       completed,
       completionRate: rows.length > 0 ? completed / rows.length : 0,
       totalCost,
-      avgAcceptanceRate: avg(acceptances),
+      avgFirstPassRate: avg(firstPasses),
       avgTestCoverage: avg(coverages),
       avgReworkRate: avg(reworks),
       avgDurationMs: avg(durations) ?? 0,
-      overAcceptanceThreshold: overThreshold,
+      lowFirstPassCount: lowCount,
       highIterationCount: hitLimit,
       trends: {
         requirementRevision: makeTrend(avg(revEarly), avg(revRecent)),

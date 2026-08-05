@@ -13,7 +13,8 @@ import {
 import type { Usage } from "./report"
 import type { WorkflowSessionRow } from "./db/schema"
 
-export const ACCEPTANCE_WARN_THRESHOLD = 45
+/** 一次通过率偏低参考线：低于此值标记为返工信号（仅供统计展示，非硬阈值/非告警）。 */
+export const LOW_FIRST_PASS_THRESHOLD = 70
 
 /** 统计参考线：单文件编辑次数达到此值视为"迭代较高"（仅供统计展示，非硬上限）。 */
 export const HIGH_ITERATION_THRESHOLD = 5
@@ -33,7 +34,7 @@ export interface SessionStats {
   tags: string[]
   stages: StageStats[]
   durationMs: number
-  acceptanceRate: number | null
+  firstPassRate: number | null
   iterationCount: number | null
   reworkRate: number | null
   testCoverage: number | null
@@ -53,8 +54,8 @@ export interface ProjectStats {
   totalCost: number
   /** 是否有任何会话取到费用（daemon 不可达时全为 null，统计应示 N/A 而非 $0） */
   hasCostData: boolean
-  avgAcceptanceRate: number | null
-  overAcceptanceThreshold: number
+  avgFirstPassRate: number | null
+  lowFirstPassCount: number
   highIterationCount: number
   stageAvgDurationMs: Record<StageName, number>
 }
@@ -106,7 +107,7 @@ export function sessionStats(row: WorkflowSessionRow, usage: Usage): SessionStat
       durationMs: stageDurationMs(workflow.stages[name]),
     })),
     durationMs: workflowDurationMs(workflow),
-    acceptanceRate: workflow.quality.acceptanceRate,
+    firstPassRate: workflow.quality.firstPassRate,
     iterationCount: workflow.quality.iterationCount,
     reworkRate: workflow.quality.reworkRate,
     testCoverage: workflow.quality.testCoverage,
@@ -125,7 +126,7 @@ export function aggregateProject(rows: WorkflowSessionRow[], usageOf: (id: strin
   const n = stats.length
   const completed = stats.filter((s) => s.complete).length
   const durations = stats.map((s) => s.durationMs)
-  const acceptances = stats.map((s) => s.acceptanceRate).filter((x): x is number => x !== null)
+  const firstPasses = stats.map((s) => s.firstPassRate).filter((x): x is number => x !== null)
   const stageAvg = {} as Record<StageName, number>
   for (const name of STAGE_ORDER) {
     const vals = stats.map((s) => s.stages.find((x) => x.name === name)!.durationMs)
@@ -138,9 +139,9 @@ export function aggregateProject(rows: WorkflowSessionRow[], usageOf: (id: strin
     avgDurationMs: n > 0 ? durations.reduce((a, b) => a + b, 0) / n : 0,
     totalCost: stats.reduce((sum, s) => sum + (s.cost ?? 0), 0),
     hasCostData: stats.some((s) => s.cost !== null),
-    avgAcceptanceRate: acceptances.length > 0 ? acceptances.reduce((a, b) => a + b, 0) / acceptances.length : null,
-    overAcceptanceThreshold: stats.filter(
-      (s) => s.acceptanceRate !== null && s.acceptanceRate > ACCEPTANCE_WARN_THRESHOLD,
+    avgFirstPassRate: firstPasses.length > 0 ? firstPasses.reduce((a, b) => a + b, 0) / firstPasses.length : null,
+    lowFirstPassCount: stats.filter(
+      (s) => s.firstPassRate !== null && s.firstPassRate < LOW_FIRST_PASS_THRESHOLD,
     ).length,
     highIterationCount: stats.filter((s) => s.iterationCount !== null && s.iterationCount >= HIGH_ITERATION_THRESHOLD).length,
     stageAvgDurationMs: stageAvg,

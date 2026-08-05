@@ -22,10 +22,13 @@ const RULES = `# Workflow Agent 规则
    （做了什么、为什么这样写、被放弃的替代方案、潜在风险）。
 8. 开发者必须逐段确认：comprehension_confirm 单次只接受一个 codeSegmentId。
 9. 开发者追问时详细解释，并将问答追加到该片段的 explanation（comprehension_ask）。
-10. 全部片段确认后才可 review_submit；清单四项须全为 true，否则回到编码/测试。
+10. 每个片段须达成终态（comprehension_confirm 接受 / comprehension_manual 开发者自处理），
+    不允许 pending/rejected 悬空；拒绝的片段先 comprehension_rewrite 重写或 manual 定论，全部定论后才可 review_submit；
+    清单四项须全为 true，否则回到编码/测试。
 
-## 采纳率与迭代上限
-11. 跟踪 acceptanceRate；单会话 >45% 时提醒开发者可能未充分审查。
+## 一次通过率与迭代上限
+11. 一次通过率由 review_submit 自动计算（未重写即 accepted 的片段占比），无需 Agent 上报；
+    一次通过率低说明返工多，应结合拒绝意见 comprehension_rewrite 改进，而非简单重试。
 12. 检测连续重复编辑模式（同一文件连续 3 次以上相同参数的 AI 编辑，或同一文件被编辑 6 次以上），提醒开发者审查是否陷入无效循环，但不拒绝生成。
 
 ## SDLC 完结与下一需求
