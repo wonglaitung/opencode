@@ -512,12 +512,32 @@ cd opencode-session-mgmt
 bun run pack:bundle        # → dist/opencode-sm-bundle-0.1.0.tgz（版本号取自 packages/cli/package.json）
 # 版本号可按需覆盖： VERSION=0.2.0 bash scripts/pack-bundle.sh
 
-# 内网开发机：
-tar xzf opencode-sm-bundle-0.1.0.tgz
-cd opencode-sm-bundle-0.1.0
+# 内网开发机（解压到固定位置，如 D:/tools/opencode/）：
+tar xzf opencode-sm-bundle-0.1.0.tgz -C D:/tools/opencode
+cd D:/tools/opencode/opencode-sm-bundle-0.1.0
 bash setup.sh              # 可选：校验环境（Windows 用 .\setup.ps1）
-# 直接指向解压目录即可（bundle 根 package.json 已注入 main 指向插件入口，与 edge-debug 一致）
 ```
+
+然后在 `opencode.json`（项目级或全局级）里**直接指向解压目录**——bundle 根 `package.json` 已注入 `main` 指向插件入口，无需再指到 `packages/plugin`（与 edge-debug 一致）：
+
+```json
+{
+  "plugin": ["D:/tools/opencode/opencode-sm-bundle-0.1.0"]
+}
+```
+
+若同时用 edge-debug bundle，并列两条即可：
+
+```json
+{
+  "plugin": [
+    "D:/tools/opencode/opencode-sm-bundle-0.1.0",
+    "D:/tools/opencode/opencode-edge-debug-bundle-0.0.1"
+  ]
+}
+```
+
+> Windows 注意：JSON 里路径用正斜杠 `/`（上面示例即如此），无需处理反斜杠转义。
 
 > 注意：`pack:bundle` 只是把「session-mgmt 本体 + 依赖」打包成可移植目录，**不含 OpenCode 运行时**——内网仍需把 OpenCode 本体与大模型网关单独搬入（见下方手动打包骨架与 9.3 节）。若想连 OpenCode 一起整包，见下方手动 tar 的目录骨架。
 
