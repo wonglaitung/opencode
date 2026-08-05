@@ -504,7 +504,24 @@ opencode-bundle/
 └── run.sh                  # export PATH="$HERE/bin:..." 后启动 opencode
 ```
 
-打包 / 解包：
+**一键打包脚本（推荐）**：仓库已备好 `pack:bundle`，自动完成「清理旧依赖 → hoisted 重装 → 组装自包含目录 → 附带 environment 校验脚本」的整包打包，产物为可 `tar` 解压即用的 tarball：
+
+```bash
+# 外网打包机（务必与内网同 OS / 同架构 / glibc 相近）：
+cd opencode-session-mgmt
+bun run pack:bundle        # → dist/opencode-sm-bundle-0.1.0.tgz（版本号取自 packages/cli/package.json）
+# 版本号可按需覆盖： VERSION=0.2.0 bash scripts/pack-bundle.sh
+
+# 内网开发机：
+tar xzf opencode-sm-bundle-0.1.0.tgz
+cd opencode-sm-bundle-0.1.0
+bash setup.sh              # 可选：校验环境（Windows 用 .\setup.ps1）
+# 然后在 opencode.json 中把 plugin 指向解压目录（其下 packages/plugin 含 package.json）
+```
+
+> 注意：`pack:bundle` 只是把「session-mgmt 本体 + 依赖」打包成可移植目录，**不含 OpenCode 运行时**——内网仍需把 OpenCode 本体与大模型网关单独搬入（见下方手动打包骨架与 9.3 节）。若想连 OpenCode 一起整包，见下方手动 tar 的目录骨架。
+
+手动打包 / 解包（备选，可自由加入 OpenCode 运行时）：
 
 ```bash
 # 外网打包机（务必与内网同 OS / 同架构 / glibc 相近）：
@@ -626,5 +643,6 @@ docker save opencode-sm-collector -o collector-image.tar
 | `bun run build:cli` | `dist/opencode-sm`（单文件二进制） |
 | `bun run pack:cli` | `dist/opencode-sm-<版本>-<平台>.tgz`（可 `npm install -g` 的安装包；`bash scripts/pack-cli.sh <平台>` 交叉编译多平台） |
 | `bun run build:collector` | `dist/collector/`（供 Dockerfile COPY） |
+| `bun run pack:bundle` | `dist/opencode-sm-bundle-<版本>.tgz`（整包便携 tarball，内网/离线分发，见 9.2 节做法一） |
 
 **进一步阅读**：设计原理 [`session-management.md`](session-management.md)；上游同步流程 [`upstream-sync.md`](upstream-sync.md)。
