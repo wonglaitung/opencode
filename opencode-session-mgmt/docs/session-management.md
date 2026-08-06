@@ -418,6 +418,7 @@ classDiagram
         +Stages stages
         +CommitGate commit
         +QualityMetrics quality
+        +BaselineEstimate? baseline
     }
 
     class Stages {
@@ -503,10 +504,16 @@ classDiagram
         +Record linesByFile
     }
 
+    class BaselineEstimate {
+        +number estimatedHours
+        +number setAt
+    }
+
     WorkflowState *-- Stages
     WorkflowState *-- CommitGate
     CommitGate *-- "0..1" CommitForce
     WorkflowState *-- QualityMetrics
+    WorkflowState *-- "0..1" BaselineEstimate
     Stages *-- StageRecord : requirements
     Stages *-- StageRecord : design
     Stages *-- StageRecord : implementation
@@ -519,6 +526,10 @@ classDiagram
     ReviewStageRecord *-- Transition
     Transition *-- TransitionAction
 ```
+
+**BaselineEstimate — 基线预估人工工时（6.3）**：
+
+`baseline` 记录项目经理在需求创建时给出的**预估人工工时**（`estimatedHours`，小时、可小数），`setAt` 为录入时间戳。它给出实际周期的参照系：会话结束后，系统按 `（预估工时 − 实际周期）÷ 预估工时` 计算 **AI 提效百分比**。字段可选（无基线的会话提效率为 N/A），可随时重设（幂等覆盖、记最新值，见 7.4 规则 28-29）；录入由开发者在 TUI 对话中转述项目经理的预估（见 4.1 `workflow_baseline`）。
 
 **ReviewChecklist — 可接手标准检查项**：
 
@@ -731,6 +742,7 @@ flowchart TD
 |------|------|-----------|
 | `workflow_advance` | 提议进入下一阶段 / 标记当前阶段 approved | 必须携带开发者确认语义；AI 不可在无确认时调用成功 |
 | `workflow_revisit` | 回退到指定阶段（revision++） | 目标阶段必须存在 |
+| `workflow_baseline` | 录入/重设基线预估人工工时（项目经理给出，如 8h，6.3） | `developer_confirmed` 必须为 true（防 AI 杜撰）；`estimated_hours > 0`；幂等覆盖记最新值 |
 | `comprehension_add` | 登记一个 AI 生成的代码片段及自然语言解释（做了什么、为什么、被放弃的替代方案、潜在风险） | 片段不可重复登记；登记后 `decision=pending`，待逐段定夺 |
 | `comprehension_confirm` | 接受单个片段（一次通过） | **单次调用只接受一个 `codeSegmentId`**，防止批量确认（见 7.3）；须处于 pending/rejected 才可接受 |
 | `comprehension_ask` | 对片段追问，问答追加到 explanation | 片段必须存在 |
@@ -899,6 +911,7 @@ graph LR
         ACCT["account/组/组织<br/>（init 配置 + 聚合库快照）"]
         QM["workflow.quality<br/>质量指标（插件库）"]
         RV["workflow.stages.review<br/>审查数据（插件库）"]
+        BL["workflow.baseline<br/>基线预估工时（插件库）"]
     end
 
     subgraph Metrics["统计指标"]
@@ -916,6 +929,7 @@ graph LR
     COST --> M3
     TOK --> M3
     DIFF --> M5
+    BL --> M5
     ACCT --> M4
     QM --> M6
     RV --> M6
@@ -940,6 +954,7 @@ graph LR
 质量:
   一次通过率: 92%  |  迭代轮次: 2 轮（单文件被 AI 编辑的最高次数）  |  测试覆盖率: 82%
   AI 净增行数: 业务 620 / 测试 310 / 配置 45（合计 975）
+  基线对比: 预估 120h / 实际 3.3d → AI 提效 35%
   返工标记: 无  |  审查清单: ✓全部通过(4/4)  |  理解确认: 5片段 ✓已确认
 
 AI 使用: 对话 47轮 | $0.36 | 85K tokens
@@ -957,6 +972,7 @@ AI 使用: 对话 47轮 | $0.36 | 85K tokens
 质量:
   平均一次通过率: 91%  |  一次通过率过低会话: 1/12 ⚠
   AI 净增行数: 业务 5.8K / 测试 2.9K / 配置 0.4K（合计 9.1K）
+  平均 AI 提效: 58%（基线会话 8/12）
   返工率: 8%  |  变更失败率: 2%  |  平均测试覆盖率: 78%
   高迭代会话(≥5轮): 0
 ```
@@ -974,9 +990,10 @@ AI 使用: 对话 47轮 | $0.36 | 85K tokens
 质量:
   组平均一次通过率: 91%  |  一次通过率过低成员: 1/5 ⚠
   AI 净增行数: 业务 18.2K / 测试 9.5K / 配置 1.2K（合计 28.9K）
+  组平均 AI 提效: 62%（基线会话 31/42）
   组返工率: 6%  |  变更失败率: 2%  |  高迭代会话: 1/42 (2.4%)
 
-趋势: 需求迭代 ↓1.5→0.9 | AI效率 ↑$0.04→$0.02/行 | 返工率 ↓10%→6%
+趋势: 需求迭代 ↓1.5→0.9 | 单行成本 ↓$0.04→$0.02 | 返工率 ↓10%→6% | 提效 ↑55%→68%
 ```
 
 **组织级**：
@@ -992,10 +1009,11 @@ AI 使用: 对话 47轮 | $0.36 | 85K tokens
 质量:
   组织平均一次通过率: 91%  |  一次通过率过低成员: 1/8 ⚠
   AI 净增行数: 业务 62K / 测试 31K / 配置 4K（合计 97K）
+  组织平均 AI 提效: 64%（基线会话 120/156）
   组织返工率: 7%  |  变更失败率: 3%
   高迭代会话: 2/156 (1.3%)
 
-趋势: 需求迭代 ↓1.3→0.8 | AI效率 ↑$0.03→$0.02/行 | 返工率 ↓12%→7%
+趋势: 需求迭代 ↓1.3→0.8 | 单行成本 ↓$0.03→$0.02 | 返工率 ↓12%→7% | 提效 ↑58%→70%
 ```
 
 ### 6.3 质量维度指标定义
@@ -1006,6 +1024,7 @@ AI 使用: 对话 47轮 | $0.36 | 85K tokens
 |------|------|----------|----------|----------|
 | 一次通过率 | 代码片段免重写即被接受的返工信号（会话内统计） | 未重写即被接受的片段数 / 全部定论片段数 × 100% | 插件自动统计（review 闭环） | 无硬阈值；作为返工信号展示，过低提示流程质量 |
 | AI 代码行数 | AI 净增代码量，按业务/测试/配置三分类（会话内统计） | write 整文件、edit 新行−旧行、apply_patch +行−−行，逐文件去重累计后分类汇总（逐文件 clamp ≥0） | 插件自动统计（tool.execute.after） | 无阈值；纯展示型指标（产出量参考，不与质量/绩效挂钩） |
+| AI 提效率 | 相对预估人工工时的提效百分比（会话级，6.3） | （预估人工工时 − 实际周期）÷ 预估人工工时 × 100%（实际周期由阶段时间戳推算，6.1） | 插件 `workflow_baseline` 录入 + 阶段时间戳自动计算 | 无阈值；仅展示（可为负，实际超预估即为负值） |
 | 返工率 | 合并后触发修改/Bug 修复的比例 | 返工提交数 / 总会话提交数 × 100% | Git + CI 管道 | 连续 2 个月上升触发审查 |
 | 变更失败率 | 因 AI 生成代码引发的测试缺陷或生产故障 | 失败变更数 / 总变更数 × 100% | CI/CD + 缺陷跟踪 | 月度环比上升 >5% 触发告警 |
 | 测试覆盖率 | AI 参与模块的增量测试覆盖率 | 覆盖行数 / 总行数 × 100% | SonarQube / CI | <70% 触发告警，<80% 不可 approve review |
@@ -1017,6 +1036,7 @@ AI 使用: 对话 47轮 | $0.36 | 85K tokens
 - **项目级**：展示平均值和分布，标记过低会话数
 - **组织级**：展示成员排行，标记过低成员，展示趋势
 - **AI 代码行数**为累加型指标：会话级展示三分类数值，项目/组/组织级展示各会话行数**求和**（不做平均），全层级仅展示、不告警
+- **AI 提效率**为比率型指标（同一次通过率/返工率）：项目/组/组织级对「有基线且有有效周期」的会话**求平均**；无基线会话不参与，全无基线时显示 N/A（并以基线会话数 0/N 示覆盖率）；组/组织级另按汇报时间分**早/近半段**展示均值走向（如 提效 ↑55%→68%），即研发提效曲线在纯文本 CLI 下的呈现
 
 ---
 
@@ -1238,6 +1258,10 @@ Agent:  ⚠ 检测到重复编辑模式：scheduler.py（连续相同操作 3 �
 ## AI 代码行数统计
 26. 插件在 `tool.execute.after` 按净增量口径累计各文件 AI 净增行数（linesByFile）：write 整文件覆盖计、edit 按新行−旧行、apply_patch 按 +行−−行（插件内轻量扫描器解析，不依赖上游模块）
 27. 行数按 业务/测试/配置 三分类汇总（测试路径/命名 → 配置扩展名 → 其余为业务），逐文件 clamp ≥0；行数仅展示、不设阈值告警，文件路径不外传（汇报只带三类聚合数字）
+
+## 基线对比（预估人工工时）
+28. 进入需求阶段（workflow_advance stage=requirements action=enter）时，主动询问开发者：项目经理对本需求的预估人工工时是多少（小时）？开发者明确给出后调用 workflow_baseline 记录（developer_confirmed=true）。未提供不阻塞；已录入后可从状态中读到，不必重复询问
+29. baseline 为可选字段，语义：预估工时仅作实际周期的参照系，AI 提效率 =（预估 − 实际周期）÷ 预估，可为负（实际超预估）、仅展示不设阈值；可随时重设（幂等覆盖记最新值）
 ```
 
 ---
@@ -1252,7 +1276,7 @@ Agent:  ⚠ 检测到重复编辑模式：scheduler.py（连续相同操作 3 �
 
 | 文件 | 用途 |
 |------|------|
-| `src/workflow.ts` | WorkflowState schema（含 ReviewChecklist、ComprehensionRecord、QualityMetrics）——插件写、收集服务收、CLI 读，单点定义 |
+| `src/workflow.ts` | WorkflowState schema（含 ReviewChecklist、ComprehensionRecord、QualityMetrics、BaselineEstimate）与 efficiencyRatio 提效率口径——插件写、收集服务收、CLI 读，单点定义 |
 | `src/loc.ts` | AI 代码行数：行数计算、业务/测试/配置三分类（classifyFile）与分类汇总（sumLinesByCategory） |
 | `src/report.ts` | 汇报与 CI 回写 payload schema |
 | `src/identity.ts` | identity.json 类型与读写 |
@@ -1267,7 +1291,7 @@ Agent:  ⚠ 检测到重复编辑模式：scheduler.py（连续相同操作 3 �
 | `src/db/index.ts` | 插件 SQLite 初始化与迁移（bun:sqlite，WAL 模式） |
 | `src/identity.ts` | 读全局 `identity.json`，会话首次活动时打标 `account_id` |
 | `src/prompt.ts` | system prompt 注入片段：规则全文 + 当前状态压缩 JSON |
-| `src/tools/workflow.ts` | `workflow_advance` / `workflow_revisit` / `commit_gate_check` / `commit_force_unlock` 工具 |
+| `src/tools/workflow.ts` | `workflow_advance` / `workflow_revisit` / `workflow_baseline` / `commit_gate_check` / `commit_force_unlock` 工具 |
 | `src/tools/review.ts` | `comprehension_add` / `comprehension_confirm` / `comprehension_reject` / `comprehension_rewrite` / `comprehension_manual` / `comprehension_ask` / `review_submit` 工具（含防批量确认校验与终态门禁） |
 | `src/tools/quality.ts` | 迭代计数 + AI 代码行数累计逻辑（`quality_report` 已移除，firstPassRate 由 review.ts 自动计算） |
 | `src/workflow-ops.ts` | 阶段转换（enter/approve/revisit，3.3）与提交门禁重算（3.4），工具与门禁共用的状态机 |

@@ -39,6 +39,33 @@ function reportWithLines(sessionID: string, account: string, group: string, line
   }
 }
 
+/** 携带基线与阶段时间戳的汇报（时间戳跨度 = durationMs，供提效率计算）。 */
+function reportWithBaseline(
+  sessionID: string,
+  account: string,
+  group: string,
+  estimatedHours: number,
+  durationMs: number,
+  reportedAt: number,
+): SessionReport {
+  const workflow = createWorkflowState()
+  const start = 1_750_000_000_000
+  workflow.stages.requirements.transitions.push({ action: "enter", at: start })
+  workflow.stages.review.transitions.push({ action: "approve", at: start + durationMs })
+  workflow.baseline = { estimatedHours, setAt: start }
+  return {
+    sessionID,
+    account,
+    group,
+    org: "Eng",
+    workflow: summarizeWorkflow(workflow),
+    cost: null,
+    tokensInput: 0,
+    tokensOutput: 0,
+    reportedAt,
+  }
+}
+
 function withDb(fn: (db: CollectorDb) => void): void {
   const dir = mkdtempSync(join(tmpdir(), "sm-col-"))
   const db = CollectorDb.open(join(dir, "c.db"))
@@ -181,6 +208,58 @@ describe("CollectorDb", () => {
         db.upsertReport(report("s2", "bob", "前端组", 2))
         expect(db.statsGroup("前端组", null).linesTotal).toEqual({ business: 0, test: 0, config: 0 })
         expect(db.statsGroup("前端组", null).hasLinesData).toBe(false)
+      })
+    })
+  })
+
+  describe("基线对比聚合（6.3 提效率为比率型求均值）", () => {
+    const HOUR = 3_600_000
+
+    test("avgEfficiency 对有基线会话求均值；baselineSessions 计数", () => {
+      withDb((db) => {
+        db.upsertReport(reportWithBaseline("s1", "alice", "前端组", 4, 1 * HOUR, 100)) // 提效 0.75
+        db.upsertReport(reportWithBaseline("s2", "bob", "前端组", 2, 1 * HOUR, 100)) // 提效 0.5
+        const stats = db.statsGroup("前端组", null)
+        expect(stats.avgEfficiency).toBeCloseTo((0.75 + 0.5) / 2)
+        expect(stats.baselineSessions).toBe(2)
+      })
+    })
+
+    test("无基线会话不参与均值；无任何基线时为 null / 0", () => {
+      withDb((db) => {
+        db.upsertReport(report("s1", "alice", "前端组", 1)) // 旧式汇报，无 baseline 字段
+        db.upsertReport(reportWithBaseline("s2", "bob", "前端组", 2, 1 * HOUR, 100)) // 提效 0.5
+        const stats = db.statsGroup("前端组", null)
+        expect(stats.avgEfficiency).toBeCloseTo(0.5) // 仅 s2 参与
+        expect(stats.baselineSessions).toBe(1)
+      })
+      withDb((db) => {
+        db.upsertReport(report("s1", "alice", "前端组", 1))
+        const stats = db.statsGroup("前端组", null)
+        expect(stats.avgEfficiency).toBeNull()
+        expect(stats.baselineSessions).toBe(0)
+      })
+    })
+
+    test("旧版汇报（无 baseline 字段）不受影响，聚合正常（向后兼容）", () => {
+      withDb((db) => {
+        db.upsertReport(report("s1", "alice", "前端组", 1.5))
+        const stats = db.statsGroup("前端组", null)
+        expect(stats.sessions).toBe(1)
+        expect(stats.avgEfficiency).toBeNull()
+        expect(stats.trends.efficiency).toBeNull()
+      })
+    })
+
+    test("趋势：提效率按汇报时间分早晚半段", () => {
+      withDb((db) => {
+        const now = Date.now()
+        const PERIOD = 1_000_000
+        // 早半段提效 0.5（预估 2h 实际 1h），近半段提效 0.75（预估 4h 实际 1h）
+        db.upsertReport(reportWithBaseline("early", "alice", "前端组", 2, 1 * HOUR, now - 800_000))
+        db.upsertReport(reportWithBaseline("recent", "alice", "前端组", 4, 1 * HOUR, now - 100_000))
+        const stats = db.statsGroup("前端组", PERIOD)
+        expect(stats.trends.efficiency).toEqual({ from: 0.5, to: 0.75, direction: "up" })
       })
     })
   })

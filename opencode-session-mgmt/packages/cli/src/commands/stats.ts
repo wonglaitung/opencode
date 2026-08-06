@@ -192,6 +192,7 @@ function printSessionStats(s: SessionStats): void {
       `质量:\n` +
       `  一次通过率: ${fmtPct(s.firstPassRate)}  迭代轮次: ${fmtIterations(s.iterationCount)}  覆盖率: ${fmtPct(s.testCoverage)}\n` +
       `  ${fmtLinesCategory(s.lines)}\n` +
+      `  ${fmtBaselineLine(s.baselineHours, s.durationMs, s.efficiency)}\n` +
       `  返工率: ${fmtPct(s.reworkRate)}  审查清单: ${s.checklistPassed}/4  理解确认: ${s.comprehension.confirmed}/${s.comprehension.total}\n\n` +
       `AI 使用: ${s.cost === null ? "$N/A" : `$${s.cost.toFixed(4)}`} | ${fmtTokens(s.tokensInput)} in / ${fmtTokens(s.tokensOutput)} out\n`,
   )
@@ -211,6 +212,9 @@ function printProjectStats(
     `质量:`,
     `  平均一次通过率: ${fmtPct(p.avgFirstPassRate)}  一次通过率过低会话(<${LOW_FIRST_PASS_THRESHOLD}%): ${p.lowFirstPassCount}/${p.sessions}`,
     `  ${p.hasLinesData ? fmtLinesCategory(p.linesTotal) : "AI 净增行数: N/A"}`,
+    p.avgEfficiency === null
+      ? `  AI 提效: N/A（无基线会话）`
+      : `  平均 AI 提效: ${fmtEfficiency(p.avgEfficiency)}（基线会话 ${p.baselineCount}/${p.sessions}）`,
     `  高迭代会话(≥${HIGH_ITERATION_THRESHOLD}轮): ${p.highIterationCount}`,
   ]
 
@@ -283,7 +287,11 @@ interface ScopeStatsView {
   linesTotal?: { business: number; test: number; config: number } | null
   /** 是否有任何会话上报行数数据（旧版收集服务响应可能缺失）；无数据时示 N/A 而非 0 */
   hasLinesData?: boolean
-  trends: { requirementRevision: TrendView | null; reworkRate: TrendView | null }
+  /** 平均 AI 提效（6.3；旧版收集服务响应可能缺失） */
+  avgEfficiency?: number | null
+  /** 已录入基线工时会话数（旧版收集服务响应可能缺失） */
+  baselineSessions?: number
+  trends: { requirementRevision: TrendView | null; reworkRate: TrendView | null; efficiency?: TrendView | null }
   perAccount: ScopeAccountView[]
 }
 
@@ -310,6 +318,11 @@ function printScopeStats(raw: unknown, scope: string): void {
       `质量:\n` +
       `  平均一次通过率: ${s.avgFirstPassRate === null ? "N/A" : `${s.avgFirstPassRate.toFixed(0)}%`}  一次通过率过低成员(<${LOW_FIRST_PASS_THRESHOLD}%): ${s.lowFirstPassCount}/${s.members}\n` +
       `  ${s.hasLinesData && s.linesTotal ? fmtLinesCategory(s.linesTotal) : "AI 净增行数: N/A"}\n` +
+      `  ${
+        s.avgEfficiency === null || s.avgEfficiency === undefined
+          ? "AI 提效: N/A（无基线会话）"
+          : `平均 AI 提效: ${fmtEfficiency(s.avgEfficiency)}（基线会话 ${s.baselineSessions ?? 0}/${s.sessions}）`
+      }\n` +
       `  平均覆盖率: ${fmtPct(s.avgTestCoverage)}  平均返工率: ${fmtRework(s.avgReworkRate)}\n` +
       `  高迭代会话(≥${HIGH_ITERATION_THRESHOLD}轮): ${s.highIterationCount}/${s.sessions}\n` +
       formatTrends(s.trends),
@@ -333,6 +346,11 @@ function formatTrends(t: ScopeStatsView["trends"] | undefined): string {
   if (t.reworkRate) {
     parts.push(
       `返工率 ${arrow(t.reworkRate.direction)}${(t.reworkRate.from * 100).toFixed(0)}%→${(t.reworkRate.to * 100).toFixed(0)}%`,
+    )
+  }
+  if (t.efficiency) {
+    parts.push(
+      `提效 ${arrow(t.efficiency.direction)}${(t.efficiency.from * 100).toFixed(0)}%→${(t.efficiency.to * 100).toFixed(0)}%`,
     )
   }
   return parts.length > 0 ? `趋势: ${parts.join(" | ")}\n` : ""
@@ -374,4 +392,17 @@ export function fmtLinesCategory(lines: { business: number; test: number; config
   if (!lines) return "AI 净增行数: N/A"
   const total = lines.business + lines.test + lines.config
   return `AI 净增行数: 业务 ${fmtLines(lines.business)} / 测试 ${fmtLines(lines.test)} / 配置 ${fmtLines(lines.config)}（合计 ${fmtLines(total)}）`
+}
+
+/** 提效率展示（6.3）：比率 → 百分比整数（四舍五入），负数保留符号（仅展示）。 */
+export function fmtEfficiency(v: number | null): string {
+  if (v === null) return "N/A"
+  return `${Math.round(v * 100)}%`
+}
+
+/** 基线对比行（6.3）：「基线对比: 预估 8h / 实际 1.7h → AI 提效 79%」；未录入基线显示 N/A。 */
+export function fmtBaselineLine(baselineHours: number | null, durationMs: number, efficiency: number | null): string {
+  if (baselineHours === null) return "基线对比: N/A（未录入预估工时）"
+  if (efficiency === null) return `基线对比: 预估 ${baselineHours}h（暂无有效周期）`
+  return `基线对比: 预估 ${baselineHours}h / 实际 ${fmtDuration(durationMs)} → AI 提效 ${fmtEfficiency(efficiency)}`
 }

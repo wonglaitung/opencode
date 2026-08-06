@@ -1,6 +1,6 @@
 /**
- * 工作流工具测试：commit_force_unlock 强制提交授权（设计文档 §3.4 逃生口）。
- * 校验开发者确认 + 原因必填，授权写入留痕且为一次性。
+ * 工作流工具测试：commit_force_unlock 强制提交授权（3.4 逃生口）、
+ * workflow_baseline 基线预估工时录入（6.3）。
  */
 import { describe, expect, test } from "bun:test"
 import { Store } from "../src/db"
@@ -42,6 +42,34 @@ describe("commit_force_unlock", () => {
     await expect(
       tools.workflow_advance!.execute({ stage: "review", action: "approve", developer_confirmed: true } as never, ctx),
     ).rejects.toThrow(/review_submit/)
+    store.close()
+  })
+})
+
+describe("workflow_baseline（基线预估工时，6.3）", () => {
+  test("录入预估工时并记录 setAt", async () => {
+    const { store, tools } = setup()
+    await tools.workflow_baseline!.execute({ estimated_hours: 8, developer_confirmed: true } as never, ctx)
+    const baseline = store.get("s1")!.workflow!.baseline
+    expect(baseline?.estimatedHours).toBe(8)
+    expect(typeof baseline?.setAt).toBe("number")
+    store.close()
+  })
+
+  test("需 developer_confirmed，防 AI 杜撰基线", async () => {
+    const { store, tools } = setup()
+    await expect(
+      tools.workflow_baseline!.execute({ estimated_hours: 8, developer_confirmed: false } as never, ctx),
+    ).rejects.toThrow(/developer_confirmed/)
+    expect(store.get("s1")?.workflow?.baseline).toBeUndefined()
+    store.close()
+  })
+
+  test("重设为幂等覆盖（记最新值）", async () => {
+    const { store, tools } = setup()
+    await tools.workflow_baseline!.execute({ estimated_hours: 8, developer_confirmed: true } as never, ctx)
+    await tools.workflow_baseline!.execute({ estimated_hours: 12, developer_confirmed: true } as never, ctx)
+    expect(store.get("s1")!.workflow!.baseline?.estimatedHours).toBe(12)
     store.close()
   })
 })

@@ -6,6 +6,7 @@
 import {
   STAGE_LABELS,
   STAGE_ORDER,
+  efficiencyRatio,
   sumLinesByCategory,
   type LinesCategory,
   type StageName,
@@ -43,6 +44,10 @@ export interface SessionStats {
   testCoverage: number | null
   /** AI 净增行数三分类聚合（本机 linesByFile 明细经 sumLinesByCategory 逐文件 clamp 汇总）；无 AI 代码编辑为 null */
   lines: LinesCategory | null
+  /** 基线预估人工工时（小时）；未录入为 null（6.3） */
+  baselineHours: number | null
+  /** AI 提效率 =（预估 − 实际周期）÷ 预估；无基线或无有效周期为 null，可为负（6.3） */
+  efficiency: number | null
   comprehension: { total: number; confirmed: number }
   checklistPassed: number
   cost: number | null
@@ -66,6 +71,10 @@ export interface ProjectStats {
   linesTotal: LinesCategory
   /** 是否有任何会话有行数数据（无数据时统计应示 N/A 而非 0，同 hasCostData） */
   hasLinesData: boolean
+  /** 平均 AI 提效率（比率型，对有基线且有有效周期的会话求均值，6.3）；无数据为 null */
+  avgEfficiency: number | null
+  /** 已录入基线的会话数（提效曲线覆盖率参考） */
+  baselineCount: number
   stageAvgDurationMs: Record<StageName, number>
 }
 
@@ -103,6 +112,8 @@ export function sessionStats(row: WorkflowSessionRow, usage: Usage): SessionStat
     checklist.behaviorVerifiable,
     checklist.designRationale,
   ].filter(Boolean).length
+  // 会话总耗时既用于展示，也作为提效率的「实际周期」（6.3）
+  const durationMs = workflowDurationMs(workflow)
   return {
     sessionID: row.session_id,
     title: row.title,
@@ -116,12 +127,14 @@ export function sessionStats(row: WorkflowSessionRow, usage: Usage): SessionStat
       revision: workflow.stages[name].revision,
       durationMs: stageDurationMs(workflow.stages[name]),
     })),
-    durationMs: workflowDurationMs(workflow),
+    durationMs,
     firstPassRate: workflow.quality.firstPassRate,
     iterationCount: workflow.quality.iterationCount,
     reworkRate: workflow.quality.reworkRate,
     testCoverage: workflow.quality.testCoverage,
     lines: workflow.quality.linesByFile ? sumLinesByCategory(workflow.quality.linesByFile) : null,
+    baselineHours: workflow.baseline?.estimatedHours ?? null,
+    efficiency: efficiencyRatio(workflow.baseline?.estimatedHours, durationMs),
     comprehension: { total: review.comprehension.length, confirmed },
     checklistPassed,
     cost: usage.cost,
@@ -151,6 +164,8 @@ export function aggregateProject(rows: WorkflowSessionRow[], usageOf: (id: strin
     linesTotal.test += s.lines.test
     linesTotal.config += s.lines.config
   }
+  // 提效率为比率型指标：对「有基线且有有效周期」的会话求均值（null 不参与，6.3）
+  const efficiencies = stats.map((s) => s.efficiency).filter((x): x is number => x !== null)
   return {
     sessions: n,
     completed,
@@ -165,6 +180,8 @@ export function aggregateProject(rows: WorkflowSessionRow[], usageOf: (id: strin
     highIterationCount: stats.filter((s) => s.iterationCount !== null && s.iterationCount >= HIGH_ITERATION_THRESHOLD).length,
     linesTotal,
     hasLinesData: stats.some((s) => s.lines !== null),
+    avgEfficiency: efficiencies.length > 0 ? efficiencies.reduce((a, b) => a + b, 0) / efficiencies.length : null,
+    baselineCount: stats.filter((s) => s.baselineHours !== null).length,
     stageAvgDurationMs: stageAvg,
   }
 }

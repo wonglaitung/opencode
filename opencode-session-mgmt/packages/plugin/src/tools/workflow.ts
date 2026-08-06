@@ -2,6 +2,7 @@
  * 工作流工具（设计文档 4.1）。
  * workflow_advance   —— 进入下一阶段 / 标记 approved（校验开发者确认语义）
  * workflow_revisit   —— 回退阶段（revision++）
+ * workflow_baseline  —— 录入基线预估人工工时（6.3，AI 提效对比）
  * commit_gate_check  —— 提交门禁检查，返回未完成阶段列表
  */
 import { tool, type ToolDefinition } from "@opencode-ai/plugin"
@@ -61,6 +62,32 @@ export function createWorkflowTools(store: Store): Record<string, ToolDefinition
     },
   })
 
+  const workflow_baseline = tool({
+    description:
+      "录入本会话的基线预估人工工时（项目经理在需求创建时给出的预估，如 8 小时），" +
+      "用于会话结束后与实际周期对比、计算 AI 提效百分比（6.3）。可重复调用以重设（幂等覆盖，记最新值）。",
+    args: {
+      estimated_hours: z.number().positive().describe("预估人工工时（小时，可小数），由项目经理给出，如 8"),
+      developer_confirmed: z
+        .boolean()
+        .describe("必须为 true，表示开发者已在对话中明确给出/确认该预估值（防止 AI 杜撰基线）"),
+    },
+    async execute(args, context) {
+      if (args.developer_confirmed !== true) {
+        throw new WorkflowOpError("基线预估须由开发者明确给出或确认：developer_confirmed 必须为 true")
+      }
+      const prev = store.get(context.sessionID)?.workflow?.baseline
+      store.mutateWorkflow(context.sessionID, (workflow) => {
+        workflow.baseline = { estimatedHours: args.estimated_hours, setAt: Date.now() }
+      })
+      const resetNote = prev ? `（已覆盖原预估 ${prev.estimatedHours}h）` : ""
+      return (
+        `✅ 已记录基线预估人工工时：${args.estimated_hours} 小时${resetNote}\n` +
+        `会话结束后将按（预估 − 实际周期）÷ 预估 计算 AI 提效百分比；预估调整时可再次调用本工具重设。`
+      )
+    },
+  })
+
   const commit_gate_check = tool({
     description: "提交门禁检查：返回五个阶段的完成状况；未全部 approved 时列出未完成阶段。提交前应调用。",
     args: {},
@@ -111,5 +138,5 @@ export function createWorkflowTools(store: Store): Record<string, ToolDefinition
     },
   })
 
-  return { workflow_advance, workflow_revisit, commit_gate_check, commit_force_unlock }
+  return { workflow_advance, workflow_revisit, workflow_baseline, commit_gate_check, commit_force_unlock }
 }
