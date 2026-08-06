@@ -174,12 +174,19 @@ export async function runStats(args: ParsedArgs): Promise<void> {
   }
 }
 
+/** 标题展示：空为 N/A，超 24 字截断加省略号（逐会话明细表列宽）。 */
+export function fmtTitle(title: string | null): string {
+  if (!title) return "N/A"
+  return title.length > 24 ? title.slice(0, 24) + "…" : title
+}
+
 function printSessionStats(s: SessionStats): void {
   const stageLines = s.stages
     .map((st) => `  ${st.label.padEnd(6, " ")} ${st.status.padEnd(12)} ${fmtDuration(st.durationMs)} (revision ${st.revision})`)
     .join("\n")
   process.stdout.write(
     `📋 会话 ${s.sessionID}\n` +
+      `标题: ${fmtTitle(s.title)}\n` +
       `开发者: ${s.account ?? "N/A"}  周期: ${fmtDuration(s.durationMs)}  ${s.complete ? "✓ 已完成" : "进行中"}\n\n` +
       `工作流:\n${stageLines}\n\n` +
       `质量:\n` +
@@ -213,9 +220,9 @@ function printProjectStats(
     lines.push("逐会话明细:")
     // 表头
     lines.push(
-      `  ${"会话ID".padEnd(12)} ${"状态".padEnd(8)} ${"周期".padStart(6)} ${"一次通过率".padStart(6)} ${"迭代".padStart(4)} ${"费用".padStart(8)}`,
+      `  ${"会话ID".padEnd(12)} ${"状态".padEnd(8)} ${"周期".padStart(6)} ${"一次通过率".padStart(6)} ${"迭代".padStart(4)} ${"费用".padStart(8)} ${"标题".padEnd(24)}`,
     )
-    lines.push(`  ${"─".repeat(12)} ${"─".repeat(8)} ${"─".repeat(6)} ${"─".repeat(6)} ${"─".repeat(4)} ${"─".repeat(8)}`)
+    lines.push(`  ${"─".repeat(12)} ${"─".repeat(8)} ${"─".repeat(6)} ${"─".repeat(6)} ${"─".repeat(4)} ${"─".repeat(8)} ${"─".repeat(24)}`)
     for (const s of sessions) {
       const id = s.sessionID.length > 12 ? s.sessionID.slice(0, 12) + "…" : s.sessionID
       const status = s.complete ? "✓完成" : s.status ?? "进行中"
@@ -229,7 +236,7 @@ function printProjectStats(
             : `${s.iterationCount}`
       const cost = s.cost === null ? "N/A" : `$${s.cost.toFixed(4)}`
       lines.push(
-        `  ${id.padEnd(12)} ${status.padEnd(8)} ${dur.padStart(6)} ${acc.padStart(6)} ${iter.padStart(4)} ${cost.padStart(8)}`,
+        `  ${id.padEnd(12)} ${status.padEnd(8)} ${dur.padStart(6)} ${acc.padStart(6)} ${iter.padStart(4)} ${cost.padStart(8)} ${fmtTitle(s.title).padEnd(24)}`,
       )
     }
     lines.push("")

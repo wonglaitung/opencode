@@ -8,6 +8,7 @@ import type { WorkflowState } from "sm-shared"
 
 export interface WorkflowSessionRow {
   session_id: string // 上游 SessionTable.id
+  title: string | null // 上游自动生成的会话标题（插件经 SDK 同步，离线可读）
   tags: string[]
   status: string | null
   workflow: WorkflowState | null
@@ -24,6 +25,7 @@ export interface OutboxRow {
 /** 数据库中存储的原始行（JSON 字段为字符串）。 */
 export interface WorkflowSessionRaw {
   session_id: string
+  title: string | null
   tags: string
   status: string | null
   workflow: string | null
@@ -50,6 +52,8 @@ export const MIGRATIONS: string[] = [
   // v2：outbox 按会话去重——同一会话仅保留最新一条待发送汇报（2.4，避免每消息堆积）
   `ALTER TABLE outbox ADD COLUMN session_id TEXT;
   CREATE INDEX IF NOT EXISTS idx_outbox_session ON outbox(session_id);`,
+  // v3：workflow_session 增 title 列——会话标题（上游自动生成，插件经 SDK 同步，5.2 离线可读）
+  `ALTER TABLE workflow_session ADD COLUMN title TEXT;`,
 ]
 
 export const SCHEMA_VERSION = MIGRATIONS.length
@@ -57,6 +61,7 @@ export const SCHEMA_VERSION = MIGRATIONS.length
 export function rowFromRaw(raw: WorkflowSessionRaw): WorkflowSessionRow {
   return {
     session_id: raw.session_id,
+    title: raw.title ?? null,
     tags: raw.tags ? (JSON.parse(raw.tags) as string[]) : [],
     status: raw.status,
     workflow: raw.workflow ? (JSON.parse(raw.workflow) as WorkflowState) : null,

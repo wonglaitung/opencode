@@ -23,7 +23,7 @@ import {
   type WorkflowSessionRow,
 } from "./schema"
 
-const SELECT_ROW = "SELECT session_id, tags, status, workflow, account_id FROM workflow_session"
+const SELECT_ROW = "SELECT session_id, title, tags, status, workflow, account_id FROM workflow_session"
 
 export class Store {
   private constructor(private db: Database) {}
@@ -84,7 +84,7 @@ export class Store {
     const existing = this.get(sessionID)
     if (existing) return existing
     this.db
-      .query("INSERT INTO workflow_session (session_id, tags, status, workflow, account_id) VALUES (?, '[]', NULL, ?, NULL)")
+      .query("INSERT INTO workflow_session (session_id, title, tags, status, workflow, account_id) VALUES (?, NULL, '[]', NULL, ?, NULL)")
       .run(sessionID, JSON.stringify(createWorkflowState()))
     return this.get(sessionID)!
   }
@@ -123,6 +123,23 @@ export class Store {
       .query("UPDATE workflow_session SET account_id = ? WHERE session_id = ? AND account_id IS NULL")
       .run(account, sessionID)
     return result.changes > 0
+  }
+
+  /** 写入会话标题（上游自动生成，插件经 SDK 同步）。仅当 title 非空时写入，空字符串不覆盖。 */
+  setTitle(sessionID: string, title: string): void {
+    if (!title) return
+    this.db.query("UPDATE workflow_session SET title = ? WHERE session_id = ?").run(title, sessionID)
+  }
+
+  /** 批量回填标题：仅更新非空标题，且不覆盖已有标题（启动一次性回填，5.2）。 */
+  backfillTitles(titles: ReadonlyMap<string, string>): void {
+    const stmt = this.db.query(
+      "UPDATE workflow_session SET title = ? WHERE session_id = ? AND (title IS NULL OR title = '')",
+    )
+    for (const [id, title] of titles) {
+      if (!title) continue
+      stmt.run(title, id)
+    }
   }
 
   getTags(sessionID: string): string[] {

@@ -31,6 +31,7 @@ export interface StageStats {
 
 export interface SessionStats {
   sessionID: string
+  title: string | null
   account: string | null
   status: string | null
   tags: string[]
@@ -104,6 +105,7 @@ export function sessionStats(row: WorkflowSessionRow, usage: Usage): SessionStat
   ].filter(Boolean).length
   return {
     sessionID: row.session_id,
+    title: row.title,
     account: row.account_id,
     status: row.status,
     tags: row.tags,

@@ -117,7 +117,7 @@ opencode        # 进入 TUI
 
 - 首次运行会**自动启动本地服务**（只绑 `127.0.0.1`，不暴露到网络）。
 - 在 TUI 里随便问一句「你好」，模型能回复，说明本体 OK。按 `Ctrl+C` 两次退出 TUI。
-- 注意：该服务进程**随 TUI 退出而结束，并不常驻**，且默认启动时不监听网络端口（进程内通信）。因此外部的 `opencode-sm` CLI 无法直接连上 TUI 里的服务——要让 CLI 能取会话标题/费用，需另起常驻的 `opencode serve` 并配置地址，见 4.3 节。
+- 注意：该服务进程**随 TUI 退出而结束，并不常驻**，且默认启动时不监听网络端口（进程内通信）。因此外部的 `opencode-sm` CLI 无法直接连上 TUI 里的服务——会话**标题**已由插件同步进插件库、离线可读；但**费用/Token** 需另起常驻的 `opencode serve` 并配置地址，见 4.3 节。
 
 > 到这里，**没有本项目你也能正常用 OpenCode**。下面三步是把「会话管理定制」加上去。
 
@@ -256,7 +256,7 @@ opencode-sm init
 
 ### 4.3 让 CLI 连上上游 daemon：`OPENCODE_SM_SERVER`（每机器一次）
 
-`opencode-sm list` / `stats` 里的会话**标题**、更新时间和费用/tokens 来自**上游 daemon**（标题由上游自动生成，本项目库里不存）。CLI 只通过环境变量 `OPENCODE_SM_SERVER` 获知 daemon 地址；**不设置就退化为本机数据**：`list` 显示「(上游不可达，标题略)」、`stats` 费用显示 `N/A`（是降级不是故障，见 8 节 FAQ）。
+`opencode-sm list` / `stats` 里的会话**标题**已由插件在会话活动时经 SDK 同步进插件库（启动一次性回填 + 每条消息按需补），**离线（daemon 不可达）也能显示**；而**更新时间和费用/tokens**仍来自**上游 daemon**（费用由上游自动生成）。CLI 只通过环境变量 `OPENCODE_SM_SERVER` 获知 daemon 地址；**不设置就退化为本机数据**：`list` 标题用插件库存量值、`stats` 费用显示 `N/A`（是降级不是故障，见 8 节 FAQ）。
 
 推荐做法：用固定端口跑一个常驻 daemon，再把地址写进环境变量，一次配好：
 
@@ -388,7 +388,7 @@ opencode-sm list --status review --tag feature      # 按状态/标签过滤会�
 
 > 会话的创建/删除/恢复用**上游原生命令**，本项目不重复包装：`opencode session list`、`opencode session delete <id>`、`opencode -c`（回到本目录最近会话）、`opencode -s <id>`（按 ID 恢复）。
 
-> `list` 的会话标题、`stats` 的费用/tokens 需连上游 daemon（配置见 4.3 节）；未连上时标题显示「(上游不可达，标题略)」、费用显示 `N/A`，本机状态/标签数据不受影响。
+> `stats` 的费用/tokens 需连上游 daemon（配置见 4.3 节），未连上时费用显示 `N/A`；会话**标题**已由插件同步进插件库，离线可读（`list` 同样用库存量标题兜底）。本机状态/标签数据不受影响。
 
 ### 6.3 统计（四级）
 
@@ -453,7 +453,7 @@ bun run typecheck    # 四包严格类型检查
 | TUI 里 AI 完全不提工作流 | 插件没加载。检查 `opencode.json` 的 `plugin` 路径是否相对 opencode.json 正确、该目录下有 `package.json`、且已 `bun install`。 |
 | `opencode-sm: command not found` | CLI 没装好。正式用：`npm install -g ./opencode-sm-<版本>-<平台>.tgz`（见 4.1 节）；开发期在 `packages/cli` 下 `bun link`；或把构建出的 `dist/opencode-sm` 放进 PATH。从源码跑还需 PATH 里有 `bun`。 |
 | 统计里费用显示 `N/A` | 上游 daemon 不可达（没在跑 / 未设置 `OPENCODE_SM_SERVER`，见 4.3 节），或该会话没有 usage 数据。工作流/质量数据不受影响，仍读本机库。 |
-| `opencode-sm list` 显示「(上游不可达，标题略)」 | 上游 daemon 不可达，标题取不到——标题由上游自动生成、只存在上游，本机插件库不存。按 4.3 节设置 `OPENCODE_SM_SERVER` 指向在跑的 daemon 即可恢复；只关心本机状态/标签的话可忽略。 |
+| `opencode-sm list` 标题显示「(无标题)」 | 该会话从未在插件运行期间被同步过标题（如旧库、或会话未在本机活动过）。插件在启动回填与 `chat.message` 时经 SDK 同步标题；用 OpenCode 打开本项目跑一次即可补上，或按 4.3 节配置 `OPENCODE_SM_SERVER` 实时取。daemon 不可达时标题用插件库存量值，不报错。 |
 | TUI 开着时再开 `opencode serve` 会有影响吗 | 没有。端口不冲突（默认 TUI 不监听网络端口），两者共享磁盘上的会话数据与插件库（WAL），插件双份加载但汇报按会话幂等合并，不脏数据；只是多一个常驻进程。注意 serve 要在项目目录里启动（见 4.3 节）。 |
 | 组/组织统计报错，但本机数据都在 | 组/组织级只查收集服务、无本地回退（见 6.3 节数据来源表）。检查收集服务是否在跑、`identity.json` 的 `collector_url` 与组名是否正确。 |
 | 组/组织统计报错或为空 | 收集服务不可达，或 `identity.json` 里 `collector_url` 写错、组名与别人不一致。先 `curl {collector_url}/healthz`。 |
