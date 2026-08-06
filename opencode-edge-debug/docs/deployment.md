@@ -308,7 +308,7 @@ tar xzf opencode-edge-debug.tgz
 >
 > 若内网有**私服 npm 镜像**（如 Verdaccio/Nexus），则内网机器可直接 `bun install`，把 registry 指向私服即可，无需打包 node_modules。
 
-OpenCode 本体在联网机下载后拷入内网（三选一，见 session-mgmt 部署手册 9.2 节做法二）：
+OpenCode 本体在联网机下载后拷入内网（三选一，见 session-mgmt 部署手册 9.2 节第 1 步）：
 
 ```bash
 # 选 A：官方安装脚本先下到联网机，内网执行本地脚本

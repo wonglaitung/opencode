@@ -142,14 +142,14 @@ git clone <本仓库地址> ~/tools/opencode-session-mgmt
 
 > 本仓库本身是独立 bun workspace，不会被 OpenCode 上游的 workspace 收录，放在上游源码树里也不会互相干扰。
 
-在仓库目录装依赖（插件运行需要 `@opencode-ai/plugin`、`sm-shared` 等，见 9.2 节 的内网做法）：
+在仓库目录装依赖（插件运行需要 `@opencode-ai/plugin`、`sm-shared` 等，内网环境见 9.2 节）：
 
 ```bash
 cd opencode-session-mgmt
 bun install
 ```
 
-> **内网 / 离线机器？** 上面的 `bun install` 要连 npm registry。若目标机无外网：在联网机装好依赖后连 `node_modules` 一起打包搬入、解包即用，内网机免再 `bun install`——详见 9.2 节「做法二」（或整包便携的「做法一」）。
+> **内网 / 离线机器？** 上面的 `bun install` 要连 npm registry。若目标机无外网：在联网机用 `bun run pack:bundle` 把依赖打进整包便携 tarball，拷入解压即用，内网机免再 `bun install`——详见 9.2 节第 2 步。
 
 > **Windows / 整包便携用户**：本项目根目录的 `.npmrc` 已设置 `node-linker=hoisted`，`bun install` 会生成真实文件拷贝（非硬链接），`node_modules` 可直接打包搬运。若你之前已用默认模式安装过依赖（没有 `.npmrc`），须先删除旧 `node_modules` 再重装：`rm -rf node_modules packages/*/node_modules && bun install`。
 
@@ -464,7 +464,7 @@ bun run typecheck    # 四包严格类型检查
 | 收集服务端口/库路径要改 | 见 5.3 节 环境变量 `PORT` / `OPENCODE_SM_COLLECTOR_DB`。 |
 | 会话能改名吗 | 不能。上游无标题更新 API，标题自动生成；用标签（`opencode-sm tag`）和会话 ID 来辨认。 |
 | 桌面版 / IDE 扩展能用吗 | 能。插件跑在服务端、与界面无关，TUI 能用的都生效；前提是用同一份 `opencode.json` 连到配了插件的服务端。详见 3.4 节。 |
-| Windows 打包/移动目录后插件加载失败（`Cannot find package 'zod'` 等） | bun 默认 `isolated` 模式在 Windows 上使用硬链接引用全局缓存中的包文件，打包（tar/zip）或移动目录后硬链接断裂。**修复**：确保根目录有 `.npmrc`（内容 `node-linker=hoisted`），然后删除旧依赖重装：`rm -rf node_modules packages/*/node_modules && bun install`。之后重新打包即可。**预防**：打包前运行 `bun run pack:bundle`，脚本会自动完成清理→重装→打包（见 9.2 节做法一）。 |
+| Windows 打包/移动目录后插件加载失败（`Cannot find package 'zod'` 等） | bun 默认 `isolated` 模式在 Windows 上使用硬链接引用全局缓存中的包文件，打包（tar/zip）或移动目录后硬链接断裂。**修复**：确保根目录有 `.npmrc`（内容 `node-linker=hoisted`），然后删除旧依赖重装：`rm -rf node_modules packages/*/node_modules && bun install`。之后重新打包即可。**预防**：打包前运行 `bun run pack:bundle`，脚本会自动完成清理→重装→打包（见 9.2 节）。 |
 
 ---
 
@@ -479,7 +479,7 @@ bun run typecheck    # 四包严格类型检查
 ─────────────                         ───────────
 1. 装 bun、拉本仓库、bun install
 2. 下载 OpenCode 安装包/二进制  ──────►  拷入并安装到每台开发机
-3. 打包依赖（node_modules 或 bun 缓存）►  拷入开发机，插件/CLI 才能跑
+3. bun run pack:bundle 出整包便携包 ──►  拷入开发机，解压即用（9.2 节）
 4. 构建 dist/opencode-sm、dist/collector
    及收集服务 docker 镜像        ──────►  拷入：CLI 二进制分发；镜像 docker load 起收集服务
 5. 内网自建模型网关（vLLM/Ollama 等）──►  OpenCode 指向它（9.3 节）
@@ -487,24 +487,29 @@ bun run typecheck    # 四包严格类型检查
 
 ### 9.2 把 OpenCode 本体与依赖搬进去
 
-有两种搬法。**想要「解压即用」用做法一（整包便携）**；只想最小改动、逐机安装用做法二（分开搬）。
+要搬两样：**OpenCode 本体**与**插件依赖**。按两步走：第 1 步逐机装好 OpenCode 本体，第 2 步用整包便携 tarball 搬插件依赖（解压即用）。
 
-#### 做法一：整包便携（推荐，解压即用）
+#### 第 1 步：搬入 OpenCode 本体
 
-在外网一台**与内网同平台**的机器上，把「运行时 + OpenCode + 本插件 + 依赖」装进**一个自包含目录**，整体打包拷入，解压后配好模型网关即可用。
+在联网机下载后拷入内网（三选一）：
 
-目录骨架：
+```bash
+# 选 A：官方安装脚本先下到联网机，内网执行本地脚本（脚本会去找二进制，需一并带入）
+curl -fsSL https://opencode.ai/install -o install.sh
 
+# 选 B：npm 离线包（联网机打包，内网离线安装）
+npm pack opencode-ai                 # 得到 opencode-ai-<版本>.tgz
+# 内网： npm i -g ./opencode-ai-<版本>.tgz
+
+# 选 C：brew 离线瓶（macOS 内网常用）
+brew fetch --bottle-tag=... anomalyco/tap/opencode
 ```
-opencode-bundle/
-├── bin/                    # 随包的 bun（或 node）二进制——运行时必须一起带
-├── opencode/               # OpenCode：用 --prefix 装进此处，或放独立二进制
-├── opencode-session-mgmt/  # 本仓库（已 bun install，含 node_modules）
-├── opencode.json           # plugin 指向上面的相对路径
-└── run.sh                  # export PATH="$HERE/bin:..." 后启动 opencode
-```
 
-**一键打包脚本（推荐）**：仓库已备好 `pack:bundle`，自动完成「清理旧依赖 → hoisted 重装 → 组装自包含目录 → 附带 environment 校验脚本」的整包打包，产物为可 `tar` 解压即用的 tarball：
+> 具体哪种最省事取决于内网基线操作系统；原则就是把「安装器 + 它要下载的二进制/包」一起在联网区备齐再拷入。
+
+#### 第 2 步：搬入插件依赖（整包便携，解压即用）
+
+在外网一台**与内网同平台**的机器上，用 `pack:bundle` 把「本仓库 + 依赖」打成自包含 tarball，拷入解压即用。一键打包脚本自动完成「清理旧依赖 → hoisted 重装 → 组装自包含目录 → 附带环境校验脚本」，产物为可 `tar` 解压即用的 tarball：
 
 ```bash
 # 外网打包机（务必与内网同 OS / 同架构 / glibc 相近）：
@@ -539,68 +544,28 @@ bash setup.sh              # 可选：校验环境（Windows 用 .\setup.ps1）
 
 > Windows 注意：JSON 里路径用正斜杠 `/`（上面示例即如此），无需处理反斜杠转义。
 
-> 注意：`pack:bundle` 只是把「session-mgmt 本体 + 依赖」打包成可移植目录，**不含 OpenCode 运行时**——内网仍需把 OpenCode 本体与大模型网关单独搬入（见下方手动打包骨架与 9.3 节）。若想连 OpenCode 一起整包，见下方手动 tar 的目录骨架。
+最后每台机跑一次 `opencode-sm init` 配身份（四问，见 4.2 节）。
 
-手动打包 / 解包（备选，可自由加入 OpenCode 运行时）：
+**「解压即用」的三个要点**（少一个就会装上却跑不起来）：
 
-```bash
-# 外网打包机（务必与内网同 OS / 同架构 / glibc 相近）：
-tar czf opencode-bundle.tgz opencode-bundle/
+1. **同平台构建**：打包机与内网机须同 OS、同 CPU 架构、glibc 别差太多，否则运行时或原生依赖加载失败。
+2. **`node_modules` 必须是 hoisted 模式**（Windows 关键）：bun 默认的 `isolated` 模式在 Windows 上使用硬链接，打包时硬链接无法保留，导致传递依赖（如 `zod`）断裂。本项目 `.npmrc` 已设 `node-linker=hoisted`（真实文件拷贝）——用 `bun run pack:bundle` 打包时脚本会自动处理；仅当手工打包时才需自查（之前用默认模式装过的，先 `rm -rf node_modules packages/*/node_modules && bun install` 重装）。
+3. **插件无原生模块**：插件不带自己的原生模块（`bun:sqlite` 是 bun 内置），workspace 软链是相对路径、随 tar 走；只要 `opencode.json` 的 `plugin` 路径指对即可加载。
 
-# 内网开发机：
-tar xzf opencode-bundle.tgz
-cd opencode-bundle && ./run.sh      # 进 TUI 验证插件已加载
-opencode-sm init                    # 每台机一次：四问配身份（见 4.2 节）
-```
+> 注意：
+> - **tarball 不含 OpenCode 本体**——本体在第 1 步单独搬入；**也不含 bun 运行时**，目标机若还没有 bun（前置条件，见第 1 章），同样从联网机带一份对应平台的 bun 二进制装入（单文件，放进 PATH 即可）。
+> - **模型后端 tar 不进来**——软件搬进去 ≠ 能对话，内网仍须把 OpenCode 指向内部模型网关（见 9.3 节）。
+> - OpenCode 配置（`~/.config/opencode`）与会话数据（`~/.local/share` 一带）在各人 home、不在包内，身份按机器配，故每台机解包后仍需 `opencode-sm init`（见 4.2 节）。
 
-**「解压即用」必须满足的五点**（少一个就会装上却跑不起来）：
-
-1. **运行时一起打包**：不能只打 `node_modules`——目标机未必有兼容的 bun/node，`bin/` 里要带上那个运行时二进制，`run.sh` 用它启动。
-2. **同平台构建**：打包机与内网机须同 OS、同 CPU 架构、glibc 别差太多，否则运行时或原生依赖加载失败。
-3. **OpenCode 可重定位**：全局 `npm i -g` 的 bin shim 含绝对路径、换机会断；用 `--prefix` 装进包内（或独立二进制）+ 启动脚本设 PATH 才稳。
-4. **插件侧最省心**：插件无自带原生模块（`bun:sqlite` 是 bun 内置），workspace 软链是相对路径、随 tar 走；只要运行时在、`opencode.json` 的 `plugin` 路径指对即可加载。
-5. **`node_modules` 必须是 hoisted 模式**（Windows 关键）：bun 默认的 `isolated` 模式在 Windows 上使用硬链接，打包时硬链接无法保留，导致传递依赖（如 `zod`）断裂。本项目 `.npmrc` 已设 `node-linker=hoisted`（真实文件拷贝），**打包前务必确认**——若之前用默认模式安装过，须先 `rm -rf node_modules packages/*/node_modules && bun install` 重装。可用打包脚本一键完成：`bun run pack:bundle`。
-
-> 注意：**模型后端 tar 不进来**——软件搬进去 ≠ 能对话，内网仍须把 OpenCode 指向内部模型网关（见 9.3 节）。另外 OpenCode 配置（`~/.config/opencode`）与会话数据（`~/.local/share` 一带）在各人 home、不在包内，故每台机解包后仍需 `opencode-sm init`（身份本就按机器配，见 4.2 节）。
-
-#### 做法二：分开搬（逐机安装）
-
-**OpenCode 本体**（三选一，均在联网机下载后拷入内网）：
-
-```bash
-# 选 A：官方安装脚本先下到联网机，内网执行本地脚本（脚本会去找二进制，需一并带入）
-curl -fsSL https://opencode.ai/install -o install.sh
-
-# 选 B：npm 离线包（联网机打包，内网离线安装）
-npm pack opencode-ai                 # 得到 opencode-ai-<版本>.tgz
-# 内网： npm i -g ./opencode-ai-<版本>.tgz
-
-# 选 C：brew 离线瓶（macOS 内网常用）
-brew fetch --bottle-tag=... anomalyco/tap/opencode
-```
-
-> 具体哪种最省事取决于内网基线操作系统；原则就是把「安装器 + 它要下载的二进制/包」一起在联网区备齐再拷入。
-
-**插件依赖**（`@opencode-ai/plugin`、`@opencode-ai/sdk` 等）：
-
-```bash
-# 联网区：装好后把整个含 node_modules 的仓库目录打包
-cd opencode-session-mgmt && bun install && cd ..
-tar czf opencode-session-mgmt.tgz opencode-session-mgmt   # 含 node_modules
-
-# 内网：解包即用，无需再联网安装
-tar xzf opencode-session-mgmt.tgz
-```
-
-> 若内网有**私服 npm 镜像**（如 Verdaccio/Nexus），则内网机器可直接 `bun install`，把 registry 指向私服即可，无需打包 node_modules。
+> 若内网有**私服 npm 镜像**（如 Verdaccio/Nexus），第 2 步可跳过打包：内网机器把 registry 指向私服后直接 `bun install` 即可。
 
 ### 9.3 大模型：指向内网自建网关
 
-完全隔离的环境通常有**内部模型服务**（vLLM / Ollama / _one-api_ 等 OpenAI 兼容网关）。让 OpenCode 指向它，而非公网 Anthropic/OpenAI。在 `opencode.json`（项目级或全局级）里配置一个自定义 provider，形如：
+完全隔离的环境通常有**内部模型服务**（vLLM / Ollama / _one-api_ 等 OpenAI 兼容网关）。让 OpenCode 指向它，而非公网 Anthropic/OpenAI。在 `opencode.json`（项目级或全局级）里配置一个自定义 provider，形如（`plugin` 指向 9.2 节第 2 步的解压目录）：
 
 ```json
 {
-  "plugin": ["/opt/opencode-session-mgmt/packages/plugin"],
+  "plugin": ["/opt/opencode-sm-bundle-0.1.0"],
   "provider": {
     "internal": {
       "npm": "@ai-sdk/openai-compatible",
@@ -663,6 +628,6 @@ docker save opencode-sm-collector -o collector-image.tar
 | `bun run build:cli` | `dist/opencode-sm`（单文件二进制） |
 | `bun run pack:cli` | `dist/opencode-sm-<版本>-<平台>.tgz`（可 `npm install -g` 的安装包；`bash scripts/pack-cli.sh <平台>` 交叉编译多平台） |
 | `bun run build:collector` | `dist/collector/`（供 Dockerfile COPY） |
-| `bun run pack:bundle` | `dist/opencode-sm-bundle-<版本>.tgz`（整包便携 tarball，内网/离线分发，见 9.2 节做法一） |
+| `bun run pack:bundle` | `dist/opencode-sm-bundle-<版本>.tgz`（整包便携 tarball，内网/离线分发，见 9.2 节） |
 
 **进一步阅读**：设计原理 [`session-management.md`](session-management.md)；上游同步流程 [`upstream-sync.md`](upstream-sync.md)。
