@@ -501,24 +501,58 @@ BASE=https://<gateway>/api
 
 ### 11.1 参考实现
 
-我方仓库 `opencode-session-mgmt/packages/collector/` 提供一份**最小参考实现**（Bun + `bun:sqlite`，零外部依赖），当前用于我方三端联调。其行为即为本规格书的可执行解释。实现方可将其作为契约测试基准，也可完全重写（任何语言/框架），只要对外契约、聚合公式与 upsert 语义一致。
+我方仓库 `opencode-session-mgmt/packages/collector/` 提供一份**最小参考实现**（Bun + `bun:sqlite`，零外部依赖），当前用于我方三端联调。其行为即为本规格书的可执行解释。实现方可将其作为契约测试基准，也可完全重写（任何语言/框架），只要对外契约、聚合公式与 upsert 语义一致。涉及的全部本地代码见 11.2 清单。
 
-关键文件：
+### 11.2 涉及的本地代码清单
+
+与本规格书相关的本仓库代码按角色分组如下，供联调与契约核对时定位。`sm-shared` 契约类型是插件、CLI、收集服务三方的**唯一事实来源**，字段变更须三包同步；对收集服务实现方而言，下列客户端代码均为只读参考，无需改动。
+
+**① 收集服务参考实现**（本规格书标的，`packages/collector/`）：
+
+| 文件 | 行数 | 对应契约 |
+|------|------|----------|
+| `packages/collector/src/index.ts` | 95 | HTTP 端点路由、参数解析、payload 校验、状态码纪律（第 3、4、5 章） |
+| `packages/collector/src/db.ts` | 344 | `reports` 表 DDL、`upsertReport`/`applyCiQuality` 合并、`statsGroup`/`statsOrg` 聚合（第 6、7 章） |
+| `packages/collector/test/db.test.ts` | 187 | upsert 合并与聚合数值测试（10 节数值等价性的可执行基准） |
+| `packages/collector/Dockerfile` | 7 | 容器镜像构建（`oven/bun:1` 基底、COPY `dist/collector`，离线搬运见部署手册 9.4 节） |
+
+**② 契约层**（三包共用，`packages/shared/`）：
+
+| 文件 | 行数 | 对应契约 |
+|------|------|----------|
+| `packages/shared/src/report.ts` | 111 | `SessionReport`/`CiQualityReport` payload 类型与 `summarizeWorkflow` 投影（5.1、8 章） |
+| `packages/shared/src/workflow.ts` | 153 | `WorkflowState` 全量类型及子结构（5.1 `workflow` 字段基础） |
+| `packages/shared/src/loc.ts` | 149 | AI 行数三分类 `LinesCategory` 与分类汇总（5.1 `workflow.quality.lines`、7.2 `linesTotal`） |
+| `packages/shared/src/merge.ts` | 50 | `deepMerge` 增量合并：Agent 指标与 CI 指标互不覆盖（6.1） |
+| `packages/shared/src/identity.ts` | 76 | `identity.json` 类型与读写：`account`/`group`/`org`/`collector_url`（2.3、3.1） |
+| `packages/shared/src/index.ts` | 5 | barrel 导出 |
+
+**③ 汇报方：插件**（`POST /api/report` 客户端，`packages/plugin/`）：
+
+| 文件 | 行数 | 对应契约 |
+|------|------|----------|
+| `packages/plugin/src/report.ts` | 93 | 汇报组装 `buildReport` + outbox 补推 `flushOutbox`（3.2 状态码纪律的客户端依据） |
+| `packages/plugin/src/db/schema.ts` | 65 | 插件库表定义（含 `outbox` 汇报缓冲表） |
+| `packages/plugin/src/db/index.ts` | 185 | `Store`：工作流状态读写 + outbox 入队/待发/删除 |
+
+**④ 查询方：CLI**（`GET /api/stats` 客户端，`packages/cli/`）：
+
+| 文件 | 行数 | 对应契约 |
+|------|------|----------|
+| `packages/cli/src/api.ts` | 97 | `collectorQuery`：拼接 `{collector_url}/api/stats` 查询（5.3） |
+| `packages/cli/src/commands/stats.ts` | 370 | `opencode-sm stats`：会话/项目级直读本机插件库，组/组织级查收集服务 |
+| `packages/cli/src/commands/init.ts` | 37 | 四问写入 `identity.json`（含 `collector_url`，3.1 路径基址来源） |
+
+**⑤ 部署与配置示例**（`deploy/`）：
 
 | 文件 | 内容 |
 |------|------|
-| `packages/collector/src/index.ts` | HTTP 端点、参数解析、payload 校验、状态码 |
-| `packages/collector/src/db.ts` | 聚合库 DDL、upsert 合并、`statsGroup`/`statsOrg` 聚合 |
+| `deploy/docker-compose.collector.yml` | 收集服务部署示例（端口 8787、数据卷、镜像名 `opencode-sm-collector`） |
+| `deploy/opencode.json.example` | 插件启用配置示例 |
 
-客户端契约来源（只读参考）：
+> CI 回写方（`POST /api/ci-quality`）由各业务团队的流水线实现，不在本仓库代码内，仅需按 5.2 契约调用。
 
-| 文件 | 内容 |
-|------|------|
-| `packages/shared/src/report.ts` | `SessionReport` / `CiQualityReport` / `WorkflowSummary` 类型与投影 |
-| `packages/shared/src/workflow.ts` | `WorkflowState` 全量类型 |
-| `packages/plugin/src/report.ts` | 插件汇报与 outbox 补推逻辑（状态码处理依据） |
-
-### 11.2 演进与兼容
+### 11.3 演进与兼容
 
 - 字段只增不删、只弱不严：新增可选字段不得导致旧客户端请求被拒；`null` 语义固定（`cost:null`=未知、`lines:null`=无代码编辑、`reworkRate/testCoverage:null`=未回写）。
 - 契约变更须保证**旧插件/旧 CLI 在新服务、新服务在旧插件**两种组合下均不报错（宽松校验 + 缺失字段容忍）。
