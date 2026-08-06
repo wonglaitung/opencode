@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import { existsSync, mkdtempSync, rmSync } from "node:fs"
+import { Database } from "bun:sqlite"
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Store } from "../src/db"
+import { MIGRATIONS } from "../src/db/schema"
 
 describe("Store", () => {
   test("ensure 初始化全新工作流", () => {
@@ -34,6 +36,30 @@ describe("Store", () => {
     const store = Store.memory()
     store.setTags("s1", ["a", "b", "a"])
     expect(store.getTags("s1")).toEqual(["a", "b"])
+    store.close()
+  })
+
+  test("setTitle 写入与 backfillTitles 批量回填（只补空、不覆盖）", () => {
+    const store = Store.memory()
+    store.ensure("s1")
+    store.setTitle("s1", "新建项目")
+    expect(store.get("s1")!.title).toBe("新建项目")
+    // 空字符串不覆盖
+    store.setTitle("s1", "")
+    expect(store.get("s1")!.title).toBe("新建项目")
+    // backfill 只补空标题、不覆盖已有值
+    store.ensure("s2")
+    store.ensure("s3")
+    store.backfillTitles(
+      new Map([
+        ["s1", "不应覆盖"],
+        ["s2", "标题2"],
+        ["s3", ""],
+      ]),
+    )
+    expect(store.get("s1")!.title).toBe("新建项目")
+    expect(store.get("s2")!.title).toBe("标题2")
+    expect(store.get("s3")!.title).toBeNull()
     store.close()
   })
 
@@ -79,6 +105,33 @@ describe("openIfExists 只读跨项目打开（4.3）", () => {
       const readonly = Store.openIfExists(dir)!
       expect(readonly.get("s1")!.workflow!.quality.linesByFile).toEqual({ "a.ts": 5 })
       readonly.close()
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})
+
+describe("schema 迁移 v3（title 列）", () => {
+  test("v2 旧库打开后自动升级，可读写 title", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sm-mig-"))
+    try {
+      // 构造仅含 v1+v2 的旧库（无 title 列）
+      mkdirSync(join(dir, ".opencode"), { recursive: true })
+      const db = new Database(join(dir, ".opencode", "session-mgmt.db"), { create: true })
+      db.exec(MIGRATIONS[0]!)
+      db.exec(MIGRATIONS[1]!)
+      db.exec("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);")
+      db.query("INSERT INTO meta (key, value) VALUES ('schema_version', '2')").run()
+      db.exec(
+        "INSERT INTO workflow_session (session_id, tags, status, workflow, account_id) VALUES ('s1', '[]', NULL, NULL, NULL)",
+      )
+      db.close()
+
+      const store = Store.open(dir) // 触发 v3 迁移
+      expect(store.get("s1")).not.toBeNull()
+      store.setTitle("s1", "迁移后标题")
+      expect(store.get("s1")!.title).toBe("迁移后标题")
+      store.close()
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }

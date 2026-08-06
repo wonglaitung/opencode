@@ -68,6 +68,40 @@ async function cleanupOrphans(store: Store, client: PluginInput["client"]): Prom
   }
 }
 
+/**
+ * 启动一次性回填会话标题（5.2）：经 session.list 取全部标题，写入插件库。
+ * 与 cleanupOrphans 共用一次 list 调用；仅补空标题、不覆盖已有值。
+ * 失败静默（上游不可达时不影响功能，标题下次再补）。
+ */
+export async function backfillSessionTitles(store: Store, client: PluginInput["client"]): Promise<void> {
+  try {
+    const res = await client.session.list()
+    const sessions = res.data
+    if (!sessions || sessions.length === 0) return
+    const titles = new Map<string, string>()
+    for (const s of sessions) if (s.title) titles.set(s.id, s.title)
+    store.backfillTitles(titles)
+  } catch {
+    // 上游不可达：跳过本次回填（不影响功能）
+  }
+}
+
+/**
+ * chat.message 时补当前会话标题（5.2）：仅库内标题为空时才经 session.get 拉取，
+ * 避免每条消息都调远程；标题在会话早期生成，拉取到非空即写库、后续跳过。
+ * 失败静默。
+ */
+export async function syncSessionTitle(store: Store, client: PluginInput["client"], sessionID: string): Promise<void> {
+  if (store.get(sessionID)?.title) return
+  try {
+    const res = await client.session.get({ path: { id: sessionID } })
+    const title = res.data?.title
+    store.setTitle(sessionID, title ?? "")
+  } catch {
+    // 上游瞬时不可达：跳过，下次 chat.message 再补
+  }
+}
+
 const SessionMgmtPlugin: Plugin = async (input) => {
   const store = Store.open(input.directory)
   const usageProvider = createUsageProvider(input.client)
@@ -77,6 +111,8 @@ const SessionMgmtPlugin: Plugin = async (input) => {
   void reporter.flushOutbox()
   // 启动时惰性清理孤儿记录（3.1）。
   void cleanupOrphans(store, input.client)
+  // 启动时一次性回填存量会话标题（5.2，daemon 不可达时 CLI 仍可读标题）。
+  void backfillSessionTitles(store, input.client)
   const timer = setInterval(() => {
     void reporter.flushOutbox()
   }, 5 * 60 * 1000)
@@ -95,6 +131,7 @@ const SessionMgmtPlugin: Plugin = async (input) => {
 
     "chat.message": async (hookInput) => {
       stampSessionAccount(store, hookInput.sessionID)
+      await syncSessionTitle(store, input.client, hookInput.sessionID)
       await reporter.enqueueReport(hookInput.sessionID)
     },
 

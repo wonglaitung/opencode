@@ -35,10 +35,10 @@ export async function runList(args: ParsedArgs): Promise<void> {
         }
       })
     } else {
-      // 上游不可达：仅列本机已追踪会话（12 退化）
+      // 上游不可达：仅列本机已追踪会话（12 退化）；标题用插件库同步的存量值
       entries = rows.map((r) => ({
         id: r.session_id,
-        title: "(上游不可达，标题略)",
+        title: r.title ?? "(无标题)",
         status: r.status,
         tags: r.tags,
         updated: null,

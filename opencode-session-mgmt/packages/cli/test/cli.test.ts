@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { asStringArray, parseArgs } from "../src/index"
-import { parsePeriodMs } from "../src/commands/stats"
+import { fmtTitle, parsePeriodMs } from "../src/commands/stats"
 
 describe("parseArgs", () => {
   test("位置参数与键值", () => {
@@ -21,5 +21,21 @@ describe("parsePeriodMs", () => {
     expect(parsePeriodMs("7d")).toBe(7 * 24 * 60 * 60 * 1000)
     expect(parsePeriodMs(undefined)).toBeNull()
     expect(parsePeriodMs("bad")).toBeNull()
+  })
+})
+
+describe("fmtTitle", () => {
+  test("空标题示 N/A", () => {
+    expect(fmtTitle(null)).toBe("N/A")
+    expect(fmtTitle("")).toBe("N/A")
+  })
+
+  test("超 24 字截断加省略号", () => {
+    const short = "使用Edge浏览器打开雅虎网站"
+    expect(fmtTitle(short)).toBe(short)
+    const long = "很长的会话语义标题用于验证截断行为是否超出表格列宽限制与展示"
+    const out = fmtTitle(long)
+    expect(out.endsWith("…")).toBe(true)
+    expect(out.length).toBe(25)
   })
 })

@@ -347,6 +347,7 @@ erDiagram
 
     WorkflowSessionTable {
         text session_id PK "插件库 - 关联上游会话"
+        text title "会话标题（上游自动生成，插件经 SDK 同步）"
         text tags "JSON string[]"
         text status "状态标签"
         text workflow "JSON WorkflowState"
@@ -378,6 +379,7 @@ erDiagram
 // opencode-session-mgmt/packages/plugin/src/db/schema.ts — 插件库（bun:sqlite / drizzle），每项目一个
 export const WorkflowSessionTable = sqliteTable("workflow_session", {
   session_id: text("session_id").primaryKey(),  // 上游 SessionTable.id
+  title: text(),  // 会话标题（上游自动生成，插件经 SDK 同步写库，5.2 离线可读）
   tags: text({ mode: "json" }).$type<string[]>().$default(() => []),
   status: text(),   // "todo"|"analysis"|"design"|"coding"|"testing"|"review"|"done"|"archived"|null
   workflow: text({ mode: "json" }).$type<WorkflowState>(),
@@ -871,6 +873,8 @@ sequenceDiagram
     end
     CLI-->>User: 表格/文本/JSON
 ```
+
+> 会话/项目级明细的**标题**也已由插件在会话活动时经 SDK 同步进插件库（启动一次性回填 + 每条消息按需补），因此 CLI **离线（daemon 不可达）也能显示标题**；费用/Token 仍须 daemon 实时取。`list` 在上游不可达时同样用插件库标题兜底。
 
 ---
 
