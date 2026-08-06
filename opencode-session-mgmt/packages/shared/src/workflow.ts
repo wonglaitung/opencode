@@ -63,6 +63,18 @@ export interface CommitGate {
   force?: { reason: string; at: number; used: boolean }
 }
 
+/**
+ * 基线对比（6.3）：需求创建时由项目经理给出的预估人工工时，开发者在 TUI 内经
+ * workflow_baseline 工具转述录入。用于与实际周期对比得出 AI 提效率。
+ * 纯数字 + 时间戳，不含代码/路径，汇报投影直接上行（12）。
+ */
+export interface BaselineEstimate {
+  /** 预估人工工时（小时，>0） */
+  estimatedHours: number
+  /** 录入/最近一次重设时间（epoch ms，幂等覆盖） */
+  setAt: number
+}
+
 export interface QualityMetrics {
   /** 一次通过率（3.2）：未重写即 accepted 的片段数 ÷ 全部定论片段数(accepted+manual)。
    *  review_submit 通过时由插件自动计算写回，不依赖 Agent 上报。纯讨论会话（无片段）保持 null。 */
@@ -99,6 +111,11 @@ export interface WorkflowState {
   stages: Stages
   commit: CommitGate
   quality: QualityMetrics
+  /**
+   * 基线对比（6.3）：预估人工工时，需求创建时录入。
+   * 可选字段：录入前缺省（不改 createWorkflowState 既有形状），随汇报上行。
+   */
+  baseline?: BaselineEstimate
 }
 
 /** 五个阶段键（提交门禁要求全部 approved，3.4）。 */
@@ -150,4 +167,18 @@ export function createWorkflowState(): WorkflowState {
       testCoverage: null,
     },
   }
+}
+
+/** 一小时对应的毫秒数（基线提效计算口径）。 */
+const MS_PER_HOUR = 3_600_000
+
+/**
+ * AI 提效率（6.3）：（预估人工工时 − 实际周期）÷ 预估人工工时。
+ * 比率型指标，可为负（实际周期超过预估时），仅展示不设阈值。
+ * 无基线（estimatedHours 缺失或非正）或无有效周期（durationMs≤0）时返回 null（展示 N/A）。
+ */
+export function efficiencyRatio(estimatedHours: number | null | undefined, durationMs: number): number | null {
+  if (estimatedHours === null || estimatedHours === undefined || estimatedHours <= 0) return null
+  if (durationMs <= 0) return null
+  return (estimatedHours * MS_PER_HOUR - durationMs) / (estimatedHours * MS_PER_HOUR)
 }

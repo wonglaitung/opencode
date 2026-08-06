@@ -5,7 +5,7 @@
  * 组/组织结构由各人汇报自然形成，GROUP BY group_name / org_name 即得。
  */
 import { Database } from "bun:sqlite"
-import type { CiQualityReport, LinesCategory, SessionReport } from "sm-shared"
+import { efficiencyRatio, type CiQualityReport, type LinesCategory, type SessionReport } from "sm-shared"
 
 interface ReportRaw {
   session_id: string
@@ -48,6 +48,8 @@ export interface ScopeTrends {
   requirementRevision: Trend | null
   /** 平均返工率 */
   reworkRate: Trend | null
+  /** 平均 AI 提效率（6.3） */
+  efficiency: Trend | null
 }
 
 export interface ScopeStats {
@@ -71,6 +73,10 @@ export interface ScopeStats {
   linesTotal: LinesCategory
   /** 是否有任何会话上报行数数据（无数据时展示侧应示 N/A 而非 0，同项目级 hasLinesData） */
   hasLinesData: boolean
+  /** 平均 AI 提效率（比率型，对「有基线且有有效周期」的会话求均值，6.3）；无数据为 null */
+  avgEfficiency: number | null
+  /** 已录入基线预估工时的会话数（提效曲线覆盖率参考） */
+  baselineSessions: number
   trends: ScopeTrends
   perAccount: AccountAggregate[]
 }
@@ -94,6 +100,8 @@ interface WorkflowLite {
     lines?: Partial<LinesCategory> | null
   }
   commit?: { status?: string }
+  /** 基线预估工时（6.3）；旧版汇报可能缺失该字段，缺省按未录入处理 */
+  baseline?: { estimatedHours?: number } | null
 }
 
 function parseWorkflow(json: string | null): WorkflowLite {
@@ -243,10 +251,15 @@ export class CollectorDb {
     // 行数为累加型指标：对会话三分类求和（不做平均，6.3）
     const linesTotal: LinesCategory = { business: 0, test: 0, config: 0 }
     let hasLinesData = false
+    // 提效率为比率型指标：对「有基线且有有效周期」的会话求均值（6.3）
+    const efficiencies: number[] = []
+    let baselineSessions = 0
     const revEarly: number[] = []
     const revRecent: number[] = []
     const reworkEarly: number[] = []
     const reworkRecent: number[] = []
+    const effEarly: number[] = []
+    const effRecent: number[] = []
 
     for (const [account, list] of byAccount) {
       let accCompleted = 0
@@ -260,7 +273,8 @@ export class CollectorDb {
         const workflow = parseWorkflow(row.workflow)
         if (workflow.commit?.status === "allowed") accCompleted++
         accCost += row.cost ?? 0
-        accDurations.push(workflowDurationMs(workflow))
+        const durationMs = workflowDurationMs(workflow)
+        accDurations.push(durationMs)
 
         const rate = workflow.quality?.firstPassRate ?? null
         if (rate !== null && rate !== undefined) {
@@ -278,6 +292,12 @@ export class CollectorDb {
           linesTotal.config += lines.config ?? 0
         }
 
+        // 基线对比（6.3）：统计基线会话数并计算提效率（无基线/无周期为 null，不参与均值）
+        const estimated = workflow.baseline?.estimatedHours
+        if (typeof estimated === "number" && estimated > 0) baselineSessions++
+        const eff = efficiencyRatio(estimated, durationMs)
+        if (eff !== null) efficiencies.push(eff)
+
         if (row.test_coverage !== null && row.test_coverage !== undefined) accCoverages.push(row.test_coverage)
         if (row.rework_rate !== null && row.rework_rate !== undefined) reworks.push(row.rework_rate)
 
@@ -287,9 +307,11 @@ export class CollectorDb {
           if (row.reported_at < mid) {
             revEarly.push(rev)
             if (row.rework_rate !== null && row.rework_rate !== undefined) reworkEarly.push(row.rework_rate)
+            if (eff !== null) effEarly.push(eff)
           } else {
             revRecent.push(rev)
             if (row.rework_rate !== null && row.rework_rate !== undefined) reworkRecent.push(row.rework_rate)
+            if (eff !== null) effRecent.push(eff)
           }
         }
       }
@@ -330,9 +352,12 @@ export class CollectorDb {
       highIterationCount: hitLimit,
       linesTotal,
       hasLinesData,
+      avgEfficiency: avg(efficiencies),
+      baselineSessions,
       trends: {
         requirementRevision: makeTrend(avg(revEarly), avg(revRecent)),
         reworkRate: makeTrend(avg(reworkEarly), avg(reworkRecent)),
+        efficiency: makeTrend(avg(effEarly), avg(effRecent)),
       },
       perAccount,
     }

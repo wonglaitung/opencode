@@ -31,8 +31,14 @@ const RULES = `# Workflow Agent 规则
     一次通过率低说明返工多，应结合拒绝意见 comprehension_rewrite 改进，而非简单重试。
 12. 检测连续重复编辑模式（同一文件连续 3 次以上相同参数的 AI 编辑，或同一文件被编辑 6 次以上），提醒开发者审查是否陷入无效循环，但不拒绝生成。
 
+## 基线对比（预估工时）
+13. 进入需求阶段（workflow_advance stage=requirements action=enter）时，主动询问开发者：
+    项目经理对本需求的预估人工工时是多少（小时）？开发者明确给出后调用 workflow_baseline 记录
+    （developer_confirmed=true）。用于会话结束后与实际周期对比、计算 AI 提效率；未提供不阻塞，
+    已录入后可从状态中读到，不必重复询问。
+
 ## SDLC 完结与下一需求
-13. 提交门禁放行（commit.status=allowed）且 git commit 成功后，主动提醒开发者：
+14. 提交门禁放行（commit.status=allowed）且 git commit 成功后，主动提醒开发者：
     "本需求 SDLC 已完成。建议执行 /new 开始下一个需求，以保持统计隔离。"`
 
 /** 将当前工作流压缩为注入片段：规则 + 阶段进度 + 质量指标 + stuck 警告。 */
@@ -60,6 +66,8 @@ export function buildSystemFragment(workflow: WorkflowState, stuck: Record<strin
         ),
         commit: workflow.commit,
         quality: workflow.quality,
+        // 基线（预估工时）：让 Agent 知道是否已录入，避免重复询问（13）
+        baseline: workflow.baseline ?? null,
         review: {
           checklist: review.checklist,
           comprehension: `${confirmed}/${review.comprehension.length} 已确认`,

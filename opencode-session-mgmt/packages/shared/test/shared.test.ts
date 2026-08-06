@@ -5,6 +5,7 @@ import { join } from "node:path"
 import {
   createWorkflowState,
   deepMerge,
+  efficiencyRatio,
   readIdentity,
   summarizeWorkflow,
   validateIdentity,
@@ -101,5 +102,40 @@ describe("summarizeWorkflow", () => {
   test("无 AI 代码编辑时行数为 null", () => {
     const summary = summarizeWorkflow(createWorkflowState())
     expect(summary.quality.lines).toBeNull()
+  })
+
+  test("基线已录入时随摘要上行（6.3）", () => {
+    const state = createWorkflowState()
+    state.baseline = { estimatedHours: 8, setAt: 1750000000000 }
+    const summary = summarizeWorkflow(state)
+    expect(summary.baseline).toEqual({ estimatedHours: 8, setAt: 1750000000000 })
+  })
+
+  test("未录入基线时为 null（向后兼容）", () => {
+    const summary = summarizeWorkflow(createWorkflowState())
+    expect(summary.baseline).toBeNull()
+  })
+})
+
+describe("efficiencyRatio（AI 提效率，6.3）", () => {
+  test("（预估 − 实际）÷ 预估", () => {
+    // 预估 8h、实际 1.7h → (8−1.7)/8 = 0.7875
+    expect(efficiencyRatio(8, 1.7 * 3_600_000)).toBeCloseTo(0.7875)
+    // 预估与实际相等 → 提效 0
+    expect(efficiencyRatio(4, 4 * 3_600_000)).toBeCloseTo(0)
+  })
+
+  test("实际超过预估时为负（仅展示，不 clamp）", () => {
+    // 预估 2h、实际 3h → (2−3)/2 = −0.5
+    expect(efficiencyRatio(2, 3 * 3_600_000)).toBeCloseTo(-0.5)
+  })
+
+  test("无基线或无有效周期返回 null（展示 N/A）", () => {
+    expect(efficiencyRatio(null, 3_600_000)).toBeNull()
+    expect(efficiencyRatio(undefined, 3_600_000)).toBeNull()
+    expect(efficiencyRatio(0, 3_600_000)).toBeNull()
+    expect(efficiencyRatio(-1, 3_600_000)).toBeNull()
+    expect(efficiencyRatio(8, 0)).toBeNull()
+    expect(efficiencyRatio(8, -5)).toBeNull()
   })
 })

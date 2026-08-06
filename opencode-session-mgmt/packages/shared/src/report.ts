@@ -5,6 +5,7 @@
  */
 import { sumLinesByCategory, type LinesCategory } from "./loc"
 import type {
+  BaselineEstimate,
   CommitGate,
   QualityMetrics,
   ReviewChecklist,
@@ -54,6 +55,8 @@ export interface WorkflowSummary {
   }
   commit: CommitGate
   quality: QualitySummary
+  /** 基线对比（6.3）：预估人工工时；未录入为 null（纯数字，无隐私剥离需求） */
+  baseline: BaselineEstimate | null
 }
 
 function summarizeStage(stage: StageRecord): StageSummary {
@@ -85,6 +88,8 @@ export function summarizeWorkflow(workflow: WorkflowState): WorkflowSummary {
       testCoverage: workflow.quality.testCoverage,
       lines: workflow.quality.linesByFile ? sumLinesByCategory(workflow.quality.linesByFile) : null,
     },
+    // 基线为纯数字 + 时间戳（预估工时），无路径/代码，直接随摘要上行（12）。
+    baseline: workflow.baseline ?? null,
   }
 }
 

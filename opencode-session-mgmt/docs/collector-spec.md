@@ -2,10 +2,12 @@
 
 | | |
 |---|---|
-| 版本 | v1.0 |
-| 日期 | 2026-08-06 |
+| 版本 | v1.1 |
+| 日期 | 2026-08-07 |
 | 读者 | 后端收集服务开发团队、网关集成团队 |
 | 状态 | 生效 |
+
+> **v1.1（2026-08-07）**：新增**基线预估人工工时与 AI 提效百分比**——汇报侧 `workflow.baseline` 可选字段，查询侧 `avgEfficiency` / `baselineSessions` / `trends.efficiency`。全部为可选字段，旧插件↔新服务、新插件↔旧服务两种组合均须容忍（见 11.2）。
 
 本文档定义「OpenCode 会话管理 — org 收集服务」的**接口契约、数据语义与非功能要求**，供其他团队据此实现后端服务并整合到公司网关。实现方可自由选择技术栈与内部架构，只要对外契约与本规格书一致、统计语义可复现相同结果，即为合格交付。
 
@@ -231,7 +233,8 @@ flowchart LR
       "reworkRate": null,
       "testCoverage": null,
       "lines": { "business": 620, "test": 310, "config": 45 }
-    }
+    },
+    "baseline": { "estimatedHours": 120, "setAt": 1750000000000 }
   },
   "cost": 0.36,
   "tokensInput": 60000,
@@ -261,6 +264,7 @@ flowchart LR
 | `workflow.quality.reworkRate` | number \| null | 是 | 返工率（0–1 分数）；插件通道恒为 `null`，由 CI 通道写入 |
 | `workflow.quality.testCoverage` | number \| null | 是 | 增量测试覆盖率（0–100）；插件通道恒为 `null`，由 CI 通道写入 |
 | `workflow.quality.lines` | `{business, test, config} \| null` | 是 | AI 净增行数三分类聚合；无 AI 代码编辑为 `null` |
+| `workflow.baseline` | `{estimatedHours, setAt} \| null` | 否 | 基线预估人工工时（AI 提效参照系，见 7.2）：项目经理在需求创建时给出，开发者在 TUI 对话中经 `workflow_baseline` 转述录入；`estimatedHours` 单位小时（>0），`setAt` 录入时间戳；未录入或旧版汇报缺省为 `null`，聚合时按无基线处理，**不得报错** |
 | `cost` | number \| null | 是 | 会话费用（美元）；daemon 不可达时插件上报 `null`（语义为「未知」，**不得当 0 拒绝**） |
 | `tokensInput` / `tokensOutput` | number \| null | 是 | Token 数 |
 | `reportedAt` | number | 是 | 汇报时间（插件本机时钟，epoch ms） |
@@ -326,9 +330,12 @@ flowchart LR
   "highIterationCount": 1,
   "linesTotal": { "business": 18200, "test": 9500, "config": 1200 },
   "hasLinesData": true,
+  "avgEfficiency": 0.62,
+  "baselineSessions": 31,
   "trends": {
     "requirementRevision": { "from": 1.5, "to": 0.9, "direction": "down" },
-    "reworkRate": { "from": 0.1, "to": 0.06, "direction": "down" }
+    "reworkRate": { "from": 0.1, "to": 0.06, "direction": "down" },
+    "efficiency": { "from": 0.55, "to": 0.68, "direction": "up" }
   },
   "perAccount": [
     {
@@ -425,6 +432,8 @@ CREATE INDEX idx_reports_org  ON reports(org_name);
 | `highIterationCount` | `iterationCount >= 5` 的会话数 |
 | `linesTotal` | 有 `lines` 的会话按三分类**求和**（`business`/`test`/`config` 分别累加；会话内已逐文件 clamp≥0，会话间直接相加，**不做平均**——累加型指标） |
 | `hasLinesData` | 范围内是否存在任一会话 `lines` 非 NULL |
+| `avgEfficiency` | 平均 AI 提效率（比率型指标，对会话求均值）。单会话提效率 =（`baseline.estimatedHours × 3600000 − 会话耗时）÷（`baseline.estimatedHours × 3600000`），会话耗时同 `avgDurationMs` 口径（全部 `transitions[].at` 最大值 − 最小值）；**可为负**（实际超预估，仅展示、不设阈值）；无基线或会话耗时 ≤ 0 的会话不参与（`null`）；范围内无任何参与会话时为 `null` |
+| `baselineSessions` | 范围内已录入基线（`workflow.baseline.estimatedHours > 0`）的会话数（提效曲线覆盖率参考） |
 
 ### 7.3 趋势
 
@@ -435,6 +444,7 @@ CREATE INDEX idx_reports_org  ON reports(org_name);
 | 分段 | `mid = since + period/2`；`reported_at < mid` 为「早半段」，否则「近半段」 |
 | `requirementRevision` | 早半段与近半段各自 `workflow.stages.requirements.revision` 的均值（缺省按 0） |
 | `reworkRate` | 早半段与近半段各自 `rework_rate` 的均值 |
+| `efficiency` | 早半段与近半段各自单会话提效率的均值（口径同 `avgEfficiency`；无基线/耗时 ≤ 0 的会话不参与），即「研发提效曲线」的数据基础 |
 | `direction` | `to > from` → `"up"`；`to < from` → `"down"`；相等 → `"flat"` |
 
 ### 7.4 perAccount（成员行）
@@ -554,6 +564,6 @@ BASE=https://<gateway>/api
 
 ### 11.3 演进与兼容
 
-- 字段只增不删、只弱不严：新增可选字段不得导致旧客户端请求被拒；`null` 语义固定（`cost:null`=未知、`lines:null`=无代码编辑、`reworkRate/testCoverage:null`=未回写）。
-- 契约变更须保证**旧插件/旧 CLI 在新服务、新服务在旧插件**两种组合下均不报错（宽松校验 + 缺失字段容忍）。
+- 字段只增不删、只弱不严：新增可选字段不得导致旧客户端请求被拒；`null` 语义固定（`cost:null`=未知、`lines:null`=无代码编辑、`reworkRate/testCoverage:null`=未回写、`baseline:null`=未录入基线）。
+- 契约变更须保证**旧插件/旧 CLI 在新服务、新服务在旧插件**两种组合下均不报错（宽松校验 + 缺失字段容忍）。v1.1 新增字段全部可选：旧插件汇报无 `workflow.baseline` 时新服务按无基线聚合；旧服务响应无 `avgEfficiency`/`baselineSessions`/`trends.efficiency` 时，新 CLI 已按读侧可选字段降级为 N/A（见 `session-management.md` 第 6.3 章）。
 - 若网关侧需要给 `/api/stats` 加权限分层（如组长看本组、管理员看全组织），由网关在收集服务之上实现，收集服务本体不做访问控制矩阵（保持契约最小）。

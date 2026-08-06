@@ -2,10 +2,11 @@
  * opencode-sm workflow <sessionID> [checklist|comprehension|stats]
  * 工作流状态外部查看（设计文档 5.1）。只读本机插件库。
  */
-import { STAGE_LABELS, STAGE_ORDER, sumLinesByCategory, type StageName } from "sm-shared"
+import { STAGE_LABELS, STAGE_ORDER, efficiencyRatio, sumLinesByCategory, type StageName } from "sm-shared"
+import { workflowDurationMs } from "sm-plugin/src/stats"
 import { openPluginStore } from "../api"
 import type { ParsedArgs } from "../index"
-import { fmtLinesCategory } from "./stats"
+import { fmtBaselineLine, fmtLinesCategory } from "./stats"
 
 export async function runWorkflow(args: ParsedArgs): Promise<void> {
   const sessionID = args.positionals[0]
@@ -52,10 +53,13 @@ export async function runWorkflow(args: ParsedArgs): Promise<void> {
       const q = workflow.quality
       const review = workflow.stages.review
       const confirmed = review.comprehension.filter((c) => c.developerConfirmed).length
+      const durationMs = workflowDurationMs(workflow)
+      const efficiency = efficiencyRatio(workflow.baseline?.estimatedHours, durationMs)
       process.stdout.write(
         `质量指标（${sessionID}）\n` +
           `  一次通过率: ${fmtPct(q.firstPassRate)}  迭代轮次: ${q.iterationCount ?? "N/A"}/3\n` +
           `  ${fmtLinesCategory(q.linesByFile ? sumLinesByCategory(q.linesByFile) : null)}\n` +
+          `  ${fmtBaselineLine(workflow.baseline?.estimatedHours ?? null, durationMs, efficiency)}\n` +
           `  返工率: ${fmtPct(q.reworkRate)}  测试覆盖率: ${fmtPct(q.testCoverage)}\n` +
           `  理解确认: ${confirmed}/${review.comprehension.length}\n`,
       )
