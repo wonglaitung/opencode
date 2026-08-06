@@ -449,7 +449,7 @@ CREATE INDEX idx_reports_org  ON reports(org_name);
 
 ### 7.4 perAccount（成员行）
 
-按 `account` 分组，各字段口径与顶层同（`avgTestCoverage`/`avgReworkRate` 为该成员名下会话的均值，`cost` 为该成员 Σ cost），**按 `sessions` 降序**返回。
+按 `account` 分组，**按 `sessions` 降序**返回。成员行字段固定为：`account`、`sessions`、`completed`、`completionRate`、`cost`、`avgFirstPassRate`、`avgTestCoverage`、`avgDurationMs`、`lowFirstPassCount`、`highIterationCount`——口径均以该成员名下会话计（`cost` 为该成员 Σ cost）。**成员行不包含顶层聚合指标**：`linesTotal`、`hasLinesData`、`avgEfficiency`、`baselineSessions`、`trends.*` 仅存在于整组/整组织聚合，不加入成员行（契约保持最小）；CLI 对成员仅做排行与低一次通过率/覆盖率标注。
 
 ### 7.5 汇总层级差异
 
@@ -522,8 +522,8 @@ BASE=https://<gateway>/api
 | 文件 | 行数 | 对应契约 |
 |------|------|----------|
 | `packages/collector/src/index.ts` | 95 | HTTP 端点路由、参数解析、payload 校验、状态码纪律（第 3、4、5 章） |
-| `packages/collector/src/db.ts` | 344 | `reports` 表 DDL、`upsertReport`/`applyCiQuality` 合并、`statsGroup`/`statsOrg` 聚合（第 6、7 章） |
-| `packages/collector/test/db.test.ts` | 187 | upsert 合并与聚合数值测试（10 节数值等价性的可执行基准） |
+| `packages/collector/src/db.ts` | 369 | `reports` 表 DDL、`upsertReport`/`applyCiQuality` 合并、`statsGroup`/`statsOrg` 聚合（第 6、7 章；含基线提效聚合 6.3） |
+| `packages/collector/test/db.test.ts` | 266 | upsert 合并与聚合数值测试（10 节数值等价性的可执行基准；含基线提效均值与趋势用例） |
 | `packages/collector/Dockerfile` | 7 | 容器镜像构建（`oven/bun:1` 基底、COPY `dist/collector`，离线搬运见部署手册 9.4 节） |
 
 **② 契约层**（三包共用，`packages/shared/`）：
