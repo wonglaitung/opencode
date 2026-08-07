@@ -3,7 +3,7 @@ import { Database } from "bun:sqlite"
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { Store } from "../src/db"
+import { Store, isPlaceholderTitle } from "../src/db"
 import { MIGRATIONS } from "../src/db/schema"
 
 describe("Store", () => {
@@ -61,6 +61,32 @@ describe("Store", () => {
     expect(store.get("s2")!.title).toBe("标题2")
     expect(store.get("s3")!.title).toBeNull()
     store.close()
+  })
+
+  test("占位标题（New session - …）视为未同步：backfill 覆盖、真实标题不覆盖", () => {
+    const store = Store.memory()
+    // s1 库存真实标题（不覆盖）；s2 库存占位符（应为真实标题覆盖）
+    store.ensure("s1")
+    store.setTitle("s1", "真实标题")
+    store.ensure("s2")
+    store.setTitle("s2", `New session - 2026-08-07T04:00:00.000Z`)
+    store.backfillTitles(
+      new Map([
+        ["s1", "不应覆盖"],
+        ["s2", "手动补发通知邮件功能"],
+      ]),
+    )
+    expect(store.get("s1")!.title).toBe("真实标题")
+    expect(store.get("s2")!.title).toBe("手动补发通知邮件功能")
+    store.close()
+  })
+
+  test("isPlaceholderTitle 识别 New/Child session 占位，非占位为 false", () => {
+    expect(isPlaceholderTitle(`New session - 2026-08-07T04:00:00.000Z`)).toBe(true)
+    expect(isPlaceholderTitle(`Child session - 2026-08-07T04:00:00.000Z`)).toBe(true)
+    expect(isPlaceholderTitle("手动补发通知邮件功能")).toBe(false)
+    expect(isPlaceholderTitle("")).toBe(false)
+    expect(isPlaceholderTitle(null)).toBe(false)
   })
 
   test("outbox 入队/列出/标记送达", () => {

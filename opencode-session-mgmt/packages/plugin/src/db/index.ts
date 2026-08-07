@@ -23,6 +23,17 @@ import {
   type WorkflowSessionRow,
 } from "./schema"
 
+/**
+ * opencode 会话默认占位标题：建会话未生成真实标题时为 `New session - <ISO>` / `Child session - <ISO>`。
+ * 判断与上游 packages/app/src/utils/session-title.ts 一致。占位标题视为「未同步」，
+ * 标题同步逻辑应照常刷新它，否则会一直停留在过期占位符（5.2 曾踩坑）。
+ */
+const PLACEHOLDER_TITLE = /^(New session|Child session) - \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
+
+export function isPlaceholderTitle(title: string | null | undefined): boolean {
+  return typeof title === "string" && PLACEHOLDER_TITLE.test(title)
+}
+
 const SELECT_ROW = "SELECT session_id, title, tags, status, workflow, account_id FROM workflow_session"
 
 export class Store {
@@ -131,13 +142,19 @@ export class Store {
     this.db.query("UPDATE workflow_session SET title = ? WHERE session_id = ?").run(title, sessionID)
   }
 
-  /** 批量回填标题：仅更新非空标题，且不覆盖已有标题（启动一次性回填，5.2）。 */
+  /** 批量回填标题：仅更新空标题或占位标题（New session - …），不覆盖已有真实标题（启动一次性回填，5.2）。 */
   backfillTitles(titles: ReadonlyMap<string, string>): void {
-    const stmt = this.db.query(
-      "UPDATE workflow_session SET title = ? WHERE session_id = ? AND (title IS NULL OR title = '')",
-    )
+    const rows = this.db.query("SELECT session_id, title FROM workflow_session").all() as {
+      session_id: string
+      title: string | null
+    }[]
+    const current = new Map(rows.map((r) => [r.session_id, r.title]))
+    const stmt = this.db.query("UPDATE workflow_session SET title = ? WHERE session_id = ?")
     for (const [id, title] of titles) {
       if (!title) continue
+      const cur = current.get(id)
+      // 只在当前为空或占位符（未同步）时覆盖；已有真实标题不动。
+      if (cur !== undefined && cur !== null && cur !== "" && !isPlaceholderTitle(cur)) continue
       stmt.run(title, id)
     }
   }
