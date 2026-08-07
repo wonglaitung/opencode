@@ -1,124 +1,212 @@
 # OpenCode 插件开发规范
 
-> 提炼自 opencode-session-mgmt 项目实践,适用于本仓库内任何新增 OpenCode 插件。
-> 参照实现:`packages/plugin`(hook 注册 / 工具 / 门禁 / 存储)、`packages/shared`(契约包)。
+版本: 1.0.0
+最后更新: 2026-08-07
+来源: opencode-session-mgmt 实践（参见 packages/plugin 与 packages/shared）
+
+说明
+- 本文档提炼自仓内实践，适用于在本仓库中新增的所有 OpenCode 插件。
+- 目标：统一约定、降低侵入性、确保安全与可测试性。
+
+目录
+1. 总则
+2. 工程分层
+3. 插件骨架（示例）
+4. Hook 使用规范
+5. 工具 (tool) 开发规范
+6. 数据存储规范
+7. 健壮性与降级策略
+8. 安全与隐私
+9. 测试规范
+10. 编码与文档风格
+11. 打包与分发
+12. 验证清单（合并前必查）
+附录：示例模板与快速检查脚本（见 docs/plugin-examples/）
+
+---
 
 ## 1. 总则
 
-1. **上游零修改**:不修改 `packages/*`(上游)下任何文件;插件全部代码收敛在自己的目录内,可整体删除。
-2. **可插拔**:插件经 `opencode.json` 的 `"plugin"` 条目启用,移除条目即完全还原,上游行为不得有任何残留变化。
-3. **最小依赖面**:只依赖上游两类公开接口——**Plugin Hook**(`@opencode-ai/plugin`)与 **session REST API**(经 `@opencode-ai/sdk`)。**禁止**读上游数据库、上游内部模块、上游登录账号。
-4. **独立 workspace**:插件工程是独立 bun workspace,不得被上游根 `package.json` 的 workspace glob 收录;改动后须复查这一点。
+1. 上游零修改：不得修改 `packages/*`（上游）下的任何文件；插件所有代码应收敛在插件目录内，保证可整体删除并恢复上游到原始状态。
+2. 可插拔：通过 `opencode.json` 的 `"plugin"` 条目启用；移除该条目后应完全还原，不得留下上游状态或行为改变。
+3. 最小依赖面：插件仅依赖上游公开接口：
+   - Plugin Hook（`@opencode-ai/plugin`）
+   - session REST API（通过 `@opencode-ai/sdk`）
+   禁止直接访问上游数据库或内部模块实现细节。
+4. 独立 workspace：插件为独立 bun workspace，不应被上游根 package.json 的 workspace glob 收录。改动后务必复查 workspace 配置，防止插件代码被上游工程无意包含。
+
+---
 
 ## 2. 工程分层
 
+推荐目录结构（单一插件工程）：
+
 ```
-src/index.ts        # 入口:只做组装——打开存储、装配依赖、注册 hooks、返回 handlers
-src/<hook 适配层>.ts # 每个 hook 一个文件;experimental hook 的兼容逻辑集中于此
-src/tools/*.ts      # 工具注册,按域分文件
-src/<纯逻辑>.ts      # 状态转换/聚合等纯函数,不触碰存储,供工具复用与单测
-src/db/             # 存储层:schema(迁移) + Store(类型化读写)
+src/index.ts                # 入口：仅做组装（打开存储、装配依赖、注册 hooks、返回 handlers）
+src/hooks/<hook>.ts         # 每个 hook 的适配与签名转换（experimental hook 兼容集中管理）
+src/tools/*.ts              # 工具注册（按功能域拆分）
+src/<pure_logic>.ts         # 纯函数：状态转换/聚合等（不触碰存储，便于复用与单测）
+src/db/                     # 存储层：schema（迁移） + Store（类型化读写）
+test/                       # 测试文件（bun test 可直接运行）
 ```
 
-- **契约先行**:类型/payload 凡被两个以上消费方(插件、CLI、服务)使用,一律抽到 shared 契约包;契约变更必须多包同步,新增字段用可选字段保持向后兼容。
-- **写侧可选 + 读侧容忍**:契约新增字段要双向兼容——写侧用可选(旧数据/旧汇报无该字段不报错),消费方读侧(插件读库、CLI/服务聚合)同样必须容忍缺失并降级展示(如显示 N/A),缺任一侧即破坏「旧↔新」组合。参照:基线 `workflow.baseline`(写侧可选)与查询侧 `avgEfficiency`/`baselineSessions`(CLI 读侧按可选字段降级 N/A、收集服务读侧容忍缺字段)。
-- 依赖注入用**闭包工厂**:`createXxx(store) → handler`,store 等依赖经闭包持有,不在模块顶层持有状态。
+- 契约先行：凡被两个以上消费方（插件、CLI、服务）使用的类型/payload，应抽到 shared 契约包。契约变更需跨包同步；新增字段应为可选以保持向后兼容。
+- 写侧可选 + 读侧容忍：写入方为新增字段使用可选属性；读侧必须容忍字段缺失（降级或使用默认值），避免因历史数据或旧实现缺字段而失败。
+- 依赖注入：采用闭包工厂模式，如 `createXxx(store) => handler`。所有运行时依赖通过闭包持有，不在模块顶层保留可变状态。
 
-## 3. 插件骨架
+---
+
+## 3. 插件骨架（示例）
 
 ```ts
+import { Plugin } from "@opencode-ai/plugin"
+import { Store } from "./db/store"
+
 const MyPlugin: Plugin = async (input) => {
-  const store = Store.open(input.directory)   // input.directory = 项目目录
-  // 启动副作用:void 触发 + 自身容错(如补推缓冲、惰性清理),不得阻塞/抛错
+  const store = await Store.open(input.directory)
+  // 启动非阻塞副作用（应自容错），不得阻塞插件加载或抛出未捕获错误
+  // 比如：启动 outbox 补推、定时清理，但这些必须在 dispose 中清理
   return {
-    "experimental.chat.system.transform": ...,
-    tool: { ... },
-    "tool.execute.before": ...,
-    "tool.execute.after": ...,
-    "chat.message": ...,
-    dispose: async () => { /* 必须实现:清定时器、flush 未竟工作、store.close() */ },
+    "experimental.chat.system.transform": /* handler */,
+    tool: /* tools 定义 */,
+    "tool.execute.before": /* handler */,
+    "tool.execute.after": /* handler */,
+    "chat.message": /* handler */,
+    dispose: async () => {
+      // 清理所有定时器、flush 未完成工作、关闭 store 等
+      await store.close()
+    },
   }
 }
 export default MyPlugin
 ```
 
-- `@opencode-ai/plugin` 声明为 **peerDependency(`*`)**,devDependency 锁具体版本。
-- 定时器、长任务必须在 `dispose` 中清理。
+要点：
+- 将 `@opencode-ai/plugin` 声明为 peerDependency（版本为 `*`），并在 devDependencies 中锁具体开发时版本。
+- 所有定时器/长期任务必须在 `dispose` 中清理，保证卸载或上下文切换时无泄漏。
+
+---
 
 ## 4. Hook 使用规范
 
-| Hook | 约定 |
-|------|------|
-| `experimental.chat.system.transform` | 只向 `output.system.push()` **追加**,不得改写上游内容;注入内容 = 规则 + 从库中读到的实时状态(状态不依赖 LLM 记忆) |
-| `tool.execute.before` | 硬拦截唯一手段是 `throw`;**未被插件追踪的会话一律放行**,宁漏勿错杀 |
-| `tool.execute.after` | 只做观测/计数,不得阻断 |
-| `chat.message` | 副作用必须幂等(如「仅当字段为空时写入」) |
+约定表：
 
-- **experimental hook 风险隔离**:`experimental.*` hook 的签名适配集中在单独一个文件(参照 `prompt.ts`),上游同步后优先核对该文件即可,不散落各处。
-- 识别上游工具名(如哪些是代码编辑工具)或**解析上游数据格式**(如 apply_patch 的补丁文本)时,以注释记录依据的上游位置(注册处/解析器源文件),上游升级后需复核;不 import 上游模块而自写轻量解析器时,行为必须对照上游实现核对,勿凭想象。
+| Hook                             | 约定说明 |
+|----------------------------------|---------|
+| experimental.chat.system.transform | 只能向 `output.system.push()` 追加内容，绝不可改写上游已存在的 system 内容；注入内容应为规则 + 从 Store 读取的实时状态（不得依赖 LLM 的上下文记忆作为唯一状态来源） |
+| tool.execute.before              | 唯一的硬拦截方式为 `throw` 错误；若会话未被插件显式追踪，应放行（宁漏勿误拦） |
+| tool.execute.after               | 仅用于观测或计数，不得阻断工具后续流转 |
+| chat.message                     | 副作用必须幂等（例如：仅当字段为空时才写入） |
 
-## 5. 工具(tool)开发规范
+实践建议：
+- 把 experimental.* 的签名适配集中在单一文件（例如 `src/hooks/prompt.ts`），以便未来上游签名同步时集中维护。
+- 当需要识别上游工具名或解析上游数据格式（如 apply_patch 的补丁文本）时，在代码中注释清楚依据的上游文件或注册处（给出文件路径/函数名/行号），并在文档中引用对齐依据，便于上游变更时定位。
 
-- 用 `tool()` + `tool.schema`(zod)定义,每个 arg 必须 `.describe()`;工具名 snake_case。
-- **校验在服务端强制,不信任 LLM**:关键前提(如「需开发者确认」)作为必填参数并校验取值,防绕过逻辑落在工具实现里,不能只写进 prompt 规则。
-- **硬约束不依赖 LLM 自觉**:凡是「必须/禁止」类规则,prompt 注入之外必须有 hook 或工具层的机制兜底。
-- 校验失败抛自定义 Error 子类(参照 `WorkflowOpError`),消息用中文写明**当前状态 + 修复路径**。
-- 返回值是人类可读中文:**结果 + 下一步指引**(如门禁状态、未完成项)。
-- **幂等**:语义重复的调用不报错(重复确认、重复提交审查均应安全)。
-- **留痕不删除**:审计相关状态(如强制操作授权)标记 `used` 而非删除。
+---
+
+## 5. 工具 (tool) 开发规范
+
+- 使用 `tool()` + `tool.schema`（zod）定义工具；每个参数必须调用 `.describe()` 描述其语义，工具名使用 snake_case。
+- 校验在服务端强制，不信任 LLM：关键前提（如 “需开发者确认”）应作为必填参数并在服务端校验其值，避免仅靠 prompt 控制逻辑。
+- 硬约束必须有程序级兜底：凡属于必须/禁止的规则，除了在 prompt 中说明外，还要在 hook 或工具实现层面强制检查与阻断。
+- 校验失败抛自定义 Error 子类（参考 `WorkflowOpError`），错误信息用中文并指明当前状态与修复路径。
+- 返回值为中文可读：输出应包含「结果」与「下一步指引」（例如门禁结果、未完成项）。
+- 幂等保证：语义重复的调用应安全（例如重复确认、重复提交审查不应导致错误）。
+- 留痕替代删除：审计类状态（例如强制授权）应标记为 `used` 或记录使用历史，而不是物理删除记录。
+
+---
 
 ## 6. 数据存储规范
 
-- 用 **bun:sqlite**,库文件放 `<项目>/.opencode/<插件名>.db`,开 WAL;统一 `?` 位置绑定。
-- **迁移自管**:`MIGRATIONS: string[]` 只追加不修改,版本号记 meta 表;不与上游 schema 发生任何耦合。
-- JSON 列存序列化状态时区分 raw(字符串)与 row(解析后)类型;复杂状态的更新区分两种语义:
-  - 增量合并(对象递归合并、数组整体替换)——适合指标类字段;
-  - 命令式读-改-写(`mutateWorkflow` 模式)——适合数组追加/计数。
-- Store 必须提供 `Store.memory()`(内存库)供测试。
-- **只读打开用 `{ readonly: true }`,不要用 `{ create: false }`**:bun 1.3.14 下后者退化为 open flags 0,抛 SQLITE_MISUSE(实测);且只读连接无法执行迁移写入,只读路径不得混入 migrate。
+- 使用 bun 提供的 sqlite（bun:sqlite），数据库文件位于 `<project>/.opencode/<plugin>.db`，打开 WAL 模式；SQL 预处理统一使用 `?` 占位符绑定参数。
+- 迁移自管：在代码中维护 `MIGRATIONS: string[]`，只追加不修改现有条目；迁移版本记录在 meta 表中，迁移脚本不得依赖上游 schema。
+- JSON 列语义：
+  - raw：原始字符串
+  - row：解析后的结构
+  更新复杂状态时区分两类语义：
+  - 增量合并（适合指标类字段）：对象递归合并、数组整体替换
+  - 命令式读-改-写（适合数组追加/计数）：明确的 mutateWorkflow 模式
+- Store API 必须提供 `Store.memory()`（内存实现）用于测试。
+- 只读打开注意事项：使用 `{ readonly: true }` 来打开只读连接，不要用 `{ create: false }`（在 bun 1.3.14 中后者导致 open flags 错误并抛 SQLITE_MISUSE；只读连接也无法执行迁移写入，因此只读路径不应用于会执行迁移的打开流程）。
 
-## 7. 健壮性与降级
+---
 
-- **静默降级**:身份/配置缺失 → 关闭对应功能但不影响其余功能;上游不可达 → 跳过本次操作。故障不得扩散。
-- **远程上报必配 outbox**:服务不可用时写本地缓冲,启动补推 + 定时补推;**4xx 视为永久失败丢弃(留日志),5xx/网络错误保留重试**;同键去重防堆积。
-- **删除/清理操作保守化**:拿不到确切列表时不清理,防瞬时不可达导致误删。
-- **子进程副作用必须静默**:需 spawn 外部命令(定位浏览器、taskkill 强杀、which 探活等)时,一律用 `spawn`/`spawnSync` + `stdio:"ignore"`(或显式捕获 stderr)。**不要用 `execFileSync`/`execFileSync` 跑可能失败的命令**——实测它失败时会一并把子进程 stderr 泄漏打印到父进程 stderr,被 OpenCode 捕获后逐条显示在 TUI、盖住输入框。edge-debug 曾因此让 Windows `taskkill` 的 "ERROR: ... could not be terminated." 刷屏 TUI;成功路径的 stderr 同理丢弃。
+## 7. 健壮性与降级策略
+
+- 静默降级：若缺少身份或配置，关闭相应功能但不影响其他功能；与上游通信失败时跳过本次操作，避免故障扩散。
+- outbox 模式：上报外部服务必须配备本地 outbox 缓冲：
+  - 服务不可用时写本地缓冲并启动补推与定时重试机制。
+  - HTTP 4xx 视为永久失败（记录日志并丢弃）；5xx 或网络错误应保留并重试。
+  - 对相同键进行去重以防堆积。
+- 删除与清理操作保守化：在不能确保完整清单时不执行删除，避免因短暂不可达而误删。
+- 外部进程调用静默化：若需 spawn 外部命令（例如定位浏览器、taskkill 等），一律使用 `spawn`/`spawnSync` 并把 stdio 设为 `"ignore"` 或显式捕获 stderr；所有外部调用应显式捕获并记录可能的错误，但不得把 stderr 泄露到上游或上传日志中。
+
+---
 
 ## 8. 安全与隐私
 
-- 任何离开本机的数据必须是**显式构造的白名单投影**:不含代码内容、不含文件路径(含路径的明细只存本机)。
-- **投影与契约同步维护**:契约类型新增含文件路径/内容的字段时,汇报投影必须显式排除——`Omit` 式排除清单不会自动覆盖新字段,漏排即泄漏;汇报测试同步补「序列化结果不含敏感子串」断言兜底。
-- **纯数字/时间戳字段可直接上行,不需剥离**:判断边界是「是否可能携带文件路径或代码内容」——预估工时、时间戳、金额、Token 数等纯数值字段不属敏感投影范围。参照:基线 `baseline.estimatedHours/setAt` 即直接随摘要上行,无需白名单排除,注释写明判断依据即可。
-- 涉及个人信息的字段最小化;配套服务仅内网部署,daemon 交互只走 `127.0.0.1`。
+- 任何离开本机的数据必须是显式构造的白名单投影：不得包含代码内容、文件路径或其他敏感内容（文件路径的明细仅保留于本机）。
+- 投影与契约同步维护：当契约中新增可能包含文件路径或内容的字段时，汇报投影必须显式排除；不要依赖通用的 Omit 清单自动覆盖新增字段，遗漏会导致数据泄露。为此建议：
+  - 明确列举允许上报的字段（白名单）
+  - 在 CI 中加入投影字段变更告警（对比 shared 契约）
+- 纯数字/时间戳字段可直接上行：判断标准为“该字段是否可能携带文件路径或代码内容”。例如：预估工时、时间戳、金额、Token 数等纯数值字段可以直接上行。
+- 个人信息最小化：涉及个人信息的字段应最小化，相关服务建议仅内网部署；daemon 与服务交互仅走 127.0.0.1。
+
+---
 
 ## 9. 测试规范
 
-- `bun test`,测试放各包 `test/*.test.ts`;在插件目录内跑,不在仓库根跑。
-- **测真实实现、零 mock**:存储用内存库,依赖经构造注入。
-- 用例名用中文描述行为;每个硬约束(拦截、单次语义、上限)都要有正反两组用例。
+- 使用 `bun test`；测试放在插件包的 `test/*.test.ts` 中，并在插件目录下运行（不要在仓库根目录运行插件包的测试）。
+- 优先测真实实现，尽量零 mock：存储使用内存库，依赖通过构造注入。
+- 用例名称用中文描述行为；对于每个硬约束（拦截、幂等、上限等），应包含正反两组用例（验收与拒绝路径）。
+- 建议增加 CI 步骤：`bun test`、`bun run typecheck`（strict）与一个轻量的插件启停脚本（启用插件、触发核心路径、移除插件并确认恢复）。
+
+---
 
 ## 10. 编码与文档风格
 
-- TypeScript strict,零 `any`;无分号、双引号(根 prettier);文件 kebab-case,DB 字段 snake_case,类型 PascalCase。
-- 魔法数字提为具名常量并注明出处;正则等易误伤逻辑必须注释边界取舍。
-- **每个源文件头部注释标注对应设计文档章节**,实现前先读该章节;行为变更同步更新设计文档与流程图。
-- 文档、注释、commit 用**中文**;禁用 `§` 符号(用「3.4 节」/裸编号);commit 遵循 conventional:`feat(plugin):`、`fix(plugin):`、`docs(...):`。
+- TypeScript strict，禁止 `any`；代码风格遵循仓内约定：无分号、双引号（由根 prettier 管理）。
+- 文件命名：文件 kebab-case，DB 字段 snake_case，类型 PascalCase。
+- 魔法数字应提为具名常量并注明出处；复杂正则与边界逻辑必须注释设计取舍。
+- 源文件顶部应注一行注释，标注对应设计文档章节；实现变更时同步更新设计文档与流程图。
+- 文档、注释与 commit 使用中文；禁止使用 `§` 符号（使用“第 3.4 节”或裸编号）。commit 遵循 conventional commits（例如 `feat(plugin): ...`、`fix(plugin): ...`、`docs(...): ...`）。
+
+---
 
 ## 11. 打包与分发
 
-两个插件已对齐统一的两层打包(参见各自工程根的 `scripts/pack-bundle.sh`):
+统一两层打包流程（参见各插件工程的 `scripts/pack-bundle.sh`）：
 
-- **`build:plugin`**:`bun build src/index.ts --outdir dist/plugin --target bun`——把插件编译成自包含 JS,屏蔽目标机 bun 版本差异。
-- **`pack:bundle`**:`scripts/pack-bundle.sh`——打成可移植 tarball(`dist/<插件>-bundle-<版本>.tgz`),供内网/离线「解压即用」。要点:
-  - 根目录必须有 `.npmrc`(`node-linker=hoisted`),否则 bun 默认 `isolated` 模式在 Windows 上使用硬链接,打包/移动后硬链接断裂、传递依赖丢失;
-  - **hoisted 的开发侧影响**:node_modules 内 workspace 包是真实拷贝而非链接,改完某包源码(尤其 shared 契约)后,其他包的测试/CLI 可能仍解析旧拷贝,且普通 `bun install` 不一定重拷(实测)——跨包联调前 `rm -rf node_modules && bun install` 刷新;
-  - 脚本自动完成「清旧依赖 → hoisted 重装 → 组装含 node_modules 的目录 → 附带 setup.sh/setup.ps1 环境校验」;
-  - **bundle 根直接可加载**:打包时给根 `package.json` 注入 `main` 指向插件入口(单插件工程为 `src/index.ts`,monorepo 为 `packages/plugin/src/index.ts`),opencode 直接指向解压目录即可,无需指到深层子目录,与 edge-debug 直接指根一致。
+- build:plugin
+  - 示例：`bun build src/index.ts --outdir dist/plugin --target bun`
+  - 目标：编译为自包含 JS，屏蔽目标机 bun 版本差异。
+- pack:bundle
+  - 示例：`scripts/pack-bundle.sh`
+  - 目标：生成可移植 tarball（`dist/<plugin>-bundle-<version>.tgz`），支持内网/离线部署（解压即用）。
+要点：
+- 根目录必须有 `.npmrc`（`node-linker=hoisted`），避免 bun 在 Windows 上使用硬链接导致打包后依赖丢失。
+- 打包脚本应完成：清旧依赖 → hoisted 重装 → 组装含 node_modules 的目录 → 附带 setup.sh/setup.ps1 的环境校验。
+- 打包时保证 bundle 根 package.json 的 `main` 指向插件入口，便于解压后直接加载。
+- 注意 hoisted 模式下 workspace 包为真实拷贝，修改 shared 契约后需要重新打包/重装以避免旧拷贝残留。
 
-## 12. 验证清单(新插件合并前)
+---
 
-1. `bun test` 与 `bun run typecheck`(strict)全绿;
-2. 启用插件跑通核心路径,**移除插件条目后上游行为完全还原**;
-3. 依赖缺失场景(无配置/服务不可达)验证静默降级;
-4. 确认未修改任何上游文件、未被上游 workspace glob 收录;
-5. experimental hook 适配集中于单一文件。
+## 12. 验证清单（新插件合并前）
+
+必要检查项（合并前强制通过）：
+1. `bun test` 与 `bun run typecheck`（strict）全绿。
+2. 启用插件跑通核心路径；移除插件条目后上游行为应完全还原（无残留）。
+3. 验证依赖缺失场景（无配置 / 远程服务不可达）下的静默降级逻辑。
+4. 确认未修改任何上游文件，且插件工程不被上游 workspace glob 收录。
+5. experimental hook 的兼容/适配代码集中于单一文件以便集中维护。
+6. 安全审计：确保上传数据为白名单投影，已列举允许上报字段并在 CI 中有变更告警。
+7. 打包校验：执行一次 `pack:bundle` 并在干净环境中验证解压即用（含依赖）。
+
+---
+
+附录（建议放在 docs/plugin-examples/）
+- 插件骨架代码模板（可直接复制）
+- Store 内存实现示例
+- MIGRATIONS 模板与示例
+- tool.schema（zod）参数示例
+- 简单的合并前自检脚本（bash / ps1）
