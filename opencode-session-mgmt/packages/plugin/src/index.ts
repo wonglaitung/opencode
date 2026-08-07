@@ -73,7 +73,12 @@ async function cleanupOrphans(store: Store, client: PluginInput["client"]): Prom
  * 与 cleanupOrphans 共用一次 list 调用；仅补空标题、不覆盖已有值。
  * 失败静默（上游不可达时不影响功能，标题下次再补）。
  */
-export async function backfillSessionTitles(store: Store, client: PluginInput["client"]): Promise<void> {
+// 注意：以下两个标题同步辅助函数仅供插件工厂内部调用，**不要加 export**。
+// opencode 的 legacy 插件加载器会把模块「所有函数导出」都当作插件工厂，
+// 依次以 (input, options) 调用：syncSessionTitle(input,…) 首行 store.get(sessionID)
+// 会因 input 无 get 方法而抛 "store.get is not a function"，导致插件加载失败、
+// opencode 启动报 "Unexpected server error"（曾踩坑，见 5.2）。
+async function backfillSessionTitles(store: Store, client: PluginInput["client"]): Promise<void> {
   try {
     const res = await client.session.list()
     const sessions = res.data
@@ -91,7 +96,7 @@ export async function backfillSessionTitles(store: Store, client: PluginInput["c
  * 避免每条消息都调远程；标题在会话早期生成，拉取到非空即写库、后续跳过。
  * 失败静默。
  */
-export async function syncSessionTitle(store: Store, client: PluginInput["client"], sessionID: string): Promise<void> {
+async function syncSessionTitle(store: Store, client: PluginInput["client"], sessionID: string): Promise<void> {
   if (store.get(sessionID)?.title) return
   try {
     const res = await client.session.get({ path: { id: sessionID } })
