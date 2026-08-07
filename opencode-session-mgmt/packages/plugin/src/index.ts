@@ -10,7 +10,7 @@
  */
 import type { Plugin, PluginInput } from "@opencode-ai/plugin"
 import { readIdentity } from "sm-shared"
-import { Store } from "./db"
+import { Store, isPlaceholderTitle } from "./db"
 import { createCommitGate } from "./gate"
 import { stampSessionAccount } from "./identity"
 import { createSystemTransform } from "./prompt"
@@ -92,12 +92,14 @@ async function backfillSessionTitles(store: Store, client: PluginInput["client"]
 }
 
 /**
- * chat.message 时补当前会话标题（5.2）：仅库内标题为空时才经 session.get 拉取，
- * 避免每条消息都调远程；标题在会话早期生成，拉取到非空即写库、后续跳过。
+ * chat.message 时补当前会话标题（5.2）：仅库内标题为空或为占位符（New session - …）时才经
+ * session.get 拉取，避免每消息都调远程；真实标题已同步则跳过。占位符非真实标题，
+ * 必须视为未同步照常刷新，否则会停留在过期占位符导致 stats/list 标题对不上。
  * 失败静默。
  */
 async function syncSessionTitle(store: Store, client: PluginInput["client"], sessionID: string): Promise<void> {
-  if (store.get(sessionID)?.title) return
+  const cur = store.get(sessionID)?.title
+  if (cur && !isPlaceholderTitle(cur)) return
   try {
     const res = await client.session.get({ path: { id: sessionID } })
     const title = res.data?.title
