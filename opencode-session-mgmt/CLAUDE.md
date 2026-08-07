@@ -39,6 +39,7 @@ docs/                # 设计文档 session-management.md、同步方案 upstrea
 - bun workspace monorepo；bun 直接跑 TS（CLI 入口 shebang `#!/usr/bin/env bun`）。
 - TypeScript strict；新代码零 `any`；`bun build --compile` 出 CLI 单二进制。
 - 插件 Hook 基于 `@opencode-ai/plugin` 的 `Hooks` 接口，均为 experimental——**同步上游后优先核对 hook 签名**（尤其 `experimental.chat.system.transform`），变更只需改 `packages/plugin/src/prompt.ts` 适配层。
+- **插件入口 `packages/plugin/src/index.ts` 只能 default 导出插件工厂，内部辅助函数一律不加 `export`**。opencode 的 legacy 加载器会把模块「所有函数导出」都当作插件工厂，以 `(input, options)` 逐一调用；曾因 `syncSessionTitle`/`backfillSessionTitles` 加了 `export`，被当作工厂调用时首行 `store.get(sessionID)` 抛 `store.get is not a function`，导致插件加载失败、opencode 启动报 `Unexpected server error`（见 5.2 与 `index.ts` 内注释）。
 - 本地存储用 bun:sqlite。
 - `bun test` 跑测试；测试文件与源码同目录 `*.test.ts`。
 
