@@ -6,7 +6,7 @@
  */
 import { statSync } from "node:fs"
 import { basename, resolve } from "node:path"
-import { readIdentity } from "sm-shared"
+import { readIdentity, resolveWorkflowType } from "sm-shared"
 import type { WorkflowSessionRow } from "sm-plugin/src/db/schema"
 import { HIGH_ITERATION_THRESHOLD, LOW_FIRST_PASS_THRESHOLD, aggregateProject, sessionStats, type SessionStats } from "sm-plugin/src/stats"
 import {
@@ -80,6 +80,7 @@ export function resolveProjectInfo(projectFlag: string | undefined): ProjectInfo
 export async function runStats(args: ParsedArgs): Promise<void> {
   const json = Boolean(args.flags.json)
   const period = typeof args.flags.period === "string" ? args.flags.period : undefined
+  const workflowType = typeof args.flags.workflow === "string" ? resolveWorkflowType(args.flags.workflow) : undefined
 
   // 组/组织级：查收集服务（5.2 alt 分支二）
   if (args.flags.group || args.flags.org) {
@@ -97,6 +98,7 @@ export async function runStats(args: ParsedArgs): Promise<void> {
         group: typeof args.flags.group === "string" ? args.flags.group : undefined,
         org: args.flags.org ? identity.org : undefined,
         period,
+        workflowType,
       })
     } catch (err) {
       process.stderr.write(`组/组织级统计查询失败：${err instanceof Error ? err.message : String(err)}\n`)
@@ -153,6 +155,10 @@ export async function runStats(args: ParsedArgs): Promise<void> {
         return at !== null && at >= since
       })
     }
+    // 6 分区管道：按工作流类型过滤，两条流程指标绝不混算
+    if (workflowType !== undefined) {
+      rows = rows.filter((r) => r.workflow?.type === workflowType)
+    }
     // cost/tokens 需异步取数：先逐会话补齐（客户端不可用时为空值），再聚合
     const usageCache = new Map<string, Awaited<ReturnType<typeof sessionUsage>>>()
     for (const r of rows) {
@@ -186,7 +192,7 @@ function printSessionStats(s: SessionStats): void {
     .join("\n")
   process.stdout.write(
     `📋 会话 ${s.sessionID}\n` +
-      `标题: ${fmtTitle(s.title)}\n` +
+      `工作流类型: ${s.type}  标题: ${fmtTitle(s.title)}\n` +
       `开发者: ${s.account ?? "N/A"}  周期: ${fmtDuration(s.durationMs)}  ${s.complete ? "✓ 已完成" : "进行中"}\n\n` +
       `工作流:\n${stageLines}\n\n` +
       `质量:\n` +

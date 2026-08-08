@@ -238,13 +238,14 @@ opencode-sm --help                     # 全局可用
 opencode-sm init
 ```
 
-交互式四问，**全部手动填写**（不读取任何上游登录账号）：
+交互式五问，**全部手动填写**（不读取任何上游登录账号）：
 
 ```
 ? 你的账号（邮箱）: alice@example.com
 ? 所在组（子组用命名约定，如 前端组/基础架构组）: 前端组
 ? 所属组织: Engineering
 ? 收集服务地址（如 http://10.0.1.20:8787）: http://10.0.1.20:8787
+? 主要工作流类型（sdlc 开发 / reqdoc 需求书）: sdlc
 ✓ 已写入 ~/.config/opencode/session-mgmt/identity.json
 ```
 
@@ -252,7 +253,8 @@ opencode-sm init
 
 - 组名/组织名由组织内**口头约定**（如「前端组」），子组用 `前端组/基础架构组` 这种命名约定，没有 ID、没有花名册。
 - 收集服务地址由**管理员告知**（就是第 5 章部署出来的那台机器的内网地址）。暂时没部署收集服务也能填，插件会把汇报先缓存在本地。
-- **人员变动（调组、换邮箱）时重跑 `opencode-sm init` 即可**；身份是「汇报快照」，只影响此后的统计归属，历史不追溯。
+- **工作流类型**决定本用户新会话走哪套流程（开发者 `sdlc` / 需求分析师 `reqdoc`），缺省 sdlc；不同角色 = 不同用户，改类型只影响之后的新会话（见 `session-management.md` 3.1）。
+- **人员变动（调组、换邮箱）时重跑 `opencode-sm init` 即可**；身份是「汇报快照」，只影响此后的统计归属，历史不追溯。仅换工作流类型也可用更轻的 `opencode-sm workflow-type set <sdlc|reqdoc>`。
 
 ### 4.3 让 CLI 连上上游 daemon：`OPENCODE_SM_SERVER`（每机器一次）
 
@@ -426,7 +428,7 @@ ls <你的项目>/.opencode/session-mgmt.db
 
 # ③ CLI + 身份
 opencode-sm --help                         # 列出 init/tag/workflow/stats/list
-cat ~/.config/opencode/session-mgmt/identity.json   # 四问结果都在
+cat ~/.config/opencode/session-mgmt/identity.json   # 五问结果都在（含 workflowType）
 
 # ④ 收集服务（管理员）
 curl http://<内网IP>:8787/healthz          # {"ok":true}
@@ -544,7 +546,7 @@ bash setup.sh              # 可选：校验环境（Windows 用 .\setup.ps1）
 
 > Windows 注意：JSON 里路径用正斜杠 `/`（上面示例即如此），无需处理反斜杠转义。
 
-最后每台机跑一次 `opencode-sm init` 配身份（四问，见 4.2 节）。
+最后每台机跑一次 `opencode-sm init` 配身份（五问，见 4.2 节）。
 
 **「解压即用」的三个要点**（少一个就会装上却跑不起来）：
 

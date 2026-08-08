@@ -123,7 +123,7 @@ describe("openIfExists 只读跨项目打开（4.3）", () => {
   test("已有库只读打开可读会话数据", () => {
     const dir = mkdtempSync(join(tmpdir(), "sm-openif-"))
     try {
-      const store = Store.open(dir)
+      const store = Store.open(dir, () => "sdlc")
       store.mutateWorkflow("s1", (wf) => {
         wf.quality.linesByFile = { "a.ts": 5 }
       })
@@ -153,7 +153,7 @@ describe("schema 迁移 v3（title 列）", () => {
       )
       db.close()
 
-      const store = Store.open(dir) // 触发 v3 迁移
+      const store = Store.open(dir, () => "sdlc") // 触发 v3 迁移
       expect(store.get("s1")).not.toBeNull()
       store.setTitle("s1", "迁移后标题")
       expect(store.get("s1")!.title).toBe("迁移后标题")

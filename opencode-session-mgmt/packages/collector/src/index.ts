@@ -66,15 +66,17 @@ const server = Bun.serve({
     if (url.pathname === "/api/stats" && req.method === "GET") {
       const scope = url.searchParams.get("scope")
       const period = parsePeriodMs(url.searchParams.get("period"))
+      // 6 分区管道：可选 workflowType 参数过滤（未传则全部类型）
+      const workflowType = url.searchParams.get("workflowType") ?? undefined
       if (scope === "group") {
         const group = url.searchParams.get("group")
         if (!group) return json({ error: "缺少 group 参数" }, 400)
-        return json(db.statsGroup(group, period))
+        return json(db.statsGroup(group, period, workflowType))
       }
       if (scope === "org") {
         const org = url.searchParams.get("org")
         if (!org) return json({ error: "缺少 org 参数" }, 400)
-        return json(db.statsOrg(org, period))
+        return json(db.statsOrg(org, period, workflowType))
       }
       return json({ error: "scope 必须为 group 或 org" }, 400)
     }

@@ -2,7 +2,7 @@
  * opencode-sm workflow <sessionID> [checklist|comprehension|stats]
  * 工作流状态外部查看（设计文档 5.1）。只读本机插件库。
  */
-import { STAGE_LABELS, STAGE_ORDER, efficiencyRatio, sumLinesByCategory, type StageName } from "sm-shared"
+import { efficiencyRatio, getDefinition, reviewRecord, sumLinesByCategory } from "sm-shared"
 import { workflowDurationMs } from "sm-plugin/src/stats"
 import { openPluginStore } from "../api"
 import type { ParsedArgs } from "../index"
@@ -24,19 +24,16 @@ export async function runWorkflow(args: ParsedArgs): Promise<void> {
       return
     }
     const workflow = row.workflow
+    const def = getDefinition(workflow.type)
+    const review = reviewRecord(workflow)
     if (sub === "checklist") {
-      const c = workflow.stages.review.checklist
-      const lines = [
-        `businessIntent:     ${mark(c.businessIntent)}`,
-        `logicExplainable:   ${mark(c.logicExplainable)}`,
-        `behaviorVerifiable: ${mark(c.behaviorVerifiable)}`,
-        `designRationale:    ${mark(c.designRationale)}`,
-      ]
+      const c = review.checklist
+      const lines = def.checklist.map((item) => `${item.key.padEnd(20)} ${mark(c[item.key] ?? item.auto === true)}`)
       process.stdout.write(`审查清单（${sessionID}）\n${lines.join("\n")}\n`)
       return
     }
     if (sub === "comprehension") {
-      let records = workflow.stages.review.comprehension
+      let records = review.comprehension
       if (args.flags.unconfirmed) records = records.filter((r) => !r.developerConfirmed)
       if (records.length === 0) {
         process.stdout.write("无理解确认记录。\n")
@@ -51,7 +48,6 @@ export async function runWorkflow(args: ParsedArgs): Promise<void> {
     }
     if (sub === "stats") {
       const q = workflow.quality
-      const review = workflow.stages.review
       const confirmed = review.comprehension.filter((c) => c.developerConfirmed).length
       const durationMs = workflowDurationMs(workflow)
       const efficiency = efficiencyRatio(workflow.baseline?.estimatedHours, durationMs)
@@ -66,9 +62,9 @@ export async function runWorkflow(args: ParsedArgs): Promise<void> {
       return
     }
     // 默认：阶段进度总览
-    const lines = STAGE_ORDER.map((name) => {
-      const stage = workflow.stages[name as StageName]
-      return `  ${STAGE_LABELS[name as StageName].padEnd(6, " ")} ${stage.status.padEnd(12)} revision=${stage.revision}`
+    const lines = def.stages.map((name) => {
+      const stage = workflow.stages[name]!
+      return `  ${(def.labels[name] ?? name).padEnd(6, " ")} ${stage.status.padEnd(12)} revision=${stage.revision}`
     })
     const force = workflow.commit.force
     const forceLine = force

@@ -4,12 +4,11 @@
  * 按 sessionID 关联。纯函数实现，供 opencode-sm 复用（不依赖插件 SDK/数据库句柄）。
  */
 import {
-  STAGE_LABELS,
-  STAGE_ORDER,
   efficiencyRatio,
+  getDefinition,
+  reviewRecord,
   sumLinesByCategory,
   type LinesCategory,
-  type StageName,
   type StageRecord,
   type WorkflowState,
 } from "sm-shared"
@@ -23,7 +22,7 @@ export const LOW_FIRST_PASS_THRESHOLD = 70
 export const HIGH_ITERATION_THRESHOLD = 5
 
 export interface StageStats {
-  name: StageName
+  name: string
   label: string
   status: string
   revision: number
@@ -32,6 +31,8 @@ export interface StageStats {
 
 export interface SessionStats {
   sessionID: string
+  /** 工作流类型（6 分区标签） */
+  type: string
   title: string | null
   account: string | null
   status: string | null
@@ -75,7 +76,7 @@ export interface ProjectStats {
   avgEfficiency: number | null
   /** 已录入基线的会话数（提效曲线覆盖率参考） */
   baselineCount: number
-  stageAvgDurationMs: Record<StageName, number>
+  stageAvgDurationMs: Record<string, number>
 }
 
 /** 阶段耗时：最后一次转换时间 - 首次转换时间（6.1 时间戳即数据源）。 */
@@ -88,8 +89,9 @@ export function stageDurationMs(stage: StageRecord): number {
 
 /** 会话总耗时：全部阶段转换的最早到最晚。 */
 export function workflowDurationMs(workflow: WorkflowState): number {
+  const def = getDefinition(workflow.type)
   const times: number[] = []
-  for (const name of STAGE_ORDER) {
+  for (const name of def.stages) {
     for (const t of workflow.stages[name].transitions) times.push(t.at)
   }
   if (times.length === 0) return 0
@@ -97,32 +99,31 @@ export function workflowDurationMs(workflow: WorkflowState): number {
 }
 
 export function isComplete(workflow: WorkflowState): boolean {
-  return STAGE_ORDER.every((name) => workflow.stages[name].status === "approved")
+  const def = getDefinition(workflow.type)
+  return def.stages.every((name) => workflow.stages[name].status === "approved")
 }
 
 export function sessionStats(row: WorkflowSessionRow, usage: Usage): SessionStats | null {
   const workflow = row.workflow
   if (!workflow) return null
-  const review = workflow.stages.review
+  const def = getDefinition(workflow.type)
+  const review = reviewRecord(workflow)
   const confirmed = review.comprehension.filter((c) => c.developerConfirmed).length
   const checklist = review.checklist
-  const checklistPassed = [
-    checklist.businessIntent,
-    checklist.logicExplainable,
-    checklist.behaviorVerifiable,
-    checklist.designRationale,
-  ].filter(Boolean).length
+  // 清单通过数按定义逐项计数（def 驱动；auto 项也计入通过口径，3.2）
+  const checklistPassed = def.checklist.filter((item) => checklist[item.key] === true).length
   // 会话总耗时既用于展示，也作为提效率的「实际周期」（6.3）
   const durationMs = workflowDurationMs(workflow)
   return {
     sessionID: row.session_id,
+    type: workflow.type,
     title: row.title,
     account: row.account_id,
     status: row.status,
     tags: row.tags,
-    stages: STAGE_ORDER.map((name) => ({
+    stages: def.stages.map((name) => ({
       name,
-      label: STAGE_LABELS[name],
+      label: def.labels[name] ?? name,
       status: workflow.stages[name].status,
       revision: workflow.stages[name].revision,
       durationMs: stageDurationMs(workflow.stages[name]),
@@ -151,10 +152,15 @@ export function aggregateProject(rows: WorkflowSessionRow[], usageOf: (id: strin
   const completed = stats.filter((s) => s.complete).length
   const durations = stats.map((s) => s.durationMs)
   const firstPasses = stats.map((s) => s.firstPassRate).filter((x): x is number => x !== null)
-  const stageAvg = {} as Record<StageName, number>
-  for (const name of STAGE_ORDER) {
-    const vals = stats.map((s) => s.stages.find((x) => x.name === name)!.durationMs)
-    stageAvg[name] = n > 0 ? vals.reduce((a, b) => a + b, 0) / n : 0
+  // 阶段均值按阶段名聚合（def 驱动）：对包含该阶段的会话求均值，缺该阶段的会话不纳入分母。
+  // 常规按同一类型过滤（CLI --workflow），此处不做序相关的假泛化。
+  const stageNames = [...new Set(stats.flatMap((s) => s.stages.map((x) => x.name)))]
+  const stageAvg = {} as Record<string, number>
+  for (const name of stageNames) {
+    const vals = stats
+      .map((s) => s.stages.find((x) => x.name === name)?.durationMs)
+      .filter((v): v is number => v !== undefined)
+    stageAvg[name] = vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0
   }
   // 行数为累加型指标：对各会话三分类求和（不做平均，6.3）
   const linesTotal: LinesCategory = { business: 0, test: 0, config: 0 }

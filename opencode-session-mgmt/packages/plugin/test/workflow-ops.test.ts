@@ -4,7 +4,7 @@ import { WorkflowOpError, applyTransition, recomputeCommit } from "../src/workfl
 
 describe("applyTransition", () => {
   test("enter → approve 记录转换并更新状态", () => {
-    const state = createWorkflowState()
+    const state = createWorkflowState("sdlc")
     applyTransition(state, "requirements", "enter", 1000)
     expect(state.stages.requirements.status).toBe("in_progress")
     applyTransition(state, "requirements", "approve", 2000, "确认")
@@ -13,12 +13,12 @@ describe("applyTransition", () => {
   })
 
   test("未经 in_progress 不可 approve", () => {
-    const state = createWorkflowState()
+    const state = createWorkflowState("sdlc")
     expect(() => applyTransition(state, "design", "approve", 1)).toThrow(WorkflowOpError)
   })
 
   test("revisit 使 revision++", () => {
-    const state = createWorkflowState()
+    const state = createWorkflowState("sdlc")
     applyTransition(state, "requirements", "enter", 1)
     applyTransition(state, "requirements", "approve", 2)
     applyTransition(state, "requirements", "revisit", 3)
@@ -29,7 +29,7 @@ describe("applyTransition", () => {
 
 describe("recomputeCommit", () => {
   test("全部 approved 才 allowed", () => {
-    const state = createWorkflowState()
+    const state = createWorkflowState("sdlc")
     for (const name of ["requirements", "design", "implementation", "testing"] as const) {
       applyTransition(state, name, "enter", 1)
       applyTransition(state, name, "approve", 2)
@@ -40,7 +40,7 @@ describe("recomputeCommit", () => {
   })
 
   test("重算门禁保留一次性强制提交授权", () => {
-    const state = createWorkflowState()
+    const state = createWorkflowState("sdlc")
     state.commit.force = { reason: "紧急 hotfix", at: 1, used: false }
     recomputeCommit(state)
     expect(state.commit.status).toBe("blocked")

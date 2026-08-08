@@ -9,11 +9,24 @@
  * review_submit         —— 提交审查清单：所有片段处于终态(accepted/manual)，通过时自动计算 firstPassRate
  */
 import { tool, type ToolDefinition } from "@opencode-ai/plugin"
-import type { ComprehensionRecord } from "sm-shared"
+import { WORKFLOW_DEFINITIONS, getDefinition, reviewRecord, type ComprehensionRecord } from "sm-shared"
 import type { Store } from "../db"
 import { WorkflowOpError, applyTransition, recomputeCommit } from "../workflow-ops"
 
 const z = tool.schema
+
+/**
+ * review_submit 的具名布尔参数（3.2 def 驱动）：汇总所有已注册类型中非 auto 的审查清单项。
+ * 本轮仅 sdlc → businessIntent/logicExplainable/behaviorVerifiable（LLM 契约逐字节不变）；
+ * auto 项（如 designRationale）由插件置真，不占用具名参数。reqdoc 加入时其非 auto 清单项自动并入。
+ */
+const reviewChecklistArgs: Record<string, ReturnType<typeof z.boolean>> = {}
+for (const def of Object.values(WORKFLOW_DEFINITIONS)) {
+  for (const item of def.checklist) {
+    if (item.auto) continue
+    if (!(item.key in reviewChecklistArgs)) reviewChecklistArgs[item.key] = z.boolean().describe(item.label)
+  }
+}
 
 export function createReviewTools(store: Store): Record<string, ToolDefinition> {
   const comprehension_add = tool({
@@ -29,7 +42,7 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
     },
     async execute(args, context) {
       store.mutateWorkflow(context.sessionID, (workflow) => {
-        const list = workflow.stages.review.comprehension
+        const list = reviewRecord(workflow).comprehension
         if (list.some((c) => c.codeSegmentId === args.codeSegmentId)) {
           throw new WorkflowOpError(`片段 ${args.codeSegmentId} 已登记`)
         }
@@ -63,7 +76,7 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
     async execute(args, context) {
       let confirmedNow = false
       store.mutateWorkflow(context.sessionID, (workflow) => {
-        const record = workflow.stages.review.comprehension.find(
+        const record = reviewRecord(workflow).comprehension.find(
           (c) => c.codeSegmentId === args.codeSegmentId,
         )
         if (!record) {
@@ -79,7 +92,7 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
           confirmedNow = true
         }
       })
-      const review = store.ensure(context.sessionID).workflow!.stages.review
+      const review = reviewRecord(store.ensure(context.sessionID).workflow!)
       const done = review.comprehension.filter((c) => c.decision === "accepted").length
       return (
         (confirmedNow ? `✅ 已确认片段 ${args.codeSegmentId}（一次通过）。` : `片段 ${args.codeSegmentId} 此前已确认。`) +
@@ -97,7 +110,7 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
     },
     async execute(args, context) {
       store.mutateWorkflow(context.sessionID, (workflow) => {
-        const record = workflow.stages.review.comprehension.find(
+        const record = reviewRecord(workflow).comprehension.find(
           (c) => c.codeSegmentId === args.codeSegmentId,
         )
         if (!record) {
@@ -119,7 +132,7 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
     },
     async execute(args, context) {
       store.mutateWorkflow(context.sessionID, (workflow) => {
-        const record = workflow.stages.review.comprehension.find(
+        const record = reviewRecord(workflow).comprehension.find(
           (c) => c.codeSegmentId === args.codeSegmentId,
         )
         if (!record) {
@@ -146,7 +159,7 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
     async execute(args, context) {
       let rewritesNow = 0
       store.mutateWorkflow(context.sessionID, (workflow) => {
-        const record = workflow.stages.review.comprehension.find(
+        const record = reviewRecord(workflow).comprehension.find(
           (c) => c.codeSegmentId === args.codeSegmentId,
         )
         if (!record) {
@@ -175,7 +188,7 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
     },
     async execute(args, context) {
       store.mutateWorkflow(context.sessionID, (workflow) => {
-        const record = workflow.stages.review.comprehension.find(
+        const record = reviewRecord(workflow).comprehension.find(
           (c) => c.codeSegmentId === args.codeSegmentId,
         )
         if (!record) {
@@ -193,17 +206,14 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
 
   const review_submit = tool({
     description:
-      "提交审查清单。仅当 businessIntent/logicExplainable/behaviorVerifiable 均为 true，且所有已登记片段" +
+      "提交审查清单。仅当清单各项均为 true，且所有已登记片段" +
       "处于终态（accepted/manual，不允许 pending/rejected 悬空）时，审查阶段才会 approve；" +
-      "通过时自动计算一次通过率 firstPassRate 写入质量指标。",
-    args: {
-      businessIntent: z.boolean().describe("公共方法有业务意图注释"),
-      logicExplainable: z.boolean().describe("圈复杂度>10 的方法有行内注释"),
-      behaviorVerifiable: z.boolean().describe("每个 Service 方法有至少一个集成测试"),
-    },
+      "通过时自动计算一次通过率 firstPassRate 写入质量指标。具名参数由当前工作流类型的审查清单生成。",
+    args: reviewChecklistArgs,
     async execute(args, context) {
       const saved = store.mutateWorkflow(context.sessionID, (workflow) => {
-        const review = workflow.stages.review
+        const def = getDefinition(workflow.type)
+        const review = reviewRecord(workflow)
         const total = review.comprehension.length
         const hadCodeEdits = (workflow.quality.iterationCount ?? 0) > 0
         // 有 AI 代码编辑就必须登记理解确认片段；纯讨论会话（无代码）可无片段通过
@@ -221,23 +231,17 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
               `comprehension_reject 拒绝后 rewrite/manual，使其进入终态（accepted/manual）`,
           )
         }
-        review.checklist.businessIntent = args.businessIntent
-        review.checklist.logicExplainable = args.logicExplainable
-        review.checklist.behaviorVerifiable = args.behaviorVerifiable
-        review.checklist.designRationale = true // 全部片段定论即通过（闭环达成）
-        const allPassed =
-          args.businessIntent && args.logicExplainable && args.behaviorVerifiable && review.checklist.designRationale
-        if (!allPassed) {
-          const failed = [
-            !args.businessIntent && "businessIntent",
-            !args.logicExplainable && "logicExplainable",
-            !args.behaviorVerifiable && "behaviorVerifiable",
-          ]
-            .filter((x): x is string => Boolean(x))
-            .join("、")
-          throw new WorkflowOpError(`审查清单未全部通过（缺：${failed}），请回到编码/测试阶段补齐`)
+        // 清单逐项写入：非 auto 取具名参数，auto 项（如 designRationale）置真（3.2 def 驱动）
+        const failed: string[] = []
+        for (const item of def.checklist) {
+          const value = item.auto ? true : (args as Record<string, boolean>)[item.key]
+          review.checklist[item.key] = value === true
+          if (value !== true) failed.push(item.key)
         }
-        // 自动计算一次通过率（3.2）：未重写即 accepted ÷ 全部定论片段(accepted+manual)
+        if (failed.length > 0) {
+          throw new WorkflowOpError(`审查清单未全部通过（缺：${failed.join("、")}），请回到编码/测试阶段补齐`)
+        }
+        // 自动计算一次通过率（3.2，sdlc 代码片段语义）：未重写即 accepted ÷ 全部定论片段(accepted+manual)
         if (total > 0) {
           const decided = review.comprehension.length
           const firstPass = review.comprehension.filter(
@@ -248,16 +252,18 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
         // 幂等：已 approved 时不重复转换（重复 review_submit 不再报错）
         if (review.status !== "approved") {
           if (review.status === "not_started") {
-            applyTransition(workflow, "review", "enter", Date.now(), "进入审查")
+            applyTransition(workflow, def.reviewStage!, "enter", Date.now(), "进入审查")
           }
-          applyTransition(workflow, "review", "approve", Date.now(), "审查清单四项通过且所有片段已定论")
+          applyTransition(workflow, def.reviewStage!, "approve", Date.now(), `审查清单全部通过且所有片段已定论`)
         }
         recomputeCommit(workflow)
       })
-      const total = saved.stages.review.comprehension.length
+      const review = reviewRecord(saved)
+      const total = review.comprehension.length
       const rate = saved.quality.firstPassRate
+      const def = getDefinition(saved.type)
       return (
-        `✅ 审查阶段通过（清单 4/4，片段定论 ${total}/${total}）` +
+        `✅ 审查阶段通过（清单 ${def.checklist.length}/${def.checklist.length}，片段定论 ${total}/${total}）` +
         (rate !== null ? `，一次通过率 ${rate}%` : "") +
         `。\n提交门禁：${saved.commit.status}` +
         (saved.commit.blocked_by.length ? `（未完成：${saved.commit.blocked_by.join("、")}）` : "")

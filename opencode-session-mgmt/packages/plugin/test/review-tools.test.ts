@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test"
+import { reviewRecord } from "sm-shared"
 import { Store } from "../src/db"
 import { createReviewTools } from "../src/tools/review"
+
+function reviewOf(store: Store, id = "s1") {
+  return reviewRecord(store.get(id)!.workflow!)
+}
 
 const ctx = { sessionID: "s1" } as never
 
@@ -17,9 +22,9 @@ describe("comprehension 工具", () => {
       { codeSegmentId: "a.ts:1-2", file: "a.ts", lineStart: 1, lineEnd: 2, explanation: "解释" } as never,
       ctx,
     )
-    expect(store.get("s1")!.workflow!.stages.review.comprehension[0]!.decision).toBe("pending")
+    expect(reviewOf(store).comprehension[0]!.decision).toBe("pending")
     await tools.comprehension_confirm!.execute({ codeSegmentId: "a.ts:1-2" } as never, ctx)
-    const rec = store.get("s1")!.workflow!.stages.review.comprehension[0]!
+    const rec = reviewOf(store).comprehension[0]!
     expect(rec.developerConfirmed).toBe(true)
     expect(rec.decision).toBe("accepted")
     store.close()
@@ -43,7 +48,7 @@ describe("comprehension 工具", () => {
       { codeSegmentId: "a.ts:1-2", question: "为何?", answer: "因为X" } as never,
       ctx,
     )
-    const explanation = store.get("s1")!.workflow!.stages.review.comprehension[0]!.explanation
+    const explanation = reviewOf(store).comprehension[0]!.explanation
     expect(explanation).toContain("为何?")
     expect(explanation).toContain("因为X")
     store.close()
@@ -58,7 +63,7 @@ describe("评审状态机（reject/rewrite/manual）", () => {
       ctx,
     )
     await tools.comprehension_reject!.execute({ codeSegmentId: "a", feedback: "应处理空值" } as never, ctx)
-    const rec = store.get("s1")!.workflow!.stages.review.comprehension[0]!
+    const rec = reviewOf(store).comprehension[0]!
     expect(rec.decision).toBe("rejected")
     expect(rec.feedback).toBe("应处理空值")
     expect(rec.rejectedAt).not.toBeNull()
@@ -86,7 +91,7 @@ describe("评审状态机（reject/rewrite/manual）", () => {
     )
     await tools.comprehension_reject!.execute({ codeSegmentId: "a", feedback: "f" } as never, ctx)
     await tools.comprehension_rewrite!.execute({ codeSegmentId: "a" } as never, ctx)
-    const rec = store.get("s1")!.workflow!.stages.review.comprehension[0]!
+    const rec = reviewOf(store).comprehension[0]!
     expect(rec.decision).toBe("pending")
     expect(rec.rewrites).toBe(1)
     expect(rec.developerConfirmed).toBe(false)
@@ -113,7 +118,7 @@ describe("评审状态机（reject/rewrite/manual）", () => {
     )
     await tools.comprehension_reject!.execute({ codeSegmentId: "a", feedback: "f" } as never, ctx)
     await tools.comprehension_manual!.execute({ codeSegmentId: "a", resolution: "已人工重写" } as never, ctx)
-    const rec = store.get("s1")!.workflow!.stages.review.comprehension[0]!
+    const rec = reviewOf(store).comprehension[0]!
     expect(rec.decision).toBe("manual")
     expect(rec.resolution).toBe("已人工重写")
     store.close()
@@ -139,7 +144,7 @@ describe("评审状态机（reject/rewrite/manual）", () => {
     )
     await tools.comprehension_reject!.execute({ codeSegmentId: "a", feedback: "f" } as never, ctx)
     await tools.comprehension_confirm!.execute({ codeSegmentId: "a" } as never, ctx)
-    expect(store.get("s1")!.workflow!.stages.review.comprehension[0]!.decision).toBe("accepted")
+    expect(reviewOf(store).comprehension[0]!.decision).toBe("accepted")
     store.close()
   })
 
@@ -165,7 +170,7 @@ describe("review_submit 门禁", () => {
       { businessIntent: true, logicExplainable: true, behaviorVerifiable: true } as never,
       ctx,
     )
-    expect(store.get("s1")!.workflow!.stages.review.status).toBe("approved")
+    expect(reviewOf(store).status).toBe("approved")
     store.close()
   })
 
@@ -188,7 +193,7 @@ describe("review_submit 门禁", () => {
     const args = { businessIntent: true, logicExplainable: true, behaviorVerifiable: true } as never
     await tools.review_submit!.execute(args, ctx)
     await expect(tools.review_submit!.execute(args, ctx)).resolves.toBeDefined()
-    expect(store.get("s1")!.workflow!.stages.review.status).toBe("approved")
+    expect(reviewOf(store).status).toBe("approved")
     store.close()
   })
 
@@ -251,8 +256,8 @@ describe("review_submit 门禁", () => {
       ctx,
     )
     const wf = store.get("s1")!.workflow!
-    expect(wf.stages.review.status).toBe("approved")
-    expect(wf.stages.review.checklist.designRationale).toBe(true)
+    expect(reviewOf(store).status).toBe("approved")
+    expect(reviewOf(store).checklist.designRationale).toBe(true)
     expect(wf.commit.blocked_by).not.toContain("review")
     store.close()
   })

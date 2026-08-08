@@ -21,7 +21,7 @@ const report: SessionReport = {
   account: identity.account,
   group: identity.group,
   org: identity.org,
-  workflow: summarizeWorkflow(createWorkflowState()),
+  workflow: summarizeWorkflow(createWorkflowState("sdlc")),
   cost: null,
   tokensInput: null,
   tokensOutput: null,

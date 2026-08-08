@@ -4,7 +4,7 @@
  * 未通过 commit_gate_check（有未 approved 阶段）时抛错阻断。
  * 这是插件层硬约束，不依赖 LLM 自觉。
  */
-import { STAGE_LABELS, type StageName } from "sm-shared"
+import { getDefinition } from "sm-shared"
 import type { Store } from "./db"
 import { recomputeCommit } from "./workflow-ops"
 
@@ -32,6 +32,8 @@ export function createCommitGate(store: Store) {
     const row = store.get(input.sessionID)
     // 未被工作流追踪的会话（无记录）不拦截
     if (!row || !row.workflow) return
+    // 无提交门禁的工作流类型（reqdoc 定稿）直接放行（3.2 hasCommitGate）
+    if (!getDefinition(row.workflow.type).hasCommitGate) return
     const gate = recomputeCommit(row.workflow).commit
     if (gate.status === "allowed") return
     // 一次性强制提交授权（3.4 逃生口）：放行一次并标记已用（留痕，不删除）
@@ -41,7 +43,8 @@ export function createCommitGate(store: Store) {
       })
       return
     }
-    const pending = gate.blocked_by.map((s) => STAGE_LABELS[s as StageName]).join("、")
+    const def = getDefinition(row.workflow.type)
+    const pending = gate.blocked_by.map((s) => def.labels[s] ?? s).join("、")
     throw new Error(
       `🔒 提交门禁：工作流尚有阶段未完成（${pending}）。` +
         `请先在对话中完成并通过审查（review_submit）再提交；` +

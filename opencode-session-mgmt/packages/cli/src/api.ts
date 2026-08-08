@@ -7,13 +7,14 @@
 import { createOpencodeClient, type Session } from "@opencode-ai/sdk"
 import { Store } from "sm-plugin/src/db"
 import type { Usage } from "sm-plugin/src/report"
-import type { Identity } from "sm-shared"
+import { readIdentity, resolveWorkflowType, type Identity } from "sm-shared"
 
 export type OpencodeClient = ReturnType<typeof createOpencodeClient>
 
-/** 打开指定项目目录的插件库（复用 sm-plugin Store；同机 WAL 多进程安全）。 */
+/** 打开指定项目目录的插件库（复用 sm-plugin Store；同机 WAL 多进程安全）。
+ *  新建会话时按全局身份解析工作流类型（用户级继承，3.1）。 */
 export function openPluginStore(directory: string): Store {
-  return Store.open(directory)
+  return Store.open(directory, () => resolveWorkflowType(readIdentity()?.workflowType))
 }
 
 /** 仅当项目已有插件库时打开（不创建）；否则返回 null。用于 --project 只读跨项目查看。 */
@@ -76,6 +77,8 @@ export interface CollectorStatsQuery {
   group?: string
   org?: string
   period?: string
+  /** 按工作流类型分区过滤（6 分区管道）；未传则全部类型 */
+  workflowType?: string
 }
 
 /** 查询 org 收集服务的组/组织级统计（5.2 alt 分支二）。 */
@@ -88,6 +91,7 @@ export async function collectorQuery(
   if (query.group) params.set("group", query.group)
   if (query.org) params.set("org", query.org)
   if (query.period) params.set("period", query.period)
+  if (query.workflowType) params.set("workflowType", query.workflowType)
   const base = identity.collector_url.replace(/\/$/, "")
   const res = await fetch(`${base}/api/stats?${params.toString()}`)
   if (!res.ok) {

@@ -8,6 +8,7 @@ import { runList } from "./commands/list"
 import { runStats } from "./commands/stats"
 import { runTag } from "./commands/tag"
 import { runWorkflow } from "./commands/workflow"
+import { runWorkflowType } from "./commands/workflow-type"
 
 export interface ParsedArgs {
   /** 位置参数（不含命令名） */
@@ -62,10 +63,12 @@ export function asStringArray(value: string | boolean | string[] | undefined): s
 const USAGE = `opencode-sm —— OpenCode 会话管理 CLI
 
 用法:
-  opencode-sm init                              每台机器一次：四问写入 identity.json
+  opencode-sm init                              每台机器一次：五问写入 identity.json
   opencode-sm tag <sessionID> [--add ...] [--remove ...] [--list]
+  opencode-sm workflow-type set <sdlc|reqdoc>  查看/修改主要工作流类型（角色变化时轻量改身份）
+  opencode-sm workflow-type get
   opencode-sm workflow <sessionID> [checklist|comprehension|stats] [--unconfirmed]
-  opencode-sm stats [<sessionID>] [--project <name>] [--group "组名"] [--org] [--period <nd>] [--json]
+  opencode-sm stats [<sessionID>] [--project <name>] [--group "组名"] [--org] [--period <nd>] [--workflow <type>] [--json]
   opencode-sm list [--status <s>] [--tag <t>] [--json]
 
 说明:
@@ -88,6 +91,9 @@ async function main(): Promise<void> {
       break
     case "workflow":
       await runWorkflow(args)
+      break
+    case "workflow-type":
+      await runWorkflowType(args)
       break
     case "stats":
       await runStats(args)
