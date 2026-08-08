@@ -513,6 +513,7 @@ classDiagram
     class WorkflowType {
         <<enumeration>>
         sdlc
+        reqdoc
     }
 
     class ChecklistItem {
@@ -541,7 +542,7 @@ classDiagram
 插件把「工作流的定义」与「通用机制」解耦。定义（阶段键、阶段中文名、审查清单、提交门禁有无、注入的规则全文）收敛为 `WorkflowDefinition`，按 `WorkflowType` 注册：
 
 ```typescript
-export type WorkflowType = "sdlc"                     // 本轮唯一值；reqdoc 随需求书工作加入
+export type WorkflowType = "sdlc" | "reqdoc"          // 当前注册 sdlc；reqdoc 为下一轮（草案见下方）
 
 export interface ChecklistItem { key: string; label: string; auto?: boolean }
 
@@ -557,6 +558,7 @@ export interface WorkflowDefinition {
 
 export const WORKFLOW_DEFINITIONS: Record<WorkflowType, WorkflowDefinition>
 export const SDLC: WorkflowDefinition     // 现值原样搬入（五阶段 + 四清单 + 门禁 + 规则）
+export const REQDOC: WorkflowDefinition   // 待实现（草案见下方）
 export function getDefinition(type: WorkflowType): WorkflowDefinition
 export function resolveWorkflowType(v: unknown): WorkflowType   // 未知值回退 "sdlc" 并打 warning
 ```
@@ -564,6 +566,10 @@ export function resolveWorkflowType(v: unknown): WorkflowType   // 未知值回�
 `WorkflowState` 新增 `type` 字段标明本会话属于哪种工作流；`stages` 由固定五键接口泛化为 `Record<string, StageRecord>`，审查阶段经 `reviewRecord()` 定位（`getDefinition(s.type).reviewStage`）。**删除** `STAGE_ORDER`/`STAGE_LABELS`/`StageName` 常量——消费方一律 `getDefinition(workflow.type)` 取阶段键/中文名/清单。`ComprehensionRecord` 结构本轮不动（sdlc 代码段语义成立）；reqdoc 的「章节」语义为 reqdoc 轮改动，本轮不臆测。`metricKind`、`workflow_set_type` 工具本轮均不加（reqdoc 轮随需求书指标/切换场景一起引入，避免死代码）。
 
 **sdlc 定义**（本轮唯一注册，现值原样搬入）：五阶段 `["requirements","design","implementation","testing","review"]`，审查阶段为 `review`，四清单项（businessIntent/logicExplainable/behaviorVerifiable/designRationale），`hasCommitGate=true`，规则全文即原 7.4 的 `RULES`。
+
+**reqdoc 定义（草案，待实现）**：需求书工作流（需求分析师角色），源于《业务需求难点与解决方案》的**四段式渐进引导**（目标与场景 → 主流程与规则 → 边界与异常探针 → 自动化排版），外加一个**业务确认闭环**。审查阶段（`reviewStage="review"`）语义为**业务确认 PRD 要点**（区别于 sdlc 的代码理解确认），复用同一套 comprehension/checklist/review_submit 闭环机制。四清单项（completeness 信息完整 / clarity 表达明确 / edgeCoverage 边界覆盖 / resolution 职责清晰），`hasCommitGate=false`（定稿无 git 门禁）。阶段键 `["goal","rules","edge","prd","review"]`，中文名 目标与场景 / 流程与规则 / 边界与异常 / 需求规格书 / 业务确认。`resolveWorkflowType` 增 `"reqdoc"` 分支。规则全文草案见 7.4。
+
+> 实现 reqdoc 轮时需把 `ComprehensionRecord` 从「代码段语义」（`codeSegmentId/file/lines`）泛化为「PRD 要点语义」（要点 id 替换代码段 id，`file/lines` 改可选）；sdlc 语义不变。该改动的具体落点与边界见 7.1 待办。
 
 **BaselineEstimate — 基线预估人工工时（6.3）**：
 
@@ -1324,6 +1330,50 @@ Agent:  ⚠ 检测到重复编辑模式：scheduler.py（连续相同操作 3 �
 ## 基线对比（预估人工工时）
 28. 进入需求阶段（workflow_advance stage=requirements action=enter）时，主动询问开发者：项目经理对本需求的预估人工工时是多少（小时）？开发者明确给出后调用 workflow_baseline 记录（developer_confirmed=true）。未提供不阻塞；已录入后可从状态中读到，不必重复询问
 29. baseline 为可选字段，语义：预估工时仅作实际周期的参照系，AI 提效率 =（预估 − 实际周期）÷ 预估，可为负（实际超预估）、仅展示不设阈值；可随时重设（幂等覆盖记最新值）
+```
+
+以下是 **reqdoc** 工作流的规则全文（**草案，待实现**），作为 `WorkflowDefinition.rules` 注入（见 3.2 `REQDOC` 定义）。源于《业务需求难点与解决方案》的四段式渐进引导 + 业务确认闭环；发布为需求书质量基线前需业务方评审定稿。
+
+```markdown
+# Workflow Agent 规则（需求书）
+
+## 渐进式引导（核心）
+1. 会话开始时初始化 workflow（所有阶段 not_started）。
+2. 采用渐进式分段引导，不要一次性抛出所有问题；单次提问不超过 2 个问题，避免业务有被「质问」的挫败感。
+3. 阶段可能完成时，先输出摘要并询问确认；业务明确确认后才可 workflow_advance 标记 approved。
+4. 业务说「回到XX」时，立即调用 workflow_revisit。绝不自行判断阶段已完成。
+
+## 目标与场景（goal）
+5. 用一两句话引导业务说明：上线后主要是谁在用？帮他们解决什么痛点？
+6. 提炼【核心用户 Actor】【业务场景 Scenario】【业务价值 Value】；业务表达模糊时给出 2-3 个选项让业务勾选确认。
+
+## 流程与规则（rules）
+7. 引导补全主流程：用户需输入哪些信息？系统处理后给什么结果？
+8. 将自然语言转化为字段定义（数据项 / 是否必填 / 校验规则）。
+9. 自动推演 Mermaid 流程图，反向展示给业务确认。
+
+## 边界与异常（edge）——最关键的一步
+10. 主动追问三类探针：
+    - 数据与权限：所有岗位可见，还是按机构/层级隔离？
+    - 异常流程：接口超时 / 操作失败 / 审批驳回，直接报错还是人工补单？
+    - 合规与留痕：涉及资金/敏感数据变更，是否留审计日志？是否需要二次授权？
+
+## 需求规格书（prd）
+11. 将对话信息自动渲染成标准 PRD：业务背景、用户故事、数据字典、正常/异常流程 Mermaid、非功能需求。
+
+## 业务确认（review，核心）
+12. review 是唯一不可由 AI 自行推进的阶段，确保业务真正理解并确认 PRD 要点。
+13. 将 PRD 拆分为可确认要点（业务目标 / 核心字段 / 异常规则 / 合规要求），逐段复述输出。
+14. 业务必须逐段确认：comprehension_confirm 单次只接受一个要点。
+15. 业务追问时详细解释，并追加到该要点（comprehension_ask）。
+16. 每个要点须达成终态（confirm 接受 / manual 自处理）；拒绝的要点先 rewrite 重写或 manual 定论，全部定论后才可 review_submit；清单四项须全为 true，否则回到 edge/prd。
+17. 一次确认通过率由 review_submit 自动计算；通过率低说明要点含糊，应结合拒绝意见重写，而非简单重试。
+
+## 基线对比（预估工时）
+18. 进入 goal 阶段（workflow_advance stage=goal action=enter）时，主动询问：本需求预估人工书写工时（小时）？业务明确给出后调用 workflow_baseline 记录（developer_confirmed=true）；未提供不阻塞，已录入后不必重复询问。
+
+## 定稿与下一个需求
+19. 业务确认完成（review_submit 通过）后，建议执行 /new 开始下一个需求，保持统计隔离。
 ```
 
 ---
