@@ -40,9 +40,8 @@ export async function runWorkflow(args: ParsedArgs): Promise<void> {
         return
       }
       for (const r of records) {
-        process.stdout.write(
-          `${r.developerConfirmed ? "✅" : "⬜"} ${r.codeSegmentId}（${r.file}:${r.lines[0]}-${r.lines[1]}）\n`,
-        )
+        const loc = r.file && r.lines ? `（${r.file}:${r.lines[0]}-${r.lines[1]}）` : ""
+        process.stdout.write(`${r.developerConfirmed ? "✅" : "⬜"} ${r.id}${loc}\n`)
       }
       return
     }

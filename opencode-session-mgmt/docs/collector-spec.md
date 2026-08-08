@@ -254,7 +254,7 @@ flowchart LR
 | `account` | string | 是 | 开发者账号邮箱（init 自报快照） |
 | `group` | string | 是 | 组名（名称字符串，子组用 `前端组/基础架构组` 命名约定） |
 | `org` | string | 是 | 组织名 |
-| `workflow.type` | `"sdlc"` | 否 | 工作流类型（本轮唯一 sdlc；reqdoc 随需求书加入）。缺省按 sdlc 处理（旧插件兼容） |
+| `workflow.type` | `"sdlc" \| "reqdoc"` | 否 | 工作流类型（sdlc 开发 / reqdoc 需求书）。缺省按 sdlc 处理（旧插件兼容） |
 | `workflow.stages.*.status` | `"not_started" \| "in_progress" \| "approved"` | 是 | 五阶段状态 |
 | `workflow.stages.*.revision` | number | 是 | 阶段回退次数（需求质量信号） |
 | `workflow.stages.*.transitions` | array | 是 | 阶段转换时间戳序列（耗时统计的数据源），`action ∈ {"enter","revisit","approve"}`，`note` 可选 |

@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
+  REQDOC,
   SDLC,
   WORKFLOW_DEFINITIONS,
   createWorkflowState,
@@ -86,7 +87,7 @@ describe("summarizeWorkflow", () => {
   test("剥离代码相关内容，保留计数", () => {
     const state = createWorkflowState("sdlc")
     reviewRecord(state).comprehension.push({
-      codeSegmentId: "a.ts:1-2",
+      id: "a.ts:1-2",
       file: "a.ts",
       lines: [1, 2],
       explanation: "秘密解释正文",
@@ -189,16 +190,55 @@ describe("WorkflowDefinition 注册表（3.2）", () => {
 
   test("resolveWorkflowType：合法值原样返回，未知值回退 sdlc 并打 warning", () => {
     expect(resolveWorkflowType("sdlc")).toBe("sdlc")
+    expect(resolveWorkflowType("reqdoc")).toBe("reqdoc")
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
-    expect(resolveWorkflowType("reqdoc")).toBe("sdlc")
     expect(resolveWorkflowType(undefined)).toBe("sdlc")
     expect(resolveWorkflowType(42)).toBe("sdlc")
+    expect(resolveWorkflowType("legacy")).toBe("sdlc")
     expect(warn).toHaveBeenCalled()
   })
 
   test("WORKFLOW_DEFINITIONS 注册表与 getDefinition", () => {
-    expect(Object.keys(WORKFLOW_DEFINITIONS)).toEqual(["sdlc"])
+    expect(Object.keys(WORKFLOW_DEFINITIONS)).toEqual(["sdlc", "reqdoc"])
     expect(getDefinition("sdlc")).toBe(SDLC)
+    expect(getDefinition("reqdoc")).toBe(REQDOC)
+  })
+
+  test("REQDOC 定义：四段渐进引导 + 业务确认闭环，无提交门禁", () => {
+    expect(REQDOC.type).toBe("reqdoc")
+    expect(REQDOC.stages).toEqual(["goal", "rules", "edge", "prd", "review"])
+    expect(REQDOC.reviewStage).toBe("review")
+    expect(REQDOC.hasCommitGate).toBe(false)
+    expect(REQDOC.labels).toEqual({
+      goal: "目标与场景",
+      rules: "流程与规则",
+      edge: "边界与异常",
+      prd: "需求规格书",
+      review: "业务确认",
+    })
+    expect(REQDOC.checklist.map((c) => c.key)).toEqual([
+      "completeness",
+      "clarity",
+      "edgeCoverage",
+      "resolution",
+    ])
+    expect(REQDOC.rules).toContain("# Workflow Agent 规则（需求书）")
+    expect(REQDOC.rules).toContain("边界与异常（edge）")
+    expect(REQDOC.rules).toContain("业务确认（review，核心）")
+  })
+
+  test("createWorkflowState(reqdoc) 含 reqdoc 阶段与清单", () => {
+    const s = createWorkflowState("reqdoc")
+    expect(s.type).toBe("reqdoc")
+    expect(Object.keys(s.stages)).toEqual(["goal", "rules", "edge", "prd", "review"])
+    expect(s.commit.blocked_by).toEqual(["goal", "rules", "edge", "prd", "review"])
+    const review = reviewRecord(s)
+    expect(review.checklist).toEqual({
+      completeness: false,
+      clarity: false,
+      edgeCoverage: false,
+      resolution: false,
+    })
   })
 })
 
