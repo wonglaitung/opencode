@@ -9,7 +9,7 @@
  *   - chat.message                        会话首次活动打 account_id（3.1）+ 汇报触发
  */
 import type { Plugin, PluginInput } from "@opencode-ai/plugin"
-import { readIdentity } from "sm-shared"
+import { readIdentity, resolveWorkflowType } from "sm-shared"
 import { Store, isPlaceholderTitle } from "./db"
 import { createCommitGate } from "./gate"
 import { stampSessionAccount } from "./identity"
@@ -110,7 +110,8 @@ async function syncSessionTitle(store: Store, client: PluginInput["client"], ses
 }
 
 const SessionMgmtPlugin: Plugin = async (input) => {
-  const store = Store.open(input.directory)
+  // 用户级流程选择（3.1）：新建会话时读 identity.workflowType（缺省 sdlc），身份快照语义。
+  const store = Store.open(input.directory, () => resolveWorkflowType(readIdentity()?.workflowType))
   const usageProvider = createUsageProvider(input.client)
   const reporter = createReporter(store, () => readIdentity(), usageProvider)
 

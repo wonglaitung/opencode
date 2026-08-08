@@ -13,6 +13,7 @@ interface ReportRaw {
   group_name: string | null
   org_name: string | null
   workflow: string | null
+  workflow_type: string | null
   cost: number | null
   tokens_input: number | null
   tokens_output: number | null
@@ -87,16 +88,14 @@ const HIGH_ITERATION_THRESHOLD = 5
 
 /** reports.workflow JSON 的读侧投影（仅取聚合所需字段）。 */
 interface WorkflowLite {
-  stages?: Partial<
-    Record<
-      "requirements" | "design" | "implementation" | "testing" | "review",
-      { revision?: number; transitions?: Array<{ at: number }> }
-    >
-  >
+  /** 工作流类型（6 分区管道）；旧版汇报可能缺失该字段 */
+  type?: string
+  /** 阶段泛化为 Record（3.2）；sdlc 才有 requirements 等专属阶段 */
+  stages?: Record<string, { revision?: number; transitions?: Array<{ at: number }> }>
   quality?: {
     firstPassRate?: number | null
     iterationCount?: number | null
-    /** 汇报投影携带的三分类行数聚合（插件已剥离文件路径，12） */
+    /** 汇报投影携带的三分类行数聚合（插件已剥离文件路径，12）；sdlc 专属 */
     lines?: Partial<LinesCategory> | null
   }
   commit?: { status?: string }
@@ -145,6 +144,7 @@ export class CollectorDb {
       group_name TEXT,
       org_name TEXT,
       workflow TEXT,
+      workflow_type TEXT,
       cost REAL,
       tokens_input INTEGER,
       tokens_output INTEGER,
@@ -154,6 +154,12 @@ export class CollectorDb {
     );
     CREATE INDEX IF NOT EXISTS idx_reports_group ON reports(group_name);
     CREATE INDEX IF NOT EXISTS idx_reports_org ON reports(org_name);`)
+    // 旧库升级：补 workflow_type 列（6 分区管道）；已存在则跳过
+    const cols = db.query("PRAGMA table_info(reports)").all() as Array<{ name: string }>
+    if (!cols.some((c) => c.name === "workflow_type")) {
+      db.exec("ALTER TABLE reports ADD COLUMN workflow_type TEXT;")
+    }
+    db.exec("CREATE INDEX IF NOT EXISTS idx_reports_type ON reports(workflow_type);")
     return new CollectorDb(db)
   }
 
@@ -161,13 +167,14 @@ export class CollectorDb {
   upsertReport(report: SessionReport): void {
     this.db
       .query(
-        `INSERT INTO reports (session_id, account, group_name, org_name, workflow, cost, tokens_input, tokens_output, reported_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO reports (session_id, account, group_name, org_name, workflow, workflow_type, cost, tokens_input, tokens_output, reported_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(session_id) DO UPDATE SET
            account = excluded.account,
            group_name = excluded.group_name,
            org_name = excluded.org_name,
            workflow = excluded.workflow,
+           workflow_type = excluded.workflow_type,
            cost = excluded.cost,
            tokens_input = excluded.tokens_input,
            tokens_output = excluded.tokens_output,
@@ -179,6 +186,7 @@ export class CollectorDb {
         report.group,
         report.org,
         JSON.stringify(report.workflow),
+        report.workflow.type,
         report.cost,
         report.tokensInput,
         report.tokensOutput,
@@ -200,7 +208,7 @@ export class CollectorDb {
   }
 
   private rowsFor(where: string, params: string[], sinceCutoff: number | null): ReportRaw[] {
-    let sql = `SELECT session_id, account, group_name, org_name, workflow, cost, tokens_input, tokens_output, rework_rate, test_coverage, reported_at FROM reports WHERE ${where}`
+    let sql = `SELECT session_id, account, group_name, org_name, workflow, workflow_type, cost, tokens_input, tokens_output, rework_rate, test_coverage, reported_at FROM reports WHERE ${where}`
     const bound: Array<string | number> = [...params]
     if (sinceCutoff !== null) {
       sql += " AND (reported_at IS NULL OR reported_at >= ?)"
@@ -209,15 +217,21 @@ export class CollectorDb {
     return this.db.query(sql).all(...bound) as ReportRaw[]
   }
 
-  statsGroup(group: string, periodMs: number | null): ScopeStats {
+  /** 分区过滤（6）：按 workflow_type 归属；旧汇报无该列（sdlc 是此前唯一类型）按 sdlc 归属。 */
+  private typeMatches(row: ReportRaw, workflowType?: string): boolean {
+    if (workflowType === undefined) return true
+    return row.workflow_type === workflowType || (row.workflow_type === null && workflowType === "sdlc")
+  }
+
+  statsGroup(group: string, periodMs: number | null, workflowType?: string): ScopeStats {
     const since = periodMs === null ? null : Date.now() - periodMs
-    const rows = this.rowsFor("group_name = ?", [group], since)
+    const rows = this.rowsFor("group_name = ?", [group], since).filter((r) => this.typeMatches(r, workflowType))
     return this.aggregate("group", group, rows, since, periodMs)
   }
 
-  statsOrg(org: string, periodMs: number | null): ScopeStats {
+  statsOrg(org: string, periodMs: number | null, workflowType?: string): ScopeStats {
     const since = periodMs === null ? null : Date.now() - periodMs
-    const rows = this.rowsFor("org_name = ?", [org], since)
+    const rows = this.rowsFor("org_name = ?", [org], since).filter((r) => this.typeMatches(r, workflowType))
     return this.aggregate("org", org, rows, since, periodMs)
   }
 
@@ -271,6 +285,9 @@ export class CollectorDb {
       let accLimit = 0
       for (const row of list) {
         const workflow = parseWorkflow(row.workflow)
+        // 6 分区：sdlc 专属指标（requirements 迭代、行数三分类、返工/覆盖率）仅 sdlc 计算，其余类型 null。
+        // 旧汇报无 type 字段按 sdlc 归属（typeMatches 已保证筛选一致性）。
+        const isSdlc = workflow.type === undefined || workflow.type === "sdlc"
         if (workflow.commit?.status === "allowed") accCompleted++
         accCost += row.cost ?? 0
         const durationMs = workflowDurationMs(workflow)
@@ -284,7 +301,7 @@ export class CollectorDb {
         const iter = workflow.quality?.iterationCount ?? null
         if (iter !== null && iter !== undefined && iter >= HIGH_ITERATION_THRESHOLD) accLimit++
 
-        const lines = workflow.quality?.lines
+        const lines = isSdlc ? workflow.quality?.lines : null
         if (lines) {
           hasLinesData = true
           linesTotal.business += lines.business ?? 0
@@ -298,19 +315,19 @@ export class CollectorDb {
         const eff = efficiencyRatio(estimated, durationMs)
         if (eff !== null) efficiencies.push(eff)
 
-        if (row.test_coverage !== null && row.test_coverage !== undefined) accCoverages.push(row.test_coverage)
-        if (row.rework_rate !== null && row.rework_rate !== undefined) reworks.push(row.rework_rate)
+        if (isSdlc && row.test_coverage !== null && row.test_coverage !== undefined) accCoverages.push(row.test_coverage)
+        if (isSdlc && row.rework_rate !== null && row.rework_rate !== undefined) reworks.push(row.rework_rate)
 
-        // 趋势取样（需有汇报时间）
+        // 趋势取样（需有汇报时间）；requirements 迭代为 sdlc 专属
         if (mid !== null && typeof row.reported_at === "number") {
-          const rev = workflow.stages?.requirements?.revision ?? 0
+          const rev = isSdlc ? (workflow.stages?.requirements?.revision ?? 0) : 0
           if (row.reported_at < mid) {
             revEarly.push(rev)
-            if (row.rework_rate !== null && row.rework_rate !== undefined) reworkEarly.push(row.rework_rate)
+            if (isSdlc && row.rework_rate !== null && row.rework_rate !== undefined) reworkEarly.push(row.rework_rate)
             if (eff !== null) effEarly.push(eff)
           } else {
             revRecent.push(rev)
-            if (row.rework_rate !== null && row.rework_rate !== undefined) reworkRecent.push(row.rework_rate)
+            if (isSdlc && row.rework_rate !== null && row.rework_rate !== undefined) reworkRecent.push(row.rework_rate)
             if (eff !== null) effRecent.push(eff)
           }
         }

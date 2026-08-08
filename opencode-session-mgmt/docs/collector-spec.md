@@ -2,10 +2,12 @@
 
 | | |
 |---|---|
-| 版本 | v1.1 |
-| 日期 | 2026-08-07 |
+| 版本 | v1.2 |
+| 日期 | 2026-08-08 |
 | 读者 | 后端收集服务开发团队、网关集成团队 |
 | 状态 | 生效 |
+
+> **v1.2（2026-08-08）**：多流程就绪——汇报 `workflow.type` 字段、报表 `workflow_type` 列与查询 `workflowType` 过滤（分区管道，见 `session-management.md` 6.4）。`type` 为可选字段，旧插件汇报无 `type` 时按 sdlc 处理（宽松兼容）。
 
 > **v1.1（2026-08-07）**：新增**基线预估人工工时与 AI 提效百分比**——汇报侧 `workflow.baseline` 可选字段，查询侧 `avgEfficiency` / `baselineSessions` / `trends.efficiency`。全部为可选字段，旧插件↔新服务、新插件↔旧服务两种组合均须容忍（见 11.2）。
 
@@ -75,7 +77,7 @@ flowchart LR
 
 ### 2.3 身份语义（自报快照，与网关无关）
 
-- 开发者的 `account`（账号邮箱）/ `group`（组名）/ `org`（组织名）由开发者本机 `opencode-sm init` 四问**手动自报**，随每条汇报携带为**快照**（见 `session-management.md` 3.1）。
+- 开发者的 `account`（账号邮箱）/ `group`（组名）/ `org`（组织名）由开发者本机 `opencode-sm init` 五问**手动自报**（另含 `workflowType` 工作流类型，缺省 sdlc），随每条汇报携带为**快照**（见 `session-management.md` 3.1）。
 - 组是**名称字符串**，无 ID、无注册表；子组用命名约定（如 `前端组/基础架构组`）。组织结构由各人汇报在聚合库中 `GROUP BY group_name` / `org_name` 自然形成。
 - 快照语义：开发者调整身份后，只影响此后的汇报，**历史数据归属不追溯变更**。
 
@@ -174,6 +176,7 @@ flowchart LR
   "group": "前端组",
   "org": "Engineering",
   "workflow": {
+    "type": "sdlc",
     "stages": {
       "requirements": {
         "status": "approved",
@@ -251,6 +254,7 @@ flowchart LR
 | `account` | string | 是 | 开发者账号邮箱（init 自报快照） |
 | `group` | string | 是 | 组名（名称字符串，子组用 `前端组/基础架构组` 命名约定） |
 | `org` | string | 是 | 组织名 |
+| `workflow.type` | `"sdlc"` | 否 | 工作流类型（本轮唯一 sdlc；reqdoc 随需求书加入）。缺省按 sdlc 处理（旧插件兼容） |
 | `workflow.stages.*.status` | `"not_started" \| "in_progress" \| "approved"` | 是 | 五阶段状态 |
 | `workflow.stages.*.revision` | number | 是 | 阶段回退次数（需求质量信号） |
 | `workflow.stages.*.transitions` | array | 是 | 阶段转换时间戳序列（耗时统计的数据源），`action ∈ {"enter","revisit","approve"}`，`note` 可选 |
@@ -310,6 +314,7 @@ flowchart LR
 | `group` | 组名（URL 编码） | scope=group 时必填 | 如 `前端组` |
 | `org` | 组织名（URL 编码） | scope=org 时必填 | 如 `Engineering` |
 | `period` | `\d+d`（如 `7d`、`30d`） | 否 | 统计窗口；缺省或非法时不做时间过滤 |
+| `workflowType` | `sdlc`（本轮唯一） | 否 | 按工作流类型过滤；缺省不过滤（全部）。分区管道见 `session-management.md` 6.4 |
 
 **响应**（200）：`ScopeStats` JSON：
 
@@ -378,6 +383,7 @@ CREATE TABLE reports (
   account      TEXT,               -- 身份快照（init 自报）
   group_name   TEXT,               -- 组名快照
   org_name     TEXT,               -- 组织名快照
+  workflow_type TEXT,              -- 工作流类型（分区管道，6.4）；NULL=旧汇报按 sdlc
   workflow     TEXT,               -- SessionReport.workflow 的 JSON 原样
   cost         REAL,               -- 会话费用；NULL=未知
   tokens_input INTEGER,            -- 输入 Token
@@ -389,6 +395,7 @@ CREATE TABLE reports (
 
 CREATE INDEX idx_reports_group ON reports(group_name);
 CREATE INDEX idx_reports_org  ON reports(org_name);
+CREATE INDEX idx_reports_type ON reports(workflow_type);
 ```
 
 ### 6.1 写入合并语义
@@ -413,6 +420,7 @@ CREATE INDEX idx_reports_org  ON reports(org_name);
 | 步骤 | 规则 |
 |------|------|
 | 范围 | `scope=group` → `group_name = <group>`；`scope=org` → `org_name = <org>` |
+| workflow_type 过滤 | 指定 `workflowType` 时：`workflow_type = <type>`（旧汇报 `workflow_type` 为 NULL 视为 sdlc）；缺省不过滤。**sdlc 专属指标（firstPassRate/iterationCount/lines/rework/coverage）仅当 `workflow.type==="sdlc"` 时计算，否则为 null**（分区管道，见 `session-management.md` 6.4） |
 | period 过滤 | 指定 `period=Nd` 时：`since = now − N×86400000`，仅保留 `reported_at IS NULL OR reported_at >= since`；缺省则全部 |
 | members | 范围内**去重 `account`** 数（`account` 为 NULL 计为 `"(unknown)"`） |
 | sessions | 范围内汇报行数 |
@@ -534,7 +542,7 @@ BASE=https://<gateway>/api
 | `packages/shared/src/workflow.ts` | 153 | `WorkflowState` 全量类型及子结构（5.1 `workflow` 字段基础） |
 | `packages/shared/src/loc.ts` | 149 | AI 行数三分类 `LinesCategory` 与分类汇总（5.1 `workflow.quality.lines`、7.2 `linesTotal`） |
 | `packages/shared/src/merge.ts` | 50 | `deepMerge` 增量合并：Agent 指标与 CI 指标互不覆盖（6.1） |
-| `packages/shared/src/identity.ts` | 76 | `identity.json` 类型与读写：`account`/`group`/`org`/`collector_url`（2.3、3.1） |
+| `packages/shared/src/identity.ts` | 76 | `identity.json` 类型与读写：`account`/`group`/`org`/`collector_url`/`workflowType`（2.3、3.1） |
 | `packages/shared/src/index.ts` | 5 | barrel 导出 |
 
 **③ 汇报方：插件**（`POST /api/report` 客户端，`packages/plugin/`）：
@@ -551,7 +559,7 @@ BASE=https://<gateway>/api
 |------|------|----------|
 | `packages/cli/src/api.ts` | 97 | `collectorQuery`：拼接 `{collector_url}/api/stats` 查询（5.3） |
 | `packages/cli/src/commands/stats.ts` | 370 | `opencode-sm stats`：会话/项目级直读本机插件库，组/组织级查收集服务 |
-| `packages/cli/src/commands/init.ts` | 37 | 四问写入 `identity.json`（含 `collector_url`，3.1 路径基址来源） |
+| `packages/cli/src/commands/init.ts` | 37 | 五问写入 `identity.json`（含 `collector_url`、`workflowType`，3.1 路径基址来源） |
 
 **⑤ 部署与配置示例**（`deploy/`）：
 

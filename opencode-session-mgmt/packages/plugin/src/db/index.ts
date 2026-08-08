@@ -13,6 +13,7 @@ import {
   type DeepPartial,
   type SessionReport,
   type WorkflowState,
+  type WorkflowType,
 } from "sm-shared"
 import {
   MIGRATIONS,
@@ -37,22 +38,27 @@ export function isPlaceholderTitle(title: string | null | undefined): boolean {
 const SELECT_ROW = "SELECT session_id, title, tags, status, workflow, account_id FROM workflow_session"
 
 export class Store {
-  private constructor(private db: Database) {}
+  /** 新建会话时解析工作流类型的回调（用户级身份继承，3.1）；已存在会话不重读（快照语义）。 */
+  private constructor(
+    private db: Database,
+    private resolveType: () => WorkflowType,
+  ) {}
 
-  /** 打开/创建 <directory>/.opencode/session-mgmt.db（WAL 模式），并完成迁移。 */
-  static open(directory: string): Store {
+  /** 打开/创建 <directory>/.opencode/session-mgmt.db（WAL 模式），并完成迁移。
+   *  resolveType 在新建会话时调用，决定新会话的 WorkflowState.type。 */
+  static open(directory: string, resolveType: () => WorkflowType): Store {
     mkdirSync(join(directory, ".opencode"), { recursive: true })
     const db = new Database(join(directory, ".opencode", "session-mgmt.db"), { create: true })
     db.exec("PRAGMA journal_mode = WAL;")
-    const store = new Store(db)
+    const store = new Store(db, resolveType)
     store.migrate()
     return store
   }
 
   /** 供测试使用：内存库。 */
-  static memory(): Store {
+  static memory(resolveType: () => WorkflowType = () => "sdlc"): Store {
     const db = new Database(":memory:")
-    const store = new Store(db)
+    const store = new Store(db, resolveType)
     store.migrate()
     return store
   }
@@ -65,7 +71,8 @@ export class Store {
     // 不用 {create:false}：bun 1.3.14 下该组合退化为 open flags 0，抛 SQLITE_MISUSE；
     // 只读连接也无法执行迁移写入——本库 schema 由插件侧自管，读侧按现有结构直读即可。
     const db = new Database(path, { readonly: true })
-    return new Store(db)
+    // 只读库不新建会话，resolveType 不参与；占位默认 sdlc。
+    return new Store(db, () => "sdlc")
   }
 
   private migrate(): void {
@@ -96,14 +103,14 @@ export class Store {
     if (existing) return existing
     this.db
       .query("INSERT INTO workflow_session (session_id, title, tags, status, workflow, account_id) VALUES (?, NULL, '[]', NULL, ?, NULL)")
-      .run(sessionID, JSON.stringify(createWorkflowState()))
+      .run(sessionID, JSON.stringify(createWorkflowState(this.resolveType())))
     return this.get(sessionID)!
   }
 
   /** 深度合并更新工作流状态（4.3 增量合并语义），返回合并后的状态。 */
   updateWorkflow(sessionID: string, patch: DeepPartial<WorkflowState>): WorkflowState {
     const row = this.ensure(sessionID)
-    const base = row.workflow ?? createWorkflowState()
+    const base = row.workflow ?? createWorkflowState(this.resolveType())
     const next = deepMerge(base, patch)
     this.db.query("UPDATE workflow_session SET workflow = ? WHERE session_id = ?").run(
       JSON.stringify(next),
@@ -118,7 +125,7 @@ export class Store {
    */
   mutateWorkflow(sessionID: string, fn: (workflow: WorkflowState) => void): WorkflowState {
     const row = this.ensure(sessionID)
-    const workflow = row.workflow ?? createWorkflowState()
+    const workflow = row.workflow ?? createWorkflowState(this.resolveType())
     fn(workflow)
     this.db.query("UPDATE workflow_session SET workflow = ? WHERE session_id = ?").run(
       JSON.stringify(workflow),

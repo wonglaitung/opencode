@@ -133,7 +133,7 @@ graph TB
 
 **采用原因**：真实开发本质上是迭代的。约束点应该是"所有必需产物是否都已完成"，而不是"当前处于哪个阶段"。
 
-**审查阶段的特殊地位**：审查（review）是五阶段中唯一**不可被 AI 自行推进**的阶段。审查不仅检查代码正确性，更检查**人是否真正理解了代码**。审查清单包含四个硬性检查项（详见 3.2），不满足则审查阶段不可 approve。审查阶段与编码、测试阶段形成迭代循环——编码完成后进入审查，审查不通过则回到编码或测试。
+**审查阶段的特殊地位（sdlc）**：审查（review）是 sdlc 五阶段中唯一**不可被 AI 自行推进**的阶段。审查不仅检查代码正确性，更检查**人是否真正理解了代码**。审查清单包含四个硬性检查项（详见 3.2），不满足则审查阶段不可 approve。审查阶段与编码、测试阶段形成迭代循环——编码完成后进入审查，审查不通过则回到编码或测试。审查阶段由 `WorkflowDefinition.reviewStage` 声明（见 3.2），reqdoc 轮可声明自己的审查阶段或为 null。
 
 ### 2.2 阶段检测方式选择
 
@@ -242,7 +242,7 @@ graph TB
 
 **数据来源决策**：零额外采集。工作流状态变更的时间戳即为分析数据源。
 
-**身份关联决策**：account → group → org 三级身份层级。身份不写上游数据库、不读上游账号体系——由开发者 `opencode-sm init` 四问自报（账号邮箱、组名、组织名、收集服务地址），存全局 `identity.json`；组是名称字符串，子组用命名约定；跨机聚合在每 org 一个的收集服务侧完成（见 2.4、3.1）。
+**身份关联决策**：account → group → org 三级身份层级，另加 **workflowType（工作流类型）** 维度。身份不写上游数据库、不读上游账号体系——由开发者 `opencode-sm init` 五问自报（账号邮箱、组名、组织名、收集服务地址、主要工作流类型），存全局 `identity.json`；组是名称字符串，子组用命名约定；跨机聚合在每 org 一个的收集服务侧完成（见 2.4、3.1）。workflowType 决定本用户新会话走哪套工作流（开发者 `sdlc` 开发 / 需求分析师 `reqdoc` 需求书），不同角色 = 不同用户（见 3.1、3.2）。
 
 ### 2.4 部署架构选择：插件 + 独立 CLI（上游零修改）
 
@@ -277,7 +277,7 @@ flowchart LR
     subgraph Local["每位开发者机器（定制，我们拥有）"]
         Plugin["session-mgmt 插件<br/>config.plugin 加载"]
         PluginDB["插件 SQLite<br/>workflow_session"]
-        ID["全局 identity.json<br/>account / group / org /<br/>collector 地址"]
+        ID["全局 identity.json<br/>account / group / org /<br/>collector 地址 /<br/>workflowType"]
         SM["opencode-sm<br/>独立 CLI"]
     end
 
@@ -304,7 +304,7 @@ flowchart LR
 |------|----------------|
 | WorkflowState 每轮注入 system prompt | 插件 `experimental.chat.system.transform`，从插件 DB 读最新状态追加 |
 | 会话 tags、status、workflow 扩展属性 | 存插件自有 SQLite，以核心 sessionID 为主键关联，不动 SessionTable |
-| account / group / org 身份 | 开发者首次使用 `opencode-sm init` 四问自报，存全局 `identity.json`；组结构由各人汇报在 org 聚合库自然形成，组即名称字符串（见 3.1） |
+| account / group / org 身份 + workflowType | 开发者首次使用 `opencode-sm init` 五问自报（账号/组/组织/收集服务地址/工作流类型），存全局 `identity.json`；组结构由各人汇报在 org 聚合库自然形成，组即名称字符串；workflowType 决定新会话走哪套工作流（见 3.1） |
 | 阶段推进 / 审查 / 理解确认 | 插件注册工具（`workflow_advance`、`comprehension_confirm`、`review_submit`），Agent 在 TUI 对话中调用，校验逻辑在工具 handler 内——天然服务端强制 |
 | 重复编辑模式检测与提交门禁 | `tool.execute.after` 计数每文件代码编辑（统计用）+ 内存短记忆检测连续重复/高频编辑模式；`tool.execute.before` 对未过审查的 `git commit` 抛错阻断；system prompt 注入 stuck 警告 |
 | QualityMetrics 采集 | 会话内指标（firstPassRate/iterationCount/linesByFile）由插件记录于本机插件库；合并后指标（reworkRate/testCoverage）由 CI 按 sessionID 回写 org 收集服务 |
@@ -328,7 +328,7 @@ flowchart LR
 
 | 存储 | 位置 | 内容 |
 |------|------|------|
-| 全局身份配置 | `~/.config/opencode/session-mgmt/identity.json` | `opencode-sm init` 四问写入：`{account, group, org, collector_url}`，每机器一份 |
+| 全局身份配置 | `~/.config/opencode/session-mgmt/identity.json` | `opencode-sm init` 五问写入：`{account, group, org, collector_url, workflowType}`（workflowType 可选，缺省 sdlc），每机器一份 |
 | 插件库 | `<project>/.opencode/session-mgmt.db`（插件自动建表，迁移自管） | 每会话的工作流数据 `workflow_session` |
 | 组织聚合库 | org 收集服务侧（每 org 一个） | 各机器汇报的会话摘要，组/组织结构由此自然形成 |
 
@@ -355,10 +355,11 @@ erDiagram
     }
 
     IdentityConfig {
-        string account "init 四问 - 账号邮箱"
-        string group "init 四问 - 组名"
-        string org "init 四问 - 组织名"
-        string collector_url "init 四问 - 收集服务地址"
+        string account "init 五问 - 账号邮箱"
+        string group "init 五问 - 组名"
+        string org "init 五问 - 组织名"
+        string collector_url "init 五问 - 收集服务地址"
+        string workflowType "init 五问 - 工作流类型（缺省 sdlc）"
     }
 
     ReportsTable {
@@ -366,6 +367,7 @@ erDiagram
         text account "汇报快照"
         text group_name "汇报快照"
         text org_name "汇报快照"
+        text workflow_type "工作流类型（分区管道，6.4）"
         text summary "阶段时间戳+质量指标"
         real cost "经 SDK 取得后随汇报上报"
     }
@@ -388,7 +390,7 @@ export const WorkflowSessionTable = sqliteTable("workflow_session", {
 
 // ~/.config/opencode/session-mgmt/identity.json — 全局身份，opencode-sm init 写入
 // { "account": "alice@example.com", "group": "前端组", "org": "Engineering",
-//   "collector_url": "http://10.0.1.20:8787" }
+//   "collector_url": "http://10.0.1.20:8787", "workflowType": "sdlc" }
 
 // 收集服务侧聚合库（opencode-session-mgmt/packages/collector）：reports 表按 session_id 主键
 // 接收汇报快照（account/group/org + 阶段时间戳 + cost/tokens + 质量指标），不含代码内容
@@ -400,11 +402,13 @@ export const WorkflowSessionTable = sqliteTable("workflow_session", {
 
 | 关联 | 写入方 | 时机 | 方式 |
 |------|--------|------|------|
-| identity.json（account/group/org/collector_url） | 开发者本人 | 每台机器一次，人员变动时重跑 | `opencode-sm init` 交互式四问，全部手动填写（见 5.1） |
+| identity.json（account/group/org/collector_url/workflowType） | 开发者本人 | 每台机器一次，人员或角色变动时重跑 | `opencode-sm init` 交互式五问，全部手动填写（见 5.1） |
 | `workflow_session.account_id` | 插件 | 会话首次活动（`chat.message` hook） | 从全局 identity.json 读取 account 写入，不读上游数据库 |
 | 聚合库 account/group/org | 插件 | 定期汇报 + 阶段事件触发 | 汇报携带当时的身份快照，收集服务落库 |
 
 **快照语义**：三层关联随汇报固化在聚合库记录里。开发者调组后重跑 `opencode-sm init`，只影响此后的汇报与本机新会话的打标，**历史统计归属不追溯变更**。本机 `workflow_session.account_id` 亦为创建时快照。
+
+**workflowType 继承（用户级流程选择）**：工作流类型由**用户角色**决定，而非目录。插件每次创建新会话 `WorkflowState` 时经 `resolveType` 读取 `identity.json.workflowType`（缺省 `sdlc`）写入 `workflow.type`（快照语义，与 account 一致——已存在会话不重读）。不同角色 = 不同用户（开发者走 sdlc 开发流程、需求分析师走 reqdoc 需求书流程），故**无目录配置、无会话内切换工具**；改类型只影响之后的新会话，历史归属不追溯。流程定义与通用机制解耦见 3.2。
 
 **孤儿记录清理**：上游删除会话后，`workflow_session` 中对应记录成为孤儿。插件**启动时**以 `session.list` 比对惰性清理（保守策略：上游不可达或返回空列表时不清理，防瞬时不可达误删），不影响功能。
 
@@ -415,18 +419,11 @@ export const WorkflowSessionTable = sqliteTable("workflow_session", {
 ```mermaid
 classDiagram
     class WorkflowState {
-        +Stages stages
+        +WorkflowType type
+        +Record~string, StageRecord~ stages
         +CommitGate commit
         +QualityMetrics quality
         +BaselineEstimate? baseline
-    }
-
-    class Stages {
-        +StageRecord requirements
-        +StageRecord design
-        +StageRecord implementation
-        +StageRecord testing
-        +ReviewStageRecord review
     }
 
     class StageRecord {
@@ -439,14 +436,8 @@ classDiagram
         +StageStatus status
         +number revision
         +Transition[] transitions
-        +ReviewChecklist checklist
-    }
-
-    class ReviewChecklist {
-        +boolean businessIntent
-        +boolean logicExplainable
-        +boolean behaviorVerifiable
-        +boolean designRationale
+        +Record~string, boolean~ checklist
+        +ComprehensionRecord[] comprehension
     }
 
     class ComprehensionRecord {
@@ -509,31 +500,78 @@ classDiagram
         +number setAt
     }
 
-    WorkflowState *-- Stages
+    class WorkflowDefinition {
+        +WorkflowType type
+        +string[] stages
+        +Record labels
+        +string? reviewStage
+        +ChecklistItem[] checklist
+        +boolean hasCommitGate
+        +string rules
+    }
+
+    class WorkflowType {
+        <<enumeration>>
+        sdlc
+    }
+
+    class ChecklistItem {
+        +string key
+        +string label
+        +boolean auto?
+    }
+
+    WorkflowState *-- WorkflowType
+    WorkflowState *-- StageRecord : stages (Record)
     WorkflowState *-- CommitGate
     CommitGate *-- "0..1" CommitForce
     WorkflowState *-- QualityMetrics
     WorkflowState *-- "0..1" BaselineEstimate
-    Stages *-- StageRecord : requirements
-    Stages *-- StageRecord : design
-    Stages *-- StageRecord : implementation
-    Stages *-- StageRecord : testing
-    Stages *-- ReviewStageRecord : review
-    ReviewStageRecord *-- ReviewChecklist
-    ReviewStageRecord *-- "0..*" ComprehensionRecord
+    ReviewStageRecord *-- ComprehensionRecord
     StageRecord *-- StageStatus
     StageRecord *-- Transition
     ReviewStageRecord *-- Transition
     Transition *-- TransitionAction
+    WorkflowDefinition *-- WorkflowType
+    WorkflowDefinition *-- ChecklistItem
 ```
+
+**WorkflowDefinition 注册表（多流程就绪）**：
+
+插件把「工作流的定义」与「通用机制」解耦。定义（阶段键、阶段中文名、审查清单、提交门禁有无、注入的规则全文）收敛为 `WorkflowDefinition`，按 `WorkflowType` 注册：
+
+```typescript
+export type WorkflowType = "sdlc"                     // 本轮唯一值；reqdoc 随需求书工作加入
+
+export interface ChecklistItem { key: string; label: string; auto?: boolean }
+
+export interface WorkflowDefinition {
+  type: WorkflowType
+  stages: string[]                        // 阶段键，顺序即推进顺序
+  labels: Record<string, string>          // 阶段中文名（渲染/注入用）
+  reviewStage: string | null              // 哪个阶段是审查阶段（可无）
+  checklist: ChecklistItem[]              // 审查清单项（仅 reviewStage 存在时用）
+  hasCommitGate: boolean                  // sdlc=true；reqdoc 定稿无 git 门禁 → false
+  rules: string                           // 该类型注入的规则全文（原 7.4 RULES 移入）
+}
+
+export const WORKFLOW_DEFINITIONS: Record<WorkflowType, WorkflowDefinition>
+export const SDLC: WorkflowDefinition     // 现值原样搬入（五阶段 + 四清单 + 门禁 + 规则）
+export function getDefinition(type: WorkflowType): WorkflowDefinition
+export function resolveWorkflowType(v: unknown): WorkflowType   // 未知值回退 "sdlc" 并打 warning
+```
+
+`WorkflowState` 新增 `type` 字段标明本会话属于哪种工作流；`stages` 由固定五键接口泛化为 `Record<string, StageRecord>`，审查阶段经 `reviewRecord()` 定位（`getDefinition(s.type).reviewStage`）。**删除** `STAGE_ORDER`/`STAGE_LABELS`/`StageName` 常量——消费方一律 `getDefinition(workflow.type)` 取阶段键/中文名/清单。`ComprehensionRecord` 结构本轮不动（sdlc 代码段语义成立）；reqdoc 的「章节」语义为 reqdoc 轮改动，本轮不臆测。`metricKind`、`workflow_set_type` 工具本轮均不加（reqdoc 轮随需求书指标/切换场景一起引入，避免死代码）。
+
+**sdlc 定义**（本轮唯一注册，现值原样搬入）：五阶段 `["requirements","design","implementation","testing","review"]`，审查阶段为 `review`，四清单项（businessIntent/logicExplainable/behaviorVerifiable/designRationale），`hasCommitGate=true`，规则全文即原 7.4 的 `RULES`。
 
 **BaselineEstimate — 基线预估人工工时（6.3）**：
 
 `baseline` 记录项目经理在需求创建时给出的**预估人工工时**（`estimatedHours`，小时、可小数），`setAt` 为录入时间戳。它给出实际周期的参照系：会话结束后，系统按 `（预估工时 − 实际周期）÷ 预估工时` 计算 **AI 提效百分比**。字段可选（无基线的会话提效率为 N/A），可随时重设（幂等覆盖、记最新值，见 7.4 规则 28-29）；录入由开发者在 TUI 对话中转述项目经理的预估（见 4.1 `workflow_baseline`）。
 
-**ReviewChecklist — 可接手标准检查项**：
+**ReviewChecklist — 可接手标准检查项（sdlc 专属）**：
 
-审查阶段不同于其他四个阶段。审查不仅检查代码正确性，更检查**人是否真正理解了 AI 生成的代码**。`ReviewChecklist` 包含四个硬性检查项，全部通过后审查阶段才可 approve：
+审查阶段（`reviewStage="review"`）不同于其他阶段。审查不仅检查代码正确性，更检查**人是否真正理解了 AI 生成的代码**。审查清单由 `WorkflowDefinition.checklist` 定义（本轮 sdlc 注册四项），全部通过后审查阶段才可 approve。sdlc 的清单项：
 
 | 检查项 | 要求 | 验证方式 |
 |--------|------|----------|
@@ -542,6 +580,8 @@ classDiagram
 | `behaviorVerifiable` | 每个 Service 方法至少有一个集成测试，测试即使用文档 | 审查清单 + 门禁 |
 | **`designRationale`** | **AI 必须为每个代码变更输出设计推导：为什么这样写、有哪些替代方案被放弃、潜在风险是什么** | **开发者逐段定夺（accepted / manual）** |
 
+`workflow.stages[review].checklist` 存储为 `Record<清单项 key, boolean>`。`review_submit` 从 `def.checklist` 生成具名输入参数（非 auto 项 → 布尔，auto 项由插件置真），LLM 契约逐字节不变；未知键由 schema 层拒绝。reqdoc 的清单项（若有）由 reqdoc 轮定义，本表为 sdlc 专属。
+
 此外，审查阶段自动记录 **`firstPassRate`（AI 代码一次通过率）**：
 
 > **一次通过率 = 未重写即被接受的片段数 ÷ 全部定论片段数 × 100**
@@ -549,6 +589,8 @@ classDiagram
 它反映 **AI 一次把代码写对的能力**，而非"开发者接受建议的比例"。每个片段的最终去留只有两种：**一次通过**（`confirm` 直接接受）或**未一次通过**（经历过 `reject` 后由 AI `rewrite` 重写、或由开发者 `manual` 自己处理）。重写或自己处理都计入"未一次通过"，因此公式分母用**片段数**、分子用**未重写即接受**的片段数。
 
 该指标由 `review_submit` 审查通过时**插件自动计算**，不依赖 Agent 上报。它不设硬性预警阈值（重写频率因团队/任务而异），仅作**返工信号**展示：一次通过率过低提示 AI 返工偏多，应回溯 prompt 或该文件的重写轮次（`rewrites`）。纯讨论会话（无片段）不写，保持 `null`（显示 N/A）。
+
+> 一次通过率依赖「代码片段」语义（`ComprehensionRecord` 的 add/confirm/reject），属 **sdlc 专属**；reqdoc 场景（章节语义）该字段为 null（见 6.4）。
 
 > 说明：业界 Copilot 的 25–35% 健康接受率针对**行级补全建议**（开发者多数跳过），而本插件是**整段 AI 代码、开发者审查后决定去留**，一次通过率天然偏高，二者口径不同，故不套用该区间。
 
@@ -740,8 +782,8 @@ flowchart TD
 
 | 工具 | 用途 | 服务端校验 |
 |------|------|-----------|
-| `workflow_advance` | 提议进入下一阶段 / 标记当前阶段 approved | 必须携带开发者确认语义；AI 不可在无确认时调用成功 |
-| `workflow_revisit` | 回退到指定阶段（revision++） | 目标阶段必须存在 |
+| `workflow_advance` | 提议进入下一阶段 / 标记当前阶段 approved | 必须携带开发者确认语义；`stage` 运行时校验须在 `getDefinition(workflow.type).stages` 内（AI 不可在无确认时调用成功） |
+| `workflow_revisit` | 回退到指定阶段（revision++） | 目标阶段必须存在于 `def.stages` |
 | `workflow_baseline` | 录入/重设基线预估人工工时（项目经理给出，如 8h，6.3） | `developer_confirmed` 必须为 true（防 AI 杜撰）；`estimated_hours > 0`；幂等覆盖记最新值 |
 | `comprehension_add` | 登记一个 AI 生成的代码片段及自然语言解释（做了什么、为什么、被放弃的替代方案、潜在风险） | 片段不可重复登记；登记后 `decision=pending`，待逐段定夺 |
 | `comprehension_confirm` | 接受单个片段（一次通过） | **单次调用只接受一个 `codeSegmentId`**，防止批量确认（见 7.3）；须处于 pending/rejected 才可接受 |
@@ -749,11 +791,13 @@ flowchart TD
 | `comprehension_reject` | 拒绝单个片段并附补充意见 | 片段必须存在；`feedback` 必填（意见将用于 AI 重写） |
 | `comprehension_rewrite` | AI 按意见重写后该片段回到待审查 | 片段须处于 `rejected`；`rewrites++`，feedback 并入 explanation |
 | `comprehension_manual` | 开发者自己处理该片段（自己写/删除） | 片段须处于 `rejected`；`resolution` 必填；进入终态 `manual` |
-| `review_submit` | 提交审查清单四项结果 | 三项必 true 且 `designRationale` 满足（有片段时须已 `comprehension_add` 登记、且**所有片段处于终态 accepted/manual，不允许 pending/rejected 悬空**）；通过时自动计算 `firstPassRate` |
-| `commit_gate_check` | 提交前门禁检查 | 返回未完成阶段列表；未通过时 `tool.execute.before` 阻断 `git commit` |
-| `commit_force_unlock` | 强制提交授权（3.4 逃生口） | `developer_confirmed` 必须为 true、原因必填；写入一次性授权，门禁放行一次后置 `used` 留痕 |
+| `review_submit` | 提交审查清单结果（从 `def.checklist` 生成具名参数） | 由 `def.checklist` 生成具名输入参数（非 auto 项布尔，auto 项插件置真）；有片段时须已 `comprehension_add` 登记、且**所有片段处于终态 accepted/manual，不允许 pending/rejected 悬空**；通过时自动计算 `firstPassRate`（sdlc） |
+| `commit_gate_check` | 提交前门禁检查（`def.hasCommitGate=true` 时启用） | 返回未完成阶段列表；未通过时 `tool.execute.before` 阻断 `git commit` |
+| `commit_force_unlock` | 强制提交授权（`def.hasCommitGate=true` 时，3.4 逃生口） | `developer_confirmed` 必须为 true、原因必填；写入一次性授权，门禁放行一次后置 `used` 留痕 |
 
 工具定义遵循上游插件 `ToolDefinition` 接口（`packages/plugin/src/tool.ts`），由 `tool` hook 注册后自动进入 LLM 可用工具集（上游 `tool/registry.ts` 已接线）。
+
+以上工具的行为由当前会话的 `workflow.type` 对应定义驱动：阶段键/中文名/清单项/是否有提交门禁均取自 `getDefinition(workflow.type)`。sdlc 的 `hasCommitGate=true`，行为与改动前一致；reqdoc（后续注册）`hasCommitGate=false`，`commit_gate_*` 工具按 `def.hasCommitGate` 分支直接放行/不注册。
 
 ### 4.2 复用的上游 API（不修改）
 
@@ -822,14 +866,16 @@ opencode                                  # 进入 TUI，交互式恢复任意�
 **`opencode-sm` 独立命令（定制，读插件库 + 调上游 API + 查收集服务）**：
 
 ```
-opencode-sm init       # 每台机器一次：交互式四问（账号/组/组织/收集服务地址），写入全局 identity.json
-opencode-sm tag        <sessionID> [--add <tag...>] [--remove <tag...>] [--list]
-opencode-sm workflow   <sessionID> [checklist|comprehension|stats]
-opencode-sm stats      [<sessionID>] [--project <dir>] [--group "组名"] [--org] [--period <nd>] [--json]
-opencode-sm list       [--status <s>] [--tag <t>] [--json]     # 在上游 session.list 结果上叠加插件库的 status/tag 过滤
+opencode-sm init          # 每台机器一次：交互式五问（账号/组/组织/收集服务地址/工作流类型），写入全局 identity.json
+opencode-sm workflow-type set <sdlc|reqdoc>   # 轻量改角色（工作流类型），重跑 init 的等价替代
+opencode-sm workflow-type get                # 查看当前工作流类型
+opencode-sm tag          <sessionID> [--add <tag...>] [--remove <tag...>] [--list]
+opencode-sm workflow     <sessionID> [checklist|comprehension|stats]
+opencode-sm stats        [<sessionID>] [--project <dir>] [--group "组名"] [--org] [--workflow <type>] [--period <nd>] [--json]
+opencode-sm list         [--status <s>] [--tag <t>] [--json]     # 在上游 session.list 结果上叠加插件库的 status/tag 过滤
 ```
 
-**init 交互示例**（四问全部由开发者手动填写）：
+**init 交互示例**（五问全部由开发者手动填写）：
 
 ```
 $ opencode-sm init
@@ -837,10 +883,13 @@ $ opencode-sm init
 ? 所在组: 前端组
 ? 所属组织: Engineering
 ? 收集服务地址: http://10.0.1.20:8787
+? 主要工作流类型（sdlc 开发 / reqdoc 需求书）: sdlc
 ✓ 已写入 ~/.config/opencode/session-mgmt/identity.json，本机即时生效
 ```
 
-组名/组织名由组织内口头约定（如"前端组"），子组用命名约定（`前端组/基础架构组`）；收集服务地址由 org 管理员告知。人员变动（调组、换邮箱）时重跑 `init` 即可——只影响此后的统计归属（快照语义，见 3.1）。
+组名/组织名由组织内口头约定（如"前端组"），子组用命名约定（`前端组/基础架构组`）；收集服务地址由 org 管理员告知。人员变动（调组、换邮箱）或**角色变化（换工作流类型）**时重跑 `init` 即可——只影响此后的统计归属（快照语义，见 3.1）。
+
+**workflow-type 命令**：`set` 与 `get` 用于轻量调整工作流类型（开发者 `sdlc` / 需求分析师 `reqdoc`），与「调组重跑 init」同语义，只是比重跑 init 少填四问。改类型只影响之后的新会话，历史归属不追溯（身份快照语义，见 3.1、3.2）。
 
 **说明**：
 
@@ -857,10 +906,10 @@ $ opencode-sm init
 
 | 子命令 | 行为 |
 |--------|------|
-| *(默认)* | 查看当前工作流状态（阶段进度、当前阶段） |
-| `checklist` | 查看审查清单四项状态 |
-| `comprehension` | 列出理解确认记录，支持 `--unconfirmed` 过滤未确认片段 |
-| `stats` | 查看当前会话的一次通过率、迭代轮次、AI 代码行数（业务/测试/配置）、覆盖率等质量指标 |
+| *(默认)* | 查看当前工作流状态（阶段进度、当前阶段，按 `def.labels` 渲染） |
+| `checklist` | 查看审查清单项状态（按 `def.checklist` 逐项） |
+| `comprehension` | 列出理解确认记录，支持 `--unconfirmed` 过滤未确认片段（sdlc） |
+| `stats` | 查看当前会话质量指标（sdlc：一次通过率、迭代轮次、AI 代码行数业务/测试/配置、覆盖率；reqdoc：通用字段，专属字段为 N/A） |
 
 ### 5.2 opencode-sm 实现模式
 
@@ -1040,6 +1089,15 @@ AI 使用: 对话 47轮 | $0.36 | 85K tokens
 - **AI 代码行数**为累加型指标：会话级展示三分类数值，项目/组/组织级展示各会话行数**求和**（不做平均），全层级仅展示、不告警
 - **AI 提效率**为比率型指标（同一次通过率/返工率）：项目/组/组织级对「有基线且有有效周期」的会话**求平均**；无基线会话不参与，全无基线时显示 N/A（并以基线会话数 0/N 示覆盖率）；组/组织级另按汇报时间分**早/近半段**展示均值走向（如 提效 ↑55%→68%），即研发提效曲线在纯文本 CLI 下的呈现
 
+### 6.4 多流程统计分区（type 感知）
+
+不同工作流（sdlc / reqdoc）的指标不同，但**报告形状保持单一**，不建 union/meta-schema：
+
+- **报告**：`QualitySummary` 单一形状——sdlc 填足（含行数三分类、rework、coverage），reqdoc 填通用字段（firstPassRate/iterationCount/baseline），code 专属字段（行数三分类、rework、coverage）为 `null` → 收集/展示侧自动作为 N/A。
+- **聚合**：collector 的 `reports` 表落 `workflow_type` 列（+ 索引，见 3.1），写入侧从 `report.workflow.type` 取；查询侧 `GET /api/stats` 与 CLI `opencode-sm stats --workflow <type>` 按类型过滤——**两条流程的指标绝不混算**。
+- **本机统计**：会话级/项目级（`stats.ts`）同样按 `workflow.type` 分区——sdlc 专属指标（行数三分类、一次通过率、返工、覆盖率）仅 sdlc 会话计算；reqdoc 会话这些字段为 null。
+- **不预建** union/meta-schema（reqdoc 指标未定，定义即臆测）；reqdoc 轮加可选字段（如 `docStats`）即可，分区管道已就位。
+
 ---
 
 ## 7. Agent 工作流约束
@@ -1190,12 +1248,14 @@ Agent:  ⚠ 检测到重复编辑模式：scheduler.py（连续相同操作 3 �
 |------|------|
 | Agent 忘记当前阶段 | 每轮 `system.transform` hook 将最新 `WorkflowState` 刷新到 system prompt |
 | Agent 自行推进阶段 | 规则重复强调"绝不自行判断"，且 `workflow_advance` 工具在服务端（插件 handler）校验：只有开发者回复中包含明确确认词（"确认"/"approve"/"ok"）时才执行成功 |
-| Agent 跳过审查交互 | 审查阶段是独立的系统提示块，规则优先级最高；`review_submit` 工具在服务端二次校验 `ReviewChecklist`，未全部通过则拒绝 |
+| Agent 跳过审查交互 | 审查阶段是独立的系统提示块，规则优先级最高；`review_submit` 工具在服务端二次校验审查清单（`def.checklist`），未全部通过则拒绝 |
 | Agent 批量跳过逐段确认 | **服务端防篡改**：`comprehension_confirm` 工具单次调用只接受一个 `codeSegmentId`，批量传入直接报错，防止 LLM 在开发者回复"看起来不错"时将全部片段批量设为 `confirmed` |
 | Agent 绕过门禁直接提交 | `tool.execute.before` hook 拦截 `bash` 中的 `git commit`，未通过 `commit_gate_check` 时抛错阻断——这是插件层的硬约束，不依赖 LLM 自觉 |
 | LLM 上下文窗口不足 | 工作流状态压缩在 JSON 中，system prompt 中只注入当前阶段规则，历史规则不重复注入 |
 
 ### 7.4 规则全文
+
+以下是 **sdlc** 工作流的完整规则，作为 `WorkflowDefinition.rules` 注入（见 3.2 `SDLC` 定义）。插件按会话的 `workflow.type` 取对应类型的规则注入 system prompt；reqdoc 轮有自己的规则全文。
 
 ```markdown
 # Workflow Agent 规则
@@ -1278,10 +1338,10 @@ Agent:  ⚠ 检测到重复编辑模式：scheduler.py（连续相同操作 3 �
 
 | 文件 | 用途 |
 |------|------|
-| `src/workflow.ts` | WorkflowState schema（含 ReviewChecklist、ComprehensionRecord、QualityMetrics、BaselineEstimate）与 efficiencyRatio 提效率口径——插件写、收集服务收、CLI 读，单点定义 |
-| `src/loc.ts` | AI 代码行数：行数计算、业务/测试/配置三分类（classifyFile）与分类汇总（sumLinesByCategory） |
-| `src/report.ts` | 汇报与 CI 回写 payload schema |
-| `src/identity.ts` | identity.json 类型与读写 |
+| `src/workflow.ts` | WorkflowDefinition 注册表（WorkflowType/ChecklistItem/WorkflowDefinition/getDefinition/resolveWorkflowType）+ WorkflowState schema（含泛化 stages/checklist、ComprehensionRecord、QualityMetrics、BaselineEstimate）与 efficiencyRatio 提效率口径；删除 STAGE_ORDER/STAGE_LABELS/StageName——插件写、收集服务收、CLI 读，单点定义 |
+| `src/loc.ts` | AI 代码行数：行数计算、业务/测试/配置三分类（classifyFile）与分类汇总（sumLinesByCategory）（sdlc 专属） |
+| `src/report.ts` | 汇报与 CI 回写 payload schema（WorkflowSummary 含 type + 泛化 stages，按 type 驱动） |
+| `src/identity.ts` | identity.json 类型与读写（含 workflowType 第五属性，缺省 sdlc） |
 | `src/merge.ts` | DeepPartial 增量合并语义（插件工具与收集服务共用） |
 
 ### 插件包 `opencode-session-mgmt/packages/plugin/`（新建，我们拥有）
@@ -1292,14 +1352,14 @@ Agent:  ⚠ 检测到重复编辑模式：scheduler.py（连续相同操作 3 �
 | `src/db/schema.ts` | 插件库表定义（仅 `workflow_session` 一张表） |
 | `src/db/index.ts` | 插件 SQLite 初始化与迁移（bun:sqlite，WAL 模式） |
 | `src/identity.ts` | 读全局 `identity.json`，会话首次活动时打标 `account_id` |
-| `src/prompt.ts` | system prompt 注入片段：规则全文 + 当前状态压缩 JSON |
+| `src/prompt.ts` | system prompt 注入片段：按 `getDefinition(workflow.type)` 取规则全文与阶段/清单 + 当前状态压缩 JSON |
 | `src/tools/workflow.ts` | `workflow_advance` / `workflow_revisit` / `workflow_baseline` / `commit_gate_check` / `commit_force_unlock` 工具 |
 | `src/tools/review.ts` | `comprehension_add` / `comprehension_confirm` / `comprehension_reject` / `comprehension_rewrite` / `comprehension_manual` / `comprehension_ask` / `review_submit` 工具（含防批量确认校验与终态门禁） |
 | `src/tools/quality.ts` | 迭代计数 + AI 代码行数累计逻辑（`quality_report` 已移除，firstPassRate 由 review.ts 自动计算） |
 | `src/workflow-ops.ts` | 阶段转换（enter/approve/revisit，3.3）与提交门禁重算（3.4），工具与门禁共用的状态机 |
 | `src/gate.ts` | `tool.execute.before` 提交门禁拦截（git commit 阻断） |
 | `src/report.ts` | 会话摘要汇报：推送至 `collector_url`，不可用时本地缓冲、恢复补推 |
-| `src/stats.ts` | 本机统计聚合查询（供 opencode-sm 复用） |
+| `src/stats.ts` | 本机统计聚合查询（按 workflow.type 分区，sdlc 专属指标仅 sdlc 计算；供 opencode-sm 复用） |
 | `test/*.test.ts` | 工具校验逻辑、合并语义、门禁、汇报缓冲的单元测试 |
 | `package.json` | 插件包定义（入口、依赖） |
 
@@ -1308,10 +1368,11 @@ Agent:  ⚠ 检测到重复编辑模式：scheduler.py（连续相同操作 3 �
 | 文件 | 用途 |
 |------|------|
 | `src/index.ts` | 入口与命令注册 |
-| `src/commands/init.ts` | 交互式四问，写全局 `identity.json` |
+| `src/commands/init.ts` | 交互式五问，写全局 `identity.json` |
+| `src/commands/workflow-type.ts` | 工作流类型查看/修改（`set <sdlc|reqdoc>` / `get`） |
 | `src/commands/tag.ts` | 标签管理（读写插件库） |
-| `src/commands/workflow.ts` | 工作流状态外部查看（含 checklist/comprehension/stats） |
-| `src/commands/stats.ts` | 四级统计：会话/项目级组合本机数据；组/组织级查收集服务 |
+| `src/commands/workflow.ts` | 工作流状态外部查看（含 checklist/comprehension/stats，按 def.labels/def.checklist 渲染） |
+| `src/commands/stats.ts` | 四级统计：会话/项目级组合本机数据；组/组织级查收集服务；`--workflow` 过滤按类型分区 |
 | `src/commands/list.ts` | 会话列表（上游 list + 插件库 status/tag 过滤） |
 | `src/api.ts` | 上游 opencode SDK 封装 + 收集服务查询客户端 |
 | `test/*.test.ts` | 格式化与聚合的单元测试 |
@@ -1320,8 +1381,8 @@ Agent:  ⚠ 检测到重复编辑模式：scheduler.py（连续相同操作 3 �
 
 | 文件 | 用途 |
 |------|------|
-| `src/index.ts` | 内网 HTTP 服务：`POST /api/report`（插件汇报）、`POST /api/ci-quality`（CI 回写）、`GET /api/stats`（opencode-sm 查询） |
-| `src/db.ts` | 聚合库（reports 表，按 session_id 合并汇报与 CI 指标） |
+| `src/index.ts` | 内网 HTTP 服务：`POST /api/report`（插件汇报）、`POST /api/ci-quality`（CI 回写）、`GET /api/stats`（opencode-sm 查询，可选 `workflowType` 过滤） |
+| `src/db.ts` | 聚合库（reports 表含 `workflow_type` 列 + 索引，按 session_id 合并汇报与 CI 指标，按 type 分区聚合） |
 | `test/*.test.ts` | 合并语义与查询的单元测试 |
 
 ### 部署配置
@@ -1338,50 +1399,42 @@ Agent:  ⚠ 检测到重复编辑模式：scheduler.py（连续相同操作 3 �
 
 ```mermaid
 gantt
-    title 实施路线图
+    title 多流程就绪重构路线图
     dateFormat YYYY-MM-DD
 
-    section Phase 1: 插件骨架与身份
-    插件包脚手架 + config 加载验证      :p1a, 2026-08-01, 1d
-    插件库 schema + 初始化/迁移          :p1b, after p1a, 1d
-    WorkflowState schema                 :p1c, after p1a, 1d
-    opencode-sm init + identity.json     :p1d, after p1b, 1d
-    账号打标 + system.transform 注入      :p1e, after p1d, 2d
+    section Phase 1: 契约层多流程化
+    WorkflowDefinition 注册表 + WorkflowState.type      :r1a, 2026-08-08, 1d
+    stages/checklist 泛化 + 删 STAGE_ORDER/LABELS/StageName :r1b, after r1a, 1d
+    summarizeWorkflow 按 type 驱动 + identity 五问         :r1c, after r1b, 1d
 
-    section Phase 2: 工具与门禁
-    workflow 工具 (advance/revisit)       :p2a, after p1e, 2d
-    审查工具 (comprehension/review_submit) :p2b, after p2a, 2d
-    迭代计数 + firstPassRate + 代码行数自动统计     :p2c, after p2b, 1d
-    提交门禁 (tool.execute.before)        :p2d, after p2c, 1d
+    section Phase 2: 各包消费方
+    插件 prompt/tools/gate/stats def-driven               :r2a, after r1c, 2d
+    CLI init 五问 + workflow-type 命令 + stats --workflow   :r2b, after r2a, 1d
+    收集服务 workflow_type 列 + 查询过滤                    :r2c, after r2b, 1d
 
-    section Phase 3: 统计与收集服务
-    本机统计聚合 (stats.ts)               :p3a, after p2d, 2d
-    opencode-sm: tag/workflow/list        :p3b, after p3a, 2d
-    收集服务 + 插件汇报（含缓冲补推）        :p3c, after p3b, 2d
-    opencode-sm stats 四级 + CI 回写       :p3d, after p3c, 2d
+    section Phase 3: 文档同步与回归
+    设计文档同步（含 mermaid 图）                          :r3a, after r2c, 1d
+    测试回归（sdlc 逐字节不变）                             :r3b, after r3a, 1d
 ```
 
-### Phase 1: 插件骨架与身份
+### Phase 1: 契约层多流程化（packages/shared）
 
-1. 插件包脚手架，`config.plugin` 加载验证（确认 hook 在 daemon 内触发）
-2. 插件库 schema（`workflow_session`）+ 初始化/迁移
-3. `schema/workflow.ts`（含 ReviewChecklist、ComprehensionRecord、QualityMetrics）
-4. `opencode-sm init`：四问写全局 `identity.json`
-5. `identity.ts` 账号打标 + `system.transform` hook 注入（规则全文 + 当前状态压缩 JSON）
+1. `WorkflowDefinition` 注册表：`WorkflowType`/`ChecklistItem`/`WorkflowDefinition`/`WORKFLOW_DEFINITIONS`/`getDefinition`/`resolveWorkflowType`；`SDLC` 定义（现值原样搬入五阶段 + 四清单 + 门禁 + 规则）
+2. `WorkflowState` 加 `type`，`stages` 泛化为 `Record<string, StageRecord>`，`ReviewChecklist` 改为 `Record<string, boolean>`；`createWorkflowState(type)`/`getStage`/`reviewRecord`；**删除** `STAGE_ORDER`/`STAGE_LABELS`/`StageName`
+3. `summarizeWorkflow` 按 `workflow.type` 取定义、`report.ts` 的 `WorkflowSummary` 加 `type` + 泛化 stages
+4. `identity.ts` 加 `workflowType?: WorkflowType`（`readIdentity` 透出）
+5. 同步测试到新形状（`createWorkflowState(type)`、泛化断言、`resolveWorkflowType` 回退 sdlc）
 
-### Phase 2: 工具与门禁
+### Phase 2: 各包消费方 def-driven
 
-1. `workflow_advance` / `workflow_revisit` 工具（含开发者确认校验）
-2. `comprehension_confirm` / `comprehension_reject` / `comprehension_rewrite` / `comprehension_manual` / `comprehension_ask` / `review_submit` 工具（防批量确认、终态门禁、清单二次校验）
-3. 迭代计数 + AI 代码行数累计（`tool.execute.after`）+ `review_submit` 自动统计 firstPassRate
-4. 提交门禁：`tool.execute.before` 拦截未过审查的 `git commit`
+1. 插件：`Store.open(dir, resolveType)` 新建会话取 `workflowType`；`prompt.ts` 按 `getDefinition` 注入；`workflow-ops.ts`/`tools/workflow.ts`/`tools/review.ts`/`gate.ts`/`stats.ts` 全部按定义驱动（sdlc 行为逐字节不变）
+2. CLI：`init` 五问；新增 `workflow-type` 子命令；`workflow.ts`/`stats.ts` 渲染走 `def.labels`/`def.checklist`，`stats --workflow` 过滤
+3. 收集服务：`reports` 表加 `workflow_type` 列 + 索引；`GET /api/stats` 加 `workflowType` 参数；sdlc 专属指标仅 `wf.type==="sdlc"` 计算
 
-### Phase 3: 统计与收集服务
+### Phase 3: 文档同步与回归
 
-1. `stats.ts` 本机统计聚合（插件库 + 上游 session API 组合）
-2. `opencode-sm`：tag、workflow（含 checklist/comprehension/stats）、list 过滤
-3. org 收集服务（汇报 + 查询端点）+ 插件 `report.ts` 汇报（不可用时本地缓冲、恢复补推）
-4. `opencode-sm stats` 组/组织级查询收集服务 + CI 回写端点（按 sessionID 合并）
+1. `docs/session-management.md` 逐节核对（3.1/3.2/4.1/4.3/5.1/6/7.4/8/9，含全部 mermaid 图）；`collector-spec.md`/`plugin-dev-guide.md`/`deployment.md` 复核
+2. 测试回归：`bun test` 全绿、`bun run typecheck` 零 any；sdlc 回归点逐字节不变（prompt 片段、工具输出、提交门禁、统计渲染）
 
 ---
 
@@ -1410,7 +1463,7 @@ docker run -d --name opencode-sm-collector -p 8787:8787 \
 npm i -g @yourorg/opencode-sm                    # 1. 装独立 CLI
 # 2. opencode 配置启用插件（opencode.json，可由团队标准配置预置）：
 #    { "plugin": ["@yourorg/opencode-session-mgmt"] }
-opencode-sm init                                  # 3. 四问：账号 / 组 / 组织 / 收集服务地址
+opencode-sm init                                  # 3. 五问：账号 / 组 / 组织 / 收集服务地址 / 工作流类型
 ```
 
 此后开发者照常使用 `opencode`（TUI）——工作流规则随 system prompt 自动注入，阶段推进、审查、理解确认全部在对话中完成；外部查看用 `opencode-sm workflow/stats`。
@@ -1461,7 +1514,7 @@ opencode-sm init                                  # 3. 四问：账号 / 组 / �
 
 ```bash
 # 首次使用（每台机器一次）
-opencode-sm init    # 四问：账号 / 组 / 组织 / 收集服务地址
+opencode-sm init    # 五问：账号 / 组 / 组织 / 收集服务地址 / 工作流类型
 
 # 上游命令（复用，验证未被定制影响）
 opencode session list
@@ -1472,9 +1525,11 @@ opencode-sm tag <id> --add feature auth
 opencode-sm workflow <id>
 opencode-sm workflow <id> checklist
 opencode-sm workflow <id> comprehension --unconfirmed
+opencode-sm workflow-type get                    # 查看当前工作流类型
+opencode-sm workflow-type set reqdoc             # 轻量改角色（只影响之后新会话）
 opencode-sm stats <id>
 opencode-sm stats --project "用户系统" --period 7d
-opencode-sm stats --group "前端组" --period 30d
+opencode-sm stats --group "前端组" --workflow sdlc --period 30d
 opencode-sm stats --org --period 30d --json
 
 # TUI 内对话验证（工作流推进、理解确认、提交门禁按 7.2 场景走通）

@@ -6,7 +6,7 @@ import { createWorkflowState, summarizeWorkflow, type SessionReport } from "sm-s
 import { CollectorDb } from "../src/db"
 
 function report(sessionID: string, account: string, group: string, cost: number): SessionReport {
-  const workflow = createWorkflowState()
+  const workflow = createWorkflowState("sdlc")
   workflow.stages.requirements.status = "approved"
   workflow.quality.firstPassRate = 50 // 低于 70 参考线，用于返工信号计数
   return {
@@ -24,7 +24,7 @@ function report(sessionID: string, account: string, group: string, cost: number)
 
 /** 携带 linesByFile 的汇报（经 summarizeWorkflow 投影为三分类聚合） */
 function reportWithLines(sessionID: string, account: string, group: string, linesByFile: Record<string, number>): SessionReport {
-  const workflow = createWorkflowState()
+  const workflow = createWorkflowState("sdlc")
   workflow.quality.linesByFile = linesByFile
   return {
     sessionID,
@@ -48,7 +48,7 @@ function reportWithBaseline(
   durationMs: number,
   reportedAt: number,
 ): SessionReport {
-  const workflow = createWorkflowState()
+  const workflow = createWorkflowState("sdlc")
   const start = 1_750_000_000_000
   workflow.stages.requirements.transitions.push({ action: "enter", at: start })
   workflow.stages.review.transitions.push({ action: "approve", at: start + durationMs })
@@ -125,7 +125,7 @@ describe("CollectorDb", () => {
 
   test("聚合人均耗时、覆盖率、返工率", () => {
     withDb((db) => {
-      const wf = createWorkflowState()
+      const wf = createWorkflowState("sdlc")
       wf.stages.requirements.transitions.push({ action: "enter", at: 0 })
       wf.stages.requirements.transitions.push({ action: "approve", at: 3_600_000 })
       const r: SessionReport = {
@@ -157,7 +157,7 @@ describe("CollectorDb", () => {
       const now = Date.now()
       const PERIOD = 1_000_000
       const mk = (id: string, rev: number, at: number): SessionReport => {
-        const wf = createWorkflowState()
+        const wf = createWorkflowState("sdlc")
         wf.stages.requirements.revision = rev
         return {
           sessionID: id,
@@ -208,6 +208,20 @@ describe("CollectorDb", () => {
         db.upsertReport(report("s2", "bob", "前端组", 2))
         expect(db.statsGroup("前端组", null).linesTotal).toEqual({ business: 0, test: 0, config: 0 })
         expect(db.statsGroup("前端组", null).hasLinesData).toBe(false)
+      })
+    })
+  })
+
+  describe("workflow_type 分区管道（6）", () => {
+    test("upsert 落库 workflow_type；stats 按类型过滤两流程不混算", () => {
+      withDb((db) => {
+        db.upsertReport(report("s1", "alice", "前端组", 1)) // sdlc
+        const reqdoc = report("s2", "bob", "前端组", 1)
+        reqdoc.workflow.type = "reqdoc" as never // 模拟未来 reqdoc 类型
+        db.upsertReport(reqdoc)
+        expect(db.statsGroup("前端组", null).sessions).toBe(2) // 未过滤：全部
+        expect(db.statsGroup("前端组", null, "sdlc").sessions).toBe(1)
+        expect(db.statsGroup("前端组", null, "reqdoc").sessions).toBe(1)
       })
     })
   })

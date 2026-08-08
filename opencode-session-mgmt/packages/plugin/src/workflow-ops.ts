@@ -3,18 +3,14 @@
  * 阶段转换（enter/approve/revisit）、审查回退与提交门禁重算——
  * 集中于此供插件工具复用与单元测试，不触碰数据库。
  */
-import {
-  STAGE_ORDER,
-  type StageName,
-  type TransitionAction,
-  type WorkflowState,
-} from "sm-shared"
+import { getDefinition, type TransitionAction, type WorkflowState } from "sm-shared"
 
 export class WorkflowOpError extends Error {}
 
-/** 依据五阶段 approved 状况重算提交门禁（3.4）；保留既有的一次性强制提交授权。 */
+/** 依据定义 stages 的 approved 状况重算提交门禁（3.4）；保留既有的一次性强制提交授权。 */
 export function recomputeCommit(workflow: WorkflowState): WorkflowState {
-  const blockedBy = STAGE_ORDER.filter((name) => workflow.stages[name].status !== "approved")
+  const def = getDefinition(workflow.type)
+  const blockedBy = def.stages.filter((name) => workflow.stages[name].status !== "approved")
   workflow.commit = {
     status: blockedBy.length === 0 ? "allowed" : "blocked",
     blocked_by: blockedBy,
@@ -31,7 +27,7 @@ export function recomputeCommit(workflow: WorkflowState): WorkflowState {
  */
 export function applyTransition(
   workflow: WorkflowState,
-  stage: StageName,
+  stage: string,
   action: TransitionAction,
   at: number,
   note?: string,

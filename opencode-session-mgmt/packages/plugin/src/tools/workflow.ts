@@ -6,21 +6,27 @@
  * commit_gate_check  —— 提交门禁检查，返回未完成阶段列表
  */
 import { tool, type ToolDefinition } from "@opencode-ai/plugin"
-import { STAGE_LABELS, STAGE_ORDER, type StageName } from "sm-shared"
+import { getDefinition, type WorkflowState } from "sm-shared"
 import type { Store } from "../db"
 import { WorkflowOpError, applyTransition, recomputeCommit } from "../workflow-ops"
 
 const z = tool.schema
 
-const stageEnum = z.enum(STAGE_ORDER)
+/** 运行时校验 stage 属于定义 stages（3.2 def 驱动；schema 用 string，因注册表类型运行时才定）。 */
+function assertStage(workflow: WorkflowState, stage: string): void {
+  const def = getDefinition(workflow.type)
+  if (!def.stages.includes(stage)) {
+    throw new WorkflowOpError(`阶段 ${stage} 不存在（工作流类型 ${def.type} 的阶段：${def.stages.join("、")}）`)
+  }
+}
 
 export function createWorkflowTools(store: Store): Record<string, ToolDefinition> {
   const workflow_advance = tool({
     description:
       "推进工作流阶段：enter 进入某阶段（in_progress），approve 在开发者明确确认后标记该阶段完成。" +
-      "审查阶段（review）不可用本工具 approve，必须经 review_submit。",
+      "审查阶段不可用本工具 approve，必须经 review_submit。",
     args: {
-      stage: stageEnum.describe("目标阶段"),
+      stage: z.string().describe("目标阶段（当前工作流类型的有效阶段之一）"),
       action: z.enum(["enter", "approve"]).describe("enter=开始该阶段；approve=确认完成"),
       developer_confirmed: z
         .boolean()
@@ -28,20 +34,23 @@ export function createWorkflowTools(store: Store): Record<string, ToolDefinition
       note: z.string().optional().describe("本次转换的备注"),
     },
     async execute(args, context) {
-      if (args.action === "approve") {
-        if (args.stage === "review") {
-          throw new WorkflowOpError("审查阶段不可由 AI 自行 approve，请改用 review_submit 工具")
-        }
-        if (args.developer_confirmed !== true) {
-          throw new WorkflowOpError("approve 需开发者明确确认：developer_confirmed 必须为 true")
-        }
-      }
       const saved = store.mutateWorkflow(context.sessionID, (workflow) => {
-        applyTransition(workflow, args.stage as StageName, args.action, Date.now(), args.note)
+        assertStage(workflow, args.stage)
+        const def = getDefinition(workflow.type)
+        if (args.action === "approve") {
+          if (def.reviewStage !== null && args.stage === def.reviewStage) {
+            throw new WorkflowOpError("审查阶段不可由 AI 自行 approve，请改用 review_submit 工具")
+          }
+          if (args.developer_confirmed !== true) {
+            throw new WorkflowOpError("approve 需开发者明确确认：developer_confirmed 必须为 true")
+          }
+        }
+        applyTransition(workflow, args.stage, args.action, Date.now(), args.note)
       })
-      const stage = saved.stages[args.stage as StageName]
+      const def = getDefinition(saved.type)
+      const stage = saved.stages[args.stage]
       return (
-        `✅ ${STAGE_LABELS[args.stage as StageName]} → ${stage.status}\n` +
+        `✅ ${def.labels[args.stage] ?? args.stage} → ${stage.status}\n` +
         `提交门禁：${saved.commit.status}` +
         (saved.commit.blocked_by.length ? `（未完成：${saved.commit.blocked_by.join("、")}）` : "")
       )
@@ -51,14 +60,16 @@ export function createWorkflowTools(store: Store): Record<string, ToolDefinition
   const workflow_revisit = tool({
     description: "回退到指定阶段（该阶段 revision++，状态回到 in_progress）。开发者说『回到XX』时调用。",
     args: {
-      stage: stageEnum.describe("要回退到的阶段"),
+      stage: z.string().describe("要回退到的阶段（当前工作流类型的有效阶段之一）"),
       note: z.string().optional().describe("回退原因"),
     },
     async execute(args, context) {
       const saved = store.mutateWorkflow(context.sessionID, (workflow) => {
-        applyTransition(workflow, args.stage as StageName, "revisit", Date.now(), args.note)
+        assertStage(workflow, args.stage)
+        applyTransition(workflow, args.stage, "revisit", Date.now(), args.note)
       })
-      return `↩ 已回退到 ${STAGE_LABELS[args.stage as StageName]}（revision=${saved.stages[args.stage as StageName].revision}）`
+      const def = getDefinition(saved.type)
+      return `↩ 已回退到 ${def.labels[args.stage] ?? args.stage}（revision=${saved.stages[args.stage].revision}）`
     },
   })
 
@@ -89,16 +100,22 @@ export function createWorkflowTools(store: Store): Record<string, ToolDefinition
   })
 
   const commit_gate_check = tool({
-    description: "提交门禁检查：返回五个阶段的完成状况；未全部 approved 时列出未完成阶段。提交前应调用。",
+    description:
+      "提交门禁检查：返回各阶段的完成状况；未全部 approved 时列出未完成阶段。提交前应调用。" +
+      "仅当前工作流类型有提交门禁时生效（sdlc）。",
     args: {},
     async execute(_args, context) {
       const saved = store.mutateWorkflow(context.sessionID, (workflow) => {
         recomputeCommit(workflow)
       })
-      if (saved.commit.status === "allowed") {
-        return "✓ 全部五个阶段已 approved，允许提交。"
+      const def = getDefinition(saved.type)
+      if (!def.hasCommitGate) {
+        return `本工作流类型（${def.type}）无 git 提交门禁，无需检查。`
       }
-      const pending = saved.commit.blocked_by.map((s) => STAGE_LABELS[s as StageName]).join("、")
+      if (saved.commit.status === "allowed") {
+        return `✓ 全部 ${def.stages.length} 个阶段已 approved，允许提交。`
+      }
+      const pending = saved.commit.blocked_by.map((s) => def.labels[s] ?? s).join("、")
       const forceNote =
         saved.commit.force && !saved.commit.force.used
           ? `\n⚠ 已有一次性强制提交授权（原因：${saved.commit.force.reason}），下次 git commit 将放行。`
@@ -110,7 +127,8 @@ export function createWorkflowTools(store: Store): Record<string, ToolDefinition
   const commit_force_unlock = tool({
     description:
       "强制提交授权（3.4 逃生口）：仅当开发者明确要求强制提交并说明原因时调用。" +
-      "写入一次性授权后，下一次 git commit 将被门禁放行（即使仍有未完成阶段），授权随即标记已用并留痕。",
+      "写入一次性授权后，下一次 git commit 将被门禁放行（即使仍有未完成阶段），授权随即标记已用并留痕。" +
+      "仅当前工作流类型有提交门禁时生效（sdlc）。",
     args: {
       reason: z.string().describe("强制提交原因（开发者口述，必填，将留痕于 WorkflowState）"),
       developer_confirmed: z.boolean().describe("必须为 true，表示开发者已明确要求强制提交"),
@@ -125,12 +143,17 @@ export function createWorkflowTools(store: Store): Record<string, ToolDefinition
       }
       const saved = store.mutateWorkflow(context.sessionID, (workflow) => {
         recomputeCommit(workflow)
+        const def = getDefinition(workflow.type)
+        if (!def.hasCommitGate) {
+          throw new WorkflowOpError(`工作流类型 ${def.type} 无提交门禁，无需强制授权`)
+        }
         workflow.commit.force = { reason, at: Date.now(), used: false }
       })
+      const def = getDefinition(saved.type)
       if (saved.commit.status === "allowed") {
         return "工作流本已全部 approved，无需强制提交，直接 git commit 即可。"
       }
-      const pending = saved.commit.blocked_by.map((s) => STAGE_LABELS[s as StageName]).join("、")
+      const pending = saved.commit.blocked_by.map((s) => def.labels[s] ?? s).join("、")
       return (
         `⚠ 已授权一次性强制提交（原因：${reason}）。未完成阶段：${pending}。\n` +
         `下一次 git commit 将被放行，授权随即失效；此操作已在 WorkflowState 留痕。`
