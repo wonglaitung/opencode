@@ -263,6 +263,58 @@ describe("review_submit 门禁", () => {
   })
 })
 
+describe("reqdoc 工作流（业务确认 PRD 要点）", () => {
+  test("要点可无 file/lines 登记，review_submit 通过且计算一次通过率", async () => {
+    const store = Store.memory(() => "reqdoc" as const)
+    const tools = createReviewTools(store)
+    const ctx = { sessionID: "r1" } as never
+    const wf = store.ensure("r1").workflow!
+    expect(wf.type).toBe("reqdoc")
+    // reqdoc 要点：不填 file/lineStart/lineEnd
+    await tools.comprehension_add!.execute(
+      { codeSegmentId: "目标与场景", explanation: "面向一线柜员，缩短开户录入时间" } as never,
+      ctx,
+    )
+    await tools.comprehension_confirm!.execute({ codeSegmentId: "目标与场景" } as never, ctx)
+    // reqdoc 清单四项具名参数
+    await tools.review_submit!.execute(
+      {
+        completeness: true,
+        clarity: true,
+        edgeCoverage: true,
+        resolution: true,
+      } as never,
+      ctx,
+    )
+    const review = reviewRecord(store.get("r1")!.workflow!)
+    expect(review.status).toBe("approved")
+    expect(review.checklist).toEqual({
+      completeness: true,
+      clarity: true,
+      edgeCoverage: true,
+      resolution: true,
+    })
+    // 1 段一次通过 → 100%
+    expect(store.get("r1")!.workflow!.quality.firstPassRate).toBe(100)
+    // reqdoc 无提交门禁：commit 状态仍为 blocked（四阶段未 approve），但门禁不拦截
+    store.close()
+  })
+
+  test("reqdoc 要点无代码位置信息（id 即要点，file/lines undefined）", async () => {
+    const store = Store.memory(() => "reqdoc" as const)
+    const tools = createReviewTools(store)
+    await tools.comprehension_add!.execute(
+      { codeSegmentId: "异常探头", explanation: "接口超时人工补单" } as never,
+      { sessionID: "r1" } as never,
+    )
+    const rec = reviewRecord(store.get("r1")!.workflow!).comprehension[0]!
+    expect(rec.id).toBe("异常探头")
+    expect(rec.file).toBeUndefined()
+    expect(rec.lines).toBeUndefined()
+    store.close()
+  })
+})
+
 describe("firstPassRate 自动计算", () => {
   test("一次通过片段计入分子；重写后 accepted 不计入", async () => {
     const { store, tools } = setup()

@@ -1,11 +1,13 @@
 /**
  * 审查与理解确认工具（设计文档 4.1、3.2、7.3、7.4 规则 9-14）。
- * comprehension_add     —— 登记一个代码片段及其自然语言解释（decision=pending）
+ * 通用机制（工作流无关）：sdlc 确认「代码片段」、reqdoc 确认「PRD 要点」，
+ * 统一以 codeSegmentId 参数承载标识（sdlc 为代码段 id、reqdoc 为要点 id）。
+ * comprehension_add     —— 登记一个片段/要点及其自然语言解释（decision=pending）
  * comprehension_confirm —— 单次只接受一个 codeSegmentId（防批量确认，服务端强制）→ accepted
- * comprehension_reject  —— 拒绝片段，feedback 必填 → rejected
- * comprehension_rewrite —— 按意见重写，片段回到 pending，rewrites++
- * comprehension_manual  —— 开发者自处理拒绝的片段，resolution 必填 → manual（终态）
- * comprehension_ask     —— 追问片段，问答追加到 explanation
+ * comprehension_reject  —— 拒绝片段/要点，feedback 必填 → rejected
+ * comprehension_rewrite —— 按意见重写，回到 pending，rewrites++
+ * comprehension_manual  —— 开发者自处理，resolution 必填 → manual（终态）
+ * comprehension_ask     —— 追问，问答追加到 explanation
  * review_submit         —— 提交审查清单：所有片段处于终态(accepted/manual)，通过时自动计算 firstPassRate
  */
 import { tool, type ToolDefinition } from "@opencode-ai/plugin"
@@ -31,25 +33,25 @@ for (const def of Object.values(WORKFLOW_DEFINITIONS)) {
 export function createReviewTools(store: Store): Record<string, ToolDefinition> {
   const comprehension_add = tool({
     description:
-      "审查阶段：登记一个 AI 生成的代码片段及其自然语言解释（做了什么、为什么这样写、被放弃的替代方案、潜在风险）。" +
-      "登记后 decision=pending，待开发者 confirm/reject 定夺。",
+      "审查阶段：登记一个 AI 生成的代码片段（sdlc）或 PRD 要点（reqdoc）及其自然语言解释。" +
+      "sdlc 需填 file/lineStart/lineEnd；reqdoc（要点）不填代码位置。登记后 decision=pending，待开发者 confirm/reject 定夺。",
     args: {
-      codeSegmentId: z.string().describe("片段唯一标识，如 auth/service.ts:12-45"),
-      file: z.string().describe("文件路径"),
-      lineStart: z.number().int().describe("起始行"),
-      lineEnd: z.number().int().describe("结束行"),
+      codeSegmentId: z.string().describe("标识：sdlc 为代码段 id（如 auth/service.ts:12-45），reqdoc 为要点 id"),
       explanation: z.string().describe("自然语言解释，含设计推导、替代方案与风险"),
+      file: z.string().optional().describe("sdlc 专属：文件路径；reqdoc 不填"),
+      lineStart: z.number().int().optional().describe("sdlc 专属：起始行；reqdoc 不填"),
+      lineEnd: z.number().int().optional().describe("sdlc 专属：结束行；reqdoc 不填"),
     },
     async execute(args, context) {
       store.mutateWorkflow(context.sessionID, (workflow) => {
         const list = reviewRecord(workflow).comprehension
-        if (list.some((c) => c.codeSegmentId === args.codeSegmentId)) {
-          throw new WorkflowOpError(`片段 ${args.codeSegmentId} 已登记`)
+        if (list.some((c) => c.id === args.codeSegmentId)) {
+          throw new WorkflowOpError(`片段/要点 ${args.codeSegmentId} 已登记`)
         }
         const record: ComprehensionRecord = {
-          codeSegmentId: args.codeSegmentId,
+          id: args.codeSegmentId,
           file: args.file,
-          lines: [args.lineStart, args.lineEnd],
+          lines: args.lineStart !== undefined && args.lineEnd !== undefined ? [args.lineStart, args.lineEnd] : undefined,
           explanation: args.explanation,
           decision: "pending",
           developerConfirmed: false,
@@ -61,29 +63,29 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
         }
         list.push(record)
       })
-      return `📖 已登记片段 ${args.codeSegmentId}，待开发者定夺。`
+      return `📖 已登记 ${args.codeSegmentId}，待开发者定夺。`
     },
   })
 
   const comprehension_confirm = tool({
     description:
-      "确认单个代码片段一次通过（accepted）。单次调用只接受一个 codeSegmentId——" +
-      "批量确认在服务端被拒绝（防 LLM 在开发者说『看起来不错』时一次性置真全部片段）。" +
-      "pending 与 rejected（开发者复议后接受）片段均可确认；已 manual 终态的不可再 confirm。",
+      "确认单个片段/要点一次通过（accepted）。单次调用只接受一个 codeSegmentId——" +
+      "批量确认在服务端被拒绝（防 LLM 在开发者说『看起来不错』时一次性置真全部）。" +
+      "pending 与 rejected（开发者复议后接受）均可确认；已 manual 终态的不可再 confirm。",
     args: {
-      codeSegmentId: z.string().describe("要确认的单个片段标识"),
+      codeSegmentId: z.string().describe("要确认的单个片段/要点标识"),
     },
     async execute(args, context) {
       let confirmedNow = false
       store.mutateWorkflow(context.sessionID, (workflow) => {
         const record = reviewRecord(workflow).comprehension.find(
-          (c) => c.codeSegmentId === args.codeSegmentId,
+          (c) => c.id === args.codeSegmentId,
         )
         if (!record) {
-          throw new WorkflowOpError(`片段 ${args.codeSegmentId} 不存在，请先 comprehension_add`)
+          throw new WorkflowOpError(`片段/要点 ${args.codeSegmentId} 不存在，请先 comprehension_add`)
         }
         if (record.decision === "manual") {
-          throw new WorkflowOpError(`片段 ${args.codeSegmentId} 已 manual 终态，不可再 confirm`)
+          throw new WorkflowOpError(`片段/要点 ${args.codeSegmentId} 已 manual 终态，不可再 confirm`)
         }
         if (record.decision !== "accepted") {
           record.decision = "accepted"
@@ -95,78 +97,78 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
       const review = reviewRecord(store.ensure(context.sessionID).workflow!)
       const done = review.comprehension.filter((c) => c.decision === "accepted").length
       return (
-        (confirmedNow ? `✅ 已确认片段 ${args.codeSegmentId}（一次通过）。` : `片段 ${args.codeSegmentId} 此前已确认。`) +
+        (confirmedNow ? `✅ 已确认 ${args.codeSegmentId}（一次通过）。` : `片段/要点 ${args.codeSegmentId} 此前已确认。`) +
         `\n理解确认进度：accepted ${done}/${review.comprehension.length}`
       )
     },
   })
 
   const comprehension_ask = tool({
-    description: "对某片段追问：将开发者的问题与 AI 的解答追加到该片段的 explanation（形成可检索知识库）。",
+    description: "对某片段/要点追问：将开发者的问题与 AI 的解答追加到其 explanation（形成可检索知识库）。",
     args: {
-      codeSegmentId: z.string().describe("被追问的片段标识"),
+      codeSegmentId: z.string().describe("被追问的片段/要点标识"),
       question: z.string().describe("开发者的问题"),
       answer: z.string().describe("AI 的解答"),
     },
     async execute(args, context) {
       store.mutateWorkflow(context.sessionID, (workflow) => {
         const record = reviewRecord(workflow).comprehension.find(
-          (c) => c.codeSegmentId === args.codeSegmentId,
+          (c) => c.id === args.codeSegmentId,
         )
         if (!record) {
-          throw new WorkflowOpError(`片段 ${args.codeSegmentId} 不存在`)
+          throw new WorkflowOpError(`片段/要点 ${args.codeSegmentId} 不存在`)
         }
         record.explanation += `\n\n追问：${args.question}\n解答：${args.answer}`
       })
-      return `💬 问答已追加到片段 ${args.codeSegmentId} 的解释。`
+      return `💬 问答已追加到 ${args.codeSegmentId} 的解释。`
     },
   })
 
   const comprehension_reject = tool({
     description:
-      "拒绝单个代码片段：开发者对片段有异议或需改动，feedback 必填（作为 rewrite 的依据）。" +
-      "片段进入 rejected 状态，须经 rewrite 重写或由开发者 manual 自处理，不允许悬空。",
+      "拒绝单个片段/要点：开发者有异议或需改动，feedback 必填（作为 rewrite 的依据）。" +
+      "进入 rejected 状态，须经 rewrite 重写或由开发者 manual 自处理，不允许悬空。",
     args: {
-      codeSegmentId: z.string().describe("被拒绝的片段标识"),
+      codeSegmentId: z.string().describe("被拒绝的片段/要点标识"),
       feedback: z.string().describe("拒绝意见：期望的改动、被误导的地方或风险点"),
     },
     async execute(args, context) {
       store.mutateWorkflow(context.sessionID, (workflow) => {
         const record = reviewRecord(workflow).comprehension.find(
-          (c) => c.codeSegmentId === args.codeSegmentId,
+          (c) => c.id === args.codeSegmentId,
         )
         if (!record) {
-          throw new WorkflowOpError(`片段 ${args.codeSegmentId} 不存在`)
+          throw new WorkflowOpError(`片段/要点 ${args.codeSegmentId} 不存在`)
         }
         if (record.decision !== "pending") {
-          throw new WorkflowOpError(`片段 ${args.codeSegmentId} 当前为 ${record.decision}，仅 pending 可拒绝（已 accepted/manual 不可回退）`)
+          throw new WorkflowOpError(`片段/要点 ${args.codeSegmentId} 当前为 ${record.decision}，仅 pending 可拒绝（已 accepted/manual 不可回退）`)
         }
         record.decision = "rejected"
         record.feedback = args.feedback
         record.rejectedAt = Date.now()
       })
-      return `⚠ 已拒绝片段 ${args.codeSegmentId}。请按意见 comprehension_rewrite 重写，或由开发者 comprehension_manual 自处理。`
+      return `⚠ 已拒绝 ${args.codeSegmentId}。请按意见 comprehension_rewrite 重写，或由开发者 comprehension_manual 自处理。`
     },
   })
 
   const comprehension_rewrite = tool({
     description:
-      "按拒绝意见重写：AI 依据 feedback 修改代码后调用，片段回到 pending 重新审查，rewrites++。" +
-      "仅 rejected 片段可重写。",
+      "按拒绝意见重写：AI 依据 feedback 修改后调用，回到 pending 重新审查，rewrites++。" +
+      "仅 rejected 可重写。",
     args: {
-      codeSegmentId: z.string().describe("被拒绝待重写的片段标识"),
+      codeSegmentId: z.string().describe("被拒绝待重写的片段/要点标识"),
     },
     async execute(args, context) {
       let rewritesNow = 0
       store.mutateWorkflow(context.sessionID, (workflow) => {
         const record = reviewRecord(workflow).comprehension.find(
-          (c) => c.codeSegmentId === args.codeSegmentId,
+          (c) => c.id === args.codeSegmentId,
         )
         if (!record) {
-          throw new WorkflowOpError(`片段 ${args.codeSegmentId} 不存在`)
+          throw new WorkflowOpError(`片段/要点 ${args.codeSegmentId} 不存在`)
         }
         if (record.decision !== "rejected") {
-          throw new WorkflowOpError(`片段 ${args.codeSegmentId} 当前为 ${record.decision}，仅 rejected 可重写`)
+          throw new WorkflowOpError(`片段/要点 ${args.codeSegmentId} 当前为 ${record.decision}，仅 rejected 可重写`)
         }
         record.decision = "pending"
         record.rewrites += 1
@@ -174,33 +176,33 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
         record.developerConfirmed = false
         record.confirmedAt = null
       })
-      return `🔧 片段 ${args.codeSegmentId} 已回到 pending 重新审查（第 ${rewritesNow} 次重写）。`
+      return `🔧 ${args.codeSegmentId} 已回到 pending 重新审查（第 ${rewritesNow} 次重写）。`
     },
   })
 
   const comprehension_manual = tool({
     description:
-      "开发者自行处理被拒绝的片段（大改、废弃或人工接手）：声明 resolution 结果说明，片段进入 manual 终态。" +
-      "manual 片段不进入一次通过率分子，但计入定论分母。",
+      "开发者自行处理被拒绝的片段/要点（大改、废弃或人工接手）：声明 resolution 结果说明，进入 manual 终态。" +
+      "manual 不进入一次通过率分子，但计入定论分母。",
     args: {
-      codeSegmentId: z.string().describe("被拒绝、由开发者自行处理的片段标识"),
+      codeSegmentId: z.string().describe("被拒绝、由开发者自行处理的片段/要点标识"),
       resolution: z.string().describe("处理结果说明，如『已废弃』『已人工重写』『保留但记入风险』"),
     },
     async execute(args, context) {
       store.mutateWorkflow(context.sessionID, (workflow) => {
         const record = reviewRecord(workflow).comprehension.find(
-          (c) => c.codeSegmentId === args.codeSegmentId,
+          (c) => c.id === args.codeSegmentId,
         )
         if (!record) {
-          throw new WorkflowOpError(`片段 ${args.codeSegmentId} 不存在`)
+          throw new WorkflowOpError(`片段/要点 ${args.codeSegmentId} 不存在`)
         }
         if (record.decision !== "rejected") {
-          throw new WorkflowOpError(`片段 ${args.codeSegmentId} 当前为 ${record.decision}，仅 rejected 可由开发者 manual 处理`)
+          throw new WorkflowOpError(`片段/要点 ${args.codeSegmentId} 当前为 ${record.decision}，仅 rejected 可由开发者 manual 处理`)
         }
         record.decision = "manual"
         record.resolution = args.resolution
       })
-      return `🖐 片段 ${args.codeSegmentId} 已 manual 终态（${args.resolution}）。`
+      return `🖐 ${args.codeSegmentId} 已 manual 终态（${args.resolution}）。`
     },
   })
 
@@ -225,9 +227,9 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
           (c) => c.decision !== "accepted" && c.decision !== "manual",
         )
         if (hanging.length > 0) {
-          const ids = hanging.map((c) => c.codeSegmentId).join("、")
+          const ids = hanging.map((c) => c.id).join("、")
           throw new WorkflowOpError(
-            `仍有 ${hanging.length} 个片段未定论（${ids}）。请 comprehension_confirm 接受、` +
+            `仍有 ${hanging.length} 个片段/要点未定论（${ids}）。请 comprehension_confirm 接受、` +
               `comprehension_reject 拒绝后 rewrite/manual，使其进入终态（accepted/manual）`,
           )
         }

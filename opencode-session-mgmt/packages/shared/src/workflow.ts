@@ -6,8 +6,7 @@
  * 本轮只注册 sdlc（设计文档 3.2 注册表）；reqdoc 随需求书工作加入。
  */
 
-export type WorkflowType = "sdlc"
-// 预留：后续 reqdoc 加入时扩为 "sdlc" | "reqdoc"
+export type WorkflowType = "sdlc" | "reqdoc"
 
 export type StageStatus = "not_started" | "in_progress" | "approved"
 
@@ -33,10 +32,19 @@ export interface ReviewChecklist {
 /** 片段评审去留状态机（3.2 审查）：add→pending；confirm→accepted；reject→rejected；rewrite→pending；manual→manual。终态为 accepted / manual。 */
 export type ComprehensionDecision = "pending" | "accepted" | "rejected" | "manual"
 
+/**
+ * 理解确认记录（3.2 审查，工作流无关的通用机制）。
+ * 泛化语义：sdlc 为「代码片段」（id 为代码段标识，file/lines 必填）；
+ * reqdoc 为「PRD 要点」（id 为要点标识，file/lines 不填）。sdlc 契约逐字节不变。
+ * 工具参数名一律 `codeSegmentId`（LLM 契约），内部映射到本字段 `id`。
+ */
 export interface ComprehensionRecord {
-  codeSegmentId: string
-  file: string
-  lines: [number, number]
+  /** 唯一标识：sdlc 为代码段 id（如 a.ts:1-2），reqdoc 为 PRD 要点 id */
+  id: string
+  /** sdlc 专属：所属文件路径；reqdoc（PRD 要点）无文件归属 → undefined */
+  file?: string
+  /** sdlc 专属：行区间；reqdoc 无 → undefined */
+  lines?: [number, number]
   explanation: string
   /** 片段当前去留状态（3.2）。 */
   decision: ComprehensionDecision
@@ -211,9 +219,82 @@ export const SDLC: WorkflowDefinition = {
     "本需求 SDLC 已完成。建议执行 /new 开始下一个需求，以保持统计隔离。"`,
 }
 
+/** reqdoc 审查清单项（reqdoc 专属，3.2）：业务确认 PRD 要点（区别于 sdlc 的代码理解确认）。 */
+const REQDOC_CHECKLIST: ChecklistItem[] = [
+  { key: "completeness", label: "信息完整（背景/口径/字段齐全）" },
+  { key: "clarity", label: "表达明确（无歧义、可落地）" },
+  { key: "edgeCoverage", label: "边界覆盖（异常/权限/合规场景俱到）" },
+  { key: "resolution", label: "职责清晰（技术初步可行性已确认）" },
+]
+
+/**
+ * reqdoc 工作流定义：需求书（需求分析师角色，3.2、7.4）。
+ * 源于《业务需求难点与解决方案》的四段式渐进引导（目标与场景 → 主流程与规则 →
+ * 边界与异常探针 → 自动化排版），外加业务确认闭环。审查阶段（review）语义为
+ * 业务确认 PRD 要点，复用通用 comprehension/checklist/review_submit 机制。
+ * 定稿无 git 门禁（hasCommitGate=false）。
+ */
+export const REQDOC: WorkflowDefinition = {
+  type: "reqdoc",
+  stages: ["goal", "rules", "edge", "prd", "review"],
+  labels: {
+    goal: "目标与场景",
+    rules: "流程与规则",
+    edge: "边界与异常",
+    prd: "需求规格书",
+    review: "业务确认",
+  },
+  reviewStage: "review",
+  checklist: REQDOC_CHECKLIST,
+  hasCommitGate: false,
+  rules: `# Workflow Agent 规则（需求书）
+
+## 渐进式引导（核心）
+1. 会话开始时初始化 workflow（所有阶段 not_started）。
+2. 采用渐进式分段引导，不要一次性抛出所有问题；单次提问不超过 2 个问题，避免业务有被「质问」的挫败感。
+3. 阶段可能完成时，先输出摘要并询问确认；业务明确确认后才可 workflow_advance 标记 approved。
+4. 业务说「回到XX」时，立即调用 workflow_revisit。绝不自行判断阶段已完成。
+
+## 目标与场景（goal）
+5. 用一两句话引导业务说明：上线后主要是谁在用？帮他们解决什么痛点？
+6. 提炼【核心用户 Actor】【业务场景 Scenario】【业务价值 Value】；业务表达模糊时给出 2-3 个选项让业务勾选确认。
+
+## 流程与规则（rules）
+7. 引导补全主流程：用户需输入哪些信息？系统处理后给什么结果？
+8. 将自然语言转化为字段定义（数据项 / 是否必填 / 校验规则）。
+9. 自动推演 Mermaid 流程图，反向展示给业务确认。
+
+## 边界与异常（edge）——最关键的一步
+10. 主动追问三类探针：
+    - 数据与权限：所有岗位可见，还是按机构/层级隔离？
+    - 异常流程：接口超时 / 操作失败 / 审批驳回，直接报错还是人工补单？
+    - 合规与留痕：涉及资金/敏感数据变更，是否留审计日志？是否需要二次授权？
+
+## 需求规格书（prd）
+11. 将对话信息自动渲染成标准 PRD：业务背景、用户故事、数据字典、正常/异常流程 Mermaid、非功能需求。
+
+## 业务确认（review，核心）
+12. review 是唯一不可由 AI 自行推进的阶段，确保业务真正理解并确认 PRD 要点。
+13. 将 PRD 拆分为可确认要点（业务目标 / 核心字段 / 异常规则 / 合规要求），逐段复述输出。
+14. 业务必须逐段确认：comprehension_confirm 单次只接受一个要点。
+15. 业务追问时详细解释，并追加到该要点（comprehension_ask）。
+16. 每个要点须达成终态（confirm 接受 / manual 自处理）；拒绝的要点先 rewrite 重写或 manual 定论，
+    全部定论后才可 review_submit；清单四项须全为 true，否则回到 edge/prd。
+17. 一次确认通过率由 review_submit 自动计算；通过率低说明要点含糊，应结合拒绝意见重写，而非简单重试。
+
+## 基线对比（预估工时）
+18. 进入 goal 阶段（workflow_advance stage=goal action=enter）时，主动询问：
+    本需求预估人工书写工时（小时）？业务明确给出后调用 workflow_baseline 记录
+    （developer_confirmed=true）；未提供不阻塞，已录入后可从状态中读到，不必重复询问。
+
+## 定稿与下一个需求
+19. 业务确认完成（review_submit 通过）后，建议执行 /new 开始下一个需求，保持统计隔离。`,
+}
+
 /** 已注册的工作流定义注册表（3.2）。 */
 export const WORKFLOW_DEFINITIONS: Record<WorkflowType, WorkflowDefinition> = {
   sdlc: SDLC,
+  reqdoc: REQDOC,
 }
 
 /** 按类型取定义；未知类型抛错（类型安全，消费方应已经 resolveWorkflowType 归一）。 */
@@ -224,6 +305,7 @@ export function getDefinition(type: WorkflowType): WorkflowDefinition {
 /** 将未知值归一为合法 WorkflowType；未知值回退 "sdlc" 并打 warning（兼容旧身份/旧库）。 */
 export function resolveWorkflowType(v: unknown): WorkflowType {
   if (v === "sdlc") return "sdlc"
+  if (v === "reqdoc") return "reqdoc"
   console.warn(`未知工作流类型 ${JSON.stringify(v)}，回退为 "sdlc"`)
   return "sdlc"
 }
