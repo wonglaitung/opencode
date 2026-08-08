@@ -225,6 +225,9 @@ describe("WorkflowDefinition 注册表（3.2）", () => {
     expect(REQDOC.rules).toContain("# Workflow Agent 规则（需求书）")
     expect(REQDOC.rules).toContain("边界与异常（edge）")
     expect(REQDOC.rules).toContain("业务确认（review，核心）")
+    // 需求资料目录契约（7.5）
+    expect(REQDOC.rules).toContain("需求资料目录")
+    expect(REQDOC.rules).toContain("07_需求规格产出")
   })
 
   test("createWorkflowState(reqdoc) 含 reqdoc 阶段与清单", () => {
