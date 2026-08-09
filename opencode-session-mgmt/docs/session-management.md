@@ -569,6 +569,30 @@ export function resolveWorkflowType(v: unknown): WorkflowType   // 未知值回�
 
 **reqdoc 定义**：需求书工作流（需求分析师角色），源于《业务需求难点与解决方案》的**四段式渐进引导**（目标与场景 → 主流程与规则 → 边界与异常探针 → 自动化排版），外加一个**业务确认闭环**。审查阶段（`reviewStage="review"`）语义为**业务确认 PRD 要点**（区别于 sdlc 的代码理解确认），复用同一套 comprehension/checklist/review_submit 闭环机制。四清单项（completeness 信息完整 / clarity 表达明确 / edgeCoverage 边界覆盖 / resolution 职责清晰），`hasCommitGate=false`（定稿无 git 门禁）。阶段键 `["goal","rules","edge","prd","review"]`，中文名 目标与场景 / 流程与规则 / 边界与异常 / 需求规格书 / 业务确认。`resolveWorkflowType` 支持 `"reqdoc"`。规则全文见 7.4；需求资料目录契约见 7.5。
 
+**reqdoc 五阶段推进流程**（与 sdlc 完成门控同构；定稿闭环为业务确认，目录 → 阶段映射见 7.5）：
+
+```mermaid
+graph TB
+    subgraph IterationZone["渐进引导区（可任意跳转反复）"]
+        direction LR
+        G["目标与场景<br/>goal"] <-->|"反复"| R["流程与规则<br/>rules"]
+        R <-->|"反复"| E["边界与异常<br/>edge"]
+        E <-->|"反复"| P["需求规格书<br/>prd"]
+        P <-->|"反复"| RV["业务确认<br/>review"]
+        G -.->|"可回退"| E
+        G -.->|"可回退"| P
+        R -.->|"可回退"| P
+    end
+
+    subgraph Close["定稿闭环（业务确认）"]
+        C{"全部要点<br/>已定论?"}
+    end
+
+    IterationZone --> C
+    C -->|"✓ 全部确认"| PRD["PRD 定稿<br/>产出归档 07_需求规格产出"]
+    C -->|"✗ 有未定论"| BACK["回到 prd/edge<br/>补充或重写要点"]
+```
+
 > **ComprehensionRecord 泛化**：`ComprehensionRecord` 是通用机制（sdlc 编码段与 reqdoc PRD 要点共用）——唯一标识字段为 `id`，`file`/`lines` 可选（sdlc 填、reqdoc 不填）。工具参数名一律保留 `codeSegmentId`（sdlc LLM 契约不变），内部映射到 `id`；`comprehension_add` 的 `file`/`lineStart`/`lineEnd` 可选，sdlc 填、reqdoc 省略。
 
 **BaselineEstimate — 基线预估人工工时（6.3）**：
