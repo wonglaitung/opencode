@@ -47,5 +47,5 @@ docs/                # 设计文档 session-management.md、同步方案 upstrea
 
 - 设计文档、注释、commit message 用**中文**；conventional commit 格式（本仓库历史可参照）。
 - **任何文档与注释都不要用 `§` 符号**引用章节，一律用纯文字（「第 3 章」「3.4 节」或裸编号「见 3.4」）。
-- 设计文档任何行为变更须同步更新对应 mermaid 流程图（共 15 个），改链路必改图。
+- 设计文档任何行为变更须同步更新对应 mermaid 流程图（共 16 个），改链路必改图。
 - 发布前 TODO 见 `README.md`（npm scope、插件发布形态、收集服务镜像）。
