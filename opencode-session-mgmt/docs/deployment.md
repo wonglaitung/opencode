@@ -244,7 +244,7 @@ opencode-sm init
 ? 你的账号（邮箱）: alice@example.com
 ? 所在组（子组用命名约定，如 前端组/基础架构组）: AMS
 ? 所属组织: FTD
-? 收集服务地址（如 http://10.0.1.20:8787）: http://123.33.61.136:8088
+? 收集服务地址（如 http://10.0.1.20:8787）: http://【收集器地址】:8088
 ? 主要工作流类型（sdlc 开发 / reqdoc 需求书）: sdlc
 ✓ 已写入 ~/.config/opencode/session-mgmt/identity.json
 ```
@@ -634,7 +634,7 @@ docker save opencode-sm-collector -o collector-image.tar
    ```
    > 模型网关字段名以所用 OpenCode 版本的 provider schema 为准（见 9.3 节）；缺了 provider 配置，OpenCode 启动后找不到可用模型，无法对话。
 
-3. **每台机配一次身份**：`.\opencode-sm.cmd init`（五问，见 4.2 节）。**「收集服务地址」填组织已部署的内网收集服务地址**（如 `http://123.33.61.136:8088`），**绝不填公网地址**。
+3. **每台机配一次身份**：`.\opencode-sm.cmd init`（五问，见 4.2 节）。**「收集服务地址」填组织已部署的内网收集服务地址**（如 `http://【收集器地址】:8088`），**绝不填公网地址**。
    > ⚠ init 后顺手核对四字段齐全：`C:\Users\<你>\.config\opencode\session-mgmt\identity.json` 须含 account / group / org / collector_url 四个非空值。缺任一（手工编辑漏写 `org` 最常见）汇报会被**静默丢弃**，收集端 sessions 恒为 0（见第 8 章排查项）。例如一个合法的身份文件长这样：
    >
    > ```json
@@ -642,7 +642,7 @@ docker save opencode-sm-collector -o collector-image.tar
    >   "account": "alice@example.com",
    >   "group": "AMS",
    >   "org": "FTD",
-   >   "collector_url": "http://123.33.61.136:8088",
+   >   "collector_url": "http://【收集器地址】:8088",
    >   "workflowType": "sdlc"
    > }
    > ```
