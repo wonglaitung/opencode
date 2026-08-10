@@ -662,6 +662,14 @@ docker save opencode-sm-collector -o collector-image.tar
    ```
    应看到该会话的账号与统计（收集端视角见 6.3 节数据来源表）。
 
+> ⚠ **qwen3.6-27b 经 vLLM 服务的已知坑**（已实证）：opencode 一提问即报 `System message must be at the beginning`（HTTP 400）。根因两层——① 模型自带 `chat_template` 里有硬抛 `raise_exception('System message must be at the beginning.')`，而 opencode 会发出第二条 system 消息；② vLLM 加载 tokenizer 时**不读**模型目录里被替换过的 `tokenizer_config.json`，只改文件无效。**处理**：用修复版模板（仓库 [`docs/qwen3.6-27b.chat-template.jinja`](qwen3.6-27b.chat-template.jinja)，已去掉两处硬抛），在 vLLM 启动时**显式指定**：
+>
+> ```bash
+> vllm serve qwen3.6-27b --chat-template /path/to/qwen3.6-27b.chat-template.jinja
+> ```
+>
+> 必须写进日常启动命令/脚本并固定模板路径；仅替换模型目录文件不会生效。修复对合法输入（system 在首位 + 有 user query）渲染结果与原始模板逐字节一致。
+
 **更新维护**：将来升级任一组件，回到联网区在工具箱目录里重装/重打（会话管理整包用 `bun run pack:bundle`，见 9.2 第 2 步），重新压缩搬入即可；内网机器不联网也能持续使用——插件汇报只走内网收集服务，绝不出网（见 9.5 节）。
 
 ---
