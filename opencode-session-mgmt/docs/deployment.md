@@ -607,6 +607,86 @@ docker save opencode-sm-collector -o collector-image.tar
 - 汇报只走内网，**绝不出网**；即便收集服务临时不可用，也只是本地缓冲，不会产生任何外网流量。
 - 若某台机器**完全不配** `collector_url`，则退化为本机会话/项目级统计，功能不受影响（只是没有组/组织聚合）。
 
+### 9.6 全量工具箱整包：一个目录装下全部（Windows 便携）
+
+前面 9.2~9.4 是把「本体、插件、CLI/收集服务」分开搬入。想一步到位的话，也可在联网区把 **Node.js 便携版目录**直接扩成「全量工具箱」——bun、opencode 本体、opencode-sm CLI、两个插件整包全放进同一目录，压缩后整包搬入内网，解压即用。
+
+以 `D:\Tools\node-v22.23.2-win-x64` 为例的目录布局：
+
+| 条目 | 是什么 |
+|------|--------|
+| `node.exe` / `npm.cmd` 等 | Node.js 便携本体 |
+| `bun.cmd` / `bun` | bun shim → `node_modules/bun/bin/bun.exe`（跑收集服务/构建用） |
+| `opencode.cmd` / `opencode` | OpenCode 本体 shim → `node_modules/opencode-ai/bin/opencode.exe` |
+| `opencode-sm.cmd` / `opencode-sm` | 会话管理 CLI shim → `node_modules/opencode-sm/bin/opencode-sm.exe` |
+| `opencode-sm-bundle-0.1.0/` | 会话管理整包（插件 + CLI + 收集服务 + 依赖，hoisted 真实文件），含 `setup.ps1` |
+| `opencode-edge-debug-bundle-0.0.1/` | edge-debug 插件整包 |
+
+> 工具根目录的 shim 均按自身位置相对定位（`%~dp0`），目录整体移动不影响；但 `opencode.json` 里写的插件路径是**绝对路径**，解压位置定下后别动。
+
+**内网解压后清单**（Windows，每台开发机 + 组织级收集服务机）：
+
+1. **解压到固定路径**，路径避免空格/中文，位置定下后不再移动。zip 用 Windows 原生解压即可（整包是 hoisted 真实文件、无硬链接，见 9.2 第 2 点，解压安全）。
+
+2. **校验包完整**（建议每台机跑一次）：
+   ```powershell
+   cd D:\Tools\node-v22.23.2-win-x64\opencode-sm-bundle-0.1.0
+   .\setup.ps1                 # 检查 bun、@opencode-ai/plugin、zod 是否齐全
+   cd ..
+   .\bun.cmd --version         # 应输出版本号，而非「找不到 bun.exe」
+   .\opencode.cmd --version
+   .\opencode-sm.cmd --version
+   ```
+   任一步报「找不到文件/命令」→ 包没拷全，回联网区重新压缩搬运。
+
+3. **启动收集服务**（每组织一台内网机，管理员做一次；不依赖 docker，整包自带 bun）：
+   ```powershell
+   cd D:\Tools\node-v22.23.2-win-x64\opencode-sm-bundle-0.1.0
+   ..\bun.cmd packages\collector\src\index.ts   # bun 直接跑 TS，零构建
+   ```
+   默认监听 `0.0.0.0:8787`、库文件在当前目录 `collector.db`；可用环境变量改：`PORT=8790`、`OPENCODE_SM_COLLECTOR_DB=D:\data\collector.db`（见 5.3 节）。生产建议交给 NSSM/systemd 托管。验证：
+   ```powershell
+   curl http://127.0.0.1:8787/healthz    # 期望 {"ok":true}
+   ```
+   内网其它机器需能访问该端口（防火墙放行）。
+
+4. **配置 opencode.json**（项目级或全局 `%USERPROFILE%\.config\opencode\opencode.json`）——写插件路径 + 内网模型网关，缺一不可：
+   ```json
+   {
+     "plugin": [
+       "D:/Tools/node-v22.23.2-win-x64/opencode-sm-bundle-0.1.0",
+       "D:/Tools/node-v22.23.2-win-x64/opencode-edge-debug-bundle-0.0.1"
+     ],
+     "provider": {
+       "internal": {
+         "npm": "@ai-sdk/openai-compatible",
+         "name": "内网模型网关",
+         "options": { "baseURL": "http://llm-gateway.intra/v1", "apiKey": "{env:INTERNAL_LLM_KEY}" },
+         "models": { "your-model-id": { "name": "内部模型" } }
+       }
+     }
+   }
+   ```
+   > 模型网关字段名以所用 OpenCode 版本的 provider schema 为准（见 9.3 节）；缺了 provider 配置，OpenCode 启动后找不到可用模型，无法对话。
+
+5. **每台机配一次身份**：`.\opencode-sm.cmd init`（五问，见 4.2 节）。**「收集服务地址」填第 3 步的内网地址**（如 `http://10.0.1.20:8787`），**绝不填公网地址**。
+   > ⚠ init 后顺手核对四字段齐全：`C:\Users\<你>\.config\opencode\session-mgmt\identity.json` 须含 account / group / org / collector_url 四个非空值。缺任一（手工编辑漏写 `org` 最常见）汇报会被**静默丢弃**，收集端 sessions 恒为 0（见 §8 排查项）。
+
+6. **（可选）把工具根目录加入系统 PATH**：`D:\Tools\node-v22.23.2-win-x64` 进 PATH 后，任意目录可直接 `opencode` / `opencode-sm` / `bun` / `npm`，不用敲 `.\xxx.cmd`。
+
+7. **开始使用并端到端验证**：
+   ```powershell
+   cd <你的项目目录>
+   D:\Tools\node-v22.23.2-win-x64\opencode.cmd
+   ```
+   进 TUI 让 AI 报工作流状态，应回显五阶段；走完一个小会话，等插件推送（启动即推 + 每 5 分钟补推）后查组统计：
+   ```powershell
+   .\opencode-sm.cmd stats --group <你的组名> --period 1d
+   ```
+   应看到该会话的账号与统计（收集端视角见 6.3 节数据来源表）。
+
+**更新维护**：将来升级任一组件，回到联网区在工具箱目录里重装/重打（会话管理整包用 `bun run pack:bundle`，见 9.2 第 2 步），重新压缩搬入即可；内网机器不联网也能持续使用——插件汇报只走内网收集服务，绝不出网（见 9.5 节）。
+
 ---
 
 ## 10. 速查附录
