@@ -217,7 +217,7 @@ describe("CollectorDb", () => {
       withDb((db) => {
         db.upsertReport(report("s1", "alice", "前端组", 1)) // sdlc
         const reqdoc = report("s2", "bob", "前端组", 1)
-        reqdoc.workflow.type = "reqdoc" as never // 模拟未来 reqdoc 类型
+        reqdoc.workflow.type = "reqdoc" // reqdoc 需求书工作流（阶段键与 sdlc 不同，分区过滤只认 type）
         db.upsertReport(reqdoc)
         expect(db.statsGroup("前端组", null).sessions).toBe(2) // 未过滤：全部
         expect(db.statsGroup("前端组", null, "sdlc").sessions).toBe(1)
