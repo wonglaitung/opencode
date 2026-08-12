@@ -112,15 +112,18 @@ function parseWorkflow(json: string | null): WorkflowLite {
   }
 }
 
-/** 会话耗时：全部阶段转换时间戳的最早到最晚（6.1 时间戳即数据源）。 */
-function workflowDurationMs(wf: WorkflowLite): number {
+/** 会话耗时：全部阶段转换时间戳的最早到最晚；进行中（commit 未 allowed）以当前时间为上界（6.1）。 */
+function workflowDurationMs(wf: WorkflowLite, now: number = Date.now()): number {
   const times: number[] = []
   for (const stage of Object.values(wf.stages ?? {})) {
     for (const t of stage?.transitions ?? []) {
       if (typeof t?.at === "number") times.push(t.at)
     }
   }
-  return times.length > 0 ? Math.max(...times) - Math.min(...times) : 0
+  if (times.length === 0) return 0
+  const first = Math.min(...times)
+  const last = wf.commit?.status === "allowed" ? Math.max(...times) : now
+  return Math.max(0, last - first)
 }
 
 function avg(values: number[]): number | null {
@@ -288,7 +291,8 @@ export class CollectorDb {
         // 6 分区：sdlc 专属指标（requirements 迭代、行数三分类、返工/覆盖率）仅 sdlc 计算，其余类型 null。
         // 旧汇报无 type 字段按 sdlc 归属（typeMatches 已保证筛选一致性）。
         const isSdlc = workflow.type === undefined || workflow.type === "sdlc"
-        if (workflow.commit?.status === "allowed") accCompleted++
+        const completed = workflow.commit?.status === "allowed"
+        if (completed) accCompleted++
         accCost += row.cost ?? 0
         const durationMs = workflowDurationMs(workflow)
         accDurations.push(durationMs)
@@ -309,10 +313,11 @@ export class CollectorDb {
           linesTotal.config += lines.config ?? 0
         }
 
-        // 基线对比（6.3）：统计基线会话数并计算提效率（无基线/无周期为 null，不参与均值）
+        // 基线对比（6.3）：统计基线会话数并计算提效率（无基线/无周期为 null，不参与均值）。
+        // 提效率仅对完成会话计算——进行中会话的周期是「至今」的实时值，对预估无参照意义。
         const estimated = workflow.baseline?.estimatedHours
         if (typeof estimated === "number" && estimated > 0) baselineSessions++
-        const eff = efficiencyRatio(estimated, durationMs)
+        const eff = completed ? efficiencyRatio(estimated, durationMs) : null
         if (eff !== null) efficiencies.push(eff)
 
         if (isSdlc && row.test_coverage !== null && row.test_coverage !== undefined) accCoverages.push(row.test_coverage)
