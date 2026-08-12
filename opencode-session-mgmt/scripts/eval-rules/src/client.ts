@@ -20,6 +20,8 @@ export async function chatComplete(system: string, user: string, tools: unknown[
     body: JSON.stringify({
       model: MODEL,
       temperature: 0,
+      // 推理模型(如 deepseek-*-flash)会先消耗 token 推理,预留空间避免截断吞掉工具调用
+      max_tokens: 2048,
       messages: [
         { role: "system", content: system },
         { role: "user", content: user },

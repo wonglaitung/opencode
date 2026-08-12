@@ -1361,16 +1361,16 @@ reqdoc 无 `git commit` 门禁，表中「绕过门禁直接提交」风险不�
 | id | stage | 注入文本 |
 |----|-------|----------|
 | sdlc-r1 | global | 会话开始时，调用 workflow_advance(stage=requirements, action=enter) 初始化工作流。 |
-| sdlc-r2 | global | 阶段可能完成时，先输出摘要并询问确认；开发者明确确认后才可 workflow_advance(action=approve, developer_confirmed=true)。 |
+| sdlc-r2 | global | 阶段可能完成时，先输出摘要并询问确认；仅开发者明确表示「确认/通过/可以」才算确认——「你看着办」「差不多」等模糊表态不算，不得自行 approve。确认后调用 workflow_advance(action=approve, developer_confirmed=true)。 |
 | sdlc-r3 | global | 开发者说「回到XX」时，立即调用 workflow_revisit(stage=XX)。绝不自行判断阶段已完成。 |
 | sdlc-r4 | global | 要求提交时，先调用 commit_gate_check；全部五阶段（含审查）approved 后才可 git commit。 |
 | sdlc-r5 | global | 提交门禁放行且 git commit 成功后，提醒开发者执行 /new 开始下一个需求，保持统计隔离。 |
 | sdlc-r6 | requirements | 进入需求阶段时，主动询问预估人工工时（小时）；开发者明确给出后调用 workflow_baseline(developer_confirmed=true)。未提供不阻塞；已录入后不必重复询问。 |
 | sdlc-r7 | review | review 是唯一不可由 AI 自行推进的阶段（必须经 review_submit），目标是确保开发者真正理解代码。 |
 | sdlc-r8 | review | 进入审查后，将每个 AI 生成的代码变更拆分为可理解片段，comprehension_add 逐段登记并输出解释（做了什么、为什么这样写、被放弃的替代方案、潜在风险）。 |
-| sdlc-r9 | review | 开发者必须逐段确认：comprehension_confirm 单次只接受一个 codeSegmentId（禁止一次确认多个）。 |
+| sdlc-r9 | review | 开发者确认某片段时，立即调用 comprehension_confirm(codeSegmentId=该片段 id)；单次只接受一个 codeSegmentId，逐段确认、禁止一次确认多个。 |
 | sdlc-r10 | review | 开发者追问时详细解释，comprehension_ask 将问答追加到该片段的 explanation。 |
-| sdlc-r11 | review | 每个片段须达成终态（confirm 接受 / manual 开发者自处理），不允许 pending/rejected 悬空；拒绝的片段先 comprehension_rewrite 重写或 manual 定论，全部定论后才可 review_submit；清单四项须全为 true，否则回到编码/测试。返工多应结合拒绝意见 rewrite 改进，而非简单重试。 |
+| sdlc-r11 | review | 每个片段须达成终态（confirm 接受 / manual 开发者自处理），不允许 pending/rejected 悬空；拒绝的片段先 comprehension_rewrite 重写或 manual 定论，全部定论且前序阶段（requirements/design/implementation/testing）全部 approved 后才可 review_submit；清单四项须全为 true，否则回到编码/测试。返工多应结合拒绝意见 rewrite 改进，而非简单重试。 |
 
 > 注入时机：进行中阶段为 requirements 时注入 6 条（r1-r6）；design/implementation/testing 时注入 5 条（r1-r5）；review 时注入 10 条（r1-r5 + r7-r11）。
 
@@ -1380,7 +1380,7 @@ reqdoc 无 `git commit` 门禁，表中「绕过门禁直接提交」风险不�
 |----|-------|----------|
 | reqdoc-r1 | global | 会话开始时，调用 workflow_advance(stage=goal, action=enter) 初始化工作流。 |
 | reqdoc-r2 | global | 采用渐进式分段引导，不要一次性抛出所有问题；单次提问不超过 2 个问题，避免业务有被「质问」的挫败感。 |
-| reqdoc-r3 | global | 阶段可能完成时，先输出摘要并询问确认；业务明确确认后才可 workflow_advance(action=approve, developer_confirmed=true)。 |
+| reqdoc-r3 | global | 阶段可能完成时，先输出摘要并询问确认；仅业务明确表示「确认/可以」才算确认——模糊表态不算，不得自行 approve。确认后调用 workflow_advance(action=approve, developer_confirmed=true)。 |
 | reqdoc-r4 | global | 业务说「回到XX」时，立即调用 workflow_revisit(stage=XX)。绝不自行判断阶段已完成。 |
 | reqdoc-r5 | global | 业务确认完成（review_submit 通过）后，建议执行 /new 开始下一个需求，保持统计隔离。 |
 | reqdoc-r6 | goal | 用一两句话引导业务说明：上线后谁在用、解决什么痛点；提炼【核心用户】【业务场景】【业务价值】，表达模糊时给出 2-3 个选项让业务勾选确认。 |
@@ -1394,9 +1394,9 @@ reqdoc 无 `git commit` 门禁，表中「绕过门禁直接提交」风险不�
 | reqdoc-r14 | prd | 产出归档：需求澄清记录、自动提取的 Mermaid 流程图、最终 PRD 一律写入 07_需求规格产出 目录。 |
 | reqdoc-r15 | review | review 是唯一不可由 AI 自行推进的阶段（必须经 review_submit），确保业务真正理解并确认 PRD 要点。 |
 | reqdoc-r16 | review | 将 PRD 拆分为可确认要点（业务目标 / 核心字段 / 异常规则 / 合规要求），comprehension_add 逐段复述输出。 |
-| reqdoc-r17 | review | 业务必须逐段确认：comprehension_confirm 单次只接受一个要点。 |
+| reqdoc-r17 | review | 业务确认某要点时，立即调用 comprehension_confirm(codeSegmentId=该要点 id)；单次只接受一个要点，逐段确认、禁止一次确认多个。 |
 | reqdoc-r18 | review | 业务追问时详细解释，comprehension_ask 将问答追加到该要点的 explanation。 |
-| reqdoc-r19 | review | 每个要点须达成终态（confirm 接受 / manual 自处理），不允许 pending/rejected 悬空；拒绝的要点先 rewrite 重写或 manual 定论，全部定论后才可 review_submit；清单四项须全为 true，否则回到 edge/prd。通过率低说明要点含糊，应结合拒绝意见重写，而非简单重试。 |
+| reqdoc-r19 | review | 每个要点须达成终态（confirm 接受 / manual 自处理），不允许 pending/rejected 悬空；拒绝的要点先 rewrite 重写或 manual 定论，全部定论且前序阶段（goal/rules/edge/prd）全部 approved 后才可 review_submit；清单四项须全为 true，否则回到 edge/prd。通过率低说明要点含糊，应结合拒绝意见重写，而非简单重试。 |
 
 ### 7.5 reqdoc 需求资料目录契约
 
@@ -1654,8 +1654,10 @@ bun run scripts/eval-rules/run.ts --variant baseline         # 跑基线通过�
 bun run scripts/eval-rules/run.ts --variant new              # 改造后 → results/new.json，自动对比 baseline
 ```
 
-- 环境变量：`EVAL_BASE_URL`（OpenAI 兼容端点）、`EVAL_API_KEY`、`EVAL_MODEL`（默认 qwen3.6-27b）；`--repeat N` 重复多次取通过率
+- 环境变量：`EVAL_BASE_URL`（OpenAI 兼容端点）、`EVAL_API_KEY`、`EVAL_MODEL`（默认 qwen3.6-27b）；`--repeat N` 重复多次取通过率（聚合按**运行次数**统计，防单次抖动掩盖趋势）
 - 场景集 14 个（sdlc s1-s8 + reqdoc r1-r6），覆盖关键规则：基线录入不重复、确认后 approve、无确认不 approve、回到XX→revisit、审查逐段不批量、前序未完成不 submit、提交前查门禁、reqdoc 渐进引导 ≤2 问 / 业务确认单要点 / edge 探针
 - **rule-based 判定**（不用 LLM judge）：工具类比对 `tool_use` 名称与参数谓词（如 approve 时 `developer_confirmed` 必须 true）、`no_tool` 类断言未调用某工具、`text` 类（≤2 问、探针关键词）为关键词启发式、判定口径脆弱需人工复核
 - baseline 与 new 共用同一状态夹具（`finish()` 重算 commit），保证可对等比较
+
+**实测结果**（2026-08-12，deepseek-v4-flash，repeat 3，按运行次数）：整体 **76% → 93%**（reqdoc 61% → 100%，sdlc 88% 持平）。驱动改进的三处迭代：状态条列出**待确认项 id**（让模型知道要 confirm 什么）、规则显式排除模糊表态（「你看着办」不算确认）、review_submit 规则补「前序须全部 approved」。基线快照冻结于 `fixtures/baseline/`，`results/{baseline,new}.json` 入库作参照，任何模型/时刻可重跑对比。
 

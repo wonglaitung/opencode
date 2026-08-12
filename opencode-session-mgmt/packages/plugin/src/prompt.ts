@@ -51,7 +51,7 @@ export function buildStateBar(workflow: WorkflowState, stage: string | null): st
     .join(" → ")
   const lines = ["## 当前工作流", bar]
 
-  // 审查进行中才输出审查进度（含清单各项）
+  // 审查进行中才输出审查进度（含清单各项 + 待确认项 id，让模型知道要 confirm 什么）
   if (stage === def.reviewStage) {
     const review = reviewRecord(workflow)
     const decided = review.comprehension.filter((c) => c.decision === "accepted" || c.decision === "manual").length
@@ -63,6 +63,10 @@ export function buildStateBar(workflow: WorkflowState, stage: string | null): st
         review.comprehension.length ? `；清单 ${checklist}` : ""
       }`,
     )
+    const pending = review.comprehension.filter((c) => c.decision !== "accepted" && c.decision !== "manual")
+    if (pending.length > 0) {
+      lines.push(`待确认：${pending.map((c) => `${c.id}(${c.decision})`).join("、")}`)
+    }
   }
   if (workflow.baseline) lines.push(`基线：已录入 ${workflow.baseline.estimatedHours} 小时`)
   const iteration = workflow.quality.iterationCount ?? 0

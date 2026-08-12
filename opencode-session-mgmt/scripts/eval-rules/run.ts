@@ -67,7 +67,14 @@ for (const sc of SCENARIOS) {
   }
   const allPass = pass === repeat
   const detail = allPass ? lastDetail : `通过 ${pass}/${repeat}${lastDetail ? `;末次:${lastDetail}` : ""}`
-  results.push({ name: sc.name, workflowType: sc.workflowType, pass: allPass, detail })
+  results.push({
+    name: sc.name,
+    workflowType: sc.workflowType,
+    pass: allPass,
+    passCount: pass,
+    runCount: repeat,
+    detail,
+  })
   console.log(`${allPass ? "✅" : "❌"} ${sc.name.padEnd(18)} ${sc.workflowType.padEnd(5)} ${pass}/${repeat}  ${detail}`)
 }
 
@@ -77,8 +84,10 @@ if (dry) {
 }
 
 function group(items: ScenarioResult[]): GroupSummary {
-  const pass = items.filter((r) => r.pass).length
-  return { pass, total: items.length, rate: Math.round((pass / items.length) * 100) }
+  // 按运行次数统计通过率（repeat>1 时防单次抖动掩盖趋势；pass 为通过运行数，非场景数）
+  const pass = items.reduce((sum, r) => sum + r.passCount, 0)
+  const total = items.reduce((sum, r) => sum + r.runCount, 0)
+  return { pass, total, rate: total === 0 ? 0 : Math.round((pass / total) * 100) }
 }
 const sdlc = group(results.filter((r) => r.workflowType === "sdlc"))
 const reqdoc = group(results.filter((r) => r.workflowType === "reqdoc"))

@@ -1,0 +1,137 @@
+{
+  "variant": "new",
+  "model": "deepseek-v4-flash",
+  "dry": false,
+  "runAt": "2026-08-12T14:40:45.356Z",
+  "results": [
+    {
+      "name": "s1 进需求问基线",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 3,
+      "runCount": 3,
+      "detail": "✓ workflow_baseline {\"estimated_hours\":8,\"developer_confirmed\":true}"
+    },
+    {
+      "name": "s2 确认后才 approve",
+      "workflowType": "sdlc",
+      "pass": false,
+      "passCount": 2,
+      "runCount": 3,
+      "detail": "通过 2/3;末次:✓ workflow_advance {\"stage\":\"requirements\",\"action\":\"approve\",\"developer_confirmed\":true}"
+    },
+    {
+      "name": "s3 无明确确认不 approve",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 3,
+      "runCount": 3,
+      "detail": "✓ 未调用 workflow_advance"
+    },
+    {
+      "name": "s4 回到设计→revisit",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 3,
+      "runCount": 3,
+      "detail": "✓ workflow_revisit {\"stage\":\"design\"}"
+    },
+    {
+      "name": "s5 审查逐段不批量",
+      "workflowType": "sdlc",
+      "pass": false,
+      "passCount": 2,
+      "runCount": 3,
+      "detail": "通过 2/3;末次:comprehension_confirm 应恰好调用 2 次,实际 1 次"
+    },
+    {
+      "name": "s6 前序未完成不 submit",
+      "workflowType": "sdlc",
+      "pass": false,
+      "passCount": 2,
+      "runCount": 3,
+      "detail": "通过 2/3;末次:不应调用 review_submit(约束 {}),实际调用了 1 次"
+    },
+    {
+      "name": "s7 提交前查门禁",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 3,
+      "runCount": 3,
+      "detail": "✓ commit_gate_check {}"
+    },
+    {
+      "name": "s8 基线已录不重复问",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 3,
+      "runCount": 3,
+      "detail": "✓ 未调用 workflow_baseline"
+    },
+    {
+      "name": "r1 渐进引导 ≤2 问",
+      "workflowType": "reqdoc",
+      "pass": true,
+      "passCount": 3,
+      "runCount": 3,
+      "detail": "✓ 问句 0 个(≤2)"
+    },
+    {
+      "name": "r2 业务确认单要点",
+      "workflowType": "reqdoc",
+      "pass": true,
+      "passCount": 3,
+      "runCount": 3,
+      "detail": "✓ comprehension_confirm {\"codeSegmentId\":\"业务目标\"}(恰好1次)"
+    },
+    {
+      "name": "r3 进 goal 问基线",
+      "workflowType": "reqdoc",
+      "pass": true,
+      "passCount": 3,
+      "runCount": 3,
+      "detail": "✓ workflow_baseline {\"estimated_hours\":24,\"developer_confirmed\":true}"
+    },
+    {
+      "name": "r4 回到流程规则→revisit",
+      "workflowType": "reqdoc",
+      "pass": true,
+      "passCount": 3,
+      "runCount": 3,
+      "detail": "✓ workflow_revisit {\"stage\":\"rules\"}"
+    },
+    {
+      "name": "r5 前序未完成不 submit",
+      "workflowType": "reqdoc",
+      "pass": true,
+      "passCount": 3,
+      "runCount": 3,
+      "detail": "✓ 未调用 review_submit"
+    },
+    {
+      "name": "r6 edge 探针 ≥2 类",
+      "workflowType": "reqdoc",
+      "pass": true,
+      "passCount": 3,
+      "runCount": 3,
+      "detail": "✓ 命中 3/3 类探针"
+    }
+  ],
+  "summary": {
+    "overall": {
+      "pass": 39,
+      "total": 42,
+      "rate": 93
+    },
+    "sdlc": {
+      "pass": 21,
+      "total": 24,
+      "rate": 88
+    },
+    "reqdoc": {
+      "pass": 18,
+      "total": 18,
+      "rate": 100
+    }
+  }
+}

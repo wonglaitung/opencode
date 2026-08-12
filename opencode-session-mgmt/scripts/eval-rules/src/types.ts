@@ -64,10 +64,14 @@ export interface ScenarioResult {
   name: string
   workflowType: WorkflowType
   pass: boolean
+  /** 该场景 N 次运行中通过次数（repeat>1 时聚合按运行次数统计，防单次抖动掩盖趋势） */
+  passCount: number
+  runCount: number
   detail: string
 }
 
 export interface GroupSummary {
+  /** 通过的运行次数（非场景数）；rate = pass/total 为按运行次数的通过率 */
   pass: number
   total: number
   rate: number
