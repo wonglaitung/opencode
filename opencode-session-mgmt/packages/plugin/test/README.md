@@ -1,6 +1,6 @@
 # 插件单元测试
 
-覆盖范围（设计文档 §13）：
+覆盖范围（设计文档 13）：
 - 工具校验逻辑（workflow_advance 的确认语义校验）
 - 防批量确认（comprehension_confirm 单次单片段）
 - 合并语义（quality 增量合并）

@@ -56,7 +56,7 @@ describe("createCommitGate", () => {
     store.close()
   })
 
-  test("一次性强制提交授权：放行一次后失效（§3.4）", async () => {
+  test("一次性强制提交授权：放行一次后失效（3.4）", async () => {
     const store = Store.memory()
     store.mutateWorkflow("s1", (wf) => {
       wf.commit.force = { reason: "紧急 hotfix", at: 1, used: false }

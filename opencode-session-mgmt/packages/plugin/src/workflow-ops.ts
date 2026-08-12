@@ -21,7 +21,7 @@ export function recomputeCommit(workflow: WorkflowState): WorkflowState {
 
 /**
  * 对指定阶段施加一次转换，返回（原地修改后的）状态。
- * 严格遵守 §3.3 状态机：enter 仅限 not_started→in_progress（状态机无 approved→in_progress、
+ * 严格遵守 3.3 状态机：enter 仅限 not_started→in_progress（状态机无 approved→in_progress、
  * in_progress→in_progress 的 enter 边），approved 只能经 revisit 回退。
  * - enter:   not_started → in_progress；已 approved 抛错（须 revisit）；已 in_progress 幂等 no-op
  * - approve: in_progress → approved（未 enter 不可 approve）

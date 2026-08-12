@@ -540,12 +540,18 @@ classDiagram
 
 **WorkflowDefinition 注册表（多流程就绪）**：
 
-插件把「工作流的定义」与「通用机制」解耦。定义（阶段键、阶段中文名、审查清单、提交门禁有无、注入的规则全文）收敛为 `WorkflowDefinition`，按 `WorkflowType` 注册：
+插件把「工作流的定义」与「通用机制」解耦。定义（阶段键、阶段中文名、审查清单、提交门禁有无、注入的规则项）收敛为 `WorkflowDefinition`，按 `WorkflowType` 注册：
 
 ```typescript
 export type WorkflowType = "sdlc" | "reqdoc"          // 当前注册 sdlc 与 reqdoc
 
 export interface ChecklistItem { key: string; label: string; auto?: boolean }
+
+export interface RuleItem {
+  id: string                               // 稳定标识（如 sdlc-r1），测试/评测/文档交叉引用
+  stage: string | "global"                 // 生效阶段键；"global" 所有阶段通用
+  text: string                             // 只承载模型可行动作（工具/时机/确认语义）
+}
 
 export interface WorkflowDefinition {
   type: WorkflowType
@@ -554,21 +560,25 @@ export interface WorkflowDefinition {
   reviewStage: string | null              // 哪个阶段是审查阶段（可无）
   checklist: ChecklistItem[]              // 审查清单项（仅 reviewStage 存在时用）
   hasCommitGate: boolean                  // sdlc=true；reqdoc 定稿无 git 门禁 → false
-  rules: string                           // 该类型注入的规则全文（见 7.4）
+  rules: RuleItem[]                       // 注入的规则项（见 7.4），阶段化注入：每轮只取 global + 当前阶段
 }
 
 export const WORKFLOW_DEFINITIONS: Record<WorkflowType, WorkflowDefinition>
 export const SDLC: WorkflowDefinition     // sdlc 定义（五阶段 + 四清单 + 门禁 + 规则）
 export const REQDOC: WorkflowDefinition   // reqdoc 定义（见下方、7.4）
 export function getDefinition(type: WorkflowType): WorkflowDefinition
+export function rulesForStage(def: WorkflowDefinition, stage: string | null): RuleItem[]
+  // 阶段化注入取规则：stage 为 null 时只给 global；否则给 global + 该阶段（7.4）
+export function currentInProgressStage(s: WorkflowState): string | null
+  // 当前进行中阶段：按 stages 顺序取第一个 in_progress，无则 null
 export function resolveWorkflowType(v: unknown): WorkflowType   // 未知值回退 "sdlc" 并打 warning
 ```
 
 `WorkflowState` 含 `type` 字段标明本会话属于哪种工作流；`stages` 为泛化的 `Record<string, StageRecord>`，审查阶段经 `reviewRecord()` 定位（`getDefinition(s.type).reviewStage`）。系统不设 `STAGE_ORDER`/`STAGE_LABELS`/`StageName` 常量——消费方一律通过 `getDefinition(workflow.type)` 取阶段键/中文名/清单。`ComprehensionRecord` 是通用机制（见下方 reqdoc 段）。`metricKind`、`workflow_set_type` 工具未实现（reqdoc 指标模型/切换场景未定，避免死代码）。
 
-**sdlc 定义**：五阶段 `["requirements","design","implementation","testing","review"]`，审查阶段为 `review`，四清单项（businessIntent/logicExplainable/behaviorVerifiable/designRationale），`hasCommitGate=true`，规则全文见 7.4。
+**sdlc 定义**：五阶段 `["requirements","design","implementation","testing","review"]`，审查阶段为 `review`，四清单项（businessIntent/logicExplainable/behaviorVerifiable/designRationale），`hasCommitGate=true`，结构化规则见 7.4。
 
-**reqdoc 定义**：需求书工作流（需求分析师角色），源于《业务需求难点与解决方案》的**四段式渐进引导**（目标与场景 → 主流程与规则 → 边界与异常探针 → 自动化排版），外加一个**业务确认闭环**。审查阶段（`reviewStage="review"`）语义为**业务确认 PRD 要点**（区别于 sdlc 的代码理解确认），复用同一套 comprehension/checklist/review_submit 闭环机制。四清单项（completeness 信息完整 / clarity 表达明确 / edgeCoverage 边界覆盖 / resolution 职责清晰），`hasCommitGate=false`（定稿无 git 门禁）。阶段键 `["goal","rules","edge","prd","review"]`，中文名 目标与场景 / 流程与规则 / 边界与异常 / 需求规格书 / 业务确认。`resolveWorkflowType` 支持 `"reqdoc"`。规则全文见 7.4；需求资料目录契约见 7.5。
+**reqdoc 定义**：需求书工作流（需求分析师角色），源于《业务需求难点与解决方案》的**四段式渐进引导**（目标与场景 → 主流程与规则 → 边界与异常探针 → 自动化排版），外加一个**业务确认闭环**。审查阶段（`reviewStage="review"`）语义为**业务确认 PRD 要点**（区别于 sdlc 的代码理解确认），复用同一套 comprehension/checklist/review_submit 闭环机制。四清单项（completeness 信息完整 / clarity 表达明确 / edgeCoverage 边界覆盖 / resolution 职责清晰），`hasCommitGate=false`（定稿无 git 门禁）。阶段键 `["goal","rules","edge","prd","review"]`，中文名 目标与场景 / 流程与规则 / 边界与异常 / 需求规格书 / 业务确认。`resolveWorkflowType` 支持 `"reqdoc"`。结构化规则见 7.4；需求资料目录契约见 7.5。
 
 **reqdoc 五阶段推进流程**（与 sdlc 完成门控同构；定稿闭环为业务确认，目录 → 阶段映射见 7.5）：
 
@@ -1173,7 +1183,7 @@ reqdoc 会话不产出代码，sdlc 专属指标——AI 代码行数（业务/�
 flowchart TD
     subgraph Turn["每轮对话"]
         SP["上游 System Prompt 组装"]
-        SP -->|"触发 system.transform hook"| RULES["插件注入：<br/># Workflow 规则<br/>+ 当前 WorkflowState"]
+        SP -->|"触发 system.transform hook"| RULES["插件注入：<br/>通用+当前阶段规则<br/>+ 一行阶段条"]
     end
 
     subgraph Agent["Agent 循环"]
@@ -1194,7 +1204,7 @@ flowchart TD
 ```
 
 关键点：
-- **规则注入**：上游每一步 Agent 循环都会重新组装 system prompt 并触发 `experimental.chat.system.transform`，插件在此 hook 中从插件库读取当前会话的 `WorkflowState`，将规则 + 当前状态追加到 `output.system`——无需修改 `prompt.ts`
+- **规则注入**：上游每一步 Agent 循环都会重新组装 system prompt 并触发 `experimental.chat.system.transform`，插件在此 hook 中从插件库读取当前会话的 `WorkflowState`，将**阶段化规则（global + 当前 in_progress 阶段）**与**一行阶段条**追加到 `output.system`——弱模型只读当前需要的规则与压缩状态，降低遵循负担（7.4、7.3）。插件注入逻辑在 `packages/plugin/src/prompt.ts`，上游引擎 `prompt.ts` 零修改
 - **状态持久化**：Agent 通过插件工具（4.1）写入 `WorkflowState`（阶段变更、审查清单、理解记录），不依赖 LLM 记忆
 - **状态同步**：每轮 hook 触发时读取的都是插件库中的最新状态，确保 Agent 始终知道当前进度
 
@@ -1332,145 +1342,65 @@ Agent:  好的，已记录。我将补充「币种」字段后重新呈现该要
 
 | 风险 | 措施 |
 |------|------|
-| Agent 忘记当前阶段 | 每轮 `system.transform` hook 将最新 `WorkflowState` 刷新到 system prompt |
-| Agent 自行推进阶段 | 规则重复强调"绝不自行判断"，且 `workflow_advance` 工具在服务端（插件 handler）校验：只有开发者回复中包含明确确认词（"确认"/"approve"/"ok"）时才执行成功 |
-| Agent 跳过审查交互 | 审查阶段是独立的系统提示块，规则优先级最高；`review_submit` 工具在服务端二次校验审查清单（`def.checklist`），未全部通过则拒绝 |
+| Agent 忘记当前阶段 | 每轮 `system.transform` hook 将最新状态压缩为一行阶段条刷新到 system prompt |
+| Agent 自行推进阶段 | 规则重复强调"绝不自行判断"，且 `workflow_advance` 工具在服务端（插件 handler）校验：`approve` 必须 `developer_confirmed=true`（开发者明确确认），否则拒绝 |
+| Agent 跳过审查交互 | 审查阶段是独立的系统提示块，规则优先级最高；`review_submit` 工具在服务端二次校验审查清单（`def.checklist`）与前序阶段，未全部通过则拒绝 |
 | Agent 批量跳过逐段确认 | **服务端防篡改**：`comprehension_confirm` 工具单次调用只接受一个 `codeSegmentId`，批量传入直接报错，防止 LLM 在开发者回复"看起来不错"时将全部片段批量设为 `confirmed` |
 | Agent 绕过门禁直接提交 | `tool.execute.before` hook 拦截 `bash` 中的 `git commit`，未通过 `commit_gate_check` 时抛错阻断——这是插件层的硬约束，不依赖 LLM 自觉 |
-| LLM 上下文窗口不足 | 工作流状态压缩在 JSON 中，system prompt 中只注入当前阶段规则，历史规则不重复注入 |
+| Agent 重复 enter 已 approved 阶段 | `applyTransition` 服务端校验：`enter` 已 approved 阶段抛错（须 `workflow_revisit` 回退），`enter` 已 in_progress 阶段幂等 no-op（不追加 transition） |
+| LLM 上下文窗口不足 | 工作流状态压缩为一行阶段条，system prompt 只注入当前阶段规则（global + 当前 in_progress 阶段，见 7.4），历史规则不重复注入 |
 
 reqdoc 无 `git commit` 门禁，表中「绕过门禁直接提交」风险不适用；其 review 语义为**业务确认 PRD 要点**，防批量走过场的约束（`comprehension_confirm` 单次只接受一个要点）同样生效。
 
 ### 7.4 规则全文
 
-以下是 **sdlc** 工作流的完整规则，作为 `WorkflowDefinition.rules` 注入（见 3.2 `SDLC` 定义）。插件按会话的 `workflow.type` 取对应类型的规则注入 system prompt；reqdoc 有自己的规则全文（见本节末尾）。
+规则以 `WorkflowDefinition.rules: RuleItem[]` 存储（见 3.2），每项带 `stage` 归属（`"global"` 或阶段键）。插件每轮经 `rulesForStage(def, currentInProgressStage(workflow))` **只注入 global + 当前 in_progress 阶段的规则**（弱模型遵循负担最小化，见 7.3）；无进行中阶段时只给 global + 起步提示。规则文本只承载**模型可行动作**（调用哪个工具、何时、确认语义）；插件内部机制（行数统计、stuck 检测、一次通过率计算）由代码强制，不进注入文本。
 
-```markdown
-# Workflow Agent 规则
+以下是 **sdlc** 的 11 条规则（5 global + 1 requirements + 5 review）：
 
-## 阶段推进规则
-1. 会话开始时，初始化 workflow 状态（所有阶段 not_started）
-2. 当对话表明阶段可能完成时，输出摘要并询问确认
-3. 开发者明确确认后才标记 approved
-4. 开发者说"回到XX"时，立即 revisit
-5. 开发者要求提交时，检查所有阶段（含 review）
-6. 绝不自行判断阶段已完成
+| id | stage | 注入文本 |
+|----|-------|----------|
+| sdlc-r1 | global | 会话开始时，调用 workflow_advance(stage=requirements, action=enter) 初始化工作流。 |
+| sdlc-r2 | global | 阶段可能完成时，先输出摘要并询问确认；开发者明确确认后才可 workflow_advance(action=approve, developer_confirmed=true)。 |
+| sdlc-r3 | global | 开发者说「回到XX」时，立即调用 workflow_revisit(stage=XX)。绝不自行判断阶段已完成。 |
+| sdlc-r4 | global | 要求提交时，先调用 commit_gate_check；全部五阶段（含审查）approved 后才可 git commit。 |
+| sdlc-r5 | global | 提交门禁放行且 git commit 成功后，提醒开发者执行 /new 开始下一个需求，保持统计隔离。 |
+| sdlc-r6 | requirements | 进入需求阶段时，主动询问预估人工工时（小时）；开发者明确给出后调用 workflow_baseline(developer_confirmed=true)。未提供不阻塞；已录入后不必重复询问。 |
+| sdlc-r7 | review | review 是唯一不可由 AI 自行推进的阶段（必须经 review_submit），目标是确保开发者真正理解代码。 |
+| sdlc-r8 | review | 进入审查后，将每个 AI 生成的代码变更拆分为可理解片段，comprehension_add 逐段登记并输出解释（做了什么、为什么这样写、被放弃的替代方案、潜在风险）。 |
+| sdlc-r9 | review | 开发者必须逐段确认：comprehension_confirm 单次只接受一个 codeSegmentId（禁止一次确认多个）。 |
+| sdlc-r10 | review | 开发者追问时详细解释，comprehension_ask 将问答追加到该片段的 explanation。 |
+| sdlc-r11 | review | 每个片段须达成终态（confirm 接受 / manual 开发者自处理），不允许 pending/rejected 悬空；拒绝的片段先 comprehension_rewrite 重写或 manual 定论，全部定论后才可 review_submit；清单四项须全为 true，否则回到编码/测试。返工多应结合拒绝意见 rewrite 改进，而非简单重试。 |
 
-## 审查阶段 — 理解保障规则（核心）
-7. 审查阶段是唯一不可被 AI 自行推进的阶段
-8. 审查阶段的核心目标是**确保开发者理解代码**，而非仅仅检查代码是否符合规范
+> 注入时机：进行中阶段为 requirements 时注入 6 条（r1-r6）；design/implementation/testing 时注入 5 条（r1-r5）；review 时注入 10 条（r1-r5 + r7-r11）。
 
-## 代码解释与理解确认交互
-9. 审查阶段进入时，Agent 将每个 AI 生成的代码变更拆分为可理解片段（按方法/类/模块边界）
-10. 对每个片段，Agent 必须输出 ComprehensionRecord：
-    - 自然语言解释：这段代码做了什么、为什么这样写
-    - 设计推导（designRationale）：为什么选择这个方案，有哪些替代方案被放弃
-    - 潜在风险：边界条件、性能考量、未来可能的变更点
-    - 关联说明：这段代码与本会话其他代码片段的关系
-11. 开发者必须**逐段**确认理解，不可一键 approve 所有片段
-12. 开发者对任意片段追问"为什么这样写"时，Agent 必须详细解释，并将追问和回答追加到 explanation 中
-13. 所有片段处于终态（`accepted` / `manual`）后，designRationale 才可标记为 true
-14. 审查清单中其他三项（businessIntent、logicExplainable、behaviorVerifiable）同时验证
+以下是 **reqdoc** 的 19 条规则（5 global + 3 goal + 2 rules + 2 edge + 2 prd + 5 review）。源于《业务需求难点与解决方案》的四段式渐进引导 + 业务确认闭环；需求资料目录契约见 7.5：
 
-## 一次通过率监控（返工信号）
-15. 一次通过率由插件在 `review` 闭环中**自动统计**，不依赖 Agent 主动上报：
-    - 每个片段在 `comprehension_add` 时置为 `decision = pending`
-    - 开发者 `comprehension_confirm` → 片段 `accepted`，计入"一次通过"
-    - 开发者 `comprehension_reject` 要求重写 → 片段进入 `rewrite` 循环，不计入"一次通过"
-    - 开发者 `comprehension_manual` 自行处理并声明 resolution → 片段 `manual`，不计入"一次通过"也不计入分母之外的返工
-    - firstPassRate = 一次通过片段数 / 全部定论片段数 × 100%
-16. 一次通过率**不设健康阈值/告警**，作为返工信号展示：
-    - 高值（接近 100%）是正常期望——AI 一次写对越少返工越好，不存在"过高=未充分审查"的语义（区别于业界"接受率"一行补全语境）
-    - 低值提示该会话返工多，可结合 rewrite 次数与反馈定位是需求理解偏差还是实现质量问题
-    - 会话级统计展示百分比与 rewrite 片段数；项目/组织级展示均值与过低会话数（不触发硬告警）
-
-## 重复编辑模式检测规则
-17. 跟踪每个文件的 AI 代码编辑次数（iterationByFile / iterationCount，统计用）
-18. 通过内存短记忆检测重复编辑模式（非硬上限）：
-    - 信号 A：同一文件连续 3 次以上使用相同参数的 AI 编辑（streak）
-    - 信号 B：同一文件在近期 20 次调用中出现 6 次以上（frequency，捕获振荡）
-19. 检测到 stuck 文件时，提醒开发者审查是否陷入无效循环，但不拒绝生成
-20. 短记忆不持久化（daemon 重启自动清零），iterationByFile 仅存本机用于统计
-
-## 审查清单验证
-21. 审查阶段 approve 前，必须验证 ReviewChecklist 四项全部为 true：
-    - businessIntent: 公共方法有业务意图注释
-    - logicExplainable: 圈复杂度 >10 的方法有行内注释
-    - behaviorVerifiable: 每个 Service 方法有至少一个集成测试
-    - designRationale: 所有代码片段有 ComprehensionRecord 且处于终态（accepted/manual）
-22. 任一检查项未通过，审查阶段不可 approve，需回到编码或测试阶段
-
-## 理解凭证的持久价值
-23. ComprehensionRecord 不仅是审批流程的产物，更是可检索的知识库
-24. 三个月后接手代码的开发者，应先阅读 ComprehensionRecord[] 中的 explanation，再阅读代码
-25. 如果开发者未逐段确认理解就直接 approve，审查阶段会在下一次 augment 时被标记为"需重新审查"
-
-## AI 代码行数统计
-26. 插件在 `tool.execute.after` 按净增量口径累计各文件 AI 净增行数（linesByFile）：write 整文件覆盖计、edit 按新行−旧行、apply_patch 按 +行−−行（插件内轻量扫描器解析，不依赖上游模块）
-27. 行数按 业务/测试/配置 三分类汇总（测试路径/命名 → 配置扩展名 → 其余为业务），逐文件 clamp ≥0；行数仅展示、不设阈值告警，文件路径不外传（汇报只带三类聚合数字）
-
-## 基线对比（预估人工工时）
-28. 进入需求阶段（workflow_advance stage=requirements action=enter）时，主动询问开发者：项目经理对本需求的预估人工工时是多少（小时）？开发者明确给出后调用 workflow_baseline 记录（developer_confirmed=true）。未提供不阻塞；已录入后可从状态中读到，不必重复询问
-29. baseline 为可选字段，语义：预估工时仅作实际周期的参照系，AI 提效率 =（预估 − 实际周期）÷ 预估，可为负（实际超预估）、仅展示不设阈值；可随时重设（幂等覆盖记最新值）
-```
-
-以下是 **reqdoc** 工作流的规则全文，作为 `WorkflowDefinition.rules` 注入（见 3.2 `REQDOC` 定义）。源于《业务需求难点与解决方案》的四段式渐进引导 + 业务确认闭环。配套的需求资料目录契约见 7.5。
-
-```markdown
-# Workflow Agent 规则（需求书）
-
-## 渐进式引导（核心）
-1. 会话开始时初始化 workflow（所有阶段 not_started）。
-2. 采用渐进式分段引导，不要一次性抛出所有问题；单次提问不超过 2 个问题，避免业务有被「质问」的挫败感。
-3. 阶段可能完成时，先输出摘要并询问确认；业务明确确认后才可 workflow_advance 标记 approved。
-4. 业务说「回到XX」时，立即调用 workflow_revisit。绝不自行判断阶段已完成。
-
-## 目标与场景（goal）
-5. 用一两句话引导业务说明：上线后主要是谁在用？帮他们解决什么痛点？
-6. 提炼【核心用户 Actor】【业务场景 Scenario】【业务价值 Value】；业务表达模糊时给出 2-3 个选项让业务勾选确认。
-
-## 流程与规则（rules）
-7. 引导补全主流程：用户需输入哪些信息？系统处理后给什么结果？
-8. 将自然语言转化为字段定义（数据项 / 是否必填 / 校验规则）。
-9. 自动推演 Mermaid 流程图，反向展示给业务确认。
-
-## 边界与异常（edge）——最关键的一步
-10. 主动追问三类探针：
-    - 数据与权限：所有岗位可见，还是按机构/层级隔离？
-    - 异常流程：接口超时 / 操作失败 / 审批驳回，直接报错还是人工补单？
-    - 合规与留痕：涉及资金/敏感数据变更，是否留审计日志？是否需要二次授权？
-
-## 需求规格书（prd）
-11. 将对话信息自动渲染成标准 PRD：业务背景、用户故事、数据字典、正常/异常流程 Mermaid、非功能需求。
-
-## 业务确认（review，核心）
-12. review 是唯一不可由 AI 自行推进的阶段，确保业务真正理解并确认 PRD 要点。
-13. 将 PRD 拆分为可确认要点（业务目标 / 核心字段 / 异常规则 / 合规要求），逐段复述输出。
-14. 业务必须逐段确认：comprehension_confirm 单次只接受一个要点。
-15. 业务追问时详细解释，并追加到该要点（comprehension_ask）。
-16. 每个要点须达成终态（confirm 接受 / manual 自处理）；拒绝的要点先 rewrite 重写或 manual 定论，
-    全部定论后才可 review_submit；清单四项须全为 true，否则回到 edge/prd。
-17. 一次确认通过率由 review_submit 自动计算；通过率低说明要点含糊，应结合拒绝意见重写，而非简单重试。
-
-## 基线对比（预估工时）
-18. 进入 goal 阶段（workflow_advance stage=goal action=enter）时，主动询问：
-    本需求预估人工书写工时（小时）？业务明确给出后调用 workflow_baseline 记录
-    （developer_confirmed=true）；未提供不阻塞，已录入后可从状态中读到，不必重复询问。
-
-## 定稿与下一个需求
-19. 业务确认完成（review_submit 通过）后，建议执行 /new 开始下一个需求，保持统计隔离。
-
-## 需求资料目录（7.5）
-20. 项目根约定 01~07 需求资料目录：01_业务背景与目标、02_制度与合规依据、03_现状与业务流程、04_数据与字段要求、05_用户与权限角色、06_界面与交互参考、07_需求规格产出。01~06 由业务投放材料；07_需求规格产出 是智能体专属输出目录，业务无需往里放材料。
-21. 进入 goal 阶段时做目录就绪检查：若项目根尚无 01~07 目录，先询问业务是否搭建需求资料目录骨架，业务确认后创建 01~07 目录与 README.md 填写指引；业务不需要则直接对话式引导。目录已存在则跳过创建，绝不重建或覆盖业务已放材料（幂等）。
-22. 目录与阶段对应：goal 读 01；rules 读 03、04；edge 读 02、05；prd 读 06。业务表示资料已放好后，按此映射扫描对应目录，作为该阶段引导的输入。
-23. 缺失度校验：01 缺失时优先询问「系统要解决的核心痛点」；已有 02 制度但缺 05 权限时，主动追问「该制度要求不同岗位的权限如何隔离」。
-24. 产出归档：需求澄清记录、自动提取的 Mermaid 流程图、最终 PRD 一律写入 07_需求规格产出 目录。
-```
+| id | stage | 注入文本 |
+|----|-------|----------|
+| reqdoc-r1 | global | 会话开始时，调用 workflow_advance(stage=goal, action=enter) 初始化工作流。 |
+| reqdoc-r2 | global | 采用渐进式分段引导，不要一次性抛出所有问题；单次提问不超过 2 个问题，避免业务有被「质问」的挫败感。 |
+| reqdoc-r3 | global | 阶段可能完成时，先输出摘要并询问确认；业务明确确认后才可 workflow_advance(action=approve, developer_confirmed=true)。 |
+| reqdoc-r4 | global | 业务说「回到XX」时，立即调用 workflow_revisit(stage=XX)。绝不自行判断阶段已完成。 |
+| reqdoc-r5 | global | 业务确认完成（review_submit 通过）后，建议执行 /new 开始下一个需求，保持统计隔离。 |
+| reqdoc-r6 | goal | 用一两句话引导业务说明：上线后谁在用、解决什么痛点；提炼【核心用户】【业务场景】【业务价值】，表达模糊时给出 2-3 个选项让业务勾选确认。 |
+| reqdoc-r7 | goal | 进入 goal 阶段时，主动询问预估人工书写工时（小时）；业务明确给出后调用 workflow_baseline(developer_confirmed=true)。未提供不阻塞；已录入后不必重复询问。 |
+| reqdoc-r8 | goal | 目录就绪检查：项目根约定 01~07 需求资料目录（01_业务背景与目标、02_制度与合规依据、03_现状与业务流程、04_数据与字段要求、05_用户与权限角色、06_界面与交互参考、07_需求规格产出）。尚无时询问业务是否搭建骨架，确认后创建（幂等，绝不重建或覆盖业务已放材料）；业务说资料已放好则扫描 01 目录作引导输入。 |
+| reqdoc-r9 | rules | 引导补全主流程：用户输入哪些信息、系统处理后给什么结果；将自然语言转化为字段定义（数据项 / 是否必填 / 校验规则）。 |
+| reqdoc-r10 | rules | 自动推演 Mermaid 流程图，反向展示给业务确认；业务说资料已放好则扫描 03、04 目录作输入。 |
+| reqdoc-r11 | edge | 主动追问三类探针：数据与权限（所有岗位可见还是按机构/层级隔离）、异常流程（接口超时 / 操作失败 / 审批驳回，报错还是人工补单）、合规留痕（资金/敏感变更是否留审计日志、是否二次授权）。 |
+| reqdoc-r12 | edge | 按已投放材料反问缺口（如已有制度但缺权限，追问「不同岗位的权限如何隔离」）；业务说资料已放好则扫描 02、05 目录作输入。 |
+| reqdoc-r13 | prd | 将对话信息自动渲染成标准 PRD：业务背景、用户故事、数据字典、正常/异常流程 Mermaid、非功能需求；业务说资料已放好则扫描 06 目录作输入。 |
+| reqdoc-r14 | prd | 产出归档：需求澄清记录、自动提取的 Mermaid 流程图、最终 PRD 一律写入 07_需求规格产出 目录。 |
+| reqdoc-r15 | review | review 是唯一不可由 AI 自行推进的阶段（必须经 review_submit），确保业务真正理解并确认 PRD 要点。 |
+| reqdoc-r16 | review | 将 PRD 拆分为可确认要点（业务目标 / 核心字段 / 异常规则 / 合规要求），comprehension_add 逐段复述输出。 |
+| reqdoc-r17 | review | 业务必须逐段确认：comprehension_confirm 单次只接受一个要点。 |
+| reqdoc-r18 | review | 业务追问时详细解释，comprehension_ask 将问答追加到该要点的 explanation。 |
+| reqdoc-r19 | review | 每个要点须达成终态（confirm 接受 / manual 自处理），不允许 pending/rejected 悬空；拒绝的要点先 rewrite 重写或 manual 定论，全部定论后才可 review_submit；清单四项须全为 true，否则回到 edge/prd。通过率低说明要点含糊，应结合拒绝意见重写，而非简单重试。 |
 
 ### 7.5 reqdoc 需求资料目录契约
 
-该目录由 `REQDOC.rules`（见 7.4）驱动 Agent 落地，插件本体不实现、不追踪。
+该目录由 `REQDOC.rules`（见 7.4）驱动 Agent 落地：目录就绪检查落在 goal 阶段规则（reqdoc-r8），各阶段扫描映射嵌在 rules/edge/prd 规则（reqdoc-r10/12/13），产出归档在 reqdoc-r14。插件本体不实现、不追踪。
 
 reqdoc 面向**业务人员**。业务习惯把现成资料（监管发文、旧流程 Word、Excel 台账、凭证扫描件）散着给，而非结构化表达。为此约定一套**需求资料目录**：业务「按图索骥」分类投放，Agent 按目录语义精准检索，支撑 7.4 的渐进式引导。该目录是**纯约定层**——不进 `WorkflowState`、不进汇报（见第 11 章）、不是插件工具，仅存在于 Agent 的引导行为。
 
@@ -1546,7 +1476,7 @@ flowchart TD
 
 | 文件 | 用途 |
 |------|------|
-| `src/workflow.ts` | WorkflowDefinition 注册表（WorkflowType/ChecklistItem/WorkflowDefinition/getDefinition/resolveWorkflowType）+ WorkflowState schema（含泛化 stages/checklist、ComprehensionRecord、QualityMetrics、BaselineEstimate）与 efficiencyRatio 提效率口径；删除 STAGE_ORDER/STAGE_LABELS/StageName——插件写、收集服务收、CLI 读，单点定义 |
+| `src/workflow.ts` | WorkflowDefinition 注册表（WorkflowType/ChecklistItem/RuleItem/WorkflowDefinition/getDefinition/resolveWorkflowType + rulesForStage/currentInProgressStage 阶段化注入选择）+ WorkflowState schema（含泛化 stages/checklist、ComprehensionRecord、QualityMetrics、BaselineEstimate）与 efficiencyRatio 提效率口径；删除 STAGE_ORDER/STAGE_LABELS/StageName——插件写、收集服务收、CLI 读，单点定义 |
 | `src/loc.ts` | AI 代码行数：行数计算、业务/测试/配置三分类（classifyFile）与分类汇总（sumLinesByCategory）（sdlc 专属） |
 | `src/report.ts` | 汇报与 CI 回写 payload schema（WorkflowSummary 含 type + 泛化 stages，按 type 驱动） |
 | `src/identity.ts` | identity.json 类型与读写（含 workflowType 第五属性，缺省 sdlc） |
@@ -1561,7 +1491,7 @@ flowchart TD
 | `src/db/schema.ts` | 插件库表定义（仅 `workflow_session` 一张表） |
 | `src/db/index.ts` | 插件 SQLite 初始化与迁移（bun:sqlite，WAL 模式） |
 | `src/identity.ts` | 读全局 `identity.json`，会话首次活动时打标 `account_id` |
-| `src/prompt.ts` | system prompt 注入片段：按 `getDefinition(workflow.type)` 取规则全文与阶段/清单 + 当前状态压缩 JSON |
+| `src/prompt.ts` | system prompt 注入片段：阶段化注入（rulesForStage 取 global + 当前阶段规则）+ buildStateBar 一行阶段条替代冗长 JSON |
 | `src/tools/workflow.ts` | `workflow_advance` / `workflow_revisit` / `workflow_baseline` / `commit_gate_check` / `commit_force_unlock` 工具 |
 | `src/tools/review.ts` | `comprehension_add` / `comprehension_confirm` / `comprehension_reject` / `comprehension_rewrite` / `comprehension_manual` / `comprehension_ask` / `review_submit` 工具（含防批量确认校验与终态门禁） |
 | `src/tools/quality.ts` | 迭代计数 + AI 代码行数累计逻辑（`quality_report` 已移除，firstPassRate 由 review.ts 自动计算） |
@@ -1712,4 +1642,20 @@ opencode
 单元测试：插件包 `opencode-session-mgmt/packages/plugin/test/`（工具校验、防批量确认、合并语义、门禁拦截）、`opencode-session-mgmt/packages/cli/test/`（格式化与聚合）。
 
 上游回归：因上游零修改，只需确认插件启用/卸载两种状态下上游既有测试（`packages/core/test/session-*.test.ts`、`packages/tui/test/`、`packages/sdk/js`）均通过。
+
+### 12.1 规则遵循度评测基线（弱模型数据驱动优化）
+
+规则文本优化（阶段化注入、状态条）以**数据驱动**验证：量化弱模型对注入规则的遵循度，改前跑基线、改后对比。脚本 `scripts/eval-rules/`（不入 `bun test`，需真实模型端点）：
+
+```bash
+# 冻结的 baseline 快照在 scripts/eval-rules/fixtures/baseline/（改造前的规则全文，可复现旧注入格式）
+bun run scripts/eval-rules/run.ts --variant baseline --dry   # 只打印注入片段与判定期望，不调模型
+bun run scripts/eval-rules/run.ts --variant baseline         # 跑基线通过率 → results/baseline.json
+bun run scripts/eval-rules/run.ts --variant new              # 改造后 → results/new.json，自动对比 baseline
+```
+
+- 环境变量：`EVAL_BASE_URL`（OpenAI 兼容端点）、`EVAL_API_KEY`、`EVAL_MODEL`（默认 qwen3.6-27b）；`--repeat N` 重复多次取通过率
+- 场景集 14 个（sdlc s1-s8 + reqdoc r1-r6），覆盖关键规则：基线录入不重复、确认后 approve、无确认不 approve、回到XX→revisit、审查逐段不批量、前序未完成不 submit、提交前查门禁、reqdoc 渐进引导 ≤2 问 / 业务确认单要点 / edge 探针
+- **rule-based 判定**（不用 LLM judge）：工具类比对 `tool_use` 名称与参数谓词（如 approve 时 `developer_confirmed` 必须 true）、`no_tool` 类断言未调用某工具、`text` 类（≤2 问、探针关键词）为关键词启发式、判定口径脆弱需人工复核
+- baseline 与 new 共用同一状态夹具（`finish()` 重算 commit），保证可对等比较
 
