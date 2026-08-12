@@ -193,7 +193,7 @@ function printSessionStats(s: SessionStats): void {
   process.stdout.write(
     `📋 会话 ${s.sessionID}\n` +
       `工作流类型: ${s.type}  标题: ${fmtTitle(s.title)}\n` +
-      `开发者: ${s.account ?? "N/A"}  周期: ${fmtDuration(s.durationMs)}  ${s.complete ? "✓ 已完成" : "进行中"}\n\n` +
+      `开发者: ${s.account ?? "N/A"}  周期: ${fmtDuration(s.durationMs)}  ${s.complete ? "✓ 已完成" : s.currentStage ? `进行中（${s.currentStage}）` : "进行中"}\n\n` +
       `工作流:\n${stageLines}\n\n` +
       `质量:\n` +
       `  一次通过率: ${fmtPct(s.firstPassRate)}  迭代轮次: ${fmtIterations(s.iterationCount)}  覆盖率: ${fmtPct(s.testCoverage)}\n` +
@@ -230,14 +230,18 @@ function printProjectStats(
     lines.push("逐会话明细:")
     // 会话 ID 列宽随最长 ID 自适应，保证完整显示、可直接复制进 stats <sessionID>
     const idWidth = Math.max(12, ...sessions.map((s) => s.sessionID.length))
+    // 状态列：进行中会话标注当前阶段（如「编码中」），列宽随最长值自适应
+    const statusOf = (s: SessionStats) =>
+      s.complete ? "✓完成" : s.currentStage ? `${s.currentStage}中` : s.status ?? "进行中"
+    const statusWidth = Math.max(8, ...sessions.map((s) => statusOf(s).length))
     // 表头
     lines.push(
-      `  ${"会话ID".padEnd(idWidth)} ${"状态".padEnd(8)} ${"周期".padStart(6)} ${"一次通过率".padStart(6)} ${"迭代".padStart(4)} ${"费用".padStart(8)} ${"标题".padEnd(24)}`,
+      `  ${"会话ID".padEnd(idWidth)} ${"状态".padEnd(statusWidth)} ${"周期".padStart(6)} ${"一次通过率".padStart(6)} ${"迭代".padStart(4)} ${"费用".padStart(8)} ${"标题".padEnd(24)}`,
     )
-    lines.push(`  ${"─".repeat(idWidth)} ${"─".repeat(8)} ${"─".repeat(6)} ${"─".repeat(6)} ${"─".repeat(4)} ${"─".repeat(8)} ${"─".repeat(24)}`)
+    lines.push(`  ${"─".repeat(idWidth)} ${"─".repeat(statusWidth)} ${"─".repeat(6)} ${"─".repeat(6)} ${"─".repeat(4)} ${"─".repeat(8)} ${"─".repeat(24)}`)
     for (const s of sessions) {
       const id = s.sessionID
-      const status = s.complete ? "✓完成" : s.status ?? "进行中"
+      const status = statusOf(s)
       const dur = fmtDuration(s.durationMs)
       const acc = fmtPct(s.firstPassRate)
       const iter =
@@ -248,7 +252,7 @@ function printProjectStats(
             : `${s.iterationCount}`
       const cost = s.cost === null ? "N/A" : `$${s.cost.toFixed(4)}`
       lines.push(
-        `  ${id.padEnd(idWidth)} ${status.padEnd(8)} ${dur.padStart(6)} ${acc.padStart(6)} ${iter.padStart(4)} ${cost.padStart(8)} ${fmtTitle(s.title).padEnd(24)}`,
+        `  ${id.padEnd(idWidth)} ${status.padEnd(statusWidth)} ${dur.padStart(6)} ${acc.padStart(6)} ${iter.padStart(4)} ${cost.padStart(8)} ${fmtTitle(s.title).padEnd(24)}`,
       )
     }
     lines.push("")
