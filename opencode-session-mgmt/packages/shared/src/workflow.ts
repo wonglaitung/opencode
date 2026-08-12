@@ -142,6 +142,18 @@ export interface ChecklistItem {
 }
 
 /**
+ * 规则项（7.4 阶段化注入）：stage 为生效阶段键，"global" 为所有阶段通用。
+ * text 只承载模型可行动作（调用哪个工具、何时、确认语义）——
+ * 插件内部机制（行数统计、stuck 检测）由代码强制，不进注入文本。
+ */
+export interface RuleItem {
+  /** 稳定标识（如 sdlc-r1），供测试/评测/文档交叉引用 */
+  id: string
+  stage: string | "global"
+  text: string
+}
+
+/**
  * 工作流定义（3.2 注册表）：把「流程的定义」与通用机制解耦。
  * 消费方一律 getDefinition(workflow.type) 取定义，不硬编码阶段/清单/规则。
  */
@@ -157,8 +169,8 @@ export interface WorkflowDefinition {
   checklist: ChecklistItem[]
   /** sdlc=true；reqdoc 定稿无 git 门禁 → false */
   hasCommitGate: boolean
-  /** 该类型注入的规则全文（原 RULES 移入，7.4） */
-  rules: string
+  /** 该类型注入的规则项（7.4），注入时经 rulesForStage 取 global + 当前阶段 */
+  rules: RuleItem[]
 }
 
 /** SDLC 五阶段审查清单项（sdlc 专属，3.2）；review_submit 从具名参数生成，字节不变。
@@ -170,7 +182,7 @@ const SDLC_CHECKLIST: ChecklistItem[] = [
   { key: "designRationale", label: "设计取舍合理", auto: true },
 ]
 
-/** SDLC 工作流定义：五阶段 + 四清单 + git 门禁 + 规则全文（原硬编码常量原样搬入）。 */
+/** SDLC 工作流定义：五阶段 + 四清单 + git 门禁 + 结构化规则（global + 阶段归属，7.4）。 */
 export const SDLC: WorkflowDefinition = {
   type: "sdlc",
   stages: ["requirements", "design", "implementation", "testing", "review"],
@@ -184,39 +196,22 @@ export const SDLC: WorkflowDefinition = {
   reviewStage: "review",
   checklist: SDLC_CHECKLIST,
   hasCommitGate: true,
-  rules: `# Workflow Agent 规则
-
-## 阶段推进
-1. 会话开始时初始化 workflow（所有阶段 not_started）。
-2. 阶段可能完成时，先输出摘要并询问确认；开发者明确确认后才可调用 workflow_advance 标记 approved。
-3. 开发者说"回到XX"时，立即调用 workflow_revisit。
-4. 绝不自行判断阶段已完成——阶段转换的唯一来源是开发者的明确操作。
-5. 要求提交时先调用 commit_gate_check，检查全部五个阶段（含审查）。
-
-## 审查阶段（理解保障，核心）
-6. 审查是唯一不可由 AI 自行推进的阶段，目标是确保开发者真正理解代码。
-7. 进入审查后，将每个 AI 生成的代码变更拆分为可理解片段，逐段输出自然语言解释
-   （做了什么、为什么这样写、被放弃的替代方案、潜在风险）。
-8. 开发者必须逐段确认：comprehension_confirm 单次只接受一个 codeSegmentId。
-9. 开发者追问时详细解释，并将问答追加到该片段的 explanation（comprehension_ask）。
-10. 每个片段须达成终态（comprehension_confirm 接受 / comprehension_manual 开发者自处理），
-    不允许 pending/rejected 悬空；拒绝的片段先 comprehension_rewrite 重写或 manual 定论，全部定论后才可 review_submit；
-    清单四项须全为 true，否则回到编码/测试。
-
-## 一次通过率与迭代上限
-11. 一次通过率由 review_submit 自动计算（未重写即 accepted 的片段占比），无需 Agent 上报；
-    一次通过率低说明返工多，应结合拒绝意见 comprehension_rewrite 改进，而非简单重试。
-12. 检测连续重复编辑模式（同一文件连续 3 次以上相同参数的 AI 编辑，或同一文件被编辑 6 次以上），提醒开发者审查是否陷入无效循环，但不拒绝生成。
-
-## 基线对比（预估工时）
-13. 进入需求阶段（workflow_advance stage=requirements action=enter）时，主动询问开发者：
-    项目经理对本需求的预估人工工时是多少（小时）？开发者明确给出后调用 workflow_baseline 记录
-    （developer_confirmed=true）。用于会话结束后与实际周期对比、计算 AI 提效率；未提供不阻塞，
-    已录入后可从状态中读到，不必重复询问。
-
-## SDLC 完结与下一需求
-14. 提交门禁放行（commit.status=allowed）且 git commit 成功后，主动提醒开发者：
-    "本需求 SDLC 已完成。建议执行 /new 开始下一个需求，以保持统计隔离。"`,
+  rules: [
+    // ---- global：所有阶段通用 ----
+    { id: "sdlc-r1", stage: "global", text: "会话开始时，调用 workflow_advance(stage=requirements, action=enter) 初始化工作流。" },
+    { id: "sdlc-r2", stage: "global", text: "阶段可能完成时，先输出摘要并询问确认；开发者明确确认后才可 workflow_advance(action=approve, developer_confirmed=true)。" },
+    { id: "sdlc-r3", stage: "global", text: "开发者说「回到XX」时，立即调用 workflow_revisit(stage=XX)。绝不自行判断阶段已完成。" },
+    { id: "sdlc-r4", stage: "global", text: "要求提交时，先调用 commit_gate_check；全部五阶段（含审查）approved 后才可 git commit。" },
+    { id: "sdlc-r5", stage: "global", text: "提交门禁放行且 git commit 成功后，提醒开发者执行 /new 开始下一个需求，保持统计隔离。" },
+    // ---- requirements ----
+    { id: "sdlc-r6", stage: "requirements", text: "进入需求阶段时，主动询问预估人工工时（小时）；开发者明确给出后调用 workflow_baseline(developer_confirmed=true)。未提供不阻塞；已录入后不必重复询问。" },
+    // ---- review（理解保障，核心）----
+    { id: "sdlc-r7", stage: "review", text: "review 是唯一不可由 AI 自行推进的阶段（必须经 review_submit），目标是确保开发者真正理解代码。" },
+    { id: "sdlc-r8", stage: "review", text: "进入审查后，将每个 AI 生成的代码变更拆分为可理解片段，comprehension_add 逐段登记并输出解释（做了什么、为什么这样写、被放弃的替代方案、潜在风险）。" },
+    { id: "sdlc-r9", stage: "review", text: "开发者必须逐段确认：comprehension_confirm 单次只接受一个 codeSegmentId（禁止一次确认多个）。" },
+    { id: "sdlc-r10", stage: "review", text: "开发者追问时详细解释，comprehension_ask 将问答追加到该片段的 explanation。" },
+    { id: "sdlc-r11", stage: "review", text: "每个片段须达成终态（confirm 接受 / manual 开发者自处理），不允许 pending/rejected 悬空；拒绝的片段先 comprehension_rewrite 重写或 manual 定论，全部定论后才可 review_submit；清单四项须全为 true，否则回到编码/测试。返工多应结合拒绝意见 rewrite 改进，而非简单重试。" },
+  ],
 }
 
 /** reqdoc 审查清单项（reqdoc 专属，3.2）：业务确认 PRD 要点（区别于 sdlc 的代码理解确认）。 */
@@ -232,7 +227,8 @@ const REQDOC_CHECKLIST: ChecklistItem[] = [
  * 源于《业务需求难点与解决方案》的四段式渐进引导（目标与场景 → 主流程与规则 →
  * 边界与异常探针 → 自动化排版），外加业务确认闭环。审查阶段（review）语义为
  * 业务确认 PRD 要点，复用通用 comprehension/checklist/review_submit 机制。
- * 定稿无 git 门禁（hasCommitGate=false）。
+ * 定稿无 git 门禁（hasCommitGate=false）。结构化规则（global + 阶段归属），
+ * 需求资料目录契约（7.5）落在 goal 阶段规则与各阶段扫描映射。
  */
 export const REQDOC: WorkflowDefinition = {
   type: "reqdoc",
@@ -247,55 +243,33 @@ export const REQDOC: WorkflowDefinition = {
   reviewStage: "review",
   checklist: REQDOC_CHECKLIST,
   hasCommitGate: false,
-  rules: `# Workflow Agent 规则（需求书）
-
-## 渐进式引导（核心）
-1. 会话开始时初始化 workflow（所有阶段 not_started）。
-2. 采用渐进式分段引导，不要一次性抛出所有问题；单次提问不超过 2 个问题，避免业务有被「质问」的挫败感。
-3. 阶段可能完成时，先输出摘要并询问确认；业务明确确认后才可 workflow_advance 标记 approved。
-4. 业务说「回到XX」时，立即调用 workflow_revisit。绝不自行判断阶段已完成。
-
-## 目标与场景（goal）
-5. 用一两句话引导业务说明：上线后主要是谁在用？帮他们解决什么痛点？
-6. 提炼【核心用户 Actor】【业务场景 Scenario】【业务价值 Value】；业务表达模糊时给出 2-3 个选项让业务勾选确认。
-
-## 流程与规则（rules）
-7. 引导补全主流程：用户需输入哪些信息？系统处理后给什么结果？
-8. 将自然语言转化为字段定义（数据项 / 是否必填 / 校验规则）。
-9. 自动推演 Mermaid 流程图，反向展示给业务确认。
-
-## 边界与异常（edge）——最关键的一步
-10. 主动追问三类探针：
-    - 数据与权限：所有岗位可见，还是按机构/层级隔离？
-    - 异常流程：接口超时 / 操作失败 / 审批驳回，直接报错还是人工补单？
-    - 合规与留痕：涉及资金/敏感数据变更，是否留审计日志？是否需要二次授权？
-
-## 需求规格书（prd）
-11. 将对话信息自动渲染成标准 PRD：业务背景、用户故事、数据字典、正常/异常流程 Mermaid、非功能需求。
-
-## 业务确认（review，核心）
-12. review 是唯一不可由 AI 自行推进的阶段，确保业务真正理解并确认 PRD 要点。
-13. 将 PRD 拆分为可确认要点（业务目标 / 核心字段 / 异常规则 / 合规要求），逐段复述输出。
-14. 业务必须逐段确认：comprehension_confirm 单次只接受一个要点。
-15. 业务追问时详细解释，并追加到该要点（comprehension_ask）。
-16. 每个要点须达成终态（confirm 接受 / manual 自处理）；拒绝的要点先 rewrite 重写或 manual 定论，
-    全部定论后才可 review_submit；清单四项须全为 true，否则回到 edge/prd。
-17. 一次确认通过率由 review_submit 自动计算；通过率低说明要点含糊，应结合拒绝意见重写，而非简单重试。
-
-## 基线对比（预估工时）
-18. 进入 goal 阶段（workflow_advance stage=goal action=enter）时，主动询问：
-    本需求预估人工书写工时（小时）？业务明确给出后调用 workflow_baseline 记录
-    （developer_confirmed=true）；未提供不阻塞，已录入后可从状态中读到，不必重复询问。
-
-## 定稿与下一个需求
-19. 业务确认完成（review_submit 通过）后，建议执行 /new 开始下一个需求，保持统计隔离。
-
-## 需求资料目录（7.5）
-20. 项目根约定 01~07 需求资料目录：01_业务背景与目标、02_制度与合规依据、03_现状与业务流程、04_数据与字段要求、05_用户与权限角色、06_界面与交互参考、07_需求规格产出。01~06 由业务投放材料；07_需求规格产出 是智能体专属输出目录，业务无需往里放材料。
-21. 进入 goal 阶段时做目录就绪检查：若项目根尚无 01~07 目录，先询问业务是否搭建需求资料目录骨架，业务确认后创建 01~07 目录与 README.md 填写指引；业务不需要则直接对话式引导。目录已存在则跳过创建，绝不重建或覆盖业务已放材料（幂等）。
-22. 目录与阶段对应：goal 读 01；rules 读 03、04；edge 读 02、05；prd 读 06。业务表示资料已放好后，按此映射扫描对应目录，作为该阶段引导的输入。
-23. 缺失度校验：01 缺失时优先询问「系统要解决的核心痛点」；已有 02 制度但缺 05 权限时，主动追问「该制度要求不同岗位的权限如何隔离」。
-24. 产出归档：需求澄清记录、自动提取的 Mermaid 流程图、最终 PRD 一律写入 07_需求规格产出 目录。`,
+  rules: [
+    // ---- global：所有阶段通用 ----
+    { id: "reqdoc-r1", stage: "global", text: "会话开始时，调用 workflow_advance(stage=goal, action=enter) 初始化工作流。" },
+    { id: "reqdoc-r2", stage: "global", text: "采用渐进式分段引导，不要一次性抛出所有问题；单次提问不超过 2 个问题，避免业务有被「质问」的挫败感。" },
+    { id: "reqdoc-r3", stage: "global", text: "阶段可能完成时，先输出摘要并询问确认；业务明确确认后才可 workflow_advance(action=approve, developer_confirmed=true)。" },
+    { id: "reqdoc-r4", stage: "global", text: "业务说「回到XX」时，立即调用 workflow_revisit(stage=XX)。绝不自行判断阶段已完成。" },
+    { id: "reqdoc-r5", stage: "global", text: "业务确认完成（review_submit 通过）后，建议执行 /new 开始下一个需求，保持统计隔离。" },
+    // ---- goal 目标与场景 ----
+    { id: "reqdoc-r6", stage: "goal", text: "用一两句话引导业务说明：上线后谁在用、解决什么痛点；提炼【核心用户】【业务场景】【业务价值】，表达模糊时给出 2-3 个选项让业务勾选确认。" },
+    { id: "reqdoc-r7", stage: "goal", text: "进入 goal 阶段时，主动询问预估人工书写工时（小时）；业务明确给出后调用 workflow_baseline(developer_confirmed=true)。未提供不阻塞；已录入后不必重复询问。" },
+    { id: "reqdoc-r8", stage: "goal", text: "目录就绪检查：项目根约定 01~07 需求资料目录（01_业务背景与目标、02_制度与合规依据、03_现状与业务流程、04_数据与字段要求、05_用户与权限角色、06_界面与交互参考、07_需求规格产出）。尚无时询问业务是否搭建骨架，确认后创建（幂等，绝不重建或覆盖业务已放材料）；业务说资料已放好则扫描 01 目录作引导输入。" },
+    // ---- rules 流程与规则 ----
+    { id: "reqdoc-r9", stage: "rules", text: "引导补全主流程：用户输入哪些信息、系统处理后给什么结果；将自然语言转化为字段定义（数据项 / 是否必填 / 校验规则）。" },
+    { id: "reqdoc-r10", stage: "rules", text: "自动推演 Mermaid 流程图，反向展示给业务确认；业务说资料已放好则扫描 03、04 目录作输入。" },
+    // ---- edge 边界与异常（最关键）----
+    { id: "reqdoc-r11", stage: "edge", text: "主动追问三类探针：数据与权限（所有岗位可见还是按机构/层级隔离）、异常流程（接口超时 / 操作失败 / 审批驳回，报错还是人工补单）、合规留痕（资金/敏感变更是否留审计日志、是否二次授权）。" },
+    { id: "reqdoc-r12", stage: "edge", text: "按已投放材料反问缺口（如已有制度但缺权限，追问「不同岗位的权限如何隔离」）；业务说资料已放好则扫描 02、05 目录作输入。" },
+    // ---- prd 需求规格书 ----
+    { id: "reqdoc-r13", stage: "prd", text: "将对话信息自动渲染成标准 PRD：业务背景、用户故事、数据字典、正常/异常流程 Mermaid、非功能需求；业务说资料已放好则扫描 06 目录作输入。" },
+    { id: "reqdoc-r14", stage: "prd", text: "产出归档：需求澄清记录、自动提取的 Mermaid 流程图、最终 PRD 一律写入 07_需求规格产出 目录。" },
+    // ---- review 业务确认（核心）----
+    { id: "reqdoc-r15", stage: "review", text: "review 是唯一不可由 AI 自行推进的阶段（必须经 review_submit），确保业务真正理解并确认 PRD 要点。" },
+    { id: "reqdoc-r16", stage: "review", text: "将 PRD 拆分为可确认要点（业务目标 / 核心字段 / 异常规则 / 合规要求），comprehension_add 逐段复述输出。" },
+    { id: "reqdoc-r17", stage: "review", text: "业务必须逐段确认：comprehension_confirm 单次只接受一个要点。" },
+    { id: "reqdoc-r18", stage: "review", text: "业务追问时详细解释，comprehension_ask 将问答追加到该要点的 explanation。" },
+    { id: "reqdoc-r19", stage: "review", text: "每个要点须达成终态（confirm 接受 / manual 自处理），不允许 pending/rejected 悬空；拒绝的要点先 rewrite 重写或 manual 定论，全部定论后才可 review_submit；清单四项须全为 true，否则回到 edge/prd。通过率低说明要点含糊，应结合拒绝意见重写，而非简单重试。" },
+  ],
 }
 
 /** 已注册的工作流定义注册表（3.2）。 */
@@ -364,6 +338,18 @@ export function reviewRecord(s: WorkflowState): ReviewStageRecord {
   const def = getDefinition(s.type)
   if (def.reviewStage === null) throw new Error(`工作流类型 ${s.type} 无审查阶段`)
   return getStage(s, def.reviewStage) as ReviewStageRecord
+}
+
+/** 取指定阶段应注入的规则：global + 该阶段规则；stage 为 null 时只给 global（7.4 阶段化注入）。 */
+export function rulesForStage(def: WorkflowDefinition, stage: string | null): RuleItem[] {
+  if (stage === null) return def.rules.filter((r) => r.stage === "global")
+  return def.rules.filter((r) => r.stage === "global" || r.stage === stage)
+}
+
+/** 当前进行中阶段：按 def.stages 顺序取第一个 in_progress；无则 null（阶段化注入选规则用）。 */
+export function currentInProgressStage(workflow: WorkflowState): string | null {
+  const def = getDefinition(workflow.type)
+  return def.stages.find((name) => workflow.stages[name].status === "in_progress") ?? null
 }
 
 /** 一小时对应的毫秒数（基线提效计算口径）。 */
