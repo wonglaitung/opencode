@@ -411,7 +411,7 @@ export const WorkflowSessionTable = sqliteTable("workflow_session", {
 
 **workflowType 继承（用户级流程选择）**：工作流类型由**用户角色**决定，而非目录。插件每次创建新会话 `WorkflowState` 时经 `resolveType` 读取 `identity.json.workflowType`（缺省 `sdlc`）写入 `workflow.type`（快照语义，与 account 一致——已存在会话不重读）。不同角色 = 不同用户（开发者走 sdlc 开发流程、需求分析师走 reqdoc 需求书流程），故**无目录配置、无会话内切换工具**；改类型只影响之后的新会话，历史归属不追溯。流程定义与通用机制解耦见 3.2。
 
-**孤儿记录清理**：上游删除会话后，`workflow_session` 中对应记录成为孤儿。插件**启动时**以 `session.list` 比对惰性清理（保守策略：上游不可达或返回空列表时不清理，防瞬时不可达误删），不影响功能。清理白名单**仅含主会话**（`parentID` 为空）：子代理会话（`parentID` 非空）与孤儿一并移除，配合 2.4 的「子代理不建记录」，保证统计纯净。
+**孤儿记录清理**：上游删除会话后，`workflow_session` 中对应记录成为孤儿。插件**启动后延后**（约 2 秒，错开 TUI 首屏与 daemon 启动竞态，减少启动耗时，见部署文档 FAQ）以 `session.list` 比对惰性清理（保守策略：上游不可达或返回空列表时不清理，防瞬时不可达误删），不影响功能。清理白名单**仅含主会话**（`parentID` 为空）：子代理会话（`parentID` 非空）与孤儿一并移除，配合 2.4 的「子代理不建记录」，保证统计纯净。
 
 ### 3.2 WorkflowState Schema
 
@@ -972,7 +972,7 @@ sequenceDiagram
     CLI-->>User: 表格/文本/JSON
 ```
 
-> 会话/项目级明细的**标题**也已由插件在会话活动时经 SDK 同步进插件库（启动一次性回填 + 每条消息按需补），因此 CLI **离线（daemon 不可达）也能显示标题**；费用/Token 仍须 daemon 实时取。`list` 在上游不可达时同样用插件库标题兜底。
+> 会话/项目级明细的**标题**也已由插件在会话活动时经 SDK 同步进插件库（启动后一次性回填 + 每条消息按需补），因此 CLI **离线（daemon 不可达）也能显示标题**；费用/Token 仍须 daemon 实时取。`list` 在上游不可达时同样用插件库标题兜底。
 >
 > **占位标题处理**：opencode 新建会话时先以 `New session - <ISO>` / `Child session - <ISO>` 占位，积累消息后才生成真实标题。插件同步时把占位符视为「未同步」——回填与按需补都会刷新占位符、只保留真实标题，否则插件库会一直停留在过期占位符，导致 `stats`（读插件库）与 `list`（读 daemon 实时标题）标题对不上。占位判断与上游一致（`packages/app/src/utils/session-title.ts`）。
 
@@ -1556,7 +1556,8 @@ flowchart TD
 
 | 文件 | 用途 |
 |------|------|
-| `src/index.ts` | 插件入口：注册 hooks（`experimental.chat.system.transform`、`tool`、`tool.execute.before/after`、`chat.message`） |
+| `src/index.ts` | 插件入口：注册 hooks（`experimental.chat.system.transform`、`tool`、`tool.execute.before/after`、`chat.message`），启动后台任务延后触发 |
+| `src/startup.ts` | 启动后台任务：共用一次 `session.list` 完成 孤儿清理 + 标题回填（延后 2 秒，减少启动耗时） |
 | `src/db/schema.ts` | 插件库表定义（仅 `workflow_session` 一张表） |
 | `src/db/index.ts` | 插件 SQLite 初始化与迁移（bun:sqlite，WAL 模式） |
 | `src/identity.ts` | 读全局 `identity.json`，会话首次活动时打标 `account_id` |
@@ -1566,7 +1567,7 @@ flowchart TD
 | `src/tools/quality.ts` | 迭代计数 + AI 代码行数累计逻辑（`quality_report` 已移除，firstPassRate 由 review.ts 自动计算） |
 | `src/workflow-ops.ts` | 阶段转换（enter/approve/revisit，3.3）与提交门禁重算（3.4），工具与门禁共用的状态机 |
 | `src/gate.ts` | `tool.execute.before` 提交门禁拦截（git commit 阻断） |
-| `src/report.ts` | 会话摘要汇报：推送至 `collector_url`，不可用时本地缓冲、恢复补推 |
+| `src/report.ts` | 会话摘要汇报：推送至 `collector_url`，不可用时本地缓冲、恢复补推（fetch 带 5 秒超时，防止不可达时无界挂起） |
 | `src/stats.ts` | 本机统计聚合查询（按 workflow.type 分区，sdlc 专属指标仅 sdlc 计算；供 opencode-sm 复用） |
 | `test/*.test.ts` | 工具校验逻辑、合并语义、门禁、汇报缓冲的单元测试 |
 | `package.json` | 插件包定义（入口、依赖） |
@@ -1604,6 +1605,8 @@ flowchart TD
 ### 已交付记录
 
 多流程就绪与 reqdoc 工作流已交付（2026-08-08/09）：契约层多流程化（`WorkflowDefinition` 注册表、`WorkflowState.type`、stages/checklist 泛化、identity 五问）→ 各包消费方 def-driven（插件 / CLI / 收集服务）→ 文档同步与回归，均已落地。
+
+启动耗时优化已交付（2026-08-12）：汇报 `fetch` 加 5 秒超时（`AbortSignal.timeout`，不可达时不再无界挂起）；孤儿清理与标题回填合并为一次 `session.list` 并延后 2 秒执行（错开 TUI 首屏 / daemon 启动竞态），逻辑移入 `src/startup.ts` 便于单测。
 
 ---
 

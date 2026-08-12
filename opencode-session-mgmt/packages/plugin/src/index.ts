@@ -7,6 +7,7 @@
  *   - tool.execute.before                 提交门禁硬拦截（7.3）
  *   - tool.execute.after                  迭代计数
  *   - chat.message                        会话首次活动打 account_id（3.1）+ 汇报触发
+ * 启动后台任务（孤儿清理/标题回填/补推汇报）延后触发，见 startup.ts。
  */
 import type { Plugin, PluginInput } from "@opencode-ai/plugin"
 import { readIdentity, resolveWorkflowType } from "sm-shared"
@@ -15,6 +16,7 @@ import { createCommitGate } from "./gate"
 import { stampSessionAccount } from "./identity"
 import { createSystemTransform } from "./prompt"
 import { createReporter, type Usage } from "./report"
+import { STARTUP_DELAY_MS, deferredStartup } from "./startup"
 import { createIterationCounter } from "./tools/quality"
 import { createReviewTools } from "./tools/review"
 import { createWorkflowTools } from "./tools/workflow"
@@ -50,55 +52,13 @@ function createUsageProvider(client: PluginInput["client"]) {
 }
 
 /**
- * 惰性清理孤儿记录（3.1）：移除插件库中上游已删除的会话；并顺带清理
- * 子代理会话记录（2.4 统计纯净度：parentID 非空即子代理，仅保留主会话）。
- * 保守策略：拿不到确切的非空会话列表时不清理，避免上游瞬时不可达导致误删。
- */
-async function cleanupOrphans(store: Store, client: PluginInput["client"]): Promise<void> {
-  try {
-    const res = await client.session.list()
-    const sessions = res.data
-    if (!sessions || sessions.length === 0) return
-    // 仅主会话入白名单：子代理会话（parentID 非空）与孤儿一并清理
-    const valid = new Set(sessions.filter((s) => !s.parentID).map((s) => s.id))
-    const orphans = store
-      .listAll()
-      .map((r) => r.session_id)
-      .filter((id) => !valid.has(id))
-    if (orphans.length > 0) store.removeSessions(orphans)
-  } catch {
-    // 上游不可达：跳过本次清理（不影响功能）
-  }
-}
-
-/**
- * 启动一次性回填会话标题（5.2）：经 session.list 取全部标题，写入插件库。
- * 与 cleanupOrphans 共用一次 list 调用；仅补空标题、不覆盖已有值。
- * 失败静默（上游不可达时不影响功能，标题下次再补）。
- */
-// 注意：以下两个标题同步辅助函数仅供插件工厂内部调用，**不要加 export**。
-// opencode 的 legacy 插件加载器会把模块「所有函数导出」都当作插件工厂，
-// 依次以 (input, options) 调用：syncSessionTitle(input,…) 首行 store.get(sessionID)
-// 会因 input 无 get 方法而抛 "store.get is not a function"，导致插件加载失败、
-// opencode 启动报 "Unexpected server error"（曾踩坑，见 5.2）。
-async function backfillSessionTitles(store: Store, client: PluginInput["client"]): Promise<void> {
-  try {
-    const res = await client.session.list()
-    const sessions = res.data
-    if (!sessions || sessions.length === 0) return
-    const titles = new Map<string, string>()
-    for (const s of sessions) if (s.title) titles.set(s.id, s.title)
-    store.backfillTitles(titles)
-  } catch {
-    // 上游不可达：跳过本次回填（不影响功能）
-  }
-}
-
-/**
  * chat.message 时补当前会话标题（5.2）：仅库内标题为空或为占位符（New session - …）时才经
  * session.get 拉取，避免每消息都调远程；真实标题已同步则跳过。占位符非真实标题，
  * 必须视为未同步照常刷新，否则会停留在过期占位符导致 stats/list 标题对不上。
  * 失败静默。
+ * 注意：内部辅助函数**不要加 export**——opencode 的 legacy 插件加载器会把模块
+ * 「所有函数导出」都当作插件工厂，以 (input, options) 逐一调用，曾致插件加载失败
+ * （见 CLAUDE.md 铁律）。
  */
 async function syncSessionTitle(store: Store, client: PluginInput["client"], sessionID: string): Promise<void> {
   const cur = store.get(sessionID)?.title
@@ -120,12 +80,13 @@ const SessionMgmtPlugin: Plugin = async (input) => {
   // 子代理会话识别器（2.4 统计纯净度）：对子代理跳过建记录/打标/汇报/规则注入
   const isSubagent = makeSubagentChecker(input.client)
 
-  // 启动时补推缓冲汇报，并定时刷新（收集服务不可用期间本地暂存，2.4）。
-  void reporter.flushOutbox()
-  // 启动时惰性清理孤儿记录（3.1）。
-  void cleanupOrphans(store, input.client)
-  // 启动时一次性回填存量会话标题（5.2，daemon 不可达时 CLI 仍可读标题）。
-  void backfillSessionTitles(store, input.client)
+  // 启动后台任务延后执行（错开 TUI 首屏 / daemon 启动竞态，启动慢根因之一）：
+  // 一次 session.list 完成 孤儿清理 + 标题回填（startup.ts），随后补推缓冲汇报。
+  const startup = setTimeout(() => {
+    void deferredStartup(store, input.client)
+    void reporter.flushOutbox()
+  }, STARTUP_DELAY_MS)
+  // 定时补推缓冲汇报（收集服务不可用期间本地暂存，2.4）。
   const timer = setInterval(() => {
     void reporter.flushOutbox()
   }, 5 * 60 * 1000)
@@ -151,6 +112,7 @@ const SessionMgmtPlugin: Plugin = async (input) => {
     },
 
     dispose: async () => {
+      clearTimeout(startup)
       clearInterval(timer)
       await reporter.flushOutbox()
       store.close()

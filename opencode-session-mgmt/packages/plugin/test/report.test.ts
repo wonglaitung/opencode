@@ -1,5 +1,5 @@
 /**
- * 汇报 outbox 补推策略测试（设计文档 §2.4 风险与取舍）。
+ * 汇报 outbox 补推策略测试（设计文档 2.4 风险与取舍）。
  * - 2xx 成功出队；
  * - 5xx/网络错误保留待补推；
  * - 4xx 为永久失败，丢弃以免堵塞队列（防毒消息）。
@@ -74,6 +74,21 @@ describe("flushOutbox 补推策略", () => {
     const sent = await createReporter(store, () => ({ ...identity, collector_url: "" }), noUsage).flushOutbox()
     expect(sent).toBe(0)
     expect(store.pendingReports().length).toBe(1)
+  })
+
+  test("collector 请求带超时信号（不可达时不无界挂起）", async () => {
+    const store = Store.memory()
+    store.enqueueReport(report)
+    let captured: RequestInit | undefined
+    globalThis.fetch = (async (_url: unknown, init?: RequestInit) => {
+      captured = init
+      return new Response("{}", { status: 200 })
+    }) as unknown as typeof fetch
+    const sent = await createReporter(store, () => identity, noUsage).flushOutbox()
+    expect(sent).toBe(1)
+    expect(captured?.signal).toBeInstanceOf(AbortSignal)
+    expect(captured?.signal?.aborted).toBe(false)
+    store.close()
   })
 
   test("同一会话多次汇报仅保留最新一条待发送（去重）", () => {
