@@ -21,8 +21,10 @@ export function recomputeCommit(workflow: WorkflowState): WorkflowState {
 
 /**
  * 对指定阶段施加一次转换，返回（原地修改后的）状态。
- * - enter:   not_started/in_progress → in_progress
- * - approve: → approved
+ * 严格遵守 §3.3 状态机：enter 仅限 not_started→in_progress（状态机无 approved→in_progress、
+ * in_progress→in_progress 的 enter 边），approved 只能经 revisit 回退。
+ * - enter:   not_started → in_progress；已 approved 抛错（须 revisit）；已 in_progress 幂等 no-op
+ * - approve: in_progress → approved（未 enter 不可 approve）
  * - revisit: → in_progress，revision++（3.3）
  */
 export function applyTransition(
@@ -35,6 +37,13 @@ export function applyTransition(
   const record = workflow.stages[stage]
   switch (action) {
     case "enter":
+      if (record.status === "approved") {
+        throw new WorkflowOpError(`阶段 ${stage} 已 approved，如需返工请用 workflow_revisit 回退`)
+      }
+      if (record.status === "in_progress") {
+        // 幂等：重复 enter 不再追加 transition（transitions[] 喂耗时统计口径，避免污染）
+        return workflow
+      }
       record.status = "in_progress"
       break
     case "approve":

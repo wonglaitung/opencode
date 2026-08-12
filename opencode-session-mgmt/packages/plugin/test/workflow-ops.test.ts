@@ -17,6 +17,26 @@ describe("applyTransition", () => {
     expect(() => applyTransition(state, "design", "approve", 1)).toThrow(WorkflowOpError)
   })
 
+  test("enter 已 approved 阶段抛错，须走 revisit", () => {
+    const state = createWorkflowState("sdlc")
+    applyTransition(state, "requirements", "enter", 1)
+    applyTransition(state, "requirements", "approve", 2)
+    expect(() => applyTransition(state, "requirements", "enter", 3)).toThrow(WorkflowOpError)
+    // 合法路径：revisit 回退后再 enter
+    applyTransition(state, "requirements", "revisit", 4)
+    applyTransition(state, "requirements", "enter", 5)
+    expect(state.stages.requirements.status).toBe("in_progress")
+  })
+
+  test("enter 已 in_progress 阶段幂等，不追加 transition", () => {
+    const state = createWorkflowState("sdlc")
+    applyTransition(state, "requirements", "enter", 1)
+    const before = state.stages.requirements.transitions.length
+    applyTransition(state, "requirements", "enter", 2)
+    expect(state.stages.requirements.status).toBe("in_progress")
+    expect(state.stages.requirements.transitions).toHaveLength(before)
+  })
+
   test("revisit 使 revision++", () => {
     const state = createWorkflowState("sdlc")
     applyTransition(state, "requirements", "enter", 1)
