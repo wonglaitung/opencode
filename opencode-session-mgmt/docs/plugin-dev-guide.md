@@ -1,7 +1,7 @@
 # OpenCode 插件开发规范
 
-版本: 1.0.0
-最后更新: 2026-08-07
+版本: 1.1.0
+最后更新: 2026-08-12
 来源: opencode-session-mgmt 实践（参见 packages/plugin 与 packages/shared）
 
 说明
@@ -84,6 +84,7 @@ export default MyPlugin
 要点：
 - 将 `@opencode-ai/plugin` 声明为 peerDependency（版本为 `*`），并在 devDependencies 中锁具体开发时版本。
 - 所有定时器/长期任务必须在 `dispose` 中清理，保证卸载或上下文切换时无泄漏。
+- 启动任务延后执行：工厂放出的后台任务应错开启动瞬间（延后数秒）再跑，避免与首屏/daemon 启动竞态抢资源；同类全量拉取尽量合并（如共用一次 `session.list` 完成多项清理/回填）。先例：`packages/plugin` 的 `startup.ts`。
 
 ---
 
@@ -101,6 +102,8 @@ export default MyPlugin
 实践建议：
 - 把 experimental.* 的签名适配集中在单一文件（例如 `src/hooks/prompt.ts`），以便未来上游签名同步时集中维护。
 - 当需要识别上游工具名或解析上游数据格式（如 apply_patch 的补丁文本）时，在代码中注释清楚依据的上游文件或注册处（给出文件路径/函数名/行号），并在文档中引用对齐依据，便于上游变更时定位。
+- 对弱模型，注入的规则应**按阶段裁剪**：只注入通用规则 + 当前阶段规则，状态压缩为一行阶段条而非整块 JSON；注入文本只保留模型可行动作（工具名、时机、确认语义），插件内部机制（统计、检测）由代码强制、不进 prompt。先例：`packages/shared` 的 `rulesForStage`/`currentInProgressStage`（规则为带 `stage` 归属的 `RuleItem[]`）与 `packages/plugin` 的 `buildStateBar`，见设计文档 7.1/7.3/7.4。
+- 识别并跳过子代理会话：上游子代理会话带 `parentID`，插件应据此对其跳过规则注入/建记录/统计/汇报，避免污染本地与聚合统计；识别结果按会话缓存（避免每个消息都调一次 `session.get`），上游不可达时保守按主会话处理（宁漏勿误拦）。先例：`packages/plugin` 的 `subagent.ts`，见设计文档 2.4。
 
 ---
 
@@ -138,6 +141,7 @@ export default MyPlugin
   - 服务不可用时写本地缓冲并启动补推与定时重试机制。
   - HTTP 4xx 视为永久失败（记录日志并丢弃）；5xx 或网络错误应保留并重试。
   - 对相同键进行去重以防堆积。
+- 对外 fetch 一律带超时：后台/启动期的 HTTP 请求应携带 `AbortSignal.timeout`（如 5 秒），服务不可达时快速放弃并留待补推，不得挂到 TCP 连接超时（可达数十秒）拖慢插件启动或阻塞请求。先例：`packages/plugin` 的 `report.ts`。
 - 删除与清理操作保守化：在不能确保完整清单时不执行删除，避免因短暂不可达而误删。
 - 外部进程调用静默化：若需 spawn 外部命令（例如定位浏览器、taskkill 等），一律使用 `spawn`/`spawnSync` 并把 stdio 设为 `"ignore"` 或显式捕获 stderr；所有外部调用应显式捕获并记录可能的错误，但不得把 stderr 泄露到上游或上传日志中。
 
@@ -160,6 +164,7 @@ export default MyPlugin
 - 优先测真实实现，尽量零 mock：存储使用内存库，依赖通过构造注入。
 - 用例名称用中文描述行为；对于每个硬约束（拦截、幂等、上限等），应包含正反两组用例（验收与拒绝路径）。
 - 建议增加 CI 步骤：`bun test`、`bun run typecheck`（strict）与一个轻量的插件启停脚本（启用插件、触发核心路径、移除插件并确认恢复）。
+- 注入规则/提示词的遵循度建议建**评测基线**：用脚本对真实模型端点批量跑场景，对比改前/改后通过率，量化弱模型对规则文本的遵循度（先例 `scripts/eval-rules`，见设计文档 12.1；此类评测需真实模型端点，不随 `bun test` 跑）。
 
 ---
 
