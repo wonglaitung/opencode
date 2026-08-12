@@ -7,6 +7,7 @@ import {
   SDLC,
   WORKFLOW_DEFINITIONS,
   createWorkflowState,
+  currentInProgressStage,
   deepMerge,
   efficiencyRatio,
   getDefinition,
@@ -14,6 +15,7 @@ import {
   readIdentity,
   resolveWorkflowType,
   reviewRecord,
+  rulesForStage,
   summarizeWorkflow,
   validateIdentity,
   writeIdentity,
@@ -162,9 +164,12 @@ describe("WorkflowDefinition 注册表（3.2）", () => {
       "behaviorVerifiable",
       "designRationale",
     ])
-    // 规则全文非空且含关键条款
-    expect(SDLC.rules).toContain("# Workflow Agent 规则")
-    expect(SDLC.rules).toContain("一次通过率由 review_submit 自动计算")
+    // 结构化规则（7.4）：stage 归属齐全、关键语义保留、插件内部机制不进注入文本
+    expect(SDLC.rules.length).toBeGreaterThan(0)
+    expect(SDLC.rules.some((r) => r.stage === "global")).toBe(true)
+    expect(SDLC.rules.some((r) => r.stage === "requirements" && r.text.includes("workflow_baseline"))).toBe(true)
+    expect(SDLC.rules.some((r) => r.stage === "review" && r.text.includes("comprehension_confirm"))).toBe(true)
+    expect(SDLC.rules.some((r) => r.text.includes("同一文件连续 3 次"))).toBe(false)
   })
 
   test("createWorkflowState(type) 含 type 与泛化阶段，缺省 checklist 全 false", () => {
@@ -204,6 +209,22 @@ describe("WorkflowDefinition 注册表（3.2）", () => {
     expect(getDefinition("reqdoc")).toBe(REQDOC)
   })
 
+  test("rulesForStage / currentInProgressStage：阶段化注入取 global + 当前阶段", () => {
+    // 无进行中阶段 → 只给 global
+    expect(rulesForStage(SDLC, null).every((r) => r.stage === "global")).toBe(true)
+    expect(rulesForStage(SDLC, null)).toHaveLength(SDLC.rules.filter((r) => r.stage === "global").length)
+    // 指定阶段 → global + 该阶段
+    const designRules = rulesForStage(SDLC, "design")
+    expect(designRules.every((r) => r.stage === "global" || r.stage === "design")).toBe(true)
+    expect(designRules.some((r) => r.stage === "requirements")).toBe(false)
+    // currentInProgressStage：按顺序取第一个 in_progress；无则 null
+    const s = createWorkflowState("sdlc")
+    expect(currentInProgressStage(s)).toBeNull()
+    s.stages.design.status = "in_progress"
+    s.stages.implementation.status = "in_progress"
+    expect(currentInProgressStage(s)).toBe("design")
+  })
+
   test("REQDOC 定义：四段渐进引导 + 业务确认闭环，无提交门禁", () => {
     expect(REQDOC.type).toBe("reqdoc")
     expect(REQDOC.stages).toEqual(["goal", "rules", "edge", "prd", "review"])
@@ -222,12 +243,11 @@ describe("WorkflowDefinition 注册表（3.2）", () => {
       "edgeCoverage",
       "resolution",
     ])
-    expect(REQDOC.rules).toContain("# Workflow Agent 规则（需求书）")
-    expect(REQDOC.rules).toContain("边界与异常（edge）")
-    expect(REQDOC.rules).toContain("业务确认（review，核心）")
+    expect(REQDOC.rules.some((r) => r.stage === "goal" && r.text.includes("workflow_baseline"))).toBe(true)
+    expect(REQDOC.rules.some((r) => r.stage === "review" && r.text.includes("comprehension_confirm"))).toBe(true)
     // 需求资料目录契约（7.5）
-    expect(REQDOC.rules).toContain("需求资料目录")
-    expect(REQDOC.rules).toContain("07_需求规格产出")
+    expect(REQDOC.rules.some((r) => r.text.includes("01_业务背景与目标"))).toBe(true)
+    expect(REQDOC.rules.some((r) => r.text.includes("07_需求规格产出"))).toBe(true)
   })
 
   test("createWorkflowState(reqdoc) 含 reqdoc 阶段与清单", () => {
