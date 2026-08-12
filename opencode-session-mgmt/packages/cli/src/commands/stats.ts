@@ -228,13 +228,15 @@ function printProjectStats(
   if (sessions.length > 0) {
     lines.push("")
     lines.push("逐会话明细:")
+    // 会话 ID 列宽随最长 ID 自适应，保证完整显示、可直接复制进 stats <sessionID>
+    const idWidth = Math.max(12, ...sessions.map((s) => s.sessionID.length))
     // 表头
     lines.push(
-      `  ${"会话ID".padEnd(12)} ${"状态".padEnd(8)} ${"周期".padStart(6)} ${"一次通过率".padStart(6)} ${"迭代".padStart(4)} ${"费用".padStart(8)} ${"标题".padEnd(24)}`,
+      `  ${"会话ID".padEnd(idWidth)} ${"状态".padEnd(8)} ${"周期".padStart(6)} ${"一次通过率".padStart(6)} ${"迭代".padStart(4)} ${"费用".padStart(8)} ${"标题".padEnd(24)}`,
     )
-    lines.push(`  ${"─".repeat(12)} ${"─".repeat(8)} ${"─".repeat(6)} ${"─".repeat(6)} ${"─".repeat(4)} ${"─".repeat(8)} ${"─".repeat(24)}`)
+    lines.push(`  ${"─".repeat(idWidth)} ${"─".repeat(8)} ${"─".repeat(6)} ${"─".repeat(6)} ${"─".repeat(4)} ${"─".repeat(8)} ${"─".repeat(24)}`)
     for (const s of sessions) {
-      const id = s.sessionID.length > 12 ? s.sessionID.slice(0, 12) + "…" : s.sessionID
+      const id = s.sessionID
       const status = s.complete ? "✓完成" : s.status ?? "进行中"
       const dur = fmtDuration(s.durationMs)
       const acc = fmtPct(s.firstPassRate)
@@ -246,7 +248,7 @@ function printProjectStats(
             : `${s.iterationCount}`
       const cost = s.cost === null ? "N/A" : `$${s.cost.toFixed(4)}`
       lines.push(
-        `  ${id.padEnd(12)} ${status.padEnd(8)} ${dur.padStart(6)} ${acc.padStart(6)} ${iter.padStart(4)} ${cost.padStart(8)} ${fmtTitle(s.title).padEnd(24)}`,
+        `  ${id.padEnd(idWidth)} ${status.padEnd(8)} ${dur.padStart(6)} ${acc.padStart(6)} ${iter.padStart(4)} ${cost.padStart(8)} ${fmtTitle(s.title).padEnd(24)}`,
       )
     }
     lines.push("")
