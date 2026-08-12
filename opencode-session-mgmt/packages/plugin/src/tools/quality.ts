@@ -79,8 +79,10 @@ function applyLineDelta(tool: string, args: unknown, lines: Record<string, numbe
  * - 信号 B：同一文件在近期 20 次调用中出现 6 次以上（frequency）→ 振荡循环
  * 检测到的 stuck 文件通过 getStuckFiles() 供 system prompt 注入警告。
  */
-export function createIterationCounter(store: Store) {
+export function createIterationCounter(store: Store, isSubagent: (sessionID: string) => Promise<boolean> = async () => false) {
   return async (input: { tool: string; sessionID: string; args?: unknown }): Promise<void> => {
+    // 子代理会话不计数、不建记录（2.4 统计纯净度）
+    if (await isSubagent(input.sessionID)) return
     if (!CODE_EDIT_TOOLS.has(input.tool)) return
     const key = fileKey(input.tool, input.args)
     const argsHash = extractArgsHash(input.tool, input.args)

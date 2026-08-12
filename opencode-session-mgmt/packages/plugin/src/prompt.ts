@@ -59,13 +59,15 @@ export function buildSystemFragment(workflow: WorkflowState, stuck: Record<strin
   return parts.join("\n")
 }
 
-/** 生成 experimental.chat.system.transform 处理器（闭包持有 store）。 */
-export function createSystemTransform(store: Store) {
+/** 生成 experimental.chat.system.transform 处理器（闭包持有 store）。isSubagent 为子代理识别器，缺省不识别。 */
+export function createSystemTransform(store: Store, isSubagent: (sessionID: string) => Promise<boolean> = async () => false) {
   return async (
     input: { sessionID?: string },
     output: { system: string[] },
   ): Promise<void> => {
     if (!input.sessionID) return
+    // 子代理会话不注入工作流规则、不建记录（2.4 统计纯净度）
+    if (await isSubagent(input.sessionID)) return
     const row = store.ensure(input.sessionID)
     const workflow = row.workflow
     if (!workflow) return

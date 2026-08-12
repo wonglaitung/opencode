@@ -18,6 +18,7 @@ import { createReporter, type Usage } from "./report"
 import { createIterationCounter } from "./tools/quality"
 import { createReviewTools } from "./tools/review"
 import { createWorkflowTools } from "./tools/workflow"
+import { makeSubagentChecker } from "./subagent"
 
 /** 经上游 SDK 汇总会话 cost/tokens（step-finish 分段求和；失败返回空值，3.1）。 */
 function createUsageProvider(client: PluginInput["client"]) {
@@ -49,7 +50,8 @@ function createUsageProvider(client: PluginInput["client"]) {
 }
 
 /**
- * 惰性清理孤儿记录（3.1）：移除插件库中上游已删除的会话。
+ * 惰性清理孤儿记录（3.1）：移除插件库中上游已删除的会话；并顺带清理
+ * 子代理会话记录（2.4 统计纯净度：parentID 非空即子代理，仅保留主会话）。
  * 保守策略：拿不到确切的非空会话列表时不清理，避免上游瞬时不可达导致误删。
  */
 async function cleanupOrphans(store: Store, client: PluginInput["client"]): Promise<void> {
@@ -57,7 +59,8 @@ async function cleanupOrphans(store: Store, client: PluginInput["client"]): Prom
     const res = await client.session.list()
     const sessions = res.data
     if (!sessions || sessions.length === 0) return
-    const valid = new Set(sessions.map((s) => s.id))
+    // 仅主会话入白名单：子代理会话（parentID 非空）与孤儿一并清理
+    const valid = new Set(sessions.filter((s) => !s.parentID).map((s) => s.id))
     const orphans = store
       .listAll()
       .map((r) => r.session_id)
@@ -114,6 +117,8 @@ const SessionMgmtPlugin: Plugin = async (input) => {
   const store = Store.open(input.directory, () => resolveWorkflowType(readIdentity()?.workflowType))
   const usageProvider = createUsageProvider(input.client)
   const reporter = createReporter(store, () => readIdentity(), usageProvider)
+  // 子代理会话识别器（2.4 统计纯净度）：对子代理跳过建记录/打标/汇报/规则注入
+  const isSubagent = makeSubagentChecker(input.client)
 
   // 启动时补推缓冲汇报，并定时刷新（收集服务不可用期间本地暂存，2.4）。
   void reporter.flushOutbox()
@@ -126,7 +131,7 @@ const SessionMgmtPlugin: Plugin = async (input) => {
   }, 5 * 60 * 1000)
 
   return {
-    "experimental.chat.system.transform": createSystemTransform(store),
+    "experimental.chat.system.transform": createSystemTransform(store, isSubagent),
 
     tool: {
       ...createWorkflowTools(store),
@@ -135,9 +140,11 @@ const SessionMgmtPlugin: Plugin = async (input) => {
 
     "tool.execute.before": createCommitGate(store),
 
-    "tool.execute.after": createIterationCounter(store),
+    "tool.execute.after": createIterationCounter(store, isSubagent),
 
     "chat.message": async (hookInput) => {
+      // 子代理会话不追踪：不建记录、不打标、不汇报（2.4 统计纯净度）
+      if (await isSubagent(hookInput.sessionID)) return
       stampSessionAccount(store, hookInput.sessionID)
       await syncSessionTitle(store, input.client, hookInput.sessionID)
       await reporter.enqueueReport(hookInput.sessionID)
