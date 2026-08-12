@@ -11,12 +11,18 @@ import { aggregateProject, sessionStats } from "../src/stats"
 const noUsage = { cost: null, tokensInput: null, tokensOutput: null }
 const HOUR = 3_600_000
 
-/** 构造一个具备指定周期（毫秒）与可选基线的会话（首末转换时间戳跨 durationMs）。 */
+/** 构造一个「已完成」会话：五阶段全 approved、首末转换时间戳跨 durationMs，可选基线。
+ *  完成态保证会话周期取转换跨度（durationMs），便于断言提效率。 */
 function seed(store: Store, id: string, durationMs: number, estimatedHours: number | null): void {
   store.mutateWorkflow(id, (wf) => {
     const start = 1_750_000_000_000
-    wf.stages.requirements.transitions.push({ action: "enter", at: start })
-    wf.stages.review.transitions.push({ action: "approve", at: start + durationMs })
+    const order = ["requirements", "design", "implementation", "testing", "review"]
+    order.forEach((name, i) => {
+      const at = start + Math.round((durationMs * i) / (order.length - 1))
+      wf.stages[name].transitions.push({ action: "enter", at })
+      wf.stages[name].transitions.push({ action: "approve", at })
+      wf.stages[name].status = "approved"
+    })
     if (estimatedHours !== null) wf.baseline = { estimatedHours, setAt: start }
   })
 }

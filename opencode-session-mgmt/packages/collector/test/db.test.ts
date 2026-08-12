@@ -39,7 +39,8 @@ function reportWithLines(sessionID: string, account: string, group: string, line
   }
 }
 
-/** 携带基线与阶段时间戳的汇报（时间戳跨度 = durationMs，供提效率计算）。 */
+/** 携带基线与阶段时间戳的汇报（时间戳跨度 = durationMs，供提效率计算）。
+ *  标记完成态（commit.status=allowed）：收集端据此取转换跨度并计算提效率。 */
 function reportWithBaseline(
   sessionID: string,
   account: string,
@@ -52,6 +53,7 @@ function reportWithBaseline(
   const start = 1_750_000_000_000
   workflow.stages.requirements.transitions.push({ action: "enter", at: start })
   workflow.stages.review.transitions.push({ action: "approve", at: start + durationMs })
+  workflow.commit.status = "allowed"
   workflow.baseline = { estimatedHours, setAt: start }
   return {
     sessionID,
@@ -128,6 +130,7 @@ describe("CollectorDb", () => {
       const wf = createWorkflowState("sdlc")
       wf.stages.requirements.transitions.push({ action: "enter", at: 0 })
       wf.stages.requirements.transitions.push({ action: "approve", at: 3_600_000 })
+      wf.commit.status = "allowed" // 完成态：周期取转换跨度
       const r: SessionReport = {
         sessionID: "s1",
         account: "alice",
@@ -149,6 +152,28 @@ describe("CollectorDb", () => {
       expect(stats.perAccount[0]!.avgTestCoverage).toBe(80)
       // period=null 时不产出趋势
       expect(stats.trends.requirementRevision).toBeNull()
+    })
+  })
+
+  test("进行中会话（未完成）：周期取自启动至今，不为 0", () => {
+    withDb((db) => {
+      const wf = createWorkflowState("sdlc")
+      const start = Date.now() - 60_000
+      wf.stages.requirements.transitions.push({ action: "enter", at: start })
+      const r: SessionReport = {
+        sessionID: "s1",
+        account: "alice",
+        group: "前端组",
+        org: "Eng",
+        workflow: summarizeWorkflow(wf),
+        cost: null,
+        tokensInput: 0,
+        tokensOutput: 0,
+        reportedAt: Date.now(),
+      }
+      db.upsertReport(r)
+      const stats = db.statsGroup("前端组", null)
+      expect(stats.avgDurationMs).toBeGreaterThan(0)
     })
   })
 
