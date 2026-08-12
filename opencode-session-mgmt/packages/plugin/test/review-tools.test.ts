@@ -11,6 +11,13 @@ const ctx = { sessionID: "s1" } as never
 
 function setup() {
   const store = Store.memory()
+  // 审查是最后一关：默认夹具已推进前序阶段（requirements/design/implementation/testing approved），
+  // 使 review_submit 用例聚焦审查门禁本身（片段/清单/一次通过率），不被顺序校验拦截。
+  store.mutateWorkflow("s1", (wf) => {
+    for (const name of ["requirements", "design", "implementation", "testing"]) {
+      wf.stages[name].status = "approved"
+    }
+  })
   const tools = createReviewTools(store)
   return { store, tools }
 }
@@ -261,6 +268,41 @@ describe("review_submit 门禁", () => {
     expect(wf.commit.blocked_by).not.toContain("review")
     store.close()
   })
+
+  test("越序：前序阶段未完成时审查被拒（sdlc，不经预推进夹具）", async () => {
+    const store = Store.memory()
+    const tools = createReviewTools(store)
+    // 全新工作流：全 not_started → 直接拒绝
+    await expect(
+      tools.review_submit!.execute(
+        { businessIntent: true, logicExplainable: true, behaviorVerifiable: true } as never,
+        ctx,
+      ),
+    ).rejects.toThrow(/审查前须先完成/)
+    // 仅完成需求分析 → 仍拒绝（设计/编码/测试未完成）
+    store.mutateWorkflow("s1", (wf) => {
+      wf.stages.requirements.status = "approved"
+    })
+    await expect(
+      tools.review_submit!.execute(
+        { businessIntent: true, logicExplainable: true, behaviorVerifiable: true } as never,
+        ctx,
+      ),
+    ).rejects.toThrow(/审查前须先完成/)
+    store.close()
+  })
+
+  test("越序：reqdoc 前序阶段未完成时审查被拒", async () => {
+    const store = Store.memory(() => "reqdoc" as const)
+    const tools = createReviewTools(store)
+    await expect(
+      tools.review_submit!.execute(
+        { completeness: true, clarity: true, edgeCoverage: true, resolution: true } as never,
+        { sessionID: "r1" } as never,
+      ),
+    ).rejects.toThrow(/审查前须先完成/)
+    store.close()
+  })
 })
 
 describe("reqdoc 工作流（业务确认 PRD 要点）", () => {
@@ -270,6 +312,10 @@ describe("reqdoc 工作流（业务确认 PRD 要点）", () => {
     const ctx = { sessionID: "r1" } as never
     const wf = store.ensure("r1").workflow!
     expect(wf.type).toBe("reqdoc")
+    // 审查是最后一关：先推进前序阶段（goal/rules/edge/prd approved）
+    store.mutateWorkflow("r1", (w) => {
+      for (const name of ["goal", "rules", "edge", "prd"]) w.stages[name].status = "approved"
+    })
     // reqdoc 要点：不填 file/lineStart/lineEnd
     await tools.comprehension_add!.execute(
       { codeSegmentId: "目标与场景", explanation: "面向一线柜员，缩短开户录入时间" } as never,
