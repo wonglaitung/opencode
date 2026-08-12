@@ -216,6 +216,17 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
       const saved = store.mutateWorkflow(context.sessionID, (workflow) => {
         const def = getDefinition(workflow.type)
         const review = reviewRecord(workflow)
+        // 审查是最后一关：前序阶段须全部 approved，防越序（弱模型跳过编码/测试直接假通过审查）。
+        // 定义驱动：sdlc（req→des→imp→tst→review）与 reqdoc（goal→rules→edge→prd→review）自动适用。
+        const reviewIdx = def.stages.indexOf(def.reviewStage!)
+        for (let i = 0; i < reviewIdx; i++) {
+          const name = def.stages[i]
+          if (workflow.stages[name].status !== "approved") {
+            throw new WorkflowOpError(
+              `审查前须先完成 ${def.labels[name]}（当前 ${def.labels[name]} 尚未 approved），请先推进该阶段`,
+            )
+          }
+        }
         const total = review.comprehension.length
         const hadCodeEdits = (workflow.quality.iterationCount ?? 0) > 0
         // 有 AI 代码编辑就必须登记理解确认片段；纯讨论会话（无代码）可无片段通过
