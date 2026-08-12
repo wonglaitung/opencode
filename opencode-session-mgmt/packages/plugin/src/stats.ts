@@ -36,6 +36,8 @@ export interface SessionStats {
   title: string | null
   account: string | null
   status: string | null
+  /** 当前进行中的阶段标签（无进行中阶段为 null），供列表「状态」列展示「编码中」等 */
+  currentStage: string | null
   tags: string[]
   stages: StageStats[]
   durationMs: number
@@ -87,15 +89,18 @@ export function stageDurationMs(stage: StageRecord): number {
   return Math.max(0, last - first)
 }
 
-/** 会话总耗时：全部阶段转换的最早到最晚。 */
-export function workflowDurationMs(workflow: WorkflowState): number {
+/** 会话总耗时：全部阶段转换的最早到最晚；进行中（未全部 approved）以当前时间为上界，
+ *  即「自工作流启动至今」，已完成取转换跨度（6.1 时间戳即数据源）。 */
+export function workflowDurationMs(workflow: WorkflowState, now: number = Date.now()): number {
   const def = getDefinition(workflow.type)
   const times: number[] = []
   for (const name of def.stages) {
     for (const t of workflow.stages[name].transitions) times.push(t.at)
   }
   if (times.length === 0) return 0
-  return Math.max(...times) - Math.min(...times)
+  const first = Math.min(...times)
+  const last = isComplete(workflow) ? Math.max(...times) : now
+  return Math.max(0, last - first)
 }
 
 export function isComplete(workflow: WorkflowState): boolean {
@@ -112,14 +117,30 @@ export function sessionStats(row: WorkflowSessionRow, usage: Usage): SessionStat
   const checklist = review.checklist
   // 清单通过数按定义逐项计数（def 驱动；auto 项也计入通过口径，3.2）
   const checklistPassed = def.checklist.filter((item) => checklist[item.key] === true).length
-  // 会话总耗时既用于展示，也作为提效率的「实际周期」（6.3）
+  // 会话总耗时既用于展示，也作为提效率的「实际周期」（6.3）。
+  // 进行中会话取「自工作流启动至今」，提效率仅对完成会话计算（避免进行中误报高提效）。
+  const complete = isComplete(workflow)
   const durationMs = workflowDurationMs(workflow)
+  // 当前阶段：进行中的阶段里，最近一次进入（最后一条转换时间戳最晚）的标签；无进行中阶段为 null
+  const inProgress = def.stages.filter((name) => workflow.stages[name].status === "in_progress")
+  let currentStage: string | null = null
+  if (inProgress.length > 0) {
+    const cur = inProgress
+      .map((name) => {
+        const st = workflow.stages[name]
+        const lastAt = st.transitions.length > 0 ? st.transitions[st.transitions.length - 1]!.at : 0
+        return { name, lastAt }
+      })
+      .sort((a, b) => b.lastAt - a.lastAt)[0]!
+    currentStage = def.labels[cur.name] ?? cur.name
+  }
   return {
     sessionID: row.session_id,
     type: workflow.type,
     title: row.title,
     account: row.account_id,
     status: row.status,
+    currentStage,
     tags: row.tags,
     stages: def.stages.map((name) => ({
       name,
@@ -135,13 +156,13 @@ export function sessionStats(row: WorkflowSessionRow, usage: Usage): SessionStat
     testCoverage: workflow.quality.testCoverage,
     lines: workflow.quality.linesByFile ? sumLinesByCategory(workflow.quality.linesByFile) : null,
     baselineHours: workflow.baseline?.estimatedHours ?? null,
-    efficiency: efficiencyRatio(workflow.baseline?.estimatedHours, durationMs),
+    efficiency: complete ? efficiencyRatio(workflow.baseline?.estimatedHours, durationMs) : null,
     comprehension: { total: review.comprehension.length, confirmed },
     checklistPassed,
     cost: usage.cost,
     tokensInput: usage.tokensInput,
     tokensOutput: usage.tokensOutput,
-    complete: isComplete(workflow),
+    complete,
   }
 }
 
