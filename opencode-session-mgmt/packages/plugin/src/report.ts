@@ -67,6 +67,9 @@ export function createReporter(
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: item.payload,
+            // 收集服务不可达时不无界挂起：5 秒未响应即放弃（启动慢根因之一：
+            // 无超时的 fetch 在不可达地址上会挂到 TCP 连接超时，可达数十秒）。
+            signal: AbortSignal.timeout(5_000),
           })
           if (!res.ok) {
             if (res.status >= 400 && res.status < 500) {
