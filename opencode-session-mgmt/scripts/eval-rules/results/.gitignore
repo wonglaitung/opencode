@@ -1,0 +1,3 @@
+# 评测结果由 run.ts 生成;baseline.json 作为参照经 git add -f 入库,其余不入库
+*.json
+!.gitignore
