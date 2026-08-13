@@ -261,10 +261,11 @@ bash setup.sh                              # 可选：校验环境
 
 ### Windows
 
-内网/离线环境（纯 cmd）建议用 \`setup.cmd\`（自动设依赖种子 + 启动开关，见下方「内网部署」）：
+内网/离线环境（纯 cmd）用 \`setup.cmd seed <项目目录>\`（纯 cmd，无需 PowerShell、无需网络；
+自动种全局 + 该项目依赖，见下方「内网部署」）：
 
 \`\`\`cmd
-setup.cmd
+setup.cmd seed D:\你的项目
 \`\`\`
 
 有 PowerShell 的环境也可用 \`setup.ps1\`（仅环境校验）：
