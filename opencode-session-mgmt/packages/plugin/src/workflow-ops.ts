@@ -38,7 +38,12 @@ export function applyTransition(
   switch (action) {
     case "enter":
       if (record.status === "approved") {
-        throw new WorkflowOpError(`阶段 ${stage} 已 approved，如需返工请用 workflow_revisit 回退`)
+        // 完成态 enter 已 approved 阶段要区分两种意图：返工（revisit，仍属本需求）与
+        // 开始下一个需求（/new 新会话）。弱模型被「返工」引导会复用本会话、污染统计。
+        throw new WorkflowOpError(
+          `阶段 ${stage} 已 approved（本会话已完成）。返工请用 workflow_revisit 回退；` +
+            `开始下一个需求请执行 /new 保持统计隔离`,
+        )
       }
       if (record.status === "in_progress") {
         // 幂等：重复 enter 不再追加 transition（transitions[] 喂耗时统计口径，避免污染）

@@ -6,24 +6,56 @@
  */
 import { currentInProgressStage, getDefinition, reviewRecord, rulesForStage, type WorkflowState } from "sm-shared"
 import type { Store } from "./db"
+import { isComplete } from "./stats"
 import { getStuckFiles } from "./tools/quality"
 
-/** 将当前工作流压缩为注入片段：阶段化规则 + 状态条 + stuck 警告。 */
+/** 将当前工作流压缩为注入片段：阶段化规则 + 状态条 + stuck 警告（完成态见下方专用分支）。 */
 export function buildSystemFragment(workflow: WorkflowState, stuck: Record<string, number> = {}): string {
   const def = getDefinition(workflow.type)
   const stage = currentInProgressStage(workflow)
-  const rules = rulesForStage(def, stage)
   const parts: string[] = []
 
+  // 完成态（全部阶段 approved，stage===null）：不注入常规规则——全局规则里的 r1「初始化工作流」
+  // 等在完成态会与「已全部完成」自相矛盾，误导弱模型重启流程；改为给全完成态的三条可行动作：
+  // 提交（如尚未）→ /new 开新需求 → revisit 改本需求。
+  if (isComplete(workflow)) {
+    parts.push("# Workflow 已完成", "")
+    if (def.hasCommitGate) {
+      parts.push("如需提交代码：先调用 commit_gate_check 确认门禁，放行后 git commit。")
+    }
+    parts.push(
+      "⚑ 开始下一个需求：提醒开发者执行 /new 保持统计隔离（勿在本会话复用，否则统计混入已完成需求）。",
+      "修改本需求：调用 workflow_revisit 回退到对应阶段。",
+    )
+    parts.push("", buildStateBar(workflow, stage))
+    return parts.join("\n")
+  }
+
+  // 进行中 / 未开始：阶段化注入（global + 当前阶段）
+  const rules = rulesForStage(def, stage)
   const header = stage
     ? `# Workflow 规则（通用 + 当前阶段 ${def.labels[stage] ?? stage}）`
     : "# Workflow 规则（通用）"
   parts.push(header, "", rules.map((r, i) => `${i + 1}. ${r.text}`).join("\n"))
   if (stage === null) {
-    parts.push(
-      "",
-      `起步：工作流尚未开始，请从「${def.labels[def.stages[0]] ?? def.stages[0]}」(${def.stages[0]}) 开始推进。`,
-    )
+    // stage===null 三态：全 not_started（起步）/ 部分 approved 无进行中（空档）/ 全部 approved（完成态，已在开头返回）。
+    // 空档态若仍提示「尚未开始」会让模型尝试 enter 已 approved 阶段（报错）或误判流程未启动。
+    const notStarted = def.stages.filter((name) => workflow.stages[name].status === "not_started")
+    if (notStarted.length === def.stages.length) {
+      parts.push(
+        "",
+        `起步：工作流尚未开始，请从「${def.labels[def.stages[0]] ?? def.stages[0]}」(${def.stages[0]}) 开始推进。`,
+      )
+    } else {
+      const done = def.stages.filter((name) => workflow.stages[name].status === "approved")
+      // 空档态必然存在未启动阶段（无 in_progress 且非全部 approved），find 兜底仅为类型安全
+      const next = def.stages.find((name) => workflow.stages[name].status === "not_started") ?? def.stages[0]
+      parts.push(
+        "",
+        `当前无进行中阶段（已 approved：${done.map((n) => def.labels[n] ?? n).join("、")}）。` +
+          `继续推进：进入「${def.labels[next] ?? next}」(${next})；回退：调用 workflow_revisit。`,
+      )
+    }
   }
   parts.push("", buildStateBar(workflow, stage))
 
@@ -31,14 +63,6 @@ export function buildSystemFragment(workflow: WorkflowState, stuck: Record<strin
   if (stuckEntries.length > 0) {
     const details = stuckEntries.map(([f, n]) => `${f}（${n} 次）`).join("、")
     parts.push("", `⚠ 检测到重复编辑模式：${details}，建议审查是否陷入无效循环，考虑人工介入修改。`)
-  }
-  if (workflow.commit.status === "allowed") {
-    parts.push(
-      "",
-      def.hasCommitGate
-        ? "⚑ SDLC 已完成，请提醒开发者执行 /new 开始下一个需求（保持统计隔离）。"
-        : "⚑ 业务确认完成，请提醒执行 /new 开始下一个需求（保持统计隔离）。",
-    )
   }
   return parts.join("\n")
 }
