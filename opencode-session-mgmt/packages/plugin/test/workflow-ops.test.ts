@@ -28,6 +28,21 @@ describe("applyTransition", () => {
     expect(state.stages.requirements.status).toBe("in_progress")
   })
 
+  test("enter 已 approved 报错区分返工与开新需求（引导 /new 防统计污染）", () => {
+    const state = createWorkflowState("sdlc")
+    applyTransition(state, "requirements", "enter", 1)
+    applyTransition(state, "requirements", "approve", 2)
+    let message = ""
+    try {
+      applyTransition(state, "requirements", "enter", 3)
+    } catch (e) {
+      message = (e as WorkflowOpError).message
+    }
+    expect(message).toContain("workflow_revisit")
+    expect(message).toContain("/new")
+    expect(message).toContain("统计隔离")
+  })
+
   test("enter 已 in_progress 阶段幂等，不追加 transition", () => {
     const state = createWorkflowState("sdlc")
     applyTransition(state, "requirements", "enter", 1)
