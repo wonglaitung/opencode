@@ -524,17 +524,17 @@ bun run pack:bundle        # → dist/opencode-sm-bundle-0.1.0.tgz（版本号�
 # 内网开发机（解压到固定位置，如 D:/tools/opencode/）：
 tar xzf opencode-sm-bundle-0.1.0.tgz -C D:/tools/opencode
 cd D:/tools/opencode/opencode-sm-bundle-0.1.0
-setup.cmd                  # Windows 内网/纯 cmd：设启动开关 + 种全局 config 目录依赖（推荐，见下）
+setup.cmd seed D:\你的项目  # 每个要用插件的项目各跑一次：种全局 + 该项目 .opencode
 # bash setup.sh           # 可选：仅校验环境（Windows 有 PowerShell 时也可用 .\setup.ps1）
 ```
 
-**Windows 内网机务必跑一次 `setup.cmd`**（纯 cmd，无需 PowerShell、无需网络）。原因：opencode 配置插件后，启动会对各 config 目录联网安装插件 SDK `@opencode-ai/plugin`，内网机无网会卡 1-2 分钟（日志出现 `background dependency install failed`）。`setup.cmd` 做两件事让安装判定变为 no-op：
-1. 设 `OPENCODE_DISABLE_PROJECT_CONFIG=1`（`setx` 持久化 + 当前会话 `set`）——项目 `.opencode` 退出安装列表，只需种全局一处。
-2. 把包内 `seed/`（打包机已生成的离线依赖种子：`node_modules/@opencode-ai/plugin` + 最小 `package-lock.json`/`package.json`，版本与 bundle 一致）拷进全局 config 目录 `%USERPROFILE%\.config\opencode\`（存在 `~/.opencode` 也种）。
+**Windows 内网机务必用 `setup.cmd seed` 种依赖**（纯 cmd，无需 PowerShell、无需网络）。原因：opencode 配置插件后，启动会对各 config 目录联网安装插件 SDK `@opencode-ai/plugin`，内网机无网会卡 1-2 分钟（日志出现 `background dependency install failed`）。做法是把包内 `seed/`（打包机已生成的离线依赖种子：`node_modules/@opencode-ai/plugin` + 最小 `package-lock.json`/`package.json`，版本与 bundle 一致）铺进每个 config 目录，让安装判定变为 no-op：
+1. 全局：每次 `setup.cmd seed <项目目录>` 都会一并种 `%USERPROFILE%\.config\opencode\`（存在 `~/.opencode` 也种）。
+2. 逐项目：`setup.cmd seed <项目目录>` 种**全局 + 该项目的 `.opencode`**——**每个要用插件的项目各跑一次**即可（项目 `.opencode` 独立存在，命令幂等、可重复）。
 
-**开关代价**：项目级 `opencode.json`（agents/modes/commands）不再加载；插件不受影响（插件配在全局 config，见下），db 仍按项目目录写。撤销开关：`setx OPENCODE_DISABLE_PROJECT_CONFIG ""`。若某项目必须保留项目级配置，用 `setup.cmd seed <项目目录>` 为该项目 `.opencode` 补种（该用法不设开关）。
+> 不用 `OPENCODE_DISABLE_PROJECT_CONFIG` 开关：该开关需 `setx` 持久化环境变量，Windows 上只对之后全新启动的进程生效，已开着的终端/常驻 daemon 仍看不到（新开窗口“失效”），且会连带关闭项目级 opencode.json。逐项目补种虽然要多跑几次命令，但纯落盘、零环境依赖、不受新窗口影响。
 
-然后配置 `opencode.json` **直接指向解压目录**——bundle 根 `package.json` 已注入 `main` 指向插件入口，无需再指到 `packages/plugin`（与 edge-debug 一致）。注意：**跑过 `setup.cmd`（已设开关）的机器只能配在全局**（`~/.config/opencode/opencode.json`），项目级 `opencode.json` 已不加载；未设开关（Linux/macOS，或 `setup.cmd seed <项目目录>` 兜底的项目）才可配项目级。
+然后配置 `opencode.json` **直接指向解压目录**——bundle 根 `package.json` 已注入 `main` 指向插件入口，无需再指到 `packages/plugin`（与 edge-debug 一致）。项目级或全局级均可；建议配在全局（`~/.config/opencode/opencode.json`），每台机一次、所有项目共用。
 
 ```json
 {
@@ -562,7 +562,7 @@ setup.cmd                  # Windows 内网/纯 cmd：设启动开关 + 种全�
 1. **同平台构建**：打包机与内网机须同 OS、同 CPU 架构、glibc 别差太多，否则运行时或原生依赖加载失败。
 2. **`node_modules` 必须是 hoisted 模式**（Windows 关键）：bun 默认的 `isolated` 模式在 Windows 上使用硬链接，打包时硬链接无法保留，导致传递依赖（如 `zod`）断裂。本项目 `.npmrc` 已设 `node-linker=hoisted`（真实文件拷贝）——用 `bun run pack:bundle` 打包时脚本会自动处理；仅当手工打包时才需自查（之前用默认模式装过的，先 `rm -rf node_modules packages/*/node_modules && bun install` 重装）。
 3. **插件无原生模块**：插件不带自己的原生模块（`bun:sqlite` 是 bun 内置），workspace 软链是相对路径、随 tar 走；只要 `opencode.json` 的 `plugin` 路径指对即可加载。
-4. **内网必须种依赖种子**：Windows 内网机先跑 `setup.cmd`（设开关 + 种全局 `seed/`），否则 opencode 每次启动联网装 `@opencode-ai/plugin` 卡 1-2 分钟；Linux/macOS 内网机如需同开关，可手设 `OPENCODE_DISABLE_PROJECT_CONFIG=1` 并把包内 `seed/` 拷进 `~/.config/opencode/`（等价于 `setup.cmd` 的两个动作，也可用 `setup.cmd seed <项目目录>` 为单项目补种）。
+4. **内网必须种依赖种子**：Windows 内网机对每个项目跑一次 `setup.cmd seed <项目目录>`（自动一并种全局），否则 opencode 每次启动联网装 `@opencode-ai/plugin` 卡 1-2 分钟；Linux/macOS 内网机同理，手动把包内 `seed/` 拷进 `~/.config/opencode/` 与各项目 `.opencode` 即可。
 
 > 注意：
 > - **tarball 不含 OpenCode 本体**——本体在第 1 步单独搬入；**也不含 bun 运行时**，目标机若还没有 bun（前置条件，见第 1 章），同样从联网机带一份对应平台的 bun 二进制装入（单文件，放进 PATH 即可）。
@@ -573,7 +573,7 @@ setup.cmd                  # Windows 内网/纯 cmd：设启动开关 + 种全�
 
 ### 9.3 大模型：指向内网自建网关
 
-完全隔离的环境通常有**内部模型服务**（vLLM / Ollama / _one-api_ 等 OpenAI 兼容网关）。让 OpenCode 指向它，而非公网 Anthropic/OpenAI。在 `opencode.json` 里配置一个自定义 provider，形如（`plugin` 指向 9.2 节第 2 步的解压目录）。注意：**跑过 `setup.cmd`（已设开关）的机器同样只能配在全局** `~/.config/opencode/opencode.json`：
+完全隔离的环境通常有**内部模型服务**（vLLM / Ollama / _one-api_ 等 OpenAI 兼容网关）。让 OpenCode 指向它，而非公网 Anthropic/OpenAI。在 `opencode.json` 里配置一个自定义 provider，形如（`plugin` 指向 9.2 节第 2 步的解压目录；建议配在全局 `~/.config/opencode/opencode.json`）：
 
 ```json
 {
@@ -624,7 +624,7 @@ docker save opencode-sm-collector -o collector-image.tar
 
 1. **解压到固定路径**，路径避免空格/中文，位置定下后不再移动。zip 用 Windows 原生解压即可。
 
-2. **配置 opencode.json**（内网机配**全局** `%USERPROFILE%\.config\opencode\opencode.json`，见 9.2 节第 2 步的开关说明）——写插件路径 + 内网模型网关，缺一不可：
+2. **配置 opencode.json**（内网机建议配**全局** `%USERPROFILE%\.config\opencode\opencode.json`，每台机一次）——写插件路径 + 内网模型网关，缺一不可：
    ```json
    {
      "plugin": [
@@ -642,7 +642,7 @@ docker save opencode-sm-collector -o collector-image.tar
    }
    ```
    > 模型网关字段名以所用 OpenCode 版本的 provider schema 为准（见 9.3 节）；缺了 provider 配置，OpenCode 启动后找不到可用模型，无法对话。
-   > **内网机配好后，务必在会话管理 bundle 解压目录跑一次 `setup.cmd`**（设 `OPENCODE_DISABLE_PROJECT_CONFIG=1` + 种全局依赖种子，见 9.2 节第 2 步），否则每次启动会联网装插件 SDK、内网无网卡 1-2 分钟。
+   > **内网机配好后，务必对每个项目在会话管理 bundle 解压目录跑一次 `setup.cmd seed <项目目录>`**（自动种全局 + 该项目，见 9.2 节第 2 步），否则每次启动会联网装插件 SDK、内网无网卡 1-2 分钟。
 
 3. **每台机配一次身份**：`.\opencode-sm.cmd init`（五问，见 4.2 节）。**「收集服务地址」填组织已部署的内网收集服务地址**（如 `http://【收集器地址】:8088`），**绝不填公网地址**。
    > ⚠ init 后顺手核对四字段齐全：`C:\Users\<你>\.config\opencode\session-mgmt\identity.json` 须含 account / group / org / collector_url 四个非空值。缺任一（手工编辑漏写 `org` 最常见）汇报会被**静默丢弃**，收集端 sessions 恒为 0（见第 8 章排查项）。例如一个合法的身份文件长这样：

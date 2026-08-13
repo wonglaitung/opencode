@@ -190,7 +190,7 @@ export default MyPlugin
   - 目标：生成可移植 tarball（`dist/<plugin>-bundle-<version>.tgz`），支持内网/离线部署（解压即用）。
 要点：
 - 根目录必须有 `.npmrc`（`node-linker=hoisted`），避免 bun 在 Windows 上使用硬链接导致打包后依赖丢失。
-- 打包脚本应完成：清旧依赖 → hoisted 重装 → 组装含 node_modules 的目录 → 附带 setup.sh / setup.ps1 / setup.cmd（内网纯 cmd 用）的环境校验与离线依赖种子（见 11.1）。
+- 打包脚本应完成：清旧依赖 → hoisted 重装 → 组装含 node_modules 的目录 → 附带 setup.sh / setup.ps1 / setup.cmd（内网纯 cmd 用）的环境校验与离线依赖种子（见 11.1）。setup.cmd 的源文件为 `scripts/templates/setup.cmd`（LF 行尾），打包时拷入并转 CRLF。
 - 打包时保证 bundle 根 package.json 的 `main` 指向插件入口，便于解压后直接加载。
 - 注意 hoisted 模式下 workspace 包为真实拷贝，修改 shared 契约后需要重新打包/重装以避免旧拷贝残留。
 
@@ -201,11 +201,8 @@ export default MyPlugin
 安装是幂等前置检查（opencode `core/src/npm.ts` 的 install）：`node_modules` 存在 **且** `package-lock.json` 根 `packages[""].dependencies` 列出 `@opencode-ai/plugin` 时直接 no-op，否则联网 reify。因此修复 = 预填这两个文件，让判定变 no-op。
 
 - `scripts/pack-bundle.sh` 打包时生成 `seed/`（从 bundle 自身拷贝 `node_modules/@opencode-ai/plugin` + 最小 `package-lock.json`/`package.json`，版本与 bundle 一致），随 tgz 分发，内网机无需联网或 npm。
-- `setup.cmd`（纯 cmd，无需 PowerShell）默认做两件事：
-  1. 设 `OPENCODE_DISABLE_PROJECT_CONFIG=1`（`setx` 持久化 + `set` 当前会话），使项目 `.opencode` 退出安装列表——只需种全局一处。
-  2. 把 `seed/` 拷贝进 `%USERPROFILE%\.config\opencode\`（存在 `~/.opencode` 也种）。
-- 开关代价：项目级 `opencode.json`（agents/modes/commands）不再加载；插件不受影响（插件配在全局 config，db 仍按项目目录写）。撤销：`setx OPENCODE_DISABLE_PROJECT_CONFIG ""`。
-- 兜底：若某项目必须保留项目级配置，用 `setup.cmd seed <项目目录>` 为该 `.opencode` 补种（该用法不设开关）。
+- `setup.cmd`（纯 cmd，无需 PowerShell、无需网络）把 `seed/` 铺进 config 目录：`setup.cmd seed <项目目录>` 种**全局 `%USERPROFILE%\.config\opencode\`（存在 `~/.opencode` 也种）+ 该项目 `.opencode`**——**每个要用插件的项目各跑一次**（命令幂等、可重复）。
+- 方案取舍：**不用 `OPENCODE_DISABLE_PROJECT_CONFIG` 开关**。该开关需 `setx` 持久化环境变量，Windows 上只对之后全新启动的进程生效，已开着的终端/常驻 daemon 看不到（新开窗口“失效”），且会连带关闭项目级 opencode.json；逐项目补种虽要多跑几次命令，但纯落盘、零环境依赖、不受新窗口影响。
 - 验证：内网机种后启动 <5s，日志不再出现 `background dependency install failed`；对照实验为去掉插件配置计时。
 
 ---
