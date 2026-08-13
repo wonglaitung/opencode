@@ -1,7 +1,7 @@
 # OpenCode 插件开发规范
 
-版本: 1.1.0
-最后更新: 2026-08-12
+版本: 1.2.0
+最后更新: 2026-08-13
 来源: opencode-session-mgmt 实践（参见 packages/plugin 与 packages/shared）
 
 说明
@@ -103,6 +103,7 @@ export default MyPlugin
 - 把 experimental.* 的签名适配集中在单一文件（例如 `src/hooks/prompt.ts`），以便未来上游签名同步时集中维护。
 - 当需要识别上游工具名或解析上游数据格式（如 apply_patch 的补丁文本）时，在代码中注释清楚依据的上游文件或注册处（给出文件路径/函数名/行号），并在文档中引用对齐依据，便于上游变更时定位。
 - 对弱模型，注入的规则应**按阶段裁剪**：只注入通用规则 + 当前阶段规则，状态压缩为一行阶段条而非整块 JSON；注入文本只保留模型可行动作（工具名、时机、确认语义），插件内部机制（统计、检测）由代码强制、不进 prompt。先例：`packages/shared` 的 `rulesForStage`/`currentInProgressStage`（规则为带 `stage` 归属的 `RuleItem[]`）与 `packages/plugin` 的 `buildStateBar`，见设计文档 7.1/7.3/7.4。
+- **无 in_progress 阶段时区分三态注入**：`currentInProgressStage` 返回 null 不只代表「未开始」，还可能是「空档态」（部分阶段 approved 但无进行中）与「完成态」（全部阶段 approved）。**完成态不得再注入常规阶段规则**——全局规则的「初始化工作流」等会与「已全部完成」自相矛盾，误导弱模型重启流程；应注入专用完成块：「提交（如尚未，先查门禁）→ 开新需求（引导 /new 保持统计隔离）→ 改本需求（workflow_revisit）」。空档态应提示进入第一个未启动阶段并给回退路径，勿误判为「尚未开始」。先例：`packages/plugin` 的 `buildSystemFragment`（`isComplete` 判定），见设计文档 7.1。
 - 识别并跳过子代理会话：上游子代理会话带 `parentID`，插件应据此对其跳过规则注入/建记录/统计/汇报，避免污染本地与聚合统计；识别结果按会话缓存（避免每个消息都调一次 `session.get`），上游不可达时保守按主会话处理（宁漏勿误拦）。先例：`packages/plugin` 的 `subagent.ts`，见设计文档 2.4。
 
 ---
