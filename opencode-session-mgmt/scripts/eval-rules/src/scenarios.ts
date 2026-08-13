@@ -1,7 +1,8 @@
 /**
- * 评测场景集(14 个,sdlc s1-s8 + reqdoc r1-r6)。覆盖关键规则:
+ * 评测场景集(18 个,sdlc s1-s11 + reqdoc r1-r7)。覆盖关键规则:
  * 基线录入不重复、确认后 approve、无确认不 approve、回到XX→revisit、
- * 审查逐段不批量、前序未完成不 submit、提交前查门禁、reqdoc 渐进引导/业务确认。
+ * 审查逐段不批量、前序未完成不 submit、提交前查门禁、完成后提示 /new、
+ * 完成后开新需求不重启、空档态继续进入下一阶段、reqdoc 渐进引导/业务确认/定稿后提示 /new。
  * 状态夹具用 createWorkflowState + 直接 mutate(不跑真实工具循环),
  * 隔离「规则遵循度」与「工具机制」两个变量。
  */
@@ -163,6 +164,57 @@ export const SCENARIOS: Scenario[] = [
     userTurn: "需求完成",
     judge: { kind: "no_tool", forbidTool: "workflow_baseline" },
   },
+  {
+    name: "s9 完成后提示 /new",
+    workflowType: "sdlc",
+    state: (() => {
+      const s = newSdlc()
+      approve(s, "requirements")
+      approve(s, "design")
+      approve(s, "implementation")
+      approve(s, "testing")
+      approve(s, "review")
+      return finish(s)
+    })(),
+    userTurn: "提交完成了，接下来呢",
+    judge: { kind: "text", type: "keyword", keyword: "/new", note: "完成态必须提醒 /new 保持统计隔离" },
+  },
+  {
+    name: "s10 完成后开新需求不重启",
+    workflowType: "sdlc",
+    state: (() => {
+      const s = newSdlc()
+      approve(s, "requirements")
+      approve(s, "design")
+      approve(s, "implementation")
+      approve(s, "testing")
+      approve(s, "review")
+      return finish(s)
+    })(),
+    userTurn: "这个需求做完了，开始下一个吧",
+    judge: {
+      kind: "no_tool",
+      forbidTool: ["workflow_advance", "workflow_revisit"],
+      note: "完成态开新需求应引导 /new，不得 enter/revisit 重启本会话（复用会污染统计）",
+    },
+  },
+  {
+    name: "s11 空档态继续进入下一阶段",
+    workflowType: "sdlc",
+    state: (() => {
+      // 需求分析 approved 但未 enter 设计 → 无 in_progress、非完成态（stage===null 空档态）
+      const s = newSdlc()
+      approve(s, "requirements")
+      return finish(s)
+    })(),
+    userTurn: "继续设计吧",
+    judge: {
+      kind: "tool",
+      expectTool: "workflow_advance",
+      args: { stage: "design", action: "enter" },
+      note: "空档态应进入第一个未启动阶段，而非误判「尚未开始」或 enter 已 approved 阶段",
+    },
+  },
 
   // ---- reqdoc ----
   {
@@ -252,5 +304,20 @@ export const SCENARIOS: Scenario[] = [
       minCategories: 2,
       note: "判定口径脆弱,需人工复核",
     },
+  },
+  {
+    name: "r7 定稿后提示 /new",
+    workflowType: "reqdoc",
+    state: (() => {
+      const s = newReqdoc()
+      approve(s, "goal")
+      approve(s, "rules")
+      approve(s, "edge")
+      approve(s, "prd")
+      approve(s, "review")
+      return finish(s)
+    })(),
+    userTurn: "定稿完成，下一个需求开始吧",
+    judge: { kind: "text", type: "keyword", keyword: "/new", note: "定稿完成态必须提醒 /new 保持统计隔离" },
   },
 ]
