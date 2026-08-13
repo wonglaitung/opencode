@@ -532,8 +532,6 @@ setup.cmd seed D:\你的项目  # 每个要用插件的项目各跑一次：种�
 1. 全局：每次 `setup.cmd seed <项目目录>` 都会一并种 `%USERPROFILE%\.config\opencode\`（存在 `~/.opencode` 也种）。
 2. 逐项目：`setup.cmd seed <项目目录>` 种**全局 + 该项目的 `.opencode`**——**每个要用插件的项目各跑一次**即可（项目 `.opencode` 独立存在，命令幂等、可重复）。
 
-> 不用 `OPENCODE_DISABLE_PROJECT_CONFIG` 开关：该开关需 `setx` 持久化环境变量，Windows 上只对之后全新启动的进程生效，已开着的终端/常驻 daemon 仍看不到（新开窗口“失效”），且会连带关闭项目级 opencode.json。逐项目补种虽然要多跑几次命令，但纯落盘、零环境依赖、不受新窗口影响。
-
 然后配置 `opencode.json` **直接指向解压目录**——bundle 根 `package.json` 已注入 `main` 指向插件入口，无需再指到 `packages/plugin`（与 edge-debug 一致）。项目级或全局级均可；建议配在全局（`~/.config/opencode/opencode.json`），每台机一次、所有项目共用。
 
 ```json

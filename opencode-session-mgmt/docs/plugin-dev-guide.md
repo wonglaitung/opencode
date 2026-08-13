@@ -202,7 +202,6 @@ export default MyPlugin
 
 - `scripts/pack-bundle.sh` 打包时生成 `seed/`（从 bundle 自身拷贝 `node_modules/@opencode-ai/plugin` + 最小 `package-lock.json`/`package.json`，版本与 bundle 一致），随 tgz 分发，内网机无需联网或 npm。
 - `setup.cmd`（纯 cmd，无需 PowerShell、无需网络）把 `seed/` 铺进 config 目录：`setup.cmd seed <项目目录>` 种**全局 `%USERPROFILE%\.config\opencode\`（存在 `~/.opencode` 也种）+ 该项目 `.opencode`**——**每个要用插件的项目各跑一次**（命令幂等、可重复）。
-- 方案取舍：**不用 `OPENCODE_DISABLE_PROJECT_CONFIG` 开关**。该开关需 `setx` 持久化环境变量，Windows 上只对之后全新启动的进程生效，已开着的终端/常驻 daemon 看不到（新开窗口“失效”），且会连带关闭项目级 opencode.json；逐项目补种虽要多跑几次命令，但纯落盘、零环境依赖、不受新窗口影响。
 - 验证：内网机种后启动 <5s，日志不再出现 `background dependency install failed`；对照实验为去掉插件配置计时。
 
 ---
