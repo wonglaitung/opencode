@@ -240,66 +240,9 @@ Write-Host "  { `"plugin`": [`"$pluginPath`"] }"
 SETUP_PS1
 
 # ---- 生成 setup.cmd（Windows，纯 cmd，内网机主用） ----
-cat > "$bundle_dir/setup.cmd" <<'SETUP_CMD'
-@echo off
-chcp 65001 >nul
-setlocal EnableExtensions
-rem setup.cmd —— 内网离线部署：设开关 + 预填 @opencode-ai/plugin 依赖种子（纯 cmd，无需 PowerShell）。
-rem
-rem 背景：opencode 配置插件后，启动会对各 config 目录执行依赖安装，内网机无法联网而卡约 2 分钟。
-rem 本脚本把 bundle 内 seed/ 拷贝进 config 目录，让安装判定变为 no-op；并设
-rem OPENCODE_DISABLE_PROJECT_CONFIG=1 让项目 .opencode 退出安装列表（只需种全局一处）。
-rem 代价：项目级 opencode.json（agents/modes/commands）不再加载；插件不受影响。
-rem
-rem 用法：
-rem   setup.cmd                 设开关 + 种全局 config 目录 + ~/.opencode（若存在）
-rem   setup.cmd seed <项目目录>  为指定项目的 .opencode 补种（仅保留项目级配置时用；不设开关）
-rem
-rem 撤销开关：setx OPENCODE_DISABLE_PROJECT_CONFIG ""
-
-set "HERE=%~dp0"
-set "SEED=%HERE%seed"
-
-if not exist "%SEED%\node_modules\@opencode-ai\plugin" (
-  echo 错误：bundle 内缺少 seed\node_modules\@opencode-ai\plugin，包可能不完整。
-  exit /b 1
-)
-
-rem ---- 兜底：setup.cmd seed <项目目录> ----
-if /i "%~1"=="seed" (
-  call :seed_target "%~2"
-  echo 项目 .opencode 已种：%~2
-  exit /b 0
-)
-
-rem ---- 默认：设开关 + 种全局 + 种 home ----
-rem setx 持久化（只影响之后新开的进程）；set 让当前窗口立即生效，便于立刻验证。
-set "OPENCODE_DISABLE_PROJECT_CONFIG=1"
-setx OPENCODE_DISABLE_PROJECT_CONFIG 1 >nul 2>&1
-echo [1/3] 已设置 OPENCODE_DISABLE_PROJECT_CONFIG=1（持久化；撤销：setx OPENCODE_DISABLE_PROJECT_CONFIG ""）
-
-call :seed_target "%USERPROFILE%\.config\opencode"
-echo [2/3] 全局 config 目录已种：%USERPROFILE%\.config\opencode
-
-if exist "%USERPROFILE%\.opencode" (
-  call :seed_target "%USERPROFILE%\.opencode"
-  echo [2/3] ~/.opencode 已种
-)
-
-echo [3/3] 完成。打开 opencode 应秒开；日志不应再出现 "background dependency install failed"。
-exit /b 0
-
-:seed_target
-rem 把 seed 铺进 %1（目标 config 目录），幂等。
-set "T=%~1"
-if not exist "%T%\node_modules" mkdir "%T%\node_modules"
-if not exist "%T%\node_modules\@opencode-ai" mkdir "%T%\node_modules\@opencode-ai"
-xcopy /E /I /Y /Q "%SEED%\node_modules\@opencode-ai\plugin" "%T%\node_modules\@opencode-ai\plugin" >nul 2>&1
-copy /Y "%SEED%\package.json" "%T%\package.json" >nul 2>&1
-copy /Y "%SEED%\package-lock.json" "%T%\package-lock.json" >nul 2>&1
-exit /b 0
-SETUP_CMD
-# cmd.exe 对 LF-only 批处理配合 call :label / goto 有兼容问题，统一转 CRLF 行尾
+# 源文件：scripts/templates/setup.cmd（LF 行尾便于版本管理与 review）。
+# cmd.exe 对 LF-only 批处理配合 call :label / goto 有兼容问题，拷入后统一转 CRLF 行尾。
+cp scripts/templates/setup.cmd "$bundle_dir/setup.cmd"
 sed -i 's/$/\r/' "$bundle_dir/setup.cmd"
 
 # ---- 生成 README ----
@@ -333,16 +276,17 @@ setup.cmd
 ## 内网部署（纯 cmd，无网络）
 
 内网机配置插件后启动慢（约 1-2 分钟）的原因：opencode 启动时会对各 config 目录联网安装
-插件 SDK \`@opencode-ai/plugin\`，内网无法联网而卡住。本 bundle 已内置离线种子 \`seed/\`：
+插件 SDK \`@opencode-ai/plugin\`，内网无法联网而卡住。本 bundle 已内置离线种子 \`seed/\`，
+跑一次把依赖铺进各 config 目录即可（安装判定变 no-op，不再联网）：
 
 \`\`\`cmd
 cd /d 解压目录
-setup.cmd                 # 设 OPENCODE_DISABLE_PROJECT_CONFIG=1 + 种全局 config 目录依赖
+setup.cmd seed D:\你的项目    # 对每个要用插件的项目各跑一次：种全局 + 该项目 .opencode
 \`\`\`
 
-之后打开 opencode 即秒开。注意：该开关会让项目级 opencode.json（agents/modes/commands）
-不再加载（插件不受影响）。若某项目必须保留项目级配置，可用 \`setup.cmd seed <项目目录>\`
-为该项目 .opencode 补种依赖。撤销开关：\`setx OPENCODE_DISABLE_PROJECT_CONFIG ""\`
+之后打开 opencode 即秒开。项目 \`.opencode\` 目录各自独立，每个项目都要单独跑一次
+\`setup.cmd seed <项目目录>\`；该命令顺带种全局，同一命令对同一项目可重复跑（幂等）。
+不依赖环境变量/开关，无“新开窗口失效”问题。
 
 ### 配置 OpenCode 加载插件
 
@@ -381,5 +325,5 @@ echo "目标机使用："
 echo "  tar xzf dist/${bundle_name}.tgz"
 echo "  cd ${bundle_name}"
 echo "  bash setup.sh              # Linux/macOS（环境校验）"
-echo "  setup.cmd                  # Windows 内网/纯 cmd：设开关 + 种全局 config 目录依赖"
+echo "  setup.cmd seed <项目目录>   # Windows 内网/纯 cmd：每个要用插件的项目各跑一次（种全局 + 该项目 .opencode）"
 echo "  # 然后在 opencode.json 中配置 plugin 路径指向解压目录"
