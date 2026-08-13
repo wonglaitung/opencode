@@ -35,16 +35,17 @@ export function judgeScenario(judge: Judge, out: ModelOutput): { pass: boolean; 
     }
 
     case "no_tool": {
+      const forbids = Array.isArray(judge.forbidTool) ? judge.forbidTool : [judge.forbidTool]
       const bad = out.toolCalls.filter(
-        (c) => c.name === judge.forbidTool && argsMatch(judge.args, c.args),
+        (c) => forbids.includes(c.name) && argsMatch(judge.args, c.args),
       )
       if (bad.length > 0) {
         return {
           pass: false,
-          detail: `不应调用 ${judge.forbidTool}(约束 ${JSON.stringify(judge.args ?? {})}),实际调用了 ${bad.length} 次`,
+          detail: `不应调用 ${forbids.join("、")}(约束 ${JSON.stringify(judge.args ?? {})}),实际调用了 ${bad.map((c) => c.name).join("、")} ${bad.length} 次`,
         }
       }
-      return { pass: true, detail: `✓ 未调用 ${judge.forbidTool}` }
+      return { pass: true, detail: `✓ 未调用 ${forbids.join("、")}` }
     }
 
     case "text": {
@@ -61,6 +62,12 @@ export function judgeScenario(judge: Judge, out: ModelOutput): { pass: boolean; 
         return pass
           ? { pass: true, detail: `✓ 命中 ${hit.length}/${categories.length} 类探针` }
           : { pass: false, detail: `探针命中 ${hit.length}/${categories.length} 类,需 ≥${judge.minCategories};全文:${out.text.slice(0, 200)}` }
+      }
+      if (judge.type === "keyword") {
+        const kw = judge.keyword ?? ""
+        return out.text.includes(kw)
+          ? { pass: true, detail: `✓ 回复包含「${kw}」` }
+          : { pass: false, detail: `回复未包含「${kw}」;全文:${out.text.slice(0, 200)}` }
       }
       return { pass: false, detail: `未知 text 判定类型 ${(judge as any).type}` }
     }

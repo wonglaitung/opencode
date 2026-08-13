@@ -25,18 +25,21 @@ export type Judge =
     }
   | {
       kind: "no_tool"
-      forbidTool: string
+      /** 不应调用的工具名（可多个，任一命中即违规） */
+      forbidTool: string | string[]
       /** 若设置,仅当调用同时满足这些参数时才判违规(如 action=approve) */
       args?: Record<string, unknown>
     }
   | {
       kind: "text"
-      type: "maxQuestions" | "categoryKeywords"
+      type: "maxQuestions" | "categoryKeywords" | "keyword"
       /** maxQuestions: 回复中问号(？/?)计数上限 */
       max?: number
       /** categoryKeywords: 命中 ≥minCategories 类关键词(每类任一命中即算该类) */
       categories?: string[][]
       minCategories?: number
+      /** keyword: 回复必须包含的关键词(如完成后提醒 /new 的无工具纯文本行为) */
+      keyword?: string
       note?: string
     }
 
