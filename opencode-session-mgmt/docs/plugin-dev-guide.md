@@ -190,7 +190,7 @@ export default MyPlugin
   - 目标：生成可移植 tarball（`dist/<plugin>-bundle-<version>.tgz`），支持内网/离线部署（解压即用）。
 要点：
 - 根目录必须有 `.npmrc`（`node-linker=hoisted`），避免 bun 在 Windows 上使用硬链接导致打包后依赖丢失。
-- 打包脚本应完成：清旧依赖 → hoisted 重装 → 组装含 node_modules 的目录 → 附带 setup.sh / setup.ps1 / setup.cmd（内网纯 cmd 用）的环境校验与离线依赖种子（见 11.1）。setup.cmd 的源文件为 `scripts/templates/setup.cmd`（LF 行尾），打包时拷入并转 CRLF。
+- 打包脚本应完成：清旧依赖 → hoisted 重装 → 组装含 node_modules 的目录 → 附带 setup.sh / setup.ps1 / setup.cmd（内网纯 cmd 用）的环境校验与离线依赖种子（见 11.1）。setup.cmd 的源文件为 `scripts/templates/setup.cmd`（LF 行尾），打包时拷入并转 CRLF。**setup.cmd 内部消息必须保持纯 ASCII（英文）**：cmd 批处理按活动控制台代码页（中文系统为 GBK/CP936）解析，UTF-8 中文在 rem/echo 行会被拆错并当作命令执行（报「不是内部或外部命令」）；曾因此踩坑，勿改回中文。
 - 打包时保证 bundle 根 package.json 的 `main` 指向插件入口，便于解压后直接加载。
 - 注意 hoisted 模式下 workspace 包为真实拷贝，修改 shared 契约后需要重新打包/重装以避免旧拷贝残留。
 

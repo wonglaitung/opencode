@@ -1,44 +1,51 @@
 @echo off
 chcp 65001 >nul
 setlocal EnableExtensions
-rem setup.cmd —— 内网离线部署：预填 @opencode-ai/plugin 依赖种子（纯 cmd，无需 PowerShell、无需网络）。
+rem setup.cmd - offline deployment: prefill @opencode-ai/plugin dependency seed.
+rem Messages are pure ASCII on purpose: Windows cmd parses batch files using the
+rem active console codepage (GBK/CP936 on Chinese systems); UTF-8 Chinese text in
+rem rem/echo lines gets mis-split and executed as bogus commands.
 rem
-rem 背景：opencode 配置插件后，启动会对各 config 目录执行依赖安装，内网机无法联网而卡约 2 分钟。
-rem 本脚本把 bundle 内 seed/ 铺进 全局 + 指定项目的 .opencode，让安装判定变为 no-op。
-rem 项目 .opencode 目录各自独立，需对每个要用插件的项目各跑一次。
+rem Why: after plugins are configured, opencode runs a dependency install per
+rem config dir at startup; on an offline machine (no network) it hangs ~1-2 min.
+rem The bundled seed/ makes that install a no-op (node_modules present + lock
+rem lists @opencode-ai/plugin). Each project's .opencode is independent, so run
+rem once per project.
 rem
-rem 用法：
-rem   setup.cmd seed <项目目录>   种全局 config（+ ~/.opencode 若存在）+ 该项目 .opencode；幂等
+rem Usage:
+rem   setup.cmd seed <projectDir>   seeds global config dir (+ ~/.opencode if it
+rem                                 exists) and <projectDir>\.opencode; idempotent
 rem
-rem 验证：打开 opencode 应秒开；日志不应再出现 "background dependency install failed"。
+rem Verify: opencode should start fast; log should no longer show
+rem "background dependency install failed".
 
 set "HERE=%~dp0"
 set "SEED=%HERE%seed"
 
 if not exist "%SEED%\node_modules\@opencode-ai\plugin" (
-  echo 错误：bundle 内缺少 seed\node_modules\@opencode-ai\plugin，包可能不完整。
+  echo ERROR: bundle is missing seed\node_modules\@opencode-ai\plugin - incomplete package.
   exit /b 1
 )
 
-rem ---- setup.cmd seed <项目目录>：种全局 + 指定项目的 .opencode（每个项目跑一次即可） ----
+rem ---- setup.cmd seed <projectDir>: seed global + the project's .opencode ----
 if /i "%~1"=="seed" (
   if "%~2"=="" (
-    echo 用法：setup.cmd seed ^<项目目录^>
+    echo Usage: setup.cmd seed ^<projectDir^>
     exit /b 1
   )
   call :seed_target "%USERPROFILE%\.config\opencode"
   if exist "%USERPROFILE%\.opencode" call :seed_target "%USERPROFILE%\.opencode"
   call :seed_target "%~2\.opencode"
-  echo 已种：全局 config + %~2\.opencode
+  echo Seeded global config + %~2\.opencode
   exit /b 0
 )
 
-echo 用法：setup.cmd seed ^<项目目录^>
-echo 说明：对每个要用插件的项目各跑一次，会自动一并种全局 config 目录。
+echo Usage: setup.cmd seed ^<projectDir^>
+echo Note: run once per project that uses the plugin; global config is seeded automatically.
 exit /b 1
 
 :seed_target
-rem 把 seed 铺进 %1（目标 config 目录），幂等；目录不存在则创建。
+rem Copy seed/ into %1 (a config dir); idempotent; creates the dir if missing.
 set "T=%~1"
 if not exist "%T%" mkdir "%T%"
 if not exist "%T%\node_modules" mkdir "%T%\node_modules"
