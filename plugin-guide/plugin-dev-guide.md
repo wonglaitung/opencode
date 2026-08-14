@@ -216,7 +216,9 @@ export default MyPlugin
 沉淀的实践要点：
 
 - **规则文本保持简洁，改前必须数据驱动 + 多模型验证**：弱模型对复杂措辞极敏感——为提升某模型而把规则写细（如补「须调用 X 工具」「逐段各调用一次」）实测反而伤害弱模型（不再调工具、要点 id 错填）。为特定模型（如推理模型）提升应优先走**脚本适配与判定口径**，而非规则膨胀。
-- **评测脚本对推理模型的适配**：`msg.content` 为空时回退 `reasoning_content`（推理模型正文可能在 thinking，`text` 类判定读不到 content）；`max_tokens` 需预留推理空间（如 4096），否则 reasoning 占满被截断，吞掉工具调用或参数。
+- **评测脚本对推理模型的适配**：`msg.content` 为空时回退 `reasoning_content`（推理模型正文可能在 thinking，`text` 类判定读不到 content）；输出上限用 `EVAL_MAX_TOKENS` 可配——推理模型显式 4096 留 thinking 空间，**慢速弱模型（本地 qwen3.6 实测 ~16 tok/s）默认 2048**，4096 会让长生成场景拖到超时。
+- **评测请求须带超时 + 重试**：弱/推理模型单请求可达数十秒、vLLM 排队时更久；`client.ts` 用 `EVAL_TIMEOUT_MS`（默认 180s）+ 网络/超时错误重试 3 次（HTTP 4xx/5xx 不重试），否则偶发超时会中断整轮评测（曾丢 25 分钟全量结果）。
+- **新增场景的 userTurn 须与规则前提一致**：场景输入要先满足规则触发条件再期望动作——s20 曾用未指明文件的发言却期望模型杜撰 `file` 调 `open_ide`（规则要求「先询问要改哪个文件」），两模型均失败；改为 userTurn 明确 `auth/service.ts` 后通过。
 - **判定口径适配模型能力**：`exactCount`（恰 N 次）对单轮单发 tool_call 的推理模型过苛，可放宽为「≥1 次 + `distinctArg` 不重复」，反映能力基线而非单次抖动。
 - **场景 userTurn 避免二义性**：发言词不要同时是阶段名与要点 id（如「边界这块」既像 edge 阶段又像要点 id「边界策略」），否则强模型可能误走 `workflow_revisit`。
 - **hoisted 拷贝残留影响评测**：评测脚本经 `opencode-session-mgmt/node_modules/sm-shared` 解析共享包，`node-linker=hoisted` 下它是真实拷贝；修改 `opencode-session-mgmt/packages/shared` 后须删除 `opencode-session-mgmt/node_modules/sm-shared` 并 `bun install` 重同步，否则评测读到旧规则文本（`typecheck`/`bun test` 仍全绿，易漏）。
