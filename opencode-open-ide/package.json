@@ -1,0 +1,20 @@
+{
+  "name": "opencode-open-ide",
+  "version": "0.0.1",
+  "description": "OpenCode 打开 IDE 插件:自然语言拉起 VS Code / IntelliJ IDEA,可打开项目目录或定位到指定文件行,便于人工手写/修改代码",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc -p .",
+    "pack:bundle": "bash scripts/pack-bundle.sh"
+  },
+  "peerDependencies": {
+    "@opencode-ai/plugin": "*"
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "^1.18.10",
+    "@types/bun": "^1.3.0",
+    "typescript": "^5.7.0"
+  }
+}
