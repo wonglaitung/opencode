@@ -1357,7 +1357,7 @@ reqdoc 无 `git commit` 门禁，表中「绕过门禁直接提交」风险不�
 
 规则以 `WorkflowDefinition.rules: RuleItem[]` 存储（见 3.2），每项带 `stage` 归属（`"global"` 或阶段键）。插件每轮经 `rulesForStage(def, currentInProgressStage(workflow))` **只注入 global + 当前 in_progress 阶段的规则**（弱模型遵循负担最小化，见 7.3）；无进行中阶段时只给 global + 起步提示。规则文本只承载**模型可行动作**（调用哪个工具、何时、确认语义）；插件内部机制（行数统计、stuck 检测、一次通过率计算）由代码强制，不进注入文本。
 
-以下是 **sdlc** 的 11 条规则（5 global + 1 requirements + 5 review）：
+以下是 **sdlc** 的 12 条规则（6 global + 1 requirements + 5 review）：
 
 | id | stage | 注入文本 |
 |----|-------|----------|
@@ -1366,6 +1366,7 @@ reqdoc 无 `git commit` 门禁，表中「绕过门禁直接提交」风险不�
 | sdlc-r3 | global | 开发者说「回到XX」时，立即调用 workflow_revisit(stage=XX)。绝不自行判断阶段已完成。 |
 | sdlc-r4 | global | 要求提交时，先调用 commit_gate_check；全部五阶段（含审查）approved 后才可 git commit。 |
 | sdlc-r5 | global | 提交门禁放行且 git commit 成功后，提醒开发者执行 /new 开始下一个需求，保持统计隔离。 |
+| sdlc-r12 | global | 开发者表示要手工修改代码时，先调用 open_ide 打开 IDE（如已安装）并锁定该文件。锁定期间可继续其它任务（改其它文件/答疑），但不得修改被锁定的文件（write/edit/apply_patch 会被服务端拒绝）。开发者确认改完后，须经其明确确认（如说「改完了/可以继续」）再调用 unlock_file 解锁，并重新读取最新文件内容后继续。 |
 | sdlc-r6 | requirements | 进入需求阶段时，主动询问预估人工工时（小时）；开发者明确给出后调用 workflow_baseline(developer_confirmed=true)。未提供不阻塞；已录入后不必重复询问。 |
 | sdlc-r7 | review | review 是唯一不可由 AI 自行推进的阶段（必须经 review_submit），目标是确保开发者真正理解代码。 |
 | sdlc-r8 | review | 进入审查后，将每个 AI 生成的代码变更拆分为可理解片段，comprehension_add 逐段登记并输出解释（做了什么、为什么这样写、被放弃的替代方案、潜在风险）。 |
@@ -1373,7 +1374,7 @@ reqdoc 无 `git commit` 门禁，表中「绕过门禁直接提交」风险不�
 | sdlc-r10 | review | 开发者追问时详细解释，comprehension_ask 将问答追加到该片段的 explanation。 |
 | sdlc-r11 | review | 每个片段须达成终态（confirm 接受 / manual 开发者自处理），不允许 pending/rejected 悬空；拒绝的片段先 comprehension_rewrite 重写或 manual 定论，全部定论且前序阶段（requirements/design/implementation/testing）全部 approved 后才可 review_submit；清单四项须全为 true，否则回到编码/测试。返工多应结合拒绝意见 rewrite 改进，而非简单重试。 |
 
-> 注入时机：进行中阶段为 requirements 时注入 6 条（r1-r6）；design/implementation/testing 时注入 5 条（r1-r5）；review 时注入 10 条（r1-r5 + r7-r11）。
+> 注入时机：进行中阶段为 requirements 时注入 7 条（r1-r6 + r12）；design/implementation/testing 时注入 6 条（r1-r5 + r12）；review 时注入 11 条（r1-r5 + r7-r12）。
 
 以下是 **reqdoc** 的 19 条规则（5 global + 3 goal + 2 rules + 2 edge + 2 prd + 5 review）。源于《业务需求难点与解决方案》的四段式渐进引导 + 业务确认闭环；需求资料目录契约见 7.5：
 
@@ -1656,7 +1657,7 @@ bun run scripts/eval-rules/run.ts --variant new              # 改造后 → res
 ```
 
 - 环境变量：`EVAL_BASE_URL`（OpenAI 兼容端点，默认 `http://localhost:8086/v1`，本地 vLLM）、`EVAL_API_KEY`、`EVAL_MODEL`（默认 `/models/qwen3`，本地 vLLM 的模型 id）；`--repeat N` 重复多次取通过率（聚合按**运行次数**统计，防单次抖动掩盖趋势）
-- 场景集 29 个（sdlc s1-s19 + reqdoc r1-r10），覆盖关键规则：基线录入不重复、确认后 approve、无确认不 approve、回到XX→revisit、审查逐段不批量、前序未完成不 submit、提交前查门禁、**完成后提示 /new**（sdlc s9 / reqdoc r7，`text.keyword` 判定回复须含 `/new`）、**完成后开新需求不重启**（sdlc s10，`no_tool` 禁 `workflow_advance`/`workflow_revisit`）、**空档态继续进入下一阶段**（sdlc s11，部分 approved 无 in_progress → `workflow_advance` enter 下一阶段）、**审查全流程**（sdlc s12-s19 / reqdoc r8-r10：正向 review_submit 且片段全定论、片段未定论不 submit、reject 必带反馈、拒绝后 rewrite/manual、追问 ask、审查不可 advance approve 必须 review_submit、拒绝复议后 confirm、reqdoc 要点未定论防定稿）、reqdoc 渐进引导 ≤2 问 / 业务确认单要点 / edge 探针
+- 场景集 31 个（sdlc s1-s21 + reqdoc r1-r10），覆盖关键规则：基线录入不重复、确认后 approve、无确认不 approve、回到XX→revisit、审查逐段不批量、前序未完成不 submit、提交前查门禁、**完成后提示 /new**（sdlc s9 / reqdoc r7，`text.keyword` 判定回复须含 `/new`）、**完成后开新需求不重启**（sdlc s10，`no_tool` 禁 `workflow_advance`/`workflow_revisit`）、**空档态继续进入下一阶段**（sdlc s11，部分 approved 无 in_progress → `workflow_advance` enter 下一阶段）、**审查全流程**（sdlc s12-s19 / reqdoc r8-r10：正向 review_submit 且片段全定论、片段未定论不 submit、reject 必带反馈、拒绝后 rewrite/manual、追问 ask、审查不可 advance approve 必须 review_submit、拒绝复议后 confirm、reqdoc 要点未定论防定稿）、**手工修改走 open_ide 锁定与改完确认解锁**（sdlc s20-s21，sdlc-r12 规则，open_ide/unlock_file 契约来自姊妹插件 opencode-open-ide）、reqdoc 渐进引导 ≤2 问 / 业务确认单要点 / edge 探针
 - **rule-based 判定**（不用 LLM judge）：工具类比对 `tool_use` 名称与参数谓词（如 approve 时 `developer_confirmed` 必须 true）、`no_tool` 类断言未调用某工具、`text` 类（≤2 问、探针关键词）为关键词启发式、判定口径脆弱需人工复核
 - baseline 与 new 共用同一状态夹具（`finish()` 重算 commit），保证可对等比较
 

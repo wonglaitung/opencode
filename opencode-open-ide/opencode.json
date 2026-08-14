@@ -4,7 +4,7 @@
   "references": {
     "open-ide-docs": {
       "path": "./docs",
-      "description": "打开 IDE 插件设计文档与部署手册（预设与 config.json 自定义次序/工具、跨平台二进制定位、CLI 定位参数）"
+      "description": "打开 IDE 插件设计文档与部署手册（预设与 config.json 自定义次序/工具、人工文件锁、与 session-mgmt 协作契约 manual-edit-loop.md）"
     },
     "plugin-dev-guide": {
       "path": "../opencode-session-mgmt/docs",

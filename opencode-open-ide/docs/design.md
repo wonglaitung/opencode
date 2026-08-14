@@ -78,28 +78,91 @@ idea 候选覆盖三类安装形态（候选含 `*` 时按 glob 展开取首个�
 
 | 工具名 | 入参 | 行为 |
 |--------|------|------|
-| `open_ide` | `file?: string`（相对项目目录或绝对路径）、`line?: number`、`column?: number`、`ide?: string`（强制指定 id） | 探测可用 IDE，打开项目目录或定位到文件行，回显「已用 X 打开 Y」 |
+| `open_ide` | `file?: string`（相对项目目录或绝对路径）、`line?: number`、`column?: number`、`ide?: string`（强制指定 id） | 探测可用 IDE，打开项目目录或定位到文件行；**带 file 时自动锁定该文件**，回显「已用 X 打开 Y，已锁定」 |
+| `lock_file` | `file` | 人工文件锁：开发者声明该文件由自己接管，AI 不得修改 |
+| `unlock_file` | `file`、`developer_confirmed`（必须 true） | 解锁；须开发者明确确认（如说「改完了/可以继续」）才生效 |
+| `list_locked_files` | 无 | 查看当前会话锁定清单 |
 
-## 5 健壮性与降级
+## 5 人工文件锁（决策记录 D4）
+
+### 5.1 目的与机制
+
+开发者打开 IDE 手工修改代码时，AI 可能基于会话内旧上下文整文件覆写，抹掉手工改动。锁 registry（内存级、按会话）在锁定期间对目标文件的 `write/edit/apply_patch` 做**服务端硬拦截**（`tool.execute.before`），与提交门禁同哲学、不靠模型自觉。
+
+```mermaid
+sequenceDiagram
+    participant U as 开发者
+    participant A as AI
+    participant P as open-ide 插件
+    participant F as 项目文件
+
+    U->>A: 这段我自己改,打开 IDE
+    A->>P: open_ide(file=src/A.java) → 自动 lock
+    P-->>U: 已锁定,改完请说「改完了」
+    U->>F: 手工修改 A.java
+    U->>A: 顺手改下 B.java(其它任务)
+    A->>F: 改 B.java ✓(A 受锁保护)
+    Note over P: AI 若尝试改 A.java
+    P->>P: tool.execute.before 提取目标 → 已锁
+    P-->>A: 🔒 throw 阻断
+    U->>A: A.java 改完了,可以继续
+    A->>P: unlock_file(A.java, developer_confirmed=true)
+    P-->>A: 已解锁
+    A->>F: read 最新 A.java 后继续 ✓
+```
+
+### 5.2 拦截点：从工具入参提取目标文件
+
+`tool.execute.before` 收到本次调用完整入参 `output.args`，拦截逻辑经纯函数 `extractTargetFiles` 提取 AI 想改的文件，与锁集合比对：
+
+| 工具 | 数据来源 |
+|------|---------|
+| `write` / `edit` | `args.filePath`（上游保证绝对路径，edit.ts:48 注释原话） |
+| `apply_patch` | `patchText` 的 `*** Add/Update/Delete File:` 头部（格式与 sm-shared/loc.ts 解析口径一致） |
+
+任一目标被锁 → throw 中文错误。只拦三个代码编辑工具，read/grep/bash 等不拦。入参畸形返回空（宁漏勿误拦）。
+
+### 5.3 路径归一化
+
+锁 registry 以**项目目录**为基准 `resolve()` 成绝对路径，与 gate 侧（同样以项目目录解析工具入参）口径一致，相对/绝对路径都能正确匹配。
+
+### 5.4 锁定提示注入
+
+`experimental.chat.system.transform`：有锁文件时向 `output.system` push「⚠ 当前锁定：X；若开发者已改完请询问确认并 unlock_file」。与 session-mgmt 各自独立 push，互不覆盖（上游按序调用各 hook）。判空 sessionID、无锁跳过（零开销）。
+
+### 5.5 锁定期间可继续其它任务
+
+锁是**按文件**的（`Map<sessionID, Set<file>>`），不是会话级暂停。开发者改 A.java 的同时可让 AI 改 B.java、答疑、推进其它阶段——只有 A.java 被保护。opencode 回合制，AI 只在开发者发消息时行动，无「等锁」挂起。
+
+### 5.6 局限（见 docs/manual-edit-loop.md 第 5 章）
+
+- 不经 open_ide / lock_file 的手改不受保护（插件不读磁盘文件）；
+- `bash` 工具的写操作（`echo > file`）无法拦截；
+- 锁内存级，daemon 重启即失；
+- 无自动解锁、无超时，仅开发者明确确认后解锁。
+
+## 6 健壮性与降级
 
 - 可预期失败抛 `OpenIdeError`：中文消息附修复路径（安装指引、config.json binary 配置建议）。
 - config.json 解析失败仅记 warning 回退默认，不阻断插件加载。
-- 无任何状态需清理：不持句柄、不留后台任务，插件卸载无副作用。
+- 锁拦截抛 Error 直接阻断工具执行；锁 registry 在 dispose 时 clearAll。
 
-## 6 安全与隐私
+## 7 安全与隐私
 
 - 仅在本机 `spawn` IDE 进程，不产生任何网络请求、不读取/上行代码。
-- 不读取项目文件内容；只把 `file` 参数拼进 IDE 定位参数。
+- 不读取项目文件内容；只把 `file` 参数拼进 IDE 定位参数；锁只记文件路径字符串，不读文件。
 - IDE 进程由用户掌控，插件不注入内容、不捕获其输出。
 
-## 7 v1 限制与未来扩展
+## 8 v1 限制与未来扩展
 
 - 单 IDE 同时探测（order 取第一个命中）；未来可支持 `ide` 强制参数逐项重试、或按文件后缀自动选 IDE。
 - 不等待 IDE 启动结果（fire-and-forget）；未来可加启动失败探测。
 - `~` 前缀展开仅简单替换 HOME，不含用户自定义 shell 语义。
+- 锁内存级、无自动解锁；未来可加锁持久化、会话级暂停（pause_ai_editing）或跨插件共享（如需 session-mgmt 感知锁）。
 
-## 8 决策记录
+## 9 决策记录
 
 - **D1 内置预设最小集 + config.json 覆盖**：只内置 vscode + idea，其余按需经 `tools` 新增；配置文件放插件目录内（非 opencode.json options），用户编辑成本最低、改动可见、与代码解耦。
 - **D2 探测即决、失败即报**：不做「探测不到就静默降级」，避免「以为开了 IDE 实际没开」的困惑；错误消息直接给出安装/配置修复路径。
 - **D3 detached + 不杀进程**：IDE 是长驻用户工具，与浏览器调试实例生命周期不同；插件只负责拉起，关闭完全交给用户。
+- **D4 人工文件锁（内存级、不跨插件共享、仅显式解锁）**：锁放本插件闭包内（tool.execute.before 全局广播特性使其可拦截所有编辑工具，session-mgmt 无需读锁，避免跨插件共享的 globalThis/契约包/磁盘三种代价）；内存级与 stuck 短记忆同取舍；解锁须开发者明确确认后 `unlock_file`（无自动检测、无超时——文件系统只能感知「变了」无法判定「改完」）；统计口径不特殊处理。

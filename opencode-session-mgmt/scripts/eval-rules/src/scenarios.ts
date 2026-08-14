@@ -1,10 +1,11 @@
 /**
- * 评测场景集(29 个,sdlc s1-s19 + reqdoc r1-r10)。覆盖关键规则:
+ * 评测场景集(31 个,sdlc s1-s21 + reqdoc r1-r10)。覆盖关键规则:
  * 基线录入不重复、确认后 approve、无确认不 approve、回到XX→revisit、
  * 审查逐段不批量、前序未完成不 submit、提交前查门禁、完成后提示 /new、
  * 完成后开新需求不重启、空档态继续进入下一阶段、
  * 审查全流程(正向 review_submit、片段未定论不 submit、reject 必带反馈、
  * 拒绝后 rewrite/manual、追问 ask、审查不可 advance approve、拒绝复议后 confirm)、
+ * 手工修改走 open_ide 锁定、改完经确认解锁、
  * reqdoc 渐进引导/业务确认/要点未定论防定稿/定稿后提示 /new。
  * 状态夹具用 createWorkflowState + 直接 mutate(不跑真实工具循环),
  * 隔离「规则遵循度」与「工具机制」两个变量。
@@ -357,6 +358,40 @@ export const SCENARIOS: Scenario[] = [
       kind: "tool",
       expectTool: "comprehension_confirm",
       args: { codeSegmentId: "auth/service.ts:1-40" },
+    },
+  },
+  {
+    name: "s20 手工修改走 open_ide 锁定",
+    workflowType: "sdlc",
+    state: (() => {
+      const s = newSdlc()
+      approvePrior(s, "implementation")
+      enter(s, "implementation")
+      return finish(s)
+    })(),
+    userTurn: "这段代码方向不对，我自己改，打开 IDE",
+    // 规则 sdlc-r12：开发者要手工改时先 open_ide（带 file 自动锁定），不得直接编辑
+    judge: {
+      kind: "tool",
+      expectTool: "open_ide",
+      args: { file: "auth/service.ts" },
+    },
+  },
+  {
+    name: "s21 手工改完经确认解锁",
+    workflowType: "sdlc",
+    state: (() => {
+      const s = newSdlc()
+      approvePrior(s, "implementation")
+      enter(s, "implementation")
+      return finish(s)
+    })(),
+    userTurn: "我改完了，可以继续了",
+    // 规则 sdlc-r12：解锁须开发者明确确认后 unlock_file，并重新读取最新内容
+    judge: {
+      kind: "tool",
+      expectTool: "unlock_file",
+      args: { file: "auth/service.ts", developer_confirmed: true },
     },
   },
 
