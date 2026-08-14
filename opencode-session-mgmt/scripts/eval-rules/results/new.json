@@ -2,7 +2,7 @@
   "variant": "new",
   "model": "/models/qwen3",
   "dry": false,
-  "runAt": "2026-08-14T03:49:16.460Z",
+  "runAt": "2026-08-14T06:40:48.699Z",
   "results": [
     {
       "name": "s1 进需求问基线",
@@ -42,7 +42,7 @@
       "pass": true,
       "passCount": 1,
       "runCount": 1,
-      "detail": "✓ comprehension_confirm {}(恰好2次)"
+      "detail": "✓ comprehension_confirm {}"
     },
     {
       "name": "s6 前序未完成不 submit",

@@ -128,7 +128,9 @@ export const SCENARIOS: Scenario[] = [
       return finish(s)
     })(),
     userTurn: "都挺清楚，两个都确认了",
-    judge: { kind: "tool", expectTool: "comprehension_confirm", exactCount: 2, distinctArg: "codeSegmentId" },
+    // 放宽为「≥1 次 confirm 且 distinctArg 不重复」：推理模型（deepseek-v4-flash）倾向单轮单发
+    // 一个 tool_call，逐段在后续轮次完成；exactCount=2 对这类模型过苛（qwen3.6 本就 2 次不受影响）
+    judge: { kind: "tool", expectTool: "comprehension_confirm", distinctArg: "codeSegmentId" },
   },
   {
     name: "s6 前序未完成不 submit",

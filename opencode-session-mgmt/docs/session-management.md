@@ -1662,3 +1662,5 @@ bun run scripts/eval-rules/run.ts --variant new              # 改造后 → res
 
 **实测结果**（2026-08-12，deepseek-v4-flash，repeat 3，按运行次数）：整体 **76% → 93%**（reqdoc 61% → 100%，sdlc 88% 持平）。驱动改进的三处迭代：状态条列出**待确认项 id**（让模型知道要 confirm 什么）、规则显式排除模糊表态（「你看着办」不算确认）、review_submit 规则补「前序须全部 approved」。基线快照冻结于 `fixtures/baseline/`，`results/{baseline,new}.json` 入库作参照，任何模型/时刻可重跑对比。
 
+**双模型实测**（2026-08-14，29 场景，repeat 1）：本地 qwen3.6（vLLM 8086）整体 **28/29（97%）**，唯一失败 `r1 渐进引导 ≤2 问`（问句 17 个超上限 2）；远端 deepseek-v4-flash（zen/go）整体 **28/29（97%）**，唯一失败 `r10 要点拒绝后重写`（userTurn「边界这块」存在二义——edge 阶段名 vs 要点 id，模型偶发改走 `workflow_revisit`）。评测脚本对推理模型的适配：`msg.content` 为空时回退 `reasoning_content`（text 类判定可读推理模型正文）、`max_tokens` 提至 4096（给推理留空间防截断吞工具调用）；s5 判定放宽为「≥1 次 confirm 且 `distinctArg` 不重复」（推理模型倾向单轮单发 tool_call，`exactCount=2` 过苛）。**规则文本保持简洁**：曾尝试给 r9/r11/r17/r19 补「须调用工具、逐段各调用一次」等详细措辞，实测发现弱模型对复杂措辞敏感（qwen3.6 出现 r2 确认要点不再调工具、r10 要点 id 错填），已全部回滚——推理模型的提升全部来自脚本适配与判定口径，而非规则膨胀。
+
