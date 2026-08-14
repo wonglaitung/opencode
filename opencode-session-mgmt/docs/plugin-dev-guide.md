@@ -167,6 +167,14 @@ export default MyPlugin
 - 建议增加 CI 步骤：`bun test`、`bun run typecheck`（strict）与一个轻量的插件启停脚本（启用插件、触发核心路径、移除插件并确认恢复）。
 - 注入规则/提示词的遵循度建议建**评测基线**：用脚本对真实模型端点批量跑场景，对比改前/改后通过率，量化弱模型对规则文本的遵循度（先例 `scripts/eval-rules`，见设计文档 12.1；此类评测需真实模型端点，不随 `bun test` 跑）。
 
+评测驱动规则迭代的实践要点（实测于 2026-08-14，见设计文档 12.1 双模型实测）：
+
+- **规则文本保持简洁，改前必须数据驱动 + 多模型验证**：弱模型对复杂措辞极敏感——为提升某模型而把规则写细（如补「须调用 X 工具」「逐段各调用一次」）实测反而伤害弱模型（不再调工具、要点 id 错填）。为特定模型（如推理模型）提升应优先走**脚本适配与判定口径**，而非规则膨胀。
+- **评测脚本对推理模型的适配**：`msg.content` 为空时回退 `reasoning_content`（推理模型正文可能在 thinking，`text` 类判定读不到 content）；`max_tokens` 需预留推理空间（如 4096），否则 reasoning 占满被截断，吞掉工具调用或参数。
+- **判定口径适配模型能力**：`exactCount`（恰 N 次）对单轮单发 tool_call 的推理模型过苛，可放宽为「≥1 次 + `distinctArg` 不重复」，反映能力基线而非单次抖动。
+- **场景 userTurn 避免二义性**：发言词不要同时是阶段名与要点 id（如「边界这块」既像 edge 阶段又像要点 id「边界策略」），否则强模型可能误走 `workflow_revisit`。
+- **hoisted 拷贝残留影响评测**：评测脚本经 `node_modules/sm-shared` 解析共享包，`node-linker=hoisted` 下它是真实拷贝；修改 `packages/shared` 后须删除 `node_modules/sm-shared` 并 `bun install` 重同步，否则评测读到旧规则文本（`typecheck`/`bun test` 仍全绿，易漏）。
+
 ---
 
 ## 10. 编码与文档风格
@@ -217,6 +225,7 @@ export default MyPlugin
 5. experimental hook 的兼容/适配代码集中于单一文件以便集中维护。
 6. 安全审计：确保上传数据为白名单投影，已列举允许上报字段并在 CI 中有变更告警。
 7. 打包校验：执行一次 `pack:bundle` 并在干净环境中验证解压即用（含依赖）。
+8. 改动 `packages/shared`（契约）后重装 workspace 依赖（`rm -rf node_modules/<共享包> && bun install`），确认测试与评测脚本读到最新契约而非 hoisted 旧拷贝。
 
 ---
 
