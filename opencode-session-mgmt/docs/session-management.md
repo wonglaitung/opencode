@@ -1645,9 +1645,13 @@ opencode
 
 上游回归：因上游零修改，只需确认插件启用/卸载两种状态下上游既有测试（`packages/core/test/session-*.test.ts`、`packages/tui/test/`、`packages/sdk/js`）均通过。
 
-### 12.1 规则遵循度评测基线（弱模型数据驱动优化）
+规则遵循度评测与数据驱动的规则迭代是**独立的验证方法论**，见第 13 章（重要：改规则前必须跑基线对比，不随 `bun test` 走）。
 
-规则文本优化（阶段化注入、状态条）以**数据驱动**验证：量化弱模型对注入规则的遵循度，改前跑基线、改后对比。脚本 `scripts/eval-rules/`（不入 `bun test`，需真实模型端点）：
+## 13. 评测驱动规则迭代（数据驱动优化）
+
+规则文本优化（阶段化注入、状态条、审查清单引导）以**数据驱动**验证：量化弱模型对注入规则的遵循度，改前跑基线、改后对比。这是本方案的**核心方法论**——规则的每一步措辞调整都必须先有基线数据支撑，避免凭直觉改规则伤害弱模型。脚本 `scripts/eval-rules/`（不入 `bun test`，需真实模型端点）。
+
+### 13.1 运行方式
 
 ```bash
 # 冻结的 baseline 快照在 scripts/eval-rules/fixtures/baseline/（改造前的规则全文，可复现旧注入格式）
@@ -1657,11 +1661,41 @@ bun run scripts/eval-rules/run.ts --variant new              # 改造后 → res
 ```
 
 - 环境变量：`EVAL_BASE_URL`（OpenAI 兼容端点，默认 `http://localhost:8086/v1`，本地 vLLM）、`EVAL_API_KEY`、`EVAL_MODEL`（默认 `/models/qwen3`，本地 vLLM 的模型 id）；`--repeat N` 重复多次取通过率（聚合按**运行次数**统计，防单次抖动掩盖趋势）
-- 场景集 31 个（sdlc s1-s21 + reqdoc r1-r10），覆盖关键规则：基线录入不重复、确认后 approve、无确认不 approve、回到XX→revisit、审查逐段不批量、前序未完成不 submit、提交前查门禁、**完成后提示 /new**（sdlc s9 / reqdoc r7，`text.keyword` 判定回复须含 `/new`）、**完成后开新需求不重启**（sdlc s10，`no_tool` 禁 `workflow_advance`/`workflow_revisit`）、**空档态继续进入下一阶段**（sdlc s11，部分 approved 无 in_progress → `workflow_advance` enter 下一阶段）、**审查全流程**（sdlc s12-s19 / reqdoc r8-r10：正向 review_submit 且片段全定论、片段未定论不 submit、reject 必带反馈、拒绝后 rewrite/manual、追问 ask、审查不可 advance approve 必须 review_submit、拒绝复议后 confirm、reqdoc 要点未定论防定稿）、**手工修改走 open_ide 锁定与改完确认解锁**（sdlc s20-s21，sdlc-r12 规则，open_ide/unlock_file 契约来自姊妹插件 opencode-open-ide）、reqdoc 渐进引导 ≤2 问 / 业务确认单要点 / edge 探针
-- **rule-based 判定**（不用 LLM judge）：工具类比对 `tool_use` 名称与参数谓词（如 approve 时 `developer_confirmed` 必须 true）、`no_tool` 类断言未调用某工具、`text` 类（≤2 问、探针关键词）为关键词启发式、判定口径脆弱需人工复核
-- baseline 与 new 共用同一状态夹具（`finish()` 重算 commit），保证可对等比较
+- **baseline 与 new 共用同一状态夹具**（`finish()` 重算 commit），保证可对等比较
+- `--dry` 不调模型，只打印各场景注入片段与判定期望，用于验证渲染
 
-**实测结果**（2026-08-12，deepseek-v4-flash，repeat 3，按运行次数）：整体 **76% → 93%**（reqdoc 61% → 100%，sdlc 88% 持平）。驱动改进的三处迭代：状态条列出**待确认项 id**（让模型知道要 confirm 什么）、规则显式排除模糊表态（「你看着办」不算确认）、review_submit 规则补「前序须全部 approved」。基线快照冻结于 `fixtures/baseline/`，`results/{baseline,new}.json` 入库作参照，任何模型/时刻可重跑对比。
+### 13.2 场景集
 
-**双模型实测**（2026-08-14，29 场景，repeat 1）：本地 qwen3.6（vLLM 8086）整体 **28/29（97%）**，唯一失败 `r1 渐进引导 ≤2 问`（问句 17 个超上限 2）；远端 deepseek-v4-flash（zen/go）整体 **28/29（97%）**，唯一失败 `r10 要点拒绝后重写`（userTurn「边界这块」存在二义——edge 阶段名 vs 要点 id，模型偶发改走 `workflow_revisit`）。评测脚本对推理模型的适配：`msg.content` 为空时回退 `reasoning_content`（text 类判定可读推理模型正文）、`max_tokens` 提至 4096（给推理留空间防截断吞工具调用）；s5 判定放宽为「≥1 次 confirm 且 `distinctArg` 不重复」（推理模型倾向单轮单发 tool_call，`exactCount=2` 过苛）。**规则文本保持简洁**：曾尝试给 r9/r11/r17/r19 补「须调用工具、逐段各调用一次」等详细措辞，实测发现弱模型对复杂措辞敏感（qwen3.6 出现 r2 确认要点不再调工具、r10 要点 id 错填），已全部回滚——推理模型的提升全部来自脚本适配与判定口径，而非规则膨胀。
+31 个场景（sdlc s1-s21 + reqdoc r1-r10），覆盖关键规则：
+
+- 基线录入不重复、确认后 approve、无确认不 approve、回到XX→revisit、审查逐段不批量、前序未完成不 submit、提交前查门禁
+- **完成后提示 /new**（sdlc s9 / reqdoc r7，`text.keyword` 判定回复须含 `/new`）
+- **完成后开新需求不重启**（sdlc s10，`no_tool` 禁 `workflow_advance`/`workflow_revisit`）
+- **空档态继续进入下一阶段**（sdlc s11，部分 approved 无 in_progress → `workflow_advance` enter 下一阶段）
+- **审查全流程**（sdlc s12-s19 / reqdoc r8-r10：正向 review_submit 且片段全定论、片段未定论不 submit、reject 必带反馈、拒绝后 rewrite/manual、追问 ask、审查不可 advance approve 必须 review_submit、拒绝复议后 confirm、reqdoc 要点未定论防定稿）
+- **手工修改走 open_ide 锁定与改完确认解锁**（sdlc s20-s21，sdlc-r12 规则，open_ide/unlock_file 契约来自姊妹插件 opencode-open-ide）
+- reqdoc 渐进引导 ≤2 问 / 业务确认单要点 / edge 探针
+
+### 13.3 判定方式（rule-based，不用 LLM judge）
+
+- 工具类比对 `tool_use` 名称与参数谓词（如 approve 时 `developer_confirmed` 必须 true）
+- `no_tool` 类断言未调用某工具
+- `text` 类（≤2 问、探针关键词）为关键词启发式，判定口径脆弱需人工复核
+
+### 13.4 实测记录与迭代闭环
+
+**迭代闭环**：改规则前跑 `--variant baseline` 冻结基线 → 改规则/脚本 → 跑 `--variant new` 对比 → 通过率不降才保留；失败场景逐个归因（规则措辞 / 判定口径 / 场景二义性），优先调脚本与判定口径而非膨胀规则。
+
+**实测结果一**（2026-08-12，deepseek-v4-flash，repeat 3，按运行次数）：整体 **76% → 93%**（reqdoc 61% → 100%，sdlc 88% 持平）。驱动改进的三处迭代：状态条列出**待确认项 id**（让模型知道要 confirm 什么）、规则显式排除模糊表态（「你看着办」不算确认）、review_submit 规则补「前序须全部 approved」。基线快照冻结于 `fixtures/baseline/`，`results/{baseline,new}.json` 入库作参照，任何模型/时刻可重跑对比。
+
+**实测结果二**（2026-08-14，29 场景，repeat 1）：本地 qwen3.6（vLLM 8086）整体 **28/29（97%）**，唯一失败 `r1 渐进引导 ≤2 问`（问句 17 个超上限 2）；远端 deepseek-v4-flash（zen/go）整体 **28/29（97%）**，唯一失败 `r10 要点拒绝后重写`（userTurn「边界这块」存在二义——edge 阶段名 vs 要点 id，模型偶发改走 `workflow_revisit`）。
+
+### 13.5 关键教训（多次迭代沉淀）
+
+- **规则文本保持简洁**：曾尝试给 r9/r11/r17/r19 补「须调用工具、逐段各调用一次」等详细措辞，实测发现弱模型对复杂措辞敏感（qwen3.6 出现 r2 确认要点不再调工具、r10 要点 id 错填），已全部回滚——提升应走脚本适配与判定口径，而非规则膨胀。
+- **评测脚本对推理模型的适配**：`msg.content` 为空时回退 `reasoning_content`（推理模型正文可能在 thinking，text 类判定读不到 content）；`max_tokens` 提至 4096（给推理留空间防截断吞工具调用）。
+- **判定口径适配模型能力**：`exactCount`（恰 N 次）对单轮单发 tool_call 的推理模型过苛，可放宽为「≥1 次 confirm 且 `distinctArg` 不重复」，反映能力基线而非单次抖动。
+- **场景 userTurn 避免二义性**：发言词不要同时是阶段名与要点 id（如「边界这块」既像 edge 阶段又像要点 id），否则强模型可能误走 `workflow_revisit`。
+- **hoisted 拷贝残留影响评测**：评测脚本经 `node_modules/sm-shared` 解析共享包，`node-linker=hoisted` 下它是真实拷贝；修改 `packages/shared` 后须删除 `node_modules/sm-shared` 并 `bun install` 重同步，否则评测读到旧规则文本（`typecheck`/`bun test` 仍全绿，易漏）。
+
 
