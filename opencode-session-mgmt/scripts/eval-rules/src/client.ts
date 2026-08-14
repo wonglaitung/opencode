@@ -1,13 +1,13 @@
 /**
  * 打 OpenAI 兼容 /chat/completions(非流式、temperature 0)。
- * 环境变量: EVAL_BASE_URL(默认 http://localhost:8000/v1) / EVAL_API_KEY / EVAL_MODEL(默认 qwen3.6-27b)。
+ * 环境变量: EVAL_BASE_URL(默认 http://localhost:8086/v1) / EVAL_API_KEY / EVAL_MODEL(默认 /models/qwen3)。
  * 用 Bun 内建 fetch,零新增依赖——评测只判 tool_use,裸参数比高层 SDK 的断言 API 更可控。
  */
 import type { ModelOutput, ToolCall } from "./types"
 
-const BASE = process.env.EVAL_BASE_URL ?? "http://localhost:8000/v1"
+const BASE = process.env.EVAL_BASE_URL ?? "http://localhost:8086/v1"
 const KEY = process.env.EVAL_API_KEY ?? ""
-const MODEL = process.env.EVAL_MODEL ?? "qwen3.6-27b"
+const MODEL = process.env.EVAL_MODEL ?? "/models/qwen3"
 
 export function modelId(): string {
   return MODEL

@@ -1,0 +1,10 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["./packages/plugin"],
+  "references": {
+    "session-mgmt-docs": {
+      "path": "./docs",
+      "description": "会话管理设计文档：五阶段门禁、理解确认、效能分析、收集服务规格、上游同步方案"
+    }
+  }
+}
