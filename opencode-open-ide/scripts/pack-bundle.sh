@@ -74,6 +74,7 @@ cp config.json "$bundle_dir/"
 cp -r src "$bundle_dir/"
 cp -r test "$bundle_dir/"
 cp -r docs "$bundle_dir/"
+cp README.md "$bundle_dir/"
 cp AGENTS.md "$bundle_dir/"
 
 # 拷贝 node_modules（hoisted 模式，真实文件）
