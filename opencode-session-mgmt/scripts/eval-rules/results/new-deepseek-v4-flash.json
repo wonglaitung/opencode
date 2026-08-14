@@ -1,0 +1,257 @@
+{
+  "variant": "new",
+  "model": "deepseek-v4-flash",
+  "dry": false,
+  "runAt": "2026-08-14T06:10:06.721Z",
+  "results": [
+    {
+      "name": "s1 进需求问基线",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ workflow_baseline {\"estimated_hours\":8,\"developer_confirmed\":true}"
+    },
+    {
+      "name": "s2 确认后才 approve",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ workflow_advance {\"stage\":\"requirements\",\"action\":\"approve\",\"developer_confirmed\":true}"
+    },
+    {
+      "name": "s3 无明确确认不 approve",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ 未调用 workflow_advance"
+    },
+    {
+      "name": "s4 回到设计→revisit",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ workflow_revisit {\"stage\":\"design\"}"
+    },
+    {
+      "name": "s5 审查逐段不批量",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ comprehension_confirm {}"
+    },
+    {
+      "name": "s6 前序未完成不 submit",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ 未调用 review_submit"
+    },
+    {
+      "name": "s7 提交前查门禁",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ commit_gate_check {}"
+    },
+    {
+      "name": "s8 基线已录不重复问",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ 未调用 workflow_baseline"
+    },
+    {
+      "name": "s9 完成后提示 /new",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ 回复包含「/new」"
+    },
+    {
+      "name": "s10 完成后开新需求不重启",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ 未调用 workflow_advance、workflow_revisit"
+    },
+    {
+      "name": "s11 空档态继续进入下一阶段",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ workflow_advance {\"stage\":\"design\",\"action\":\"enter\"}"
+    },
+    {
+      "name": "s12 审查正向提交",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ review_submit {}"
+    },
+    {
+      "name": "s13 片段未定论不 submit",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ 未调用 review_submit"
+    },
+    {
+      "name": "s14 拒绝片段必带反馈",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ comprehension_reject {\"codeSegmentId\":\"auth/service.ts:1-40\"}"
+    },
+    {
+      "name": "s15 拒绝后重写",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ comprehension_rewrite {\"codeSegmentId\":\"auth/service.ts:1-40\"}"
+    },
+    {
+      "name": "s16 拒绝后人工自处理",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ comprehension_manual {\"codeSegmentId\":\"auth/service.ts:1-40\"}"
+    },
+    {
+      "name": "s17 追问登记问答",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ comprehension_ask {\"codeSegmentId\":\"auth/service.ts:1-40\"}"
+    },
+    {
+      "name": "s18 审查不可 advance approve",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ 未调用 workflow_advance"
+    },
+    {
+      "name": "s19 拒绝复议后接受",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ comprehension_confirm {\"codeSegmentId\":\"auth/service.ts:1-40\"}"
+    },
+    {
+      "name": "r1 渐进引导 ≤2 问",
+      "workflowType": "reqdoc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ 问句 0 个(≤2)"
+    },
+    {
+      "name": "r2 业务确认单要点",
+      "workflowType": "reqdoc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ comprehension_confirm {\"codeSegmentId\":\"业务目标\"}(恰好1次)"
+    },
+    {
+      "name": "r3 进 goal 问基线",
+      "workflowType": "reqdoc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ workflow_baseline {\"estimated_hours\":24,\"developer_confirmed\":true}"
+    },
+    {
+      "name": "r4 回到流程规则→revisit",
+      "workflowType": "reqdoc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ workflow_revisit {\"stage\":\"rules\"}"
+    },
+    {
+      "name": "r5 前序未完成不 submit",
+      "workflowType": "reqdoc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ 未调用 review_submit"
+    },
+    {
+      "name": "r6 edge 探针 ≥2 类",
+      "workflowType": "reqdoc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ 命中 2/3 类探针"
+    },
+    {
+      "name": "r7 定稿后提示 /new",
+      "workflowType": "reqdoc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ 回复包含「/new」"
+    },
+    {
+      "name": "r8 业务确认正向定稿",
+      "workflowType": "reqdoc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ review_submit {}"
+    },
+    {
+      "name": "r9 要点未定论不定稿",
+      "workflowType": "reqdoc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ 未调用 review_submit"
+    },
+    {
+      "name": "r10 要点拒绝后重写",
+      "workflowType": "reqdoc",
+      "pass": false,
+      "passCount": 0,
+      "runCount": 1,
+      "detail": "通过 0/1;末次:未调用 comprehension_rewrite(实际:workflow_revisit)"
+    }
+  ],
+  "summary": {
+    "overall": {
+      "pass": 28,
+      "total": 29,
+      "rate": 97
+    },
+    "sdlc": {
+      "pass": 19,
+      "total": 19,
+      "rate": 100
+    },
+    "reqdoc": {
+      "pass": 9,
+      "total": 10,
+      "rate": 90
+    }
+  }
+}
