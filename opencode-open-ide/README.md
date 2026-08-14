@@ -15,9 +15,9 @@ OpenCode 打开 IDE 插件：用自然语言让 Agent 拉起本机 **VS Code / I
 
 典型用法（直接在 OpenCode 会话中说）：
 
-> 打开 IDE，我要手改代码
-> 打开 src/main/java/com/example/A.java，我自己改
-> 我改完了，可以继续
+- 「打开 IDE，我要手改代码」
+- 「打开 src/main/java/com/example/A.java，我自己改」
+- 「我改完了，可以继续」
 
 如需精确定位，可让 AI 打开指定行（可选）：「打开 A.java 第 42 行，我自己改」。
 
