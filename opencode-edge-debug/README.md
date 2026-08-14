@@ -56,7 +56,7 @@ bun run pack:bundle   # 打成可移植 tarball → dist/opencode-edge-debug-bun
 ```
 
 - 工程规约见 [CLAUDE.md](./CLAUDE.md)；架构与决策记录见 [docs/design.md](./docs/design.md)。
-- 跨插件通用开发规范见 [../opencode-session-mgmt/docs/plugin-dev-guide.md](../opencode-session-mgmt/docs/plugin-dev-guide.md)。
+- 跨插件通用开发规范见 [../plugin-guide/plugin-dev-guide.md](../plugin-guide/plugin-dev-guide.md)。
 
 ## 隐私
 

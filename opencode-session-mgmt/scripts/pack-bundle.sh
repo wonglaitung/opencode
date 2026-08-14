@@ -123,7 +123,7 @@ find "$bundle_dir" -name "*.db-shm" -delete 2>/dev/null || true
 # 背景：opencode 配置插件后，启动会对各 config 目录执行 install(dir,{add:[@opencode-ai/plugin]})；
 # 其幂等判定只需 node_modules 存在 + package-lock.json 根 packages[""].dependencies 含 @opencode-ai/plugin。
 # 内网机无法联网 npm、无 registry 镜像，故在打包机一次性生成种子随包分发，setup.cmd 只做拷贝。
-# 详见 docs/plugin-dev-guide.md 内网部署小节。
+# 详见 plugin-guide/plugin-dev-guide.md 内网部署小节（11.1）。
 seed_dir="$bundle_dir/seed"
 mkdir -p "$seed_dir/node_modules/@opencode-ai"
 

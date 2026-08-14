@@ -104,5 +104,5 @@ bun run typecheck
 
 从 `opencode.json` 的 `plugin` 移除该目录，删除本目录即可完整还原；不修改任何上游文件。
 
-**进一步阅读**：架构与决策记录 [`design.md`](design.md)；工程规约 [`AGENTS.md`](../AGENTS.md)；人工修改闭环协作契约 [`manual-edit-loop.md`](manual-edit-loop.md)；跨插件通用开发规范 [`../opencode-session-mgmt/docs/plugin-dev-guide.md`](../../opencode-session-mgmt/docs/plugin-dev-guide.md)。
+**进一步阅读**：架构与决策记录 [`design.md`](design.md)；工程规约 [`AGENTS.md`](../AGENTS.md)；人工修改闭环协作契约 [`manual-edit-loop.md`](manual-edit-loop.md)；跨插件通用开发规范 [`../../plugin-guide/plugin-dev-guide.md`](../../plugin-guide/plugin-dev-guide.md)。
 
