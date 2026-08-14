@@ -7,7 +7,43 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { loadIdeConfig, resolveEntries } from "../src/config"
-import { buildOpenArgs, probeBinary, resolveIdeBinary } from "../src/ide"
+import { buildOpenArgs, pickWindowsExecutable, probeBinary, resolveIdeBinary } from "../src/ide"
+
+describe("pickWindowsExecutable(where 多行挑选)", () => {
+  test("无后缀 sh 脚本与 .cmd 并存时选 .cmd", () => {
+    const lines = [
+      "C:\\Users\\wongl\\AppData\\Local\\Programs\\Microsoft VS Code\\bin\\code",
+      "C:\\Users\\wongl\\AppData\\Local\\Programs\\Microsoft VS Code\\bin\\code.cmd",
+    ]
+    expect(pickWindowsExecutable(lines)).toBe(
+      "C:\\Users\\wongl\\AppData\\Local\\Programs\\Microsoft VS Code\\bin\\code.cmd",
+    )
+  })
+
+  test(".exe 优先于 .cmd", () => {
+    const lines = ["C:\\x\\code.cmd", "C:\\x\\idea64.exe", "C:\\x\\code"]
+    expect(pickWindowsExecutable(lines)).toBe("C:\\x\\idea64.exe")
+  })
+
+  test(".cmd 优先于 .bat", () => {
+    const lines = ["C:\\x\\a.bat", "C:\\x\\b.cmd"]
+    expect(pickWindowsExecutable(lines)).toBe("C:\\x\\b.cmd")
+  })
+
+  test("全部无后缀时兜底第一行", () => {
+    const lines = ["C:\\x\\code", "C:\\y\\code"]
+    expect(pickWindowsExecutable(lines)).toBe("C:\\x\\code")
+  })
+
+  test("空数组返回 null", () => {
+    expect(pickWindowsExecutable([])).toBeNull()
+  })
+
+  test("大小写不敏感(.CMD 也命中)", () => {
+    const lines = ["C:\\x\\code", "C:\\x\\code.CMD"]
+    expect(pickWindowsExecutable(lines)).toBe("C:\\x\\code.CMD")
+  })
+})
 
 describe("resolveEntries(config.json 合并预设)", () => {
   test("空配置回退默认顺序 vscode → idea", () => {

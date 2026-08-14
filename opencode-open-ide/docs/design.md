@@ -66,6 +66,8 @@ idea 候选覆盖三类安装形态（候选含 `*` 时按 glob 展开取首个�
 - 含 `/`、`\` 或 `~` 前缀 → `~` 展开 HOME 后查存在性；
 - 否则 `which`（posix）/ `where`（win32）查 PATH。
 
+win32 的 `where` 会返回**多行**（如 VS Code 同时有无后缀的 POSIX sh 脚本 `...\bin\code` 与真正的 shim `code.cmd`）。无后缀行供 WSL/linux 使用、cmd.exe 无法执行，必须跳过——按扩展名优先级 `.exe` → `.cmd` → `.bat` 挑选（`pickWindowsExecutable`），全部无后缀时兜底第一行（决策记录 D5）。
+
 第一个命中启用，命中返回**解析后的真实可执行路径**（供 spawn 直接用）；全部未命中抛中文错误含安装指引。探测函数可注入以便测试。
 
 ## 3 进程与平台
@@ -166,3 +168,4 @@ sequenceDiagram
 - **D2 探测即决、失败即报**：不做「探测不到就静默降级」，避免「以为开了 IDE 实际没开」的困惑；错误消息直接给出安装/配置修复路径。
 - **D3 detached + 不杀进程**：IDE 是长驻用户工具，与浏览器调试实例生命周期不同；插件只负责拉起，关闭完全交给用户。
 - **D4 人工文件锁（内存级、不跨插件共享、仅显式解锁）**：锁放本插件闭包内（tool.execute.before 全局广播特性使其可拦截所有编辑工具，session-mgmt 无需读锁，避免跨插件共享的 globalThis/契约包/磁盘三种代价）；内存级与 stuck 短记忆同取舍；解锁须开发者明确确认后 `unlock_file`（无自动检测、无超时——文件系统只能感知「变了」无法判定「改完」）；统计口径不特殊处理。
+- **D5 win32 二进制定位跳过无后缀 sh 脚本**：`where code` 返回多行，第一行是无后缀的 POSIX sh 脚本（供 WSL/linux），cmd.exe 无法执行、`shell:true` spawn 时静默失败（stdio ignore + unref 吞错误）——曾致 VS Code 不启动。按扩展名优先级 `.exe`/`.cmd`/`.bat` 挑选（`pickWindowsExecutable`），全部无后缀才兜底第一行（不破坏仅有无后缀可执行程序的场景）。
