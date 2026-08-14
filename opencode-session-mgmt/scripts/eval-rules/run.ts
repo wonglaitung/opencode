@@ -6,9 +6,9 @@
  * 用法:
  *   bun run scripts/eval-rules/run.ts --variant baseline|new [--repeat 3] [--dry]
  * 环境变量:
- *   EVAL_BASE_URL  OpenAI 兼容端点(默认 http://localhost:8000/v1)
+ *   EVAL_BASE_URL  OpenAI 兼容端点(默认 http://localhost:8086/v1,本地 vLLM)
  *   EVAL_API_KEY   可选
- *   EVAL_MODEL     评测模型(默认 qwen3.6-27b)
+ *   EVAL_MODEL     评测模型(默认 /models/qwen3,本地 vLLM 的模型 id)
  * --dry:只打印各场景注入片段与判定期望,不调模型(验证渲染用)。
  * 输出:控制台 per-scenario 表 + 聚合通过率,落 scripts/eval-rules/results/{variant}.json
  */
