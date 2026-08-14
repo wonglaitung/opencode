@@ -1,12 +1,13 @@
 # OpenCode 插件开发规范
 
 版本: 1.2.0
-最后更新: 2026-08-13
-来源: opencode-session-mgmt 实践（参见 packages/plugin 与 packages/shared）
+最后更新: 2026-08-14
+来源: opencode-session-mgmt 实践（参见 `opencode-session-mgmt/packages/plugin` 与 `opencode-session-mgmt/packages/shared`）
 
 说明
-- 本文档提炼自仓内实践，适用于在本仓库中新增的所有 OpenCode 插件。
+- 本文档提炼自仓内实践，适用于在本仓库中新增的所有 OpenCode 插件（`opencode-session-mgmt`、`opencode-edge-debug`、`opencode-open-ide`）。
 - 目标：统一约定、降低侵入性、确保安全与可测试性。
+- 位置：本文件为**跨插件通用规范**，独立存放于仓库根 `plugin-guide/`（不隶属任一插件工程），避免被埋没于某工程 docs 下。文中的 `opencode-session-mgmt/...` 路径均以仓库根为基准；「设计文档 X 章」指 `opencode-session-mgmt/docs/session-management.md`。
 
 目录
 1. 总则
@@ -21,7 +22,7 @@
 10. 编码与文档风格
 11. 打包与分发
 12. 验证清单（合并前必查）
-附录：示例模板与快速检查脚本（见 docs/plugin-examples/）
+附录：示例模板与快速检查脚本（见 plugin-guide/plugin-examples/）
 
 ---
 
@@ -84,7 +85,7 @@ export default MyPlugin
 要点：
 - 将 `@opencode-ai/plugin` 声明为 peerDependency（版本为 `*`），并在 devDependencies 中锁具体开发时版本。
 - 所有定时器/长期任务必须在 `dispose` 中清理，保证卸载或上下文切换时无泄漏。
-- 启动任务延后执行：工厂放出的后台任务应错开启动瞬间（延后数秒）再跑，避免与首屏/daemon 启动竞态抢资源；同类全量拉取尽量合并（如共用一次 `session.list` 完成多项清理/回填）。先例：`packages/plugin` 的 `startup.ts`。
+- 启动任务延后执行：工厂放出的后台任务应错开启动瞬间（延后数秒）再跑，避免与首屏/daemon 启动竞态抢资源；同类全量拉取尽量合并（如共用一次 `session.list` 完成多项清理/回填）。先例：`opencode-session-mgmt/packages/plugin` 的 `startup.ts`。
 
 ---
 
@@ -102,9 +103,9 @@ export default MyPlugin
 实践建议：
 - 把 experimental.* 的签名适配集中在单一文件（例如 `src/hooks/prompt.ts`），以便未来上游签名同步时集中维护。
 - 当需要识别上游工具名或解析上游数据格式（如 apply_patch 的补丁文本）时，在代码中注释清楚依据的上游文件或注册处（给出文件路径/函数名/行号），并在文档中引用对齐依据，便于上游变更时定位。
-- 对弱模型，注入的规则应**按阶段裁剪**：只注入通用规则 + 当前阶段规则，状态压缩为一行阶段条而非整块 JSON；注入文本只保留模型可行动作（工具名、时机、确认语义），插件内部机制（统计、检测）由代码强制、不进 prompt。先例：`packages/shared` 的 `rulesForStage`/`currentInProgressStage`（规则为带 `stage` 归属的 `RuleItem[]`）与 `packages/plugin` 的 `buildStateBar`，见设计文档 7.1/7.3/7.4。
-- **无 in_progress 阶段时区分三态注入**：`currentInProgressStage` 返回 null 不只代表「未开始」，还可能是「空档态」（部分阶段 approved 但无进行中）与「完成态」（全部阶段 approved）。**完成态不得再注入常规阶段规则**——全局规则的「初始化工作流」等会与「已全部完成」自相矛盾，误导弱模型重启流程；应注入专用完成块：「提交（如尚未，先查门禁）→ 开新需求（引导 /new 保持统计隔离）→ 改本需求（workflow_revisit）」。空档态应提示进入第一个未启动阶段并给回退路径，勿误判为「尚未开始」。先例：`packages/plugin` 的 `buildSystemFragment`（`isComplete` 判定），见设计文档 7.1。
-- 识别并跳过子代理会话：上游子代理会话带 `parentID`，插件应据此对其跳过规则注入/建记录/统计/汇报，避免污染本地与聚合统计；识别结果按会话缓存（避免每个消息都调一次 `session.get`），上游不可达时保守按主会话处理（宁漏勿误拦）。先例：`packages/plugin` 的 `subagent.ts`，见设计文档 2.4。
+- 对弱模型，注入的规则应**按阶段裁剪**：只注入通用规则 + 当前阶段规则，状态压缩为一行阶段条而非整块 JSON；注入文本只保留模型可行动作（工具名、时机、确认语义），插件内部机制（统计、检测）由代码强制、不进 prompt。先例：`opencode-session-mgmt/packages/shared` 的 `rulesForStage`/`currentInProgressStage`（规则为带 `stage` 归属的 `RuleItem[]`）与 `opencode-session-mgmt/packages/plugin` 的 `buildStateBar`，见设计文档 7.1/7.3/7.4。
+- **无 in_progress 阶段时区分三态注入**：`currentInProgressStage` 返回 null 不只代表「未开始」，还可能是「空档态」（部分阶段 approved 但无进行中）与「完成态」（全部阶段 approved）。**完成态不得再注入常规阶段规则**——全局规则的「初始化工作流」等会与「已全部完成」自相矛盾，误导弱模型重启流程；应注入专用完成块：「提交（如尚未，先查门禁）→ 开新需求（引导 /new 保持统计隔离）→ 改本需求（workflow_revisit）」。空档态应提示进入第一个未启动阶段并给回退路径，勿误判为「尚未开始」。先例：`opencode-session-mgmt/packages/plugin` 的 `buildSystemFragment`（`isComplete` 判定），见设计文档 7.1。
+- 识别并跳过子代理会话：上游子代理会话带 `parentID`，插件应据此对其跳过规则注入/建记录/统计/汇报，避免污染本地与聚合统计；识别结果按会话缓存（避免每个消息都调一次 `session.get`），上游不可达时保守按主会话处理（宁漏勿误拦）。先例：`opencode-session-mgmt/packages/plugin` 的 `subagent.ts`，见设计文档 2.4。
 
 ---
 
@@ -142,7 +143,7 @@ export default MyPlugin
   - 服务不可用时写本地缓冲并启动补推与定时重试机制。
   - HTTP 4xx 视为永久失败（记录日志并丢弃）；5xx 或网络错误应保留并重试。
   - 对相同键进行去重以防堆积。
-- 对外 fetch 一律带超时：后台/启动期的 HTTP 请求应携带 `AbortSignal.timeout`（如 5 秒），服务不可达时快速放弃并留待补推，不得挂到 TCP 连接超时（可达数十秒）拖慢插件启动或阻塞请求。先例：`packages/plugin` 的 `report.ts`。
+- 对外 fetch 一律带超时：后台/启动期的 HTTP 请求应携带 `AbortSignal.timeout`（如 5 秒），服务不可达时快速放弃并留待补推，不得挂到 TCP 连接超时（可达数十秒）拖慢插件启动或阻塞请求。先例：`opencode-session-mgmt/packages/plugin` 的 `report.ts`。
 - 删除与清理操作保守化：在不能确保完整清单时不执行删除，避免因短暂不可达而误删。
 - 外部进程调用静默化：若需 spawn 外部命令（例如定位浏览器、taskkill 等），一律使用 `spawn`/`spawnSync` 并把 stdio 设为 `"ignore"` 或显式捕获 stderr；所有外部调用应显式捕获并记录可能的错误，但不得把 stderr 泄露到上游或上传日志中。
 
@@ -165,7 +166,7 @@ export default MyPlugin
 - 优先测真实实现，尽量零 mock：存储使用内存库，依赖通过构造注入。
 - 用例名称用中文描述行为；对于每个硬约束（拦截、幂等、上限等），应包含正反两组用例（验收与拒绝路径）。
 - 建议增加 CI 步骤：`bun test`、`bun run typecheck`（strict）与一个轻量的插件启停脚本（启用插件、触发核心路径、移除插件并确认恢复）。
-- 注入规则/提示词的遵循度建议建**评测基线**：用脚本对真实模型端点批量跑场景，对比改前/改后通过率，量化弱模型对规则文本的遵循度（先例 `scripts/eval-rules`，见设计文档第 13 章；此类评测需真实模型端点，不随 `bun test` 跑）。
+- 注入规则/提示词的遵循度建议建**评测基线**：用脚本对真实模型端点批量跑场景，对比改前/改后通过率，量化弱模型对规则文本的遵循度（先例 `opencode-session-mgmt/scripts/eval-rules`，见设计文档第 13 章；此类评测需真实模型端点，不随 `bun test` 跑）。
 
 评测驱动规则迭代的实践要点（实测于 2026-08-14，见设计文档 13.4、13.5）：
 
@@ -173,7 +174,7 @@ export default MyPlugin
 - **评测脚本对推理模型的适配**：`msg.content` 为空时回退 `reasoning_content`（推理模型正文可能在 thinking，`text` 类判定读不到 content）；`max_tokens` 需预留推理空间（如 4096），否则 reasoning 占满被截断，吞掉工具调用或参数。
 - **判定口径适配模型能力**：`exactCount`（恰 N 次）对单轮单发 tool_call 的推理模型过苛，可放宽为「≥1 次 + `distinctArg` 不重复」，反映能力基线而非单次抖动。
 - **场景 userTurn 避免二义性**：发言词不要同时是阶段名与要点 id（如「边界这块」既像 edge 阶段又像要点 id「边界策略」），否则强模型可能误走 `workflow_revisit`。
-- **hoisted 拷贝残留影响评测**：评测脚本经 `node_modules/sm-shared` 解析共享包，`node-linker=hoisted` 下它是真实拷贝；修改 `packages/shared` 后须删除 `node_modules/sm-shared` 并 `bun install` 重同步，否则评测读到旧规则文本（`typecheck`/`bun test` 仍全绿，易漏）。
+- **hoisted 拷贝残留影响评测**：评测脚本经 `opencode-session-mgmt/node_modules/sm-shared` 解析共享包，`node-linker=hoisted` 下它是真实拷贝；修改 `opencode-session-mgmt/packages/shared` 后须删除 `opencode-session-mgmt/node_modules/sm-shared` 并 `bun install` 重同步，否则评测读到旧规则文本（`typecheck`/`bun test` 仍全绿，易漏）。
 
 ---
 
@@ -199,7 +200,7 @@ export default MyPlugin
   - 目标：生成可移植 tarball（`dist/<plugin>-bundle-<version>.tgz`），支持内网/离线部署（解压即用）。
 要点：
 - 根目录必须有 `.npmrc`（`node-linker=hoisted`），避免 bun 在 Windows 上使用硬链接导致打包后依赖丢失。
-- 打包脚本应完成：清旧依赖 → hoisted 重装 → 组装含 node_modules 的目录 → 附带 setup.sh / setup.ps1 / setup.cmd（内网纯 cmd 用）的环境校验与离线依赖种子（见 11.1）。setup.cmd 的源文件为 `scripts/templates/setup.cmd`（LF 行尾），打包时拷入并转 CRLF。**setup.cmd 内部消息必须保持纯 ASCII（英文）**：cmd 批处理按活动控制台代码页（中文系统为 GBK/CP936）解析，UTF-8 中文在 rem/echo 行会被拆错并当作命令执行（报「不是内部或外部命令」）；曾因此踩坑，勿改回中文。
+- 打包脚本应完成：清旧依赖 → hoisted 重装 → 组装含 node_modules 的目录 → 附带 setup.sh / setup.ps1 / setup.cmd（内网纯 cmd 用）的环境校验与离线依赖种子（见 11.1）。setup.cmd 的源文件为 `opencode-session-mgmt/scripts/templates/setup.cmd`（LF 行尾），打包时拷入并转 CRLF。**setup.cmd 内部消息必须保持纯 ASCII（英文）**：cmd 批处理按活动控制台代码页（中文系统为 GBK/CP936）解析，UTF-8 中文在 rem/echo 行会被拆错并当作命令执行（报「不是内部或外部命令」）；曾因此踩坑，勿改回中文。
 - 打包时保证 bundle 根 package.json 的 `main` 指向插件入口，便于解压后直接加载。
 - 注意 hoisted 模式下 workspace 包为真实拷贝，修改 shared 契约后需要重新打包/重装以避免旧拷贝残留。
 
@@ -225,11 +226,11 @@ export default MyPlugin
 5. experimental hook 的兼容/适配代码集中于单一文件以便集中维护。
 6. 安全审计：确保上传数据为白名单投影，已列举允许上报字段并在 CI 中有变更告警。
 7. 打包校验：执行一次 `pack:bundle` 并在干净环境中验证解压即用（含依赖）。
-8. 改动 `packages/shared`（契约）后重装 workspace 依赖（`rm -rf node_modules/<共享包> && bun install`），确认测试与评测脚本读到最新契约而非 hoisted 旧拷贝。
+8. 改动 `opencode-session-mgmt/packages/shared`（契约）后重装 workspace 依赖（`rm -rf node_modules/<共享包> && bun install`），确认测试与评测脚本读到最新契约而非 hoisted 旧拷贝。
 
 ---
 
-附录（建议放在 docs/plugin-examples/）
+附录（建议放在 plugin-guide/plugin-examples/）
 - 插件骨架代码模板（可直接复制）
 - Store 内存实现示例
 - MIGRATIONS 模板与示例

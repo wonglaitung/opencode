@@ -362,4 +362,4 @@ npm pack opencode-ai                 # 得到 opencode-ai-<版本>.tgz
 | `bun run build:plugin` | `dist/plugin/index.js`（插件编译为自包含 JS，屏蔽目标机 bun 版本差异） |
 | `bun run pack:bundle` | `dist/opencode-edge-debug-bundle-<版本>.tgz`（可移植 tarball，内网/离线分发，见 8.2 节） |
 
-**进一步阅读**：架构与决策记录 [`design.md`](design.md)；工程规约 [`CLAUDE.md`](../CLAUDE.md)；跨插件通用开发规范 [`../opencode-session-mgmt/docs/plugin-dev-guide.md`](../../opencode-session-mgmt/docs/plugin-dev-guide.md)。
+**进一步阅读**：架构与决策记录 [`design.md`](design.md)；工程规约 [`CLAUDE.md`](../CLAUDE.md)；跨插件通用开发规范 [`../../plugin-guide/plugin-dev-guide.md`](../../plugin-guide/plugin-dev-guide.md)。
