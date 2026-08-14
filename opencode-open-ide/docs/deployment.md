@@ -19,6 +19,8 @@
 
 路径含 `.` 时确保有 `package.json`（入口取 `main: src/index.ts`）。Windows 注意路径用正斜杠 `/` 或双反斜杠 `\\`。
 
+> **Windows 打包/移动便携必读**：bun 默认使用 `isolated` 链接策略，在 Windows 上通过**硬链接**从全局缓存引用包文件——打包（tar/zip）或移动目录后**硬链接断裂**，导致传递依赖丢失、插件加载失败。本项目根目录已有 `.npmrc`（`node-linker=hoisted`），让 `bun install` 生成真实文件拷贝而非硬链接，`node_modules` 可直接打包搬运。**务必不要删除 `.npmrc`**；若曾用默认模式装过依赖（无 `.npmrc` 时），先 `rm -rf node_modules && bun install` 重装再打包。
+
 ## 3 配置自定义次序与工具
 
 编辑插件根目录的 `config.json`（本仓库已含默认：`order: ["vscode", "idea"]`）：
@@ -96,7 +98,11 @@ bun run typecheck
 | 打开了但没定位到行 | 文件是相对路径且不存在于项目目录；确认 file 参数路径正确 |
 | 指定 `ide` 报 id 不存在 | 该 id 不在 config.json 的 `order` 中；先加进 order 或用预设 id（vscode/idea） |
 | win32 打开失败 | `code`/`idea` 是 `.cmd` shim，插件已用 `shell: true`；确认 PATH 含其安装 bin 目录 |
+| Windows 打包/移动目录后插件加载失败（`Cannot find package 'zod'` 等） | bun 默认 `isolated` 模式在 Windows 上使用硬链接引用全局缓存，打包/移动后硬链接断裂。**修复**：确认根目录 `.npmrc` 含 `node-linker=hoisted`，删除旧依赖重装 `rm -rf node_modules && bun install` 后重新打包。**预防**：用 `bun run pack:bundle` 打包（脚本自动完成清理→重装→打包） |
 
 ## 7 卸载
 
 从 `opencode.json` 的 `plugin` 移除该目录，删除本目录即可完整还原；不修改任何上游文件。
+
+**进一步阅读**：架构与决策记录 [`design.md`](design.md)；工程规约 [`AGENTS.md`](../AGENTS.md)；人工修改闭环协作契约 [`manual-edit-loop.md`](manual-edit-loop.md)；跨插件通用开发规范 [`../opencode-session-mgmt/docs/plugin-dev-guide.md`](../../opencode-session-mgmt/docs/plugin-dev-guide.md)。
+

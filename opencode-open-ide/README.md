@@ -85,6 +85,8 @@ bun run typecheck     # tsc 类型检查
 bun run pack:bundle   # 打成可移植 tarball → dist/opencode-open-ide-bundle-<版本>.tgz
 ```
 
+> 打包/移动便携依赖 `.npmrc` 的 `node-linker=hoisted`：bun 默认 `isolated` 模式在 Windows 上对 `node_modules` 用**硬链接**引用全局缓存，打包后硬链接断裂、依赖丢失（`Cannot find package 'zod'` 等）。hoisted 模式生成真实文件拷贝，可直接打包搬运。请勿删除 `.npmrc`。
+
 - 工程规约见 [CLAUDE.md](./AGENTS.md)；架构与决策记录见 [docs/design.md](./docs/design.md)。
 - 与会话管理插件的协作契约（时序/职责/局限）见 [docs/manual-edit-loop.md](./docs/manual-edit-loop.md)。
 - 跨插件通用开发规范见 [../opencode-session-mgmt/docs/plugin-dev-guide.md](../opencode-session-mgmt/docs/plugin-dev-guide.md)。
