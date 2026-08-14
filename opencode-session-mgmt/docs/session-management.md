@@ -578,7 +578,7 @@ export function resolveWorkflowType(v: unknown): WorkflowType   // 未知值回�
 
 **sdlc 定义**：五阶段 `["requirements","design","implementation","testing","review"]`，审查阶段为 `review`，四清单项（businessIntent/logicExplainable/behaviorVerifiable/designRationale），`hasCommitGate=true`，结构化规则见 7.4。
 
-**reqdoc 定义**：需求书工作流（需求分析师角色），源于《业务需求难点与解决方案》的**四段式渐进引导**（目标与场景 → 主流程与规则 → 边界与异常探针 → 自动化排版），外加一个**业务确认闭环**。审查阶段（`reviewStage="review"`）语义为**业务确认 PRD 要点**（区别于 sdlc 的代码理解确认），复用同一套 comprehension/checklist/review_submit 闭环机制。四清单项（completeness 信息完整 / clarity 表达明确 / edgeCoverage 边界覆盖 / resolution 职责清晰），`hasCommitGate=false`（定稿无 git 门禁）。阶段键 `["goal","rules","edge","prd","review"]`，中文名 目标与场景 / 流程与规则 / 边界与异常 / 需求规格书 / 业务确认。`resolveWorkflowType` 支持 `"reqdoc"`。结构化规则见 7.4；需求资料目录契约见 7.5。
+**reqdoc 定义**：需求书工作流（需求分析师角色），源于《业务需求难点与解决方案》的**四段式渐进引导**（目标与场景 → 主流程与规则 → 边界与异常探针 → 自动化排版），外加一个**业务确认闭环**。审查阶段（`reviewStage="review"`）语义为**业务确认 PRD 要点**（区别于 sdlc 的代码理解确认），复用同一套 comprehension/checklist/review_submit 闭环机制。四清单项（completeness 信息完整 / clarity 表达明确 / edgeCoverage 边界覆盖 / resolution 职责清晰），`hasCommitGate=false`（定稿无 git 门禁）。阶段键 `["goal","rules","edge","prd","review"]`，中文名 目标与场景 / 流程与规则 / 边界与异常 / 需求规格书 / 业务确认。prd 阶段产出按《业务需求说明书》模板渲染（`docs/reqdoc-prd-template.md`，源自 `docs/模版.docx`）。`resolveWorkflowType` 支持 `"reqdoc"`。结构化规则见 7.4；需求资料目录契约见 7.5。
 
 **reqdoc 五阶段推进流程**（与 sdlc 完成门控同构；定稿闭环为业务确认，目录 → 阶段映射见 7.5）：
 
@@ -1394,7 +1394,7 @@ reqdoc 无 `git commit` 门禁，表中「绕过门禁直接提交」风险不�
 | reqdoc-r10 | rules | 自动推演 Mermaid 流程图，反向展示给业务确认；业务说资料已放好则扫描 03、04 目录作输入。 |
 | reqdoc-r11 | edge | 主动追问三类探针：数据与权限（所有岗位可见还是按机构/层级隔离）、异常流程（接口超时 / 操作失败 / 审批驳回，报错还是人工补单）、合规留痕（资金/敏感变更是否留审计日志、是否二次授权）。 |
 | reqdoc-r12 | edge | 按已投放材料反问缺口（如已有制度但缺权限，追问「不同岗位的权限如何隔离」）；业务说资料已放好则扫描 02、05 目录作输入。 |
-| reqdoc-r13 | prd | 将对话信息自动渲染成标准 PRD：业务背景、用户故事、数据字典、正常/异常流程 Mermaid、非功能需求；业务说资料已放好则扫描 06 目录作输入。 |
+| reqdoc-r13 | prd | 将对话信息自动渲染成《业务需求说明书》模板（见 `docs/reqdoc-prd-template.md`，源自 `docs/模版.docx`）：封面（项目信息/文档变更过程）→ 第一章 需求概述 → 第二章 需求概述（术语/业务规则）→ 第三章 需求功能详述（逐功能点：输入要素/处理要求/异常/清算/差错/交易安全/附件）；未涉及项选「不涉及/不适用」并留白；业务说资料已放好则扫描 06 目录作输入。 |
 | reqdoc-r14 | prd | 产出归档：需求澄清记录、自动提取的 Mermaid 流程图、最终 PRD 一律写入 07_需求规格产出 目录。 |
 | reqdoc-r15 | review | review 是唯一不可由 AI 自行推进的阶段（必须经 review_submit），确保业务真正理解并确认 PRD 要点。 |
 | reqdoc-r16 | review | 将 PRD 拆分为可确认要点（业务目标 / 核心字段 / 异常规则 / 合规要求），comprehension_add 逐段复述输出。 |
@@ -1422,7 +1422,7 @@ reqdoc 面向**业务人员**。业务习惯把现成资料（监管发文、旧
 └── README.md                   # 填写指引
 ```
 
-`07_需求规格产出` 是产出端：需求澄清记录、自动提取的 Mermaid 流程图、最终 PRD 一律归档于此。`README.md` 须写明「**07_需求规格产出/** 是智能体的专属输出目录，您无需往里放任何材料；需求梳理过程中，智能体会自动把澄清记录、流程图和最终 PRD 写到这里」。
+`07_需求规格产出` 是产出端：需求澄清记录、自动提取的 Mermaid 流程图、最终 PRD 一律归档于此。PRD 按《业务需求说明书》模板渲染（模板见 `docs/reqdoc-prd-template.md`，源自 `docs/模版.docx`），结构为「封面（项目信息/文档变更过程）+ 第一章 需求概述 + 第二章 需求概述（术语/业务规则）+ 第三章 需求功能详述（逐功能点）」。`README.md` 须写明「**07_需求规格产出/** 是智能体的专属输出目录，您无需往里放任何材料；需求梳理过程中，智能体会自动把澄清记录、流程图和最终 PRD 写到这里」。
 
 **目录 → 阶段映射**
 
