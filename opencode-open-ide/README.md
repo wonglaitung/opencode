@@ -8,7 +8,7 @@ OpenCode 打开 IDE 插件：用自然语言让 Agent 拉起本机 **VS Code / I
 
 | 工具 | 说明 |
 |---|---|
-| `open_ide` | 打开 IDE（默认按 config.json 顺序探测 VS Code → IDEA）；指定 `file` 时自动锁定该文件并定位到行 |
+| `open_ide` | 打开 IDE（默认按 config.json 顺序探测 VS Code → IDEA）；指定 `file` 时自动锁定该文件，可选 `line`/`column` 精确定位 |
 | `lock_file` | 人工文件锁：开发者声明某文件由自己接管，AI 不得修改 |
 | `unlock_file` | 解锁（须开发者明确确认 `developer_confirmed=true` 才生效） |
 | `list_locked_files` | 查看当前会话锁定清单 |
@@ -16,8 +16,10 @@ OpenCode 打开 IDE 插件：用自然语言让 Agent 拉起本机 **VS Code / I
 典型用法（直接在 OpenCode 会话中说）：
 
 > 打开 IDE，我要手改代码
-> 打开 src/main/java/com/example/A.java 第 42 行，我自己改
+> 打开 src/main/java/com/example/A.java，我自己改
 > 我改完了，可以继续
+
+如需精确定位，可让 AI 打开指定行（可选）：「打开 A.java 第 42 行，我自己改」。
 
 ## 人工文件锁
 
