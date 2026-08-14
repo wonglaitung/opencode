@@ -1,6 +1,6 @@
 # OpenCode 插件开发规范
 
-版本: 1.2.0
+版本: 1.3.0
 最后更新: 2026-08-14
 来源: opencode-session-mgmt 实践（参见 `opencode-session-mgmt/packages/plugin` 与 `opencode-session-mgmt/packages/shared`）
 
@@ -14,7 +14,7 @@
 2. 工程分层
 3. 插件骨架（示例）
 4. Hook 使用规范
-5. 工具 (tool) 开发规范
+5. 工具 (tool) 开发规范（含目标文件识别 + 5.1 跨插件协作）
 6. 数据存储规范
 7. 健壮性与降级策略
 8. 安全与隐私
@@ -100,6 +100,8 @@ export default MyPlugin
 | tool.execute.after               | 仅用于观测或计数，不得阻断工具后续流转 |
 | chat.message                     | 副作用必须幂等（例如：仅当字段为空时才写入） |
 
+**tool.execute.before 是全局广播**：上游在**任何工具执行前**统一触发（`session/tools.ts`），对所有插件注册的 before hook 逐一调用——无论该工具是上游内置（write/edit/apply_patch/bash）还是其它插件注册的。因此**单个插件的 before hook 就能拦截全部工具的调用**，无需跨插件共享状态即可实施全局约束（如人工文件锁：一个插件锁文件，就能拦下所有插件对它的写操作，见 open-ide 的 `lock-gate.ts`）。这是「插件间不耦合、约束仍全局生效」的关键机制。
+
 实践建议：
 - 把 experimental.* 的签名适配集中在单一文件（例如 `src/hooks/prompt.ts`），以便未来上游签名同步时集中维护。
 - 当需要识别上游工具名或解析上游数据格式（如 apply_patch 的补丁文本）时，在代码中注释清楚依据的上游文件或注册处（给出文件路径/函数名/行号），并在文档中引用对齐依据，便于上游变更时定位。
@@ -118,6 +120,26 @@ export default MyPlugin
 - 返回值为中文可读：输出应包含「结果」与「下一步指引」（例如门禁结果、未完成项）。
 - 幂等保证：语义重复的调用应安全（例如重复确认、重复提交审查不应导致错误）。
 - 留痕替代删除：审计类状态（例如强制授权）应标记为 `used` 或记录使用历史，而不是物理删除记录。
+
+**识别工具目标文件（拦截类功能的核心）**：要在 `tool.execute.before` 里判断「AI 这次要改哪些文件」，须从工具入参提取目标路径，三个代码编辑工具的入参形态不同（先例 `opencode-open-ide/src/patched.ts`）：
+
+| 工具 | 数据来源 | 说明 |
+|------|---------|------|
+| `write` / `edit` | `args.filePath` | 上游保证为绝对路径（edit.ts:48 注释原话） |
+| `apply_patch` | `patchText` 的 `*** Add/Update/Delete File:` 头部 | 入参只有 patch 文本，文件在 File 头里；`Move to` 不重置、`*** Begin/End Patch` 重置 |
+
+- 提取后**与锁集合比对须同一归一化口径**：锁以项目目录为基准 `resolve()` 成绝对路径，提取侧同样以项目目录解析，保证相对/绝对路径都能正确匹配（open-ide `createLockRegistry(directory)`）。
+- 入参缺失/畸形返回空（宁漏勿误拦，同 gate 哲学）；只拦目标明确的工具，不拦 read/grep/bash 等。
+
+---
+
+## 5.1 跨插件协作（通用规范独立存放 + 文本契约）
+
+当功能需要两个独立插件配合（如 session-mgmt 引导 AI 调 open-ide 的人工文件锁）：
+
+- **通用规范独立存放**：跨插件共享的约定/规范文档应放仓库根独立目录（如 `plugin-guide/`），不要埋在某一个插件工程的 docs 下——否则其它插件维护者容易忽略它的存在。三插件引用统一指向该目录（`opencode.json` 的 `references` + README 链接）。
+- **仅文本契约，零代码依赖**：跨插件配合时，被调插件（如 open-ide）的**工具名/参数契约**由调用方（session-mgmt）的规则文本引用（如 sdlc-r12 提到 `open_ide`/`unlock_file`）。这是可接受的**单向文本耦合**——调用方改动工具契约时需同步更新规则文本与评测脚本的 `tool-defs`；但不允许代码级 import 对方模块。先例：`opencode-session-mgmt` 的 sdlc-r12 规则 + `scripts/eval-rules/src/tool-defs.ts` 引用 open-ide 工具契约，协作契约文档 `opencode-open-ide/docs/manual-edit-loop.md`。
+- **规则措辞要精确到工具参数**：若某工具「不传关键参数就达不到目的」（如 `open_ide` 不带 `file` 不会锁定），规则文本必须显式写出「必须携带 file 参数」，否则弱模型会调成无效形态，闭环从源头断开。
 
 ---
 
@@ -185,6 +207,8 @@ export default MyPlugin
 - 魔法数字应提为具名常量并注明出处；复杂正则与边界逻辑必须注释设计取舍。
 - 源文件顶部应注一行注释，标注对应设计文档章节；实现变更时同步更新设计文档与流程图。
 - 文档、注释与 commit 使用中文；禁止使用 `§` 符号（使用“第 3.4 节”或裸编号）。commit 遵循 conventional commits（例如 `feat(plugin): ...`、`fix(plugin): ...`、`docs(...): ...`）。
+- **用户可编辑的 JSON 配置含文件路径时，文档必须要求正斜杠 `/` 或双反斜杠 `\\`**：JSON 里 `\` 是转义符——`\P` 等非法转义导致解析失败（回退默认但用户不明所以）；更隐蔽的是 `\b`/`\n`/`\t` 是**合法**转义，`"C:\bin\..."` 会被静默转成控制字符，路径错但 JSON 解析"成功"。文档示例与代码侧解析失败的 warning 都要点出这个诱因（先例 open-ide 的 `config.json`，见其 `src/config.ts`）。
+- **配置文档示例须显式标注字段语义**（覆盖 / 新增 / 缺省用默认），避免用户误以为所有项都要写全才生效（先例 open-ide `tools` 示例标注「cursor=新增、idea=覆盖」）。
 
 ---
 
@@ -200,6 +224,7 @@ export default MyPlugin
   - 目标：生成可移植 tarball（`dist/<plugin>-bundle-<version>.tgz`），支持内网/离线部署（解压即用）。
 要点：
 - 根目录必须有 `.npmrc`（`node-linker=hoisted`），避免 bun 在 Windows 上使用硬链接导致打包后依赖丢失。
+- **源码目录拷贝用 `cp -rL` 解引用符号链接**：普通 `cp -r` 会保留符号链接本身，若源码树内有人 `ln -s` 共享文件（如 AGENTS.md → CLAUDE.md），解压后链接目标缺失即断链。`-L` 把链接跟随为真实文件进包。打包后应 `find "$bundle_dir" -type l` 检查（排除 node_modules/.bin 的命令 shim）确认无残留（先例 `opencode-session-mgmt`、`opencode-open-ide` 的 `pack-bundle.sh`）。
 - 打包脚本应完成：清旧依赖 → hoisted 重装 → 组装含 node_modules 的目录 → 附带 setup.sh / setup.ps1 / setup.cmd（内网纯 cmd 用）的环境校验与离线依赖种子（见 11.1）。setup.cmd 的源文件为 `opencode-session-mgmt/scripts/templates/setup.cmd`（LF 行尾），打包时拷入并转 CRLF。**setup.cmd 内部消息必须保持纯 ASCII（英文）**：cmd 批处理按活动控制台代码页（中文系统为 GBK/CP936）解析，UTF-8 中文在 rem/echo 行会被拆错并当作命令执行（报「不是内部或外部命令」）；曾因此踩坑，勿改回中文。
 - 打包时保证 bundle 根 package.json 的 `main` 指向插件入口，便于解压后直接加载。
 - 注意 hoisted 模式下 workspace 包为真实拷贝，修改 shared 契约后需要重新打包/重装以避免旧拷贝残留。
