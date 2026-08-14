@@ -53,11 +53,30 @@
 开发者: 打开 IDE 看看，我要手改代码
 Agent:   🖐 已用 vscode 打开 /home/dev/project。
 
-开发者: 打开 src/main/java/com/example/A.java 第 42 行
+开发者: 打开 src/main/java/com/example/A.java 第 42 行，我自己改
 Agent:   🖐 已用 vscode 打开 src/main/java/com/example/A.java:42。
+         该文件已锁定，AI 不会修改它。改完后请说「改完了」，
+         由 AI 调用 unlock_file 解锁后继续。
 ```
 
-人工改完后回到对话继续（如需与会话管理插件配合，可在审查阶段经 `comprehension_manual` 声明处理结果）。
+### 4.1 人工文件锁
+
+打开文件时会**自动锁定**（防 AI 覆盖手工改动），也可手动管理：
+
+| 你/AI 的操作 | 工具 | 效果 |
+|-------------|------|------|
+| 打开文件手改 | `open_ide(file=X)` | 打开 + 自动锁定 X |
+| 声明某文件人工接管 | `lock_file(X)` | 锁定 X |
+| 查看锁定清单 | `list_locked_files` | 列出当前会话锁定文件 |
+| 改完确认解锁 | `unlock_file(X, developer_confirmed=true)` | 解锁（须开发者明确确认） |
+
+**锁定期间**：AI 可继续其它任务（改别的文件/答疑），但对该文件的 `write`/`edit`/`apply_patch` 会被服务端拒绝（`🔒 人工文件锁`）。解锁后 AI 会重新读取最新内容再继续。
+
+**完整闭环**（与 session-mgmt 的协作契约，含时序图/职责矩阵/局限声明）见 `docs/manual-edit-loop.md`。
+
+### 4.2 与 session-mgmt 配合
+
+session-mgmt 的 sdlc-r12 规则会引导 AI：开发者要手工改代码时先调 `open_ide` 锁定、改完经明确确认后 `unlock_file` 解锁、再重新读取最新内容继续。两插件仅文本耦合，无代码依赖。
 
 ## 5 验证
 

@@ -203,6 +203,7 @@ export const SDLC: WorkflowDefinition = {
     { id: "sdlc-r3", stage: "global", text: "开发者说「回到XX」时，立即调用 workflow_revisit(stage=XX)。绝不自行判断阶段已完成。" },
     { id: "sdlc-r4", stage: "global", text: "要求提交时，先调用 commit_gate_check；全部五阶段（含审查）approved 后才可 git commit。" },
     { id: "sdlc-r5", stage: "global", text: "提交门禁放行且 git commit 成功后，提醒开发者执行 /new 开始下一个需求，保持统计隔离。" },
+    { id: "sdlc-r12", stage: "global", text: "开发者表示要手工修改代码时，先调用 open_ide 打开 IDE（如已安装）并锁定该文件。锁定期间可继续其它任务（改其它文件/答疑），但不得修改被锁定的文件（write/edit/apply_patch 会被服务端拒绝）。开发者确认改完后，须经其明确确认（如说「改完了/可以继续」）再调用 unlock_file 解锁，并重新读取最新文件内容后继续。" },
     // ---- requirements ----
     { id: "sdlc-r6", stage: "requirements", text: "进入需求阶段时，主动询问预估人工工时（小时）；开发者明确给出后调用 workflow_baseline(developer_confirmed=true)。未提供不阻塞；已录入后不必重复询问。" },
     // ---- review（理解保障，核心）----

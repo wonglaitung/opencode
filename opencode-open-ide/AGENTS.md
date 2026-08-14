@@ -18,21 +18,30 @@ OpenCode 打开 IDE 插件：自然语言拉起 VS Code / IntelliJ IDEA，可打
 - **探测失败即报错**：全部候选不可用抛中文错误（含安装指引），不静默降级。
 - **启动即忘**：`spawn` 带 `detached + stdio:ignore + unref()`，daemon 不挂起；**dispose 不杀 IDE**（IDE 由用户自主关闭，区别于 Edge 调试实例）。
 - **兜底**：config.json 缺失/字段缺失 → 内置预设；无效 JSON 记 warning 回退默认，不崩溃。
+- **人工文件锁（决策 D4）**：`open_ide(file)` 自动锁定该文件（或 `lock_file` 显式锁），锁定期间 `tool.execute.before` 硬拦截 AI 对其 `write/edit/apply_patch`（从入参提取目标文件：write/edit 取 filePath、apply_patch 扫 File 头），`system.transform` 注入锁定提示；解锁须开发者明确确认后 `unlock_file(developer_confirmed=true)`，无自动解锁/无超时。锁内存级、不跨插件共享（tool.execute.before 全局广播特性使本插件即可拦全部编辑工具）；锁定期间 AI 可继续其它任务（按文件锁，非会话暂停）。与 session-mgmt 协作契约见 docs/manual-edit-loop.md。
 
 ## 结构
 
 ```
 src/
-├── index.ts        # 插件入口：仅 default export；读 config.json 注册 open_ide 工具
+├── index.ts        # 插件入口：仅 default export；读 config.json 注册 open_ide + 锁工具 + hooks
 ├── errors.ts       # OpenIdeError：可预期失败，中文消息含修复路径
 ├── presets.ts      # 内置 registry（vscode + idea，kind 与跨平台候选）
 ├── config.ts       # 读取/合并 config.json（覆盖预设、兜底默认，只读一次）
-└── ide.ts          # 纯函数：二进制定位（which/where 可注入）、CLI 参数构造、spawn
+├── ide.ts          # 纯函数：二进制定位（which/where/glob 可注入）、CLI 参数构造、spawn
+├── lock.ts         # 人工文件锁 registry（内存级、按会话，以项目目录归一化路径）
+├── patched.ts      # 从 write/edit/apply_patch 入参提取目标文件（纯函数）
+├── lock-gate.ts    # tool.execute.before 硬拦截（锁定文件被编辑则 throw）
+├── lock-hint.ts    # system.transform 注入锁定提示
+└── tools/
+    └── lock-tools.ts  # lock_file / unlock_file / list_locked_files
 test/
-└── ide.test.ts     # config 合并 / 参数构造 / 探测顺序（注入假探针，零 mock）
+├── ide.test.ts     # config 合并 / 参数构造 / 探测顺序（注入假探针，零 mock）
+└── lock.test.ts    # 锁 registry / 文件提取 / 拦截判定 / 注入内容（零 mock）
 docs/
-├── design.md       # 设计文档（架构图 + 决策记录）
-└── deployment.md   # 部署手册
+├── design.md           # 设计文档（架构图 + 人工文件锁 + 决策记录）
+├── deployment.md       # 部署手册
+└── manual-edit-loop.md # 与 session-mgmt 的协作契约（时序/职责/局限）
 ```
 
 ## 技术约定

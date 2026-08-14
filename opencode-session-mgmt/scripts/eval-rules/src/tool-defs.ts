@@ -194,4 +194,35 @@ export const EVAL_TOOLS: OpenAITool[] = [
       },
     },
   },
+  {
+    // 来自姊妹插件 opencode-open-ide（人工文件锁，规则 sdlc-r12）。评测只判 tool_use 契约。
+    type: "function",
+    function: {
+      name: "open_ide",
+      description:
+        "打开本机 IDE(默认 VS Code → IntelliJ IDEA)供开发者人工修改代码；指定 file 时自动锁定该文件。",
+      parameters: {
+        type: "object",
+        properties: {
+          file: str("要打开的文件路径(相对项目目录或绝对路径)"),
+          line: str("定位行号(配合 file 使用)"),
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "unlock_file",
+      description: "人工文件锁解锁：须开发者明确确认改完(developer_confirmed=true)才生效。",
+      parameters: {
+        type: "object",
+        properties: {
+          file: str("要解锁的文件路径(相对项目目录或绝对路径)"),
+          developer_confirmed: bool("必须为 true，表示开发者已明确确认改完该文件"),
+        },
+        required: ["file", "developer_confirmed"],
+      },
+    },
+  },
 ]
