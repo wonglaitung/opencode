@@ -20,6 +20,8 @@ description: Use when running or analyzing the rule-following evaluation baselin
 - `EVAL_BASE_URL`：OpenAI 兼容端点，默认 `http://localhost:8086/v1`（本地 vLLM）
 - `EVAL_API_KEY`：可选
 - `EVAL_MODEL`：评测模型 id，默认 `/models/qwen3`（本地 vLLM）
+- `EVAL_MAX_TOKENS`：输出上限，默认 2048；推理模型（deepseek-*-flash）显式 4096 留 thinking 空间
+- `EVAL_TIMEOUT_MS`：单请求超时（默认 180000），网络/超时错误自动重试 3 次
 
 ## 文件布局
 

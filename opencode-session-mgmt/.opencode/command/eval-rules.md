@@ -12,4 +12,4 @@ description: 运行规则遵循度评测基线（设计文档 12.1，需真实�
    `bun run scripts/eval-rules/run.ts --variant new [--repeat 3]`
 3. 结果落 `scripts/eval-rules/results/new.json`，与 `baseline.json` 对比；通过率下降时分析场景、回滚或调整注入文本。
 
-环境变量：`EVAL_BASE_URL`（默认 `http://localhost:8086/v1`，本地 vLLM）、`EVAL_API_KEY`、`EVAL_MODEL`（默认 `/models/qwen3`，本地 vLLM 的模型 id）。冻结的 baseline 快照在 `scripts/eval-rules/fixtures/baseline/`。
+环境变量：`EVAL_BASE_URL`（默认 `http://localhost:8086/v1`，本地 vLLM）、`EVAL_API_KEY`、`EVAL_MODEL`（默认 `/models/qwen3`，本地 vLLM 的模型 id）、`EVAL_MAX_TOKENS`（默认 2048；推理模型如 deepseek-*-flash 显式 4096）、`EVAL_TIMEOUT_MS`（默认 180000，含网络/超时重试）。冻结的 baseline 快照在 `scripts/eval-rules/fixtures/baseline/`。

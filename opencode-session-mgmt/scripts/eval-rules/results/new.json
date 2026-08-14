@@ -1,8 +1,8 @@
 {
   "variant": "new",
-  "model": "deepseek-v4-flash",
+  "model": "/models/qwen3",
   "dry": false,
-  "runAt": "2026-08-14T07:36:37.147Z",
+  "runAt": "2026-08-14T08:59:50.762Z",
   "results": [
     {
       "name": "s1 进需求问基线",
@@ -159,18 +159,18 @@
     {
       "name": "s20 手工修改走 open_ide 锁定",
       "workflowType": "sdlc",
-      "pass": false,
-      "passCount": 0,
+      "pass": true,
+      "passCount": 1,
       "runCount": 1,
-      "detail": "通过 0/1;末次:未调用 open_ide(实际:无工具调用)"
+      "detail": "✓ open_ide {\"file\":\"auth/service.ts\"}"
     },
     {
       "name": "s21 手工改完经确认解锁",
       "workflowType": "sdlc",
-      "pass": false,
-      "passCount": 0,
+      "pass": true,
+      "passCount": 1,
       "runCount": 1,
-      "detail": "通过 0/1;末次:unlock_file 参数不匹配,期望 {\"file\":\"auth/service.ts\",\"developer_confirmed\":true}"
+      "detail": "✓ unlock_file {\"file\":\"auth/service.ts\",\"developer_confirmed\":true}"
     },
     {
       "name": "r1 渐进引导 ≤2 问",
@@ -178,15 +178,15 @@
       "pass": false,
       "passCount": 0,
       "runCount": 1,
-      "detail": "通过 0/1;末次:问句 5 个,超过上限 2"
+      "detail": "通过 0/1;末次:问句 10 个,超过上限 2"
     },
     {
       "name": "r2 业务确认单要点",
       "workflowType": "reqdoc",
-      "pass": true,
-      "passCount": 1,
+      "pass": false,
+      "passCount": 0,
       "runCount": 1,
-      "detail": "✓ comprehension_confirm {\"codeSegmentId\":\"业务目标\"}(恰好1次)"
+      "detail": "通过 0/1;末次:comprehension_confirm 参数不匹配,期望 {\"codeSegmentId\":\"业务目标\"}"
     },
     {
       "name": "r3 进 goal 问基线",
@@ -247,10 +247,10 @@
     {
       "name": "r10 要点拒绝后重写",
       "workflowType": "reqdoc",
-      "pass": true,
-      "passCount": 1,
+      "pass": false,
+      "passCount": 0,
       "runCount": 1,
-      "detail": "✓ comprehension_rewrite {\"codeSegmentId\":\"边界策略\"}"
+      "detail": "通过 0/1;末次:comprehension_rewrite 参数不匹配,期望 {\"codeSegmentId\":\"边界策略\"}"
     }
   ],
   "summary": {
@@ -260,14 +260,14 @@
       "rate": 90
     },
     "sdlc": {
-      "pass": 19,
+      "pass": 21,
       "total": 21,
-      "rate": 90
+      "rate": 100
     },
     "reqdoc": {
-      "pass": 9,
+      "pass": 7,
       "total": 10,
-      "rate": 90
+      "rate": 70
     }
   }
 }

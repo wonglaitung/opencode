@@ -369,8 +369,8 @@ export const SCENARIOS: Scenario[] = [
       enter(s, "implementation")
       return finish(s)
     })(),
-    userTurn: "这段代码方向不对，我自己改，打开 IDE",
-    // 规则 sdlc-r12：开发者要手工改时先 open_ide（带 file 自动锁定），不得直接编辑
+    userTurn: "auth/service.ts 这段方向不对，我自己改，打开 IDE",
+    // 规则 sdlc-r12：开发者明确文件后先 open_ide（带 file 自动锁定），不得直接编辑
     judge: {
       kind: "tool",
       expectTool: "open_ide",
@@ -386,8 +386,8 @@ export const SCENARIOS: Scenario[] = [
       enter(s, "implementation")
       return finish(s)
     })(),
-    userTurn: "我改完了，可以继续了",
-    // 规则 sdlc-r12：解锁须开发者明确确认后 unlock_file，并重新读取最新内容
+    userTurn: "auth/service.ts 我改完了，可以继续了",
+    // 规则 sdlc-r12：解锁须开发者明确确认改完该文件后 unlock_file，并重新读取最新内容
     judge: {
       kind: "tool",
       expectTool: "unlock_file",
