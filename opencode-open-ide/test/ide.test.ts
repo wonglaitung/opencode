@@ -7,7 +7,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { loadIdeConfig, resolveEntries } from "../src/config"
-import { buildOpenArgs, pickWindowsExecutable, probeBinary, resolveIdeBinary } from "../src/ide"
+import { buildOpenArgs, buildSpawnCommand, pickWindowsExecutable, probeBinary, resolveIdeBinary } from "../src/ide"
 
 describe("pickWindowsExecutable(where 多行挑选)", () => {
   test("无后缀 sh 脚本与 .cmd 并存时选 .cmd", () => {
@@ -191,6 +191,27 @@ describe("buildOpenArgs(kind 定位语法)", () => {
       "-g",
       "/abs/A.java:1",
     ])
+  })
+})
+
+describe("buildSpawnCommand(win32 binary 与参数引号转义)", () => {
+  test("binary 含空格加引号,参数含空格也加引号", () => {
+    const binary = "C:\\Users\\wongl\\AppData\\Local\\Programs\\Microsoft VS Code\\bin\\code.cmd"
+    expect(buildSpawnCommand(binary, ["-g", "C:\\proj\\my app\\A.java:1"])).toBe(
+      '"C:\\Users\\wongl\\AppData\\Local\\Programs\\Microsoft VS Code\\bin\\code.cmd" -g "C:\\proj\\my app\\A.java:1"',
+    )
+  })
+
+  test("无空格路径与参数不加引号", () => {
+    expect(buildSpawnCommand("C:\\tools\\idea64.exe", ["--line", "10", "C:\\proj\\A.java"])).toBe(
+      "C:\\tools\\idea64.exe --line 10 C:\\proj\\A.java",
+    )
+  })
+
+  test("binary 含空格但参数无空格时仍引 binary", () => {
+    expect(buildSpawnCommand("C:\\Program Files\\JetBrains\\bin\\idea64.exe", ["C:\\proj"])).toBe(
+      '"C:\\Program Files\\JetBrains\\bin\\idea64.exe" C:\\proj',
+    )
   })
 })
 
