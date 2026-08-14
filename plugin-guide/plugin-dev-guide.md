@@ -5,7 +5,7 @@
 来源: opencode-session-mgmt 实践（参见 `opencode-session-mgmt/packages/plugin` 与 `opencode-session-mgmt/packages/shared`）
 
 说明
-- 本文档提炼自仓内实践，适用于在本仓库中新增的所有 OpenCode 插件（`opencode-session-mgmt`、`opencode-edge-debug`、`opencode-open-ide`）。
+- 本文档提炼自仓内实践，适用于在本仓库中新增的所有 OpenCode 插件（`opencode-session-mgmt`、`opencode-edge-debug`）。注：原 `opencode-open-ide` 插件已于 2026-08 物理合并进 `opencode-session-mgmt`（`packages/plugin/src/open-ide/`），不再作为独立工程。
 - 目标：统一约定、降低侵入性、确保安全与可测试性。
 - 位置：本文件为**跨插件通用规范**，独立存放于仓库根 `plugin-guide/`（不隶属任一插件工程），避免被埋没于某工程 docs 下。文中的 `opencode-session-mgmt/...` 路径均以仓库根为基准；「设计文档 X 章」指 `opencode-session-mgmt/docs/session-management.md`。
 
@@ -121,7 +121,7 @@ export default MyPlugin
 - 幂等保证：语义重复的调用应安全（例如重复确认、重复提交审查不应导致错误）。
 - 留痕替代删除：审计类状态（例如强制授权）应标记为 `used` 或记录使用历史，而不是物理删除记录。
 
-**识别工具目标文件（拦截类功能的核心）**：要在 `tool.execute.before` 里判断「AI 这次要改哪些文件」，须从工具入参提取目标路径，三个代码编辑工具的入参形态不同（先例 `opencode-open-ide/src/patched.ts`）：
+**识别工具目标文件（拦截类功能的核心）**：要在 `tool.execute.before` 里判断「AI 这次要改哪些文件」，须从工具入参提取目标路径，三个代码编辑工具的入参形态不同（先例 `opencode-session-mgmt/packages/plugin/src/open-ide/patched.ts`）：
 
 | 工具 | 数据来源 | 说明 |
 |------|---------|------|
@@ -138,7 +138,7 @@ export default MyPlugin
 当功能需要两个独立插件配合（如 session-mgmt 引导 AI 调 open-ide 的人工文件锁）：
 
 - **通用规范独立存放**：跨插件共享的约定/规范文档应放仓库根独立目录（如 `plugin-guide/`），不要埋在某一个插件工程的 docs 下——否则其它插件维护者容易忽略它的存在。三插件引用统一指向该目录（`opencode.json` 的 `references` + README 链接）。
-- **仅文本契约，零代码依赖**：跨插件配合时，被调插件（如 open-ide）的**工具名/参数契约**由调用方（session-mgmt）的规则文本引用（如 sdlc-r12 提到 `open_ide`/`unlock_file`）。这是可接受的**单向文本耦合**——调用方改动工具契约时需同步更新规则文本与评测脚本的 `tool-defs`；但不允许代码级 import 对方模块。先例：`opencode-session-mgmt` 的 sdlc-r12 规则 + `scripts/eval-rules/src/tool-defs.ts` 引用 open-ide 工具契约，协作契约文档 `opencode-open-ide/docs/manual-edit-loop.md`。
+- **仅文本契约，零代码依赖**：跨插件配合时，被调插件的**工具名/参数契约**由调用方（session-mgmt）的规则文本引用（如 sdlc-r12 提到 `open_ide`/`unlock_file`）。这是可接受的**单向文本耦合**——调用方改动工具契约时需同步更新规则文本与评测脚本的 `tool-defs`；但不允许代码级 import 对方模块。先例：`opencode-session-mgmt` 的 sdlc-r12 规则 + `scripts/eval-rules/src/tool-defs.ts` 引用 open_ide 工具契约（原 `opencode-open-ide` 已合并进本工程，契约现为仓库内一处定义）。
 - **规则措辞要精确到工具参数**：若某工具「不传关键参数就达不到目的」（如 `open_ide` 不带 `file` 不会锁定），规则文本必须显式写出「必须携带 file 参数」，否则弱模型会调成无效形态，闭环从源头断开。
 
 ---
@@ -250,7 +250,7 @@ export default MyPlugin
   - 目标：生成可移植 tarball（`dist/<plugin>-bundle-<version>.tgz`），支持内网/离线部署（解压即用）。
 要点：
 - 根目录必须有 `.npmrc`（`node-linker=hoisted`），避免 bun 在 Windows 上使用硬链接导致打包后依赖丢失。
-- **源码目录拷贝用 `cp -rL` 解引用符号链接**：普通 `cp -r` 会保留符号链接本身，若源码树内有人 `ln -s` 共享文件（如 AGENTS.md → CLAUDE.md），解压后链接目标缺失即断链。`-L` 把链接跟随为真实文件进包。打包后应 `find "$bundle_dir" -type l` 检查（排除 node_modules/.bin 的命令 shim）确认无残留（先例 `opencode-session-mgmt`、`opencode-open-ide` 的 `pack-bundle.sh`）。
+- **源码目录拷贝用 `cp -rL` 解引用符号链接**：普通 `cp -r` 会保留符号链接本身，若源码树内有人 `ln -s` 共享文件（如 AGENTS.md → CLAUDE.md），解压后链接目标缺失即断链。`-L` 把链接跟随为真实文件进包。打包后应 `find "$bundle_dir" -type l` 检查（排除 node_modules/.bin 的命令 shim）确认无残留（先例 `opencode-session-mgmt` 的 `pack-bundle.sh`）。
 - 打包脚本应完成：清旧依赖 → hoisted 重装 → 组装含 node_modules 的目录 → 附带 setup.sh / setup.ps1 / setup.cmd（内网纯 cmd 用）的环境校验与离线依赖种子（见 11.1）。setup.cmd 的源文件为 `opencode-session-mgmt/scripts/templates/setup.cmd`（LF 行尾），打包时拷入并转 CRLF。**setup.cmd 内部消息必须保持纯 ASCII（英文）**：cmd 批处理按活动控制台代码页（中文系统为 GBK/CP936）解析，UTF-8 中文在 rem/echo 行会被拆错并当作命令执行（报「不是内部或外部命令」）；曾因此踩坑，勿改回中文。
 - 打包时保证 bundle 根 package.json 的 `main` 指向插件入口，便于解压后直接加载。
 - 注意 hoisted 模式下 workspace 包为真实拷贝，修改 shared 契约后需要重新打包/重装以避免旧拷贝残留。

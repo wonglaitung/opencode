@@ -195,7 +195,7 @@ export const EVAL_TOOLS: OpenAITool[] = [
     },
   },
   {
-    // 来自姊妹插件 opencode-open-ide（人工文件锁，规则 sdlc-r12）。评测只判 tool_use 契约。
+    // 人工文件锁工具契约（open-ide 已合并进本工程，规则 sdlc-r12）。评测只判 tool_use 契约。
     type: "function",
     function: {
       name: "open_ide",
@@ -222,6 +222,17 @@ export const EVAL_TOOLS: OpenAITool[] = [
           developer_confirmed: bool("必须为 true，表示开发者已明确确认改完该文件"),
         },
         required: ["file", "developer_confirmed"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_locked_files",
+      description: "查看当前会话被人工锁定的文件清单。",
+      parameters: {
+        type: "object",
+        properties: {},
       },
     },
   },

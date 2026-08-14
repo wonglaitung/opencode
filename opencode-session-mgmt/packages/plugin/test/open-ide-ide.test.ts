@@ -6,8 +6,8 @@ import { describe, expect, test } from "bun:test"
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { loadIdeConfig, resolveEntries } from "../src/config"
-import { buildOpenArgs, buildSpawnCommand, pickWindowsExecutable, probeBinary, resolveIdeBinary } from "../src/ide"
+import { loadIdeConfig, resolveEntries } from "../src/open-ide/config"
+import { buildOpenArgs, buildSpawnCommand, pickWindowsExecutable, probeBinary, resolveIdeBinary } from "../src/open-ide/ide"
 
 describe("pickWindowsExecutable(where 多行挑选)", () => {
   test("无后缀 sh 脚本与 .cmd 并存时选 .cmd", () => {

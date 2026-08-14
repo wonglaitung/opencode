@@ -16,9 +16,10 @@
 │     - opencode 命令 + TUI + 一个自动启动的本地 Daemon（只绑 127.0.0.1）            │
 │     - 需要一个「大模型提供方」（Anthropic/OpenAI，或内网自建模型网关）                │
 │                                                                                │
-│  ② session-mgmt 插件（本项目的 packages/plugin）                                  │
+│  ② session-mgmt 插件（本项目的 packages/plugin，已合并原 open-ide 插件）            │
 │     - 由 OpenCode 通过 opencode.json 的 plugin 配置加载，跑在 Daemon 进程内         │
 │     - 自动在每个项目下建一个本地库：<项目>/.opencode/session-mgmt.db                 │
+│     - 含人工文件锁（open_ide/lock_file/unlock_file，锁持久化在该库 file_lock 表）    │
 │                                                                                │
 │  ③ opencode-sm 命令行（本项目的 packages/cli）                                    │
 │     - 独立命令，用于在 TUI 之外查看工作流 / 统计，以及首次配置身份                     │
@@ -616,7 +617,7 @@ docker save opencode-sm-collector -o collector-image.tar
 
 ### 9.6 全量工具箱整包：一个目录装下全部（Windows 便携）
 
-前面 9.2~9.4 是把「本体、插件、CLI/收集服务」分开搬入。想一步到位的话，也可在联网区把 **Node.js 便携版目录**直接扩成「全量工具箱」——bun、opencode 本体、opencode-sm CLI、两个插件整包全放进同一目录，压缩后整包搬入内网，解压即用。
+前面 9.2~9.4 是把「本体、插件、CLI/收集服务」分开搬入。想一步到位的话，也可在联网区把 **Node.js 便携版目录**直接扩成「全量工具箱」——bun、opencode 本体、opencode-sm CLI、插件整包（session-mgmt 已含 open-ide 功能；如用 Edge 调试再加 edge-debug 包）全放进同一目录，压缩后整包搬入内网，解压即用。
 
 以 `D:\Tools\node-v22.23.2-win-x64` 为例：
 

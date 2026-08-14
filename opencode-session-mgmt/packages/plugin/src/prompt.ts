@@ -10,7 +10,11 @@ import { isComplete } from "./stats"
 import { getStuckFiles } from "./tools/quality"
 
 /** 将当前工作流压缩为注入片段：阶段化规则 + 状态条 + stuck 警告（完成态见下方专用分支）。 */
-export function buildSystemFragment(workflow: WorkflowState, stuck: Record<string, number> = {}): string {
+export function buildSystemFragment(
+  workflow: WorkflowState,
+  stuck: Record<string, number> = {},
+  lockedFiles: string[] = [],
+): string {
   const def = getDefinition(workflow.type)
   const stage = currentInProgressStage(workflow)
   const parts: string[] = []
@@ -22,6 +26,13 @@ export function buildSystemFragment(workflow: WorkflowState, stuck: Record<strin
     parts.push("# Workflow 已完成", "")
     if (def.hasCommitGate) {
       parts.push("如需提交代码：先调用 commit_gate_check 确认门禁，放行后 git commit。")
+      // 完成态解锁提示（合并决策）：仅 sdlc（hasCommitGate）注入——reqdoc 无代码编辑不提示。
+      if (lockedFiles.length > 0) {
+        parts.push(
+          `⚠ 仍有 ${lockedFiles.length} 个文件被人工锁定（${lockedFiles.join("、")}）。` +
+            `请询问开发者是否已完成手工修改；明确确认后逐个调用 unlock_file 解锁（未提及的文件保持锁定）。`,
+        )
+      }
     }
     parts.push(
       "⚑ 开始下一个需求：提醒开发者执行 /new 保持统计隔离（勿在本会话复用，否则统计混入已完成需求）。",
@@ -119,6 +130,8 @@ export function createSystemTransform(store: Store, isSubagent: (sessionID: stri
     const row = store.ensure(input.sessionID)
     const workflow = row.workflow
     if (!workflow) return
-    output.system.push(buildSystemFragment(workflow, getStuckFiles(input.sessionID)))
+    output.system.push(
+      buildSystemFragment(workflow, getStuckFiles(input.sessionID), store.listLocks(input.sessionID)),
+    )
   }
 }

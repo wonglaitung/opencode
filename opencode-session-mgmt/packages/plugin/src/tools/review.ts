@@ -277,13 +277,19 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
       const def = getDefinition(saved.type)
       // 审查是最后阶段：通过即全部阶段 approved → 完成。此时在工具返回直接带出 /new 提醒
       // （弱模型未必等到下一轮注入片段才行动，完成瞬间的工具结果是最稳的触发点）。
+      const locked = store.listLocks(context.sessionID)
+      const lockedNote =
+        def.hasCommitGate && locked.length > 0
+          ? `\n⚠ 仍有 ${locked.length} 个文件被人工锁定（${locked.join("、")}）。` +
+            `请询问开发者是否已完成手工修改，明确确认后逐个调用 unlock_file 解锁。`
+          : ""
       return (
         `✅ 审查阶段通过（清单 ${def.checklist.length}/${def.checklist.length}，片段定论 ${total}/${total}）` +
         (rate !== null ? `，一次通过率 ${rate}%` : "") +
         `。\n提交门禁：${saved.commit.status}` +
         (saved.commit.blocked_by.length ? `（未完成：${saved.commit.blocked_by.join("、")}）` : "") +
         (saved.commit.status === "allowed"
-          ? `\n⚑ 工作流已完成，请提醒开发者执行 /new 开始下一个需求（保持统计隔离）。`
+          ? `\n⚑ 工作流已完成，请提醒开发者执行 /new 开始下一个需求（保持统计隔离）。${lockedNote}`
           : "")
       )
     },

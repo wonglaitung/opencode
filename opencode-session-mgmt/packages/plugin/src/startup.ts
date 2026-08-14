@@ -40,7 +40,21 @@ export function backfillSessionTitles(store: Store, sessions: readonly ListedSes
   return titles.size
 }
 
-/** 启动一次性任务：拉一次会话列表，同时完成 孤儿清理 + 标题回填。上游不可达时静默跳过。 */
+/**
+ * 人工文件锁残留修剪（open-ide 合并）：删除已不存在会话的锁行。
+ * 锁按 sessionID 持久化（file_lock 表），会话被删后其锁变惰性残留——用当前会话列表
+ * 全量过滤（含子代理会话，锁对子代理照常生效）。空列表视为上游瞬时不可达，不修剪。
+ * 返回清理条数。
+ */
+export function pruneLocks(store: Store, sessions: readonly ListedSession[]): number {
+  if (sessions.length === 0) return 0
+  const valid = new Set(sessions.map((s) => s.id))
+  const stale = store.listLockedSessions().filter((id) => !valid.has(id))
+  for (const id of stale) store.clearLocks(id)
+  return stale.length
+}
+
+/** 启动一次性任务：拉一次会话列表，同时完成 孤儿清理 + 标题回填 + 锁残留修剪。上游不可达时静默跳过。 */
 export async function deferredStartup(store: Store, client: PluginInput["client"]): Promise<void> {
   try {
     const res = await client.session.list()
@@ -48,6 +62,7 @@ export async function deferredStartup(store: Store, client: PluginInput["client"
     if (!sessions || sessions.length === 0) return
     cleanupOrphans(store, sessions)
     backfillSessionTitles(store, sessions)
+    pruneLocks(store, sessions)
   } catch {
     // 上游不可达：跳过本次清理与回填（不影响功能，消息时另有 syncSessionTitle 兜底）
   }

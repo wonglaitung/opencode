@@ -20,7 +20,7 @@ OpenCode 会话管理定制：标准化开发流程（五阶段门禁）、理�
 - **CLI 命名为 `opencode-sm`**（曾短暂叫 ocsm，已废弃，勿再用）。
 - 会话不能改名：上游 `Session.Service` 无 update 方法，会话标题由上游自动生成，勿设计 rename 功能。
 - 工作流推进是**完成门禁模型**（AI 主动 `workflow_advance`，AI 引导人决定），不是审批流；提交门禁经 `tool.execute.before` 拦截 `git commit` 实现；迭代上限 3 轮；`comprehension_confirm` 单次只认一段（防批量走过场）。
-- **手工修改走 open_ide 锁定（sdlc-r12，软提示）**：开发者要手工改代码时 AI 先调 `open_ide`（姊妹插件 opencode-open-ide，带 file 自动锁定，防 AI 覆盖手工改动）；锁定期间 AI 可继续其它任务但不得改被锁文件（服务端硬拦截）；解锁须开发者明确确认后 `unlock_file`，并重新读取最新内容。跨插件仅文本耦合（规则/文档引用工具契约），无代码依赖。
+- **手工修改走 open_ide 锁定（sdlc-r12，软提示 + 硬拦截）**：开发者要手工改代码时 AI 先调 `open_ide`（带 file 自动锁定，防 AI 覆盖手工改动）；锁定期间 AI 可继续其它任务但不得改被锁文件（`tool.execute.before` 服务端硬拦截）；解锁须开发者明确确认后 `unlock_file`，并重新读取最新内容。open-ide 已**物理合并**进本工程（`packages/plugin/src/open-ide/`，原 `opencode-open-ide` 独立工程已移除）：锁持久化进 SQLite `file_lock` 表（daemon 重启自动恢复），**SDLC 完结时完成态注入解锁提示**（仅 sdlc，经 `hasCommitGate` 门控，reqdoc 不提示）。
 - 规则**阶段化注入**：`WorkflowDefinition.rules` 为 `RuleItem[]`（含 `stage` 归属），每轮只注入 global + 当前阶段（`rulesForStage`/`currentInProgressStage`）；状态以一行阶段条展示（`buildStateBar`），替代冗长 JSON。无 in_progress 分三态（未启动/空档/完成），**完成态注入专用完成块**（提交查门禁→引导 /new 开新需求保持统计隔离→workflow_revisit 改本需求），不注入常规规则（避免「尚未开始」与「已全部完成」自相矛盾）。`applyTransition` 严格执行状态机：enter 已 approved 须走 revisit、enter 已 in_progress 幂等。规则遵循度评测基线在 `scripts/eval-rules/`（不随 `bun test` 跑，需真实模型端点，见设计文档第 13 章）。
 
 ## 结构
@@ -47,8 +47,8 @@ docs/                # 设计文档 session-management.md、同步方案 upstrea
 
 ## 经验教训（通用约定）
 
-- **用户手写 JSON 配置含文件路径时，单反斜杠是陷阱**（三工程通用约定）：JSON 里 `\` 是转义符——`\P` 等非法转义导致解析失败（回退默认但用户不明所以）；更隐蔽的是 `\b`/`\n`/`\t` 是**合法**转义，`"C:\bin\..."` 会被静默转成控制字符，路径错但 JSON 解析"成功"。凡工程引入用户可编辑的 JSON 配置且可能含文件路径，文档必须明确要求**用正斜杠 `/`（Windows 原生接受）或双反斜杠 `\\`**；代码侧解析失败时 warning 要直接点出这个诱因。本工程现状：`identity.json`（账号/组/组织/服务地址）不含文件路径，`deploy/opencode.json.example` 的 plugin 路径为相对/正斜杠写法，暂无触发场景；将来若新增含路径的用户配置（如收集服务本地路径），须按本约定落实（先例：`opencode-open-ide` 的 `config.json`，见其 `src/config.ts` 与 docs）。
-- **配置文档示例须显式标注字段语义**（覆盖 / 新增 / 缺省用默认），避免用户误以为所有项都要写全才生效。本工程现状：无此类手写配置字段示例；若将来引入配置字段，示例须按此标注（先例：`opencode-open-ide` 的 `tools` 示例标注「cursor=新增、idea=覆盖」）。
+- **用户手写 JSON 配置含文件路径时，单反斜杠是陷阱**（三工程通用约定）：JSON 里 `\` 是转义符——`\P` 等非法转义导致解析失败（回退默认但用户不明所以）；更隐蔽的是 `\b`/`\n`/`\t` 是**合法**转义，`"C:\bin\..."` 会被静默转成控制字符，路径错但 JSON 解析"成功"。凡工程引入用户可编辑的 JSON 配置且可能含文件路径，文档必须明确要求**用正斜杠 `/`（Windows 原生接受）或双反斜杠 `\\`**；代码侧解析失败时 warning 要直接点出这个诱因。本工程现状：`identity.json`（账号/组/组织/服务地址）不含文件路径，`deploy/opencode.json.example` 的 plugin 路径为相对/正斜杠写法；插件 `config.json`（源出已合并的 open-ide）含用户可编辑的 `tools` binary 路径，须按本约定落实（见 `packages/plugin/src/open-ide/config.ts`）。
+- **配置文档示例须显式标注字段语义**（覆盖 / 新增 / 缺省用默认），避免用户误以为所有项都要写全才生效。本工程现状：插件 `config.json` 的 `tools` 示例标注「cursor=新增、idea=覆盖」（源出已合并的 open-ide）。
 
 ## 文档与语言
 
