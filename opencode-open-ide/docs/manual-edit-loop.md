@@ -52,6 +52,7 @@ sequenceDiagram
     O-->>A: 已解锁
     A->>F: read 最新 src/A.java
     A->>S: 基于新内容继续工作流(comprehension_manual 等) ✓
+    Note over O: 多文件锁定时,"改完了"只针对明确提及的文件;<br/>AI 须逐个确认解锁,未提及的保持锁定
 ```
 
 ## 3 角色职责

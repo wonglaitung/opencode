@@ -168,4 +168,17 @@ describe("createLockHintTransform(注入)", () => {
     expect(out.system[0]).toContain("src/A.java")
     expect(out.system[0]).toContain("unlock_file")
   })
+
+  test("多文件锁提示逐个确认解锁,不擅自解锁未提及文件", async () => {
+    const r = createLockRegistry(DIR)
+    r.lock("s1", "src/A.java")
+    r.lock("s1", "src/B.java")
+    const t = createLockHintTransform(r)
+    const out = { system: [] as string[] }
+    await t({ sessionID: "s1" }, out)
+    expect(out.system[0]).toContain("A.java")
+    expect(out.system[0]).toContain("B.java")
+    expect(out.system[0]).toContain("可能只改完其中一个")
+    expect(out.system[0]).toContain("未明确提及的文件保持锁定")
+  })
 })

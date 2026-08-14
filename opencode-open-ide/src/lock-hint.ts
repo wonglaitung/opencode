@@ -15,8 +15,10 @@ export function createLockHintTransform(registry: LockRegistry) {
     output.system.push(
       `## 人工文件锁\n⚠ 当前被开发者锁定的人工修改文件：${locked.join("、")}。` +
         `锁定期间不得对这些文件执行 write/edit/apply_patch（服务端会拒绝）。` +
-        `若开发者已改完，请询问其明确确认（如「改完了/可以继续」）后调用 unlock_file 解锁，` +
-        `再重新读取最新文件内容后继续。`,
+        `开发者说「改完了/可以继续」时，须先确认其指的是哪一个文件` +
+        `（可能只改完其中一个），再为每个已确认的文件单独调用 unlock_file；` +
+        `未明确提及的文件保持锁定，不得擅自解锁。` +
+        `解锁后重新读取该文件最新内容再继续。`,
     )
   }
 }
