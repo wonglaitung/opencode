@@ -200,6 +200,19 @@ export default MyPlugin
 5. **逐个归因失败场景**：按「规则措辞 / 判定口径 / 场景二义性」三类归因——优先调**脚本适配与判定口径**，其次修场景，**规则文本保持简洁**（弱模型对复杂措辞极敏感，为提升某模型把规则写细实测反而伤害弱模型）；多模型验证（本地弱模型 + 远端强模型），避免过拟合单一模型。
 6. **`--repeat N` 多次取通过率**（聚合按运行次数统计），防单次抖动掩盖趋势。
 
+**项目中可参考的实例**（`opencode-session-mgmt` 为完整落地，新插件可照抄骨架）：
+
+| 步骤 | 参考文件/示例 |
+|------|--------------|
+| 场景集 | `opencode-session-mgmt/scripts/eval-rules/src/scenarios.ts`（31 场景：每场景 = name + workflowType + 状态夹具 state + userTurn + judge）；judge 三种形态见 `src/types.ts`（`tool`/`no_tool`/`text`） |
+| 工具契约同步 | `opencode-session-mgmt/scripts/eval-rules/src/tool-defs.ts`——评测用精简工具定义须与插件真实工具 description/参数名一致（改插件工具时同步改这里，否则测的不是真实契约）；跨插件工具（如 open-ide 的 `open_ide`/`unlock_file`）也在此声明 |
+| 状态夹具 | `scenarios.ts` 顶部辅助：`enter`/`approve`/`addSegment`/`rejectSegment`/`finish()`（按阶段重算 commit）——直接构造 WorkflowState，不跑真实工具循环 |
+| 运行入口 | `opencode-session-mgmt/scripts/eval-rules/run.ts`（`--variant baseline\|new`、`--repeat N`、`--dry`；环境变量 `EVAL_BASE_URL`/`EVAL_MODEL`/`EVAL_API_KEY`） |
+| 冻结快照 | `opencode-session-mgmt/scripts/eval-rules/fixtures/baseline/`（旧规则全文）+ `results/{baseline,new}.json`（通过率快照入库，可重跑对比） |
+| 模型适配 | `opencode-session-mgmt/scripts/eval-rules/src/client.ts`（content 空回退 `reasoning_content`、`max_tokens` 可配、超时/重试） |
+| 判定口径适配 | `opencode-session-mgmt/scripts/eval-rules/src/judge.ts`（如 s5 放宽为「≥1 次 confirm + `distinctArg` 不重复」） |
+| 方法论文档 | `opencode-session-mgmt/docs/session-management.md` 第 13 章（运行/场景集/判定/实测记录/教训） |
+
 沉淀的实践要点：
 
 - **规则文本保持简洁，改前必须数据驱动 + 多模型验证**：弱模型对复杂措辞极敏感——为提升某模型而把规则写细（如补「须调用 X 工具」「逐段各调用一次」）实测反而伤害弱模型（不再调工具、要点 id 错填）。为特定模型（如推理模型）提升应优先走**脚本适配与判定口径**，而非规则膨胀。
