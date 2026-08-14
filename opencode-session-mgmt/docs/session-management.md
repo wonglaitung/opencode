@@ -177,7 +177,7 @@ sequenceDiagram
     else 开发者回退
         Dev->>AI: 回到需求分析，scope 要补充
         AI->>Store: revisit(requirements)
-        Store-->>AI: status = in_progress, revision++
+        Store-->>AI: requirements: in_progress, revision++<br/>design: 级联回退 in_progress（若已 approved）
         AI->>Dev: 好的，已回到需求阶段
     end
 ```
@@ -768,6 +768,8 @@ stateDiagram-v2
     note right of approved : 阶段已完成<br/>可 revisit 回退
 ```
 
+**revisit 级联回退**：`workflow_revisit(阶段S)` 除把 S 回退到 `in_progress`（revision++）外，还会把 **S 之后所有已 `approved` 的下游阶段**一并级联回退到 `in_progress`（同样 revision++、追加 revisit transition）。原因：下游阶段（设计/编码/测试/审查）的结论建立在 S 之上，S 返工后其 approved 状态不再成立，须重新走一遍（含审查的 review_submit 硬校验）。`currentInProgressStage` 按 `def.stages` 顺序取第一个 `in_progress`，级联后规则注入仍以最靠前的回退阶段为准。
+
 每次转换自动追加到 `transitions[]`：
 
 ```json
@@ -830,7 +832,7 @@ flowchart TD
 | 工具 | 用途 | 服务端校验 |
 |------|------|-----------|
 | `workflow_advance` | 提议进入下一阶段 / 标记当前阶段 approved | 必须携带开发者确认语义；`stage` 运行时校验须在 `getDefinition(workflow.type).stages` 内（AI 不可在无确认时调用成功） |
-| `workflow_revisit` | 回退到指定阶段（revision++） | 目标阶段必须存在于 `def.stages` |
+| `workflow_revisit` | 回退到指定阶段（revision++） | 目标阶段必须存在于 `def.stages`；**级联回退**该阶段之后所有已 `approved` 的下游阶段（同样 revision++，见 3.3） |
 | `workflow_baseline` | 录入/重设基线预估人工工时（项目经理给出，如 8h，6.3） | `developer_confirmed` 必须为 true（防 AI 杜撰）；`estimated_hours > 0`；幂等覆盖记最新值 |
 | `comprehension_add` | 登记一个片段/要点及自然语言解释（sdlc 为代码片段，reqdoc 为 PRD 要点） | 不可重复登记；sdlc 填 `file/lineStart/lineEnd`，reqdoc 省略；登记后 `decision=pending`，待逐段定夺 |
 | `comprehension_confirm` | 接受单个片段/要点（一次通过） | **单次调用只接受一个 `codeSegmentId`**，防止批量确认（见 7.3）；须处于 pending/rejected 才可接受 |

@@ -72,11 +72,11 @@ graph TB
     B --> F["继续测试 → 审查 → 提交"]
     A -->|"不一致（推翻方案）"| C["建议 workflow_revisit design<br/>更新设计方案"]
     C --> D{"开发者确认回退？"}
-    D -->|"是"| E["design 回到 in_progress（revision++）<br/>更新方案后重新 approve"]
+    D -->|"是"| E["design 回到 in_progress（revision++）<br/>级联回退其后已 approved 的阶段<br/>更新方案后重新 approve"]
     D -->|"否，坚持强推"| F
     E --> F
     F --> G["说明：<br/>两种路径门禁都能跑通，<br/>区别在返工率统计与设计记录一致性"]
 ```
 
 - **同一方案的分工**：不用回设计阶段，直接锁定文件手工改即可。
-- **推翻已批准方案**：无硬性拦截（工作流不 diff 设计与代码），但正确做法是回退设计，否则 `designRationale` 与实际不符，返工率统计也漏记这次偏差。
+- **推翻已批准方案**：无硬性拦截（工作流不 diff 设计与代码），但正确做法是回退设计，否则 `designRationale` 与实际不符，返工率统计也漏记这次偏差。注意 `workflow_revisit` 会**级联回退**其后已 approved 的阶段（如 testing/review），需要重新走一遍。

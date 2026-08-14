@@ -64,12 +64,25 @@ export function createWorkflowTools(store: Store): Record<string, ToolDefinition
       note: z.string().optional().describe("回退原因"),
     },
     async execute(args, context) {
+      // 快照回退前的下游阶段状态，用于精确判定本次级联回退了哪些阶段（approved → in_progress）。
+      const before = store.get(context.sessionID)?.workflow
       const saved = store.mutateWorkflow(context.sessionID, (workflow) => {
         assertStage(workflow, args.stage)
         applyTransition(workflow, args.stage, "revisit", Date.now(), args.note)
       })
       const def = getDefinition(saved.type)
-      return `↩ 已回退到 ${def.labels[args.stage] ?? args.stage}（revision=${saved.stages[args.stage].revision}）`
+      const idx = def.stages.indexOf(args.stage)
+      const cascaded = def.stages
+        .slice(idx + 1)
+        .filter((name) => {
+          const prev = before ? before.stages[name] : null
+          return prev?.status === "approved" && saved.stages[name].status === "in_progress"
+        })
+        .map((name) => def.labels[name] ?? name)
+      const cascadeNote = cascaded.length > 0 ? `（级联回退：${cascaded.join("、")}）` : ""
+      return (
+        `↩ 已回退到 ${def.labels[args.stage] ?? args.stage}（revision=${saved.stages[args.stage].revision}）${cascadeNote}`
+      )
     },
   })
 
