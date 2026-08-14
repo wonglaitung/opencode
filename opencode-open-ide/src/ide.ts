@@ -30,13 +30,35 @@ export interface ResolvedIde {
  */
 export type BinaryProbe = (candidate: string) => string | null
 
+/** win32 可执行扩展名优先级:cmd 解释器可执行的顺序。 */
+const WIN_EXE_SUFFIX = [".exe", ".cmd", ".bat"]
+
+/**
+ * 从 where 输出行挑选可被 cmd.exe 执行的路径(win32)。
+ * where code 会同时返回无后缀的 POSIX sh 脚本(`...\bin\code`,供 WSL/linux)
+ * 与真正的 Windows shim(`code.cmd`);前者 cmd.exe 无法执行,必须跳过。
+ * 按扩展名优先级 `.exe` → `.cmd` → `.bat` 挑选;全部无后缀时兜底第一行(不退化)。
+ */
+export function pickWindowsExecutable(lines: string[]): string | null {
+  for (const suffix of WIN_EXE_SUFFIX) {
+    const hit = lines.find((l) => l.toLowerCase().endsWith(suffix))
+    if (hit) return hit
+  }
+  return lines[0] ?? null
+}
+
 /** 在 PATH 中查找可执行文件;未找到返回 null。win32 用 where,其余用 which。 */
 function findInPath(name: string): string | null {
   const cmd = process.platform === "win32" ? "where" : "which"
   const res = spawnSync(cmd, [name], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })
   if (res.status !== 0) return null
-  const first = (res.stdout ?? "").split(/\r?\n/)[0]?.trim()
-  return first && first !== "" ? first : null
+  const lines = (res.stdout ?? "")
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l !== "")
+  if (lines.length === 0) return null
+  // win32:where 返回多行,须跳过无后缀的 POSIX sh 脚本,挑 cmd 可执行的 shim
+  return process.platform === "win32" ? pickWindowsExecutable(lines) : lines[0]!
 }
 
 /** 展开 `~` 前缀(仅简单替换 HOME,不含 shell 语义)。 */

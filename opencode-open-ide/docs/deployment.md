@@ -98,6 +98,7 @@ bun run typecheck
 | 打开了但没定位到行 | 文件是相对路径且不存在于项目目录；确认 file 参数路径正确 |
 | 指定 `ide` 报 id 不存在 | 该 id 不在 config.json 的 `order` 中；先加进 order 或用预设 id（vscode/idea） |
 | win32 打开失败 | `code`/`idea` 是 `.cmd` shim，插件已用 `shell: true`；确认 PATH 含其安装 bin 目录 |
+| win32 打开 IDE 无反应（工具返回成功但 IDE 没起来） | `where code` 会同时返回无后缀的 POSIX sh 脚本（`...\bin\code`，供 WSL/linux）与真正的 Windows shim（`code.cmd`）；旧版插件取第一行会选到 sh 脚本，cmd.exe 无法执行而静默失败。**已修复**：win32 二进制定位优先 `.exe`/`.cmd`/`.bat`，跳过无后缀 sh 脚本（`pickWindowsExecutable`）。升级插件后复测即可 |
 | Windows 打包/移动目录后插件加载失败（`Cannot find package 'zod'` 等） | bun 默认 `isolated` 模式在 Windows 上使用硬链接引用全局缓存，打包/移动后硬链接断裂。**修复**：确认根目录 `.npmrc` 含 `node-linker=hoisted`，删除旧依赖重装 `rm -rf node_modules && bun install` 后重新打包。**预防**：用 `bun run pack:bundle` 打包（脚本自动完成清理→重装→打包） |
 
 ## 7 卸载
