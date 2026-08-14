@@ -8,7 +8,7 @@ OpenCode 打开 IDE 插件：用自然语言让 Agent 拉起本机 **VS Code / I
 
 | 工具 | 说明 |
 |---|---|
-| `open_ide` | 打开 IDE（默认按 config.json 顺序探测 VS Code → IDEA）；指定 `file` 时自动锁定该文件，可选 `line`/`column` 精确定位 |
+| `open_ide` | 打开 IDE（默认按 config.json 顺序探测 VS Code → IDEA）；指定 `file` 时自动锁定该文件，可选 `line`/`column` 精确定位。**不指定 file 只开目录、不锁定** |
 | `lock_file` | 人工文件锁：开发者声明某文件由自己接管，AI 不得修改 |
 | `unlock_file` | 解锁（须开发者明确确认 `developer_confirmed=true` 才生效） |
 | `list_locked_files` | 查看当前会话锁定清单 |
