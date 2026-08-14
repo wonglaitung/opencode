@@ -208,9 +208,9 @@ export const SDLC: WorkflowDefinition = {
     // ---- review（理解保障，核心）----
     { id: "sdlc-r7", stage: "review", text: "review 是唯一不可由 AI 自行推进的阶段（必须经 review_submit），目标是确保开发者真正理解代码。" },
     { id: "sdlc-r8", stage: "review", text: "进入审查后，将每个 AI 生成的代码变更拆分为可理解片段，comprehension_add 逐段登记并输出解释（做了什么、为什么这样写、被放弃的替代方案、潜在风险）。" },
-    { id: "sdlc-r9", stage: "review", text: "开发者确认一个或多个片段时，立即为每个待确认片段各调用一次 comprehension_confirm(codeSegmentId=该片段 id)；单次调用只接受一个 codeSegmentId——一次确认多个片段须多次调用（逐段不遗漏），禁止在单次调用里塞多个 id。" },
+    { id: "sdlc-r9", stage: "review", text: "开发者确认某片段时，立即调用 comprehension_confirm(codeSegmentId=该片段 id)；单次只接受一个 codeSegmentId，逐段确认、禁止一次确认多个。" },
     { id: "sdlc-r10", stage: "review", text: "开发者追问时详细解释，comprehension_ask 将问答追加到该片段的 explanation。" },
-    { id: "sdlc-r11", stage: "review", text: "每个片段须达成终态（confirm 接受 / manual 开发者自处理），不允许 pending/rejected 悬空；拒绝的片段须调用 comprehension_rewrite 工具提交重写（不得仅以回复文本代替），或 comprehension_manual 定论，全部定论且前序阶段（requirements/design/implementation/testing）全部 approved 后才可 review_submit；清单四项须全为 true，否则回到编码/测试。返工多应结合拒绝意见 rewrite 改进，而非简单重试。" },
+    { id: "sdlc-r11", stage: "review", text: "每个片段须达成终态（confirm 接受 / manual 开发者自处理），不允许 pending/rejected 悬空；拒绝的片段先 comprehension_rewrite 重写或 manual 定论，全部定论且前序阶段（requirements/design/implementation/testing）全部 approved 后才可 review_submit；清单四项须全为 true，否则回到编码/测试。返工多应结合拒绝意见 rewrite 改进，而非简单重试。" },
   ],
 }
 
@@ -266,9 +266,9 @@ export const REQDOC: WorkflowDefinition = {
     // ---- review 业务确认（核心）----
     { id: "reqdoc-r15", stage: "review", text: "review 是唯一不可由 AI 自行推进的阶段（必须经 review_submit），确保业务真正理解并确认 PRD 要点。" },
     { id: "reqdoc-r16", stage: "review", text: "将 PRD 拆分为可确认要点（业务目标 / 核心字段 / 异常规则 / 合规要求），comprehension_add 逐段复述输出。" },
-    { id: "reqdoc-r17", stage: "review", text: "业务确认一个或多个要点时，立即为每个待确认要点各调用一次 comprehension_confirm(codeSegmentId=该要点 id)；单次调用只接受一个要点——一次确认多个要点须多次调用（逐段不遗漏），禁止在单次调用里塞多个 id。" },
+    { id: "reqdoc-r17", stage: "review", text: "业务确认某要点时，立即调用 comprehension_confirm(codeSegmentId=该要点 id)；单次只接受一个要点，逐段确认、禁止一次确认多个。" },
     { id: "reqdoc-r18", stage: "review", text: "业务追问时详细解释，comprehension_ask 将问答追加到该要点的 explanation。" },
-    { id: "reqdoc-r19", stage: "review", text: "每个要点须达成终态（confirm 接受 / manual 自处理），不允许 pending/rejected 悬空；拒绝的要点须调用 comprehension_rewrite 工具提交重写（不得仅以回复文本代替），或 comprehension_manual 定论，全部定论且前序阶段（goal/rules/edge/prd）全部 approved 后才可 review_submit；清单四项须全为 true，否则回到 edge/prd。通过率低说明要点含糊，应结合拒绝意见重写，而非简单重试。" },
+    { id: "reqdoc-r19", stage: "review", text: "每个要点须达成终态（confirm 接受 / manual 自处理），不允许 pending/rejected 悬空；拒绝的要点先 rewrite 重写或 manual 定论，全部定论且前序阶段（goal/rules/edge/prd）全部 approved 后才可 review_submit；清单四项须全为 true，否则回到 edge/prd。通过率低说明要点含糊，应结合拒绝意见重写，而非简单重试。" },
   ],
 }
 
