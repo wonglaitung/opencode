@@ -71,9 +71,10 @@ cp bun.lock "$bundle_dir/"
 cp .npmrc "$bundle_dir/"
 cp tsconfig.json "$bundle_dir/"
 cp config.json "$bundle_dir/"
-cp -r src "$bundle_dir/"
-cp -r test "$bundle_dir/"
-cp -r docs "$bundle_dir/"
+# 源码目录用 -rL 解引用符号链接:避免包内软链解压后断链(与 session-mgmt 打包一致)。
+cp -rL src "$bundle_dir/"
+cp -rL test "$bundle_dir/"
+cp -rL docs "$bundle_dir/"
 cp README.md "$bundle_dir/"
 cp AGENTS.md "$bundle_dir/"
 

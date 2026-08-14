@@ -94,7 +94,9 @@ mkdir -p "$bundle_dir"
 cp package.json "$bundle_dir/"
 cp bun.lock "$bundle_dir/"
 cp .npmrc "$bundle_dir/"
-cp -r packages "$bundle_dir/"
+# -rL 解引用符号链接:包内若出现软链(packages 下有人 ln -s 共享文件),以真实文件进包,
+# 避免解压后链接目标缺失断链(与下方 workspace 包处理一致)。
+cp -rL packages "$bundle_dir/"
 
 # 让 bundle 根 package.json 兼作插件入口（与 edge-debug 一致，opencode 可直接指 bundle 根）。
 # 只改 bundle 里的副本，源码根 package.json 不动。
