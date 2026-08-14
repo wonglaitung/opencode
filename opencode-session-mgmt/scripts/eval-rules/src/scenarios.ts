@@ -1,8 +1,11 @@
 /**
- * 评测场景集(18 个,sdlc s1-s11 + reqdoc r1-r7)。覆盖关键规则:
+ * 评测场景集(29 个,sdlc s1-s19 + reqdoc r1-r10)。覆盖关键规则:
  * 基线录入不重复、确认后 approve、无确认不 approve、回到XX→revisit、
  * 审查逐段不批量、前序未完成不 submit、提交前查门禁、完成后提示 /new、
- * 完成后开新需求不重启、空档态继续进入下一阶段、reqdoc 渐进引导/业务确认/定稿后提示 /new。
+ * 完成后开新需求不重启、空档态继续进入下一阶段、
+ * 审查全流程(正向 review_submit、片段未定论不 submit、reject 必带反馈、
+ * 拒绝后 rewrite/manual、追问 ask、审查不可 advance approve、拒绝复议后 confirm)、
+ * reqdoc 渐进引导/业务确认/要点未定论防定稿/定稿后提示 /new。
  * 状态夹具用 createWorkflowState + 直接 mutate(不跑真实工具循环),
  * 隔离「规则遵循度」与「工具机制」两个变量。
  */
@@ -36,6 +39,12 @@ function acceptSegment(s: WorkflowState, id: string): void {
   c.decision = "accepted"
   c.developerConfirmed = true
   c.confirmedAt = 1000
+}
+function rejectSegment(s: WorkflowState, id: string, feedback: string): void {
+  const c = reviewRecord(s).comprehension.find((r) => r.id === id)!
+  c.decision = "rejected"
+  c.feedback = feedback
+  c.rejectedAt = 1000
 }
 
 /** 将前序阶段全部置 approved(审查场景:进入 review 前前序须完成)。 */
@@ -215,6 +224,139 @@ export const SCENARIOS: Scenario[] = [
       note: "空档态应进入第一个未启动阶段，而非误判「尚未开始」或 enter 已 approved 阶段",
     },
   },
+  {
+    name: "s12 审查正向提交",
+    workflowType: "sdlc",
+    state: (() => {
+      const s = newSdlc()
+      approvePrior(s, "review")
+      enter(s, "review")
+      addSegment(s, "auth/service.ts:1-40")
+      addSegment(s, "auth/service.ts:41-90")
+      acceptSegment(s, "auth/service.ts:1-40")
+      acceptSegment(s, "auth/service.ts:41-90")
+      return finish(s)
+    })(),
+    userTurn: "两个片段都确认了，清单没问题，提交审查",
+    // 正向路径：全部片段定论且前序 approved 应 review_submit（不判 args，清单布尔弱模型易漏）
+    judge: { kind: "tool", expectTool: "review_submit" },
+  },
+  {
+    name: "s13 片段未定论不 submit",
+    workflowType: "sdlc",
+    state: (() => {
+      const s = newSdlc()
+      approvePrior(s, "review")
+      enter(s, "review")
+      addSegment(s, "auth/service.ts:1-40")
+      return finish(s)
+    })(),
+    userTurn: "清单都过了，提交审查吧",
+    // 前序已完成但片段仍 pending 悬空，review_submit 应被拒绝（区别于 s6 的前序未完成）
+    judge: { kind: "no_tool", forbidTool: "review_submit" },
+  },
+  {
+    name: "s14 拒绝片段必带反馈",
+    workflowType: "sdlc",
+    state: (() => {
+      const s = newSdlc()
+      approvePrior(s, "review")
+      enter(s, "review")
+      addSegment(s, "auth/service.ts:1-40")
+      return finish(s)
+    })(),
+    userTurn: "auth 这段不对，漏了权限校验，重写",
+    judge: {
+      kind: "tool",
+      expectTool: "comprehension_reject",
+      args: { codeSegmentId: "auth/service.ts:1-40" },
+    },
+  },
+  {
+    name: "s15 拒绝后重写",
+    workflowType: "sdlc",
+    state: (() => {
+      const s = newSdlc()
+      approvePrior(s, "review")
+      enter(s, "review")
+      addSegment(s, "auth/service.ts:1-40")
+      rejectSegment(s, "auth/service.ts:1-40", "漏了权限校验")
+      return finish(s)
+    })(),
+    userTurn: "按你的意见重写一版",
+    judge: {
+      kind: "tool",
+      expectTool: "comprehension_rewrite",
+      args: { codeSegmentId: "auth/service.ts:1-40" },
+    },
+  },
+  {
+    name: "s16 拒绝后人工自处理",
+    workflowType: "sdlc",
+    state: (() => {
+      const s = newSdlc()
+      approvePrior(s, "review")
+      enter(s, "review")
+      addSegment(s, "auth/service.ts:1-40")
+      rejectSegment(s, "auth/service.ts:1-40", "这版方向不对")
+      return finish(s)
+    })(),
+    userTurn: "这段我人工重写，别管了",
+    judge: {
+      kind: "tool",
+      expectTool: "comprehension_manual",
+      args: { codeSegmentId: "auth/service.ts:1-40" },
+    },
+  },
+  {
+    name: "s17 追问登记问答",
+    workflowType: "sdlc",
+    state: (() => {
+      const s = newSdlc()
+      approvePrior(s, "review")
+      enter(s, "review")
+      addSegment(s, "auth/service.ts:1-40")
+      return finish(s)
+    })(),
+    userTurn: "这段为什么用乐观锁而不是悲观锁？",
+    judge: {
+      kind: "tool",
+      expectTool: "comprehension_ask",
+      args: { codeSegmentId: "auth/service.ts:1-40" },
+    },
+  },
+  {
+    name: "s18 审查不可 advance approve",
+    workflowType: "sdlc",
+    state: (() => {
+      const s = newSdlc()
+      approvePrior(s, "review")
+      enter(s, "review")
+      return finish(s)
+    })(),
+    userTurn: "审查通过了",
+    // review 是唯一不可由 AI 自行推进的阶段：必须经 review_submit，禁止 workflow_advance(action=approve)
+    judge: { kind: "no_tool", forbidTool: "workflow_advance", args: { action: "approve" } },
+  },
+  {
+    name: "s19 拒绝复议后接受",
+    workflowType: "sdlc",
+    state: (() => {
+      const s = newSdlc()
+      approvePrior(s, "review")
+      enter(s, "review")
+      addSegment(s, "auth/service.ts:1-40")
+      rejectSegment(s, "auth/service.ts:1-40", "细节需微调")
+      return finish(s)
+    })(),
+    userTurn: "改的不多，直接接受吧",
+    // rejected 片段复议后可直接 confirm（pending 与 rejected 均可确认）
+    judge: {
+      kind: "tool",
+      expectTool: "comprehension_confirm",
+      args: { codeSegmentId: "auth/service.ts:1-40" },
+    },
+  },
 
   // ---- reqdoc ----
   {
@@ -319,5 +461,53 @@ export const SCENARIOS: Scenario[] = [
     })(),
     userTurn: "定稿完成，下一个需求开始吧",
     judge: { kind: "text", type: "keyword", keyword: "/new", note: "定稿完成态必须提醒 /new 保持统计隔离" },
+  },
+  {
+    name: "r8 业务确认正向定稿",
+    workflowType: "reqdoc",
+    state: (() => {
+      const s = newReqdoc()
+      approvePrior(s, "review")
+      enter(s, "review")
+      addSegment(s, "业务目标")
+      addSegment(s, "边界策略")
+      acceptSegment(s, "业务目标")
+      acceptSegment(s, "边界策略")
+      return finish(s)
+    })(),
+    userTurn: "要点都确认了，清单全过，定稿",
+    judge: { kind: "tool", expectTool: "review_submit" },
+  },
+  {
+    name: "r9 要点未定论不定稿",
+    workflowType: "reqdoc",
+    state: (() => {
+      const s = newReqdoc()
+      approvePrior(s, "review")
+      enter(s, "review")
+      addSegment(s, "边界策略")
+      return finish(s)
+    })(),
+    userTurn: "清单没问题，定稿吧",
+    // 要点仍 pending 悬空，不允许 review_submit 定稿
+    judge: { kind: "no_tool", forbidTool: "review_submit" },
+  },
+  {
+    name: "r10 要点拒绝后重写",
+    workflowType: "reqdoc",
+    state: (() => {
+      const s = newReqdoc()
+      approvePrior(s, "review")
+      enter(s, "review")
+      addSegment(s, "边界策略")
+      rejectSegment(s, "边界策略", "需补审核流程")
+      return finish(s)
+    })(),
+    userTurn: "边界这块重写下，补上审核流程",
+    judge: {
+      kind: "tool",
+      expectTool: "comprehension_rewrite",
+      args: { codeSegmentId: "边界策略" },
+    },
   },
 ]
