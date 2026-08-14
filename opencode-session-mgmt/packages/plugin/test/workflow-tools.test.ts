@@ -73,3 +73,32 @@ describe("workflow_baseline（基线预估工时，6.3）", () => {
     store.close()
   })
 })
+
+describe("workflow_revisit 级联回退", () => {
+  test("回退早阶段返回信息含级联回退列表", async () => {
+    const { store, tools } = setup()
+    // 推进 requirements/design/implementation 至 approved
+    for (const stage of ["requirements", "design", "implementation"] as const) {
+      await tools.workflow_advance!.execute({ stage, action: "enter", developer_confirmed: false } as never, ctx)
+      await tools.workflow_advance!.execute({ stage, action: "approve", developer_confirmed: true } as never, ctx)
+    }
+    const out = await tools.workflow_revisit!.execute({ stage: "requirements", note: "需求改动" } as never, ctx)
+    expect(String(out)).toContain("已回退到 需求分析")
+    expect(String(out)).toContain("级联回退")
+    expect(String(out)).toContain("设计")
+    expect(String(out)).toContain("编码")
+    const wf = store.get("s1")!.workflow!
+    expect(wf.stages.design.status).toBe("in_progress")
+    expect(wf.stages.implementation.status).toBe("in_progress")
+    store.close()
+  })
+
+  test("回退末段阶段不出现级联提示", async () => {
+    const { store, tools } = setup()
+    await tools.workflow_advance!.execute({ stage: "requirements", action: "enter", developer_confirmed: false } as never, ctx)
+    await tools.workflow_advance!.execute({ stage: "requirements", action: "approve", developer_confirmed: true } as never, ctx)
+    const out = await tools.workflow_revisit!.execute({ stage: "requirements", note: "改动" } as never, ctx)
+    expect(String(out)).not.toContain("级联回退")
+    store.close()
+  })
+})

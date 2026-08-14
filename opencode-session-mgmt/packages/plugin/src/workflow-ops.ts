@@ -25,7 +25,8 @@ export function recomputeCommit(workflow: WorkflowState): WorkflowState {
  * in_progress→in_progress 的 enter 边），approved 只能经 revisit 回退。
  * - enter:   not_started → in_progress；已 approved 抛错（须 revisit）；已 in_progress 幂等 no-op
  * - approve: in_progress → approved（未 enter 不可 approve）
- * - revisit: → in_progress，revision++（3.3）
+ * - revisit: → in_progress，revision++；并**级联回退**该阶段之后所有已 approved 的阶段
+ *            （下游阶段建立在本阶段之上，本阶段改动后其结论失效，须重新走一遍；3.3 扩展）
  */
 export function applyTransition(
   workflow: WorkflowState,
@@ -57,10 +58,23 @@ export function applyTransition(
       }
       record.status = "approved"
       break
-    case "revisit":
+    case "revisit": {
       record.status = "in_progress"
       record.revision += 1
+      // 级联回退：本阶段之后所有已 approved 的下游阶段 → in_progress，revision++。
+      // 下游阶段依据本阶段结论构建，本阶段返工后其 approved 状态不再成立，须重新确认。
+      const def = getDefinition(workflow.type)
+      const idx = def.stages.indexOf(stage)
+      for (let i = idx + 1; i < def.stages.length; i++) {
+        const downstream = workflow.stages[def.stages[i]!]
+        if (downstream.status === "approved") {
+          downstream.status = "in_progress"
+          downstream.revision += 1
+          downstream.transitions.push({ action: "revisit", at, note })
+        }
+      }
       break
+    }
   }
   record.transitions.push(note ? { action, at, note } : { action, at })
   return recomputeCommit(workflow)
