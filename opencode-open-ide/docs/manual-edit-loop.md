@@ -39,6 +39,7 @@ sequenceDiagram
 
     Note over U,F: ① 发起手工修改
     U->>A: 这段代码方向不对,我自己改,打开 IDE
+    Note over A: AI 从上下文确定文件(开发者提及/最近编辑);<br/>不明确时先询问「要改哪个文件」
     A->>O: open_ide(file=src/A.java) → 自动 lock
     O-->>U: 已打开,该文件已锁定;改完请说「改完了」
     Note over O,S: ② 锁定期间(回合制:AI 此时已停,等开发者下一条消息)
