@@ -54,8 +54,8 @@ flowchart LR
 
 idea 候选覆盖三类安装形态（候选含 `*` 时按 glob 展开取首个命中）：
 - **PATH 名**：`idea` / `idea.sh`（darwin、linux）、`idea64.exe` / `idea.cmd`（win32）；
-- **常见绝对路径**：linux `/opt/idea/bin/idea.sh`、darwin `/Applications/IntelliJ IDEA.app/Contents/MacOS/idea`、win32 `Program Files\JetBrains\IntelliJ IDEA*\bin\idea64.exe` 等；
-- **版本化 glob**：`/opt/idea-*/bin/idea.sh`、`~/.local/share/JetBrains/Toolbox/apps/IDEA-U/ch-0/*/bin/idea.sh`、win32 `Users\*\AppData\Local\JetBrains\Toolbox\apps\IDEA-U\ch-0\*\bin\idea64.exe` 等。
+- **常见绝对路径**：linux `/opt/idea/bin/idea.sh`、darwin `/Applications/IntelliJ IDEA.app/Contents/MacOS/idea`、win32 `C:/Program Files/JetBrains/IntelliJ IDEA*/bin/idea64.exe` 等；
+- **版本化 glob**：`/opt/idea-*/bin/idea.sh`、`~/.local/share/JetBrains/Toolbox/apps/IDEA-U/ch-0/*/bin/idea.sh`、win32 `C:/Users/*/AppData/Local/JetBrains/Toolbox/apps/IDEA-U/ch-0/*/bin/idea64.exe` 等。
 
 只内置最小集（vscode + idea）；其余 IDE 经 `tools` 自行新增，避免 registry 膨胀。
 

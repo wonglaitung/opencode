@@ -5,7 +5,7 @@
 - 安装 opencode（TUI / 桌面版 / IDE 扩展均可——插件运行在 daemon 进程内，与界面无关）。
 - 安装至少一个 IDE：
   - **VS Code**：安装后执行「Shell Command: Install 'code' command in PATH」（macOS 需手动装；Windows/Linux 一般自动入 PATH）。
-  - **IntelliJ IDEA**：插件内置常见安装路径与版本化 glob 探测——linux `/opt/idea*/bin/idea.sh`、macOS `/Applications/IntelliJ IDEA.app`、Windows `Program Files\JetBrains\IntelliJ IDEA*\bin\idea64.exe` 及 Toolbox 目录，多数安装可**开箱即用**，无需配 PATH。特殊安装位置才需在 `config.json` 的 `tools` 里写绝对路径。
+  - **IntelliJ IDEA**：插件内置常见安装路径与版本化 glob 探测——linux `/opt/idea*/bin/idea.sh`、macOS `/Applications/IntelliJ IDEA.app`、Windows `C:/Program Files/JetBrains/IntelliJ IDEA*/bin/idea64.exe` 及 Toolbox 目录，多数安装可**开箱即用**，无需配 PATH。特殊安装位置才需在 `config.json` 的 `tools` 里写绝对路径。
 
 ## 2 安装插件
 
