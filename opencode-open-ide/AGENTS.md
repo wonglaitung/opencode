@@ -17,7 +17,7 @@ OpenCode 打开 IDE 插件：自然语言拉起 VS Code / IntelliJ IDEA，可打
 - **kind 决定定位语法**：`vscode` 用 `-g <path>:<line>[:<col>]`；`idea` 用 `--line <n> [--column <n>] <path>`（官方 CLI 文档已核实）。
 - **探测失败即报错**：全部候选不可用抛中文错误（含安装指引），不静默降级。
 - **win32 二进制定位跳过无后缀 sh 脚本**：`where` 返回多行，须优先挑 `.exe`/`.cmd`/`.bat`（`pickWindowsExecutable`），无后缀行是供 WSL/linux 的 POSIX sh 脚本、cmd.exe 无法执行（曾致 VS Code 静默启动失败）。
-- **启动即忘**：`spawn` 带 `detached + stdio:ignore + unref()`，daemon 不挂起；**dispose 不杀 IDE**（IDE 由用户自主关闭，区别于 Edge 调试实例）。
+- **启动即忘**：`spawn` 带 `detached + stdio:ignore + unref()`，daemon 不挂起；**dispose 不杀 IDE**（IDE 由用户自主关闭，区别于 Edge 调试实例）。win32 `shell:true` 下 **binary 与参数都须经 `buildSpawnCommand` 加引号**——只引参数不引 binary，含空格的 binary 路径（如 `...\Microsoft VS Code\bin\code.cmd`）被 cmd.exe 拆词致静默失败（曾致 VS Code 不启动）。
 - **兜底**：config.json 缺失/字段缺失 → 内置预设；无效 JSON 记 warning 回退默认，不崩溃。
 - **人工文件锁（决策 D4）**：`open_ide(file)` 自动锁定该文件（或 `lock_file` 显式锁），锁定期间 `tool.execute.before` 硬拦截 AI 对其 `write/edit/apply_patch`（从入参提取目标文件：write/edit 取 filePath、apply_patch 扫 File 头），`system.transform` 注入锁定提示；解锁须开发者明确确认后 `unlock_file(developer_confirmed=true)`，无自动解锁/无超时。锁内存级、不跨插件共享（tool.execute.before 全局广播特性使本插件即可拦全部编辑工具）；锁定期间 AI 可继续其它任务（按文件锁，非会话暂停）。与 session-mgmt 协作契约见 docs/manual-edit-loop.md。
 

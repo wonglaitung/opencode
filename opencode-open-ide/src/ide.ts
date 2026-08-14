@@ -148,14 +148,24 @@ export function buildOpenArgs(kind: IdeKind, target: OpenTarget): string[] {
 }
 
 /**
+ * win32 shell 模式的启动命令构造(纯函数,便于单测)。
+ * shell:true 时 node 经 cmd.exe 执行整条命令,**binary 与参数含空格都必须加引号**;
+ * 漏掉 binary(如 `...\Microsoft VS Code\bin\code.cmd`)会被拆词
+ * ('Microsoft' is not recognized)致静默失败。
+ */
+export function buildSpawnCommand(binary: string, args: string[]): string {
+  return [quoteIfSpaced(binary), ...args.map(quoteIfSpaced)].join(" ")
+}
+
+/**
  * 启动 IDE(design 3.1)。
  * posix:detached + stdio ignore + unref,自成进程组、daemon 不挂起;
- * win32:code/idea 经 .cmd shim,须 shell:true 才能解析,含空格参数手动加引号。
+ * win32:code/idea 经 .cmd shim,须 shell:true 才能解析,binary 与参数经 buildSpawnCommand 加引号。
  */
 export function launchIde(binary: string, args: string[], directory: string): ChildProcess {
   const isWin = process.platform === "win32"
-  const finalArgs = isWin ? args.map(quoteIfSpaced) : args
-  const child = spawn(binary, finalArgs, {
+  const command = isWin ? buildSpawnCommand(binary, args) : binary
+  const child = spawn(command, isWin ? [] : args, {
     cwd: directory,
     detached: true,
     stdio: "ignore",
@@ -165,7 +175,7 @@ export function launchIde(binary: string, args: string[], directory: string): Ch
   return child
 }
 
-/** win32 shell 模式下为含空格的参数加双引号(避免路径空格被 shell 拆词)。 */
+/** 为含空格的路径加双引号(避免被 shell 拆词)。 */
 function quoteIfSpaced(arg: string): string {
   return arg.includes(" ") ? `"${arg}"` : arg
 }

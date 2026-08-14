@@ -73,7 +73,7 @@ win32 的 `where` 会返回**多行**（如 VS Code 同时有无后缀的 POSIX 
 ## 3 进程与平台
 
 - posix：`spawn(binary, args, { cwd: directory, detached: true, stdio: "ignore" })` + `unref()`——自成进程组、daemon 不挂起。
-- win32：`code`/`idea` 经 `.cmd` shim，须 `shell: true` 才能解析；含空格的参数手动加双引号，避免被 shell 拆词。
+- win32：`code`/`idea` 经 `.cmd` shim，须 `shell: true` 才能解析；**binary 与参数都须经 `buildSpawnCommand` 加引号**——shell:true 下 node 经 cmd.exe 执行整条命令，漏引 binary 时含空格的路径（如 `...\Microsoft VS Code\bin\code.cmd`）被拆词（'Microsoft' is not recognized）致静默失败。
 - **dispose 不杀 IDE**：IDE 由用户自主关闭，不同于 Edge 调试实例（对比 `opencode-edge-debug` 的 `killProcessTree` 兜底）。
 
 ## 4 工具定义
@@ -169,3 +169,4 @@ sequenceDiagram
 - **D3 detached + 不杀进程**：IDE 是长驻用户工具，与浏览器调试实例生命周期不同；插件只负责拉起，关闭完全交给用户。
 - **D4 人工文件锁（内存级、不跨插件共享、仅显式解锁）**：锁放本插件闭包内（tool.execute.before 全局广播特性使其可拦截所有编辑工具，session-mgmt 无需读锁，避免跨插件共享的 globalThis/契约包/磁盘三种代价）；内存级与 stuck 短记忆同取舍；解锁须开发者明确确认后 `unlock_file`（无自动检测、无超时——文件系统只能感知「变了」无法判定「改完」）；统计口径不特殊处理。
 - **D5 win32 二进制定位跳过无后缀 sh 脚本**：`where code` 返回多行，第一行是无后缀的 POSIX sh 脚本（供 WSL/linux），cmd.exe 无法执行、`shell:true` spawn 时静默失败（stdio ignore + unref 吞错误）——曾致 VS Code 不启动。按扩展名优先级 `.exe`/`.cmd`/`.bat` 挑选（`pickWindowsExecutable`），全部无后缀才兜底第一行（不破坏仅有无后缀可执行程序的场景）。
+- **D6 win32 spawn 时 binary 与参数都须加引号**：D5 修完定位后仍打不开 IDE——`shell:true` 下 node 经 cmd.exe 执行整条命令，先前只对 args 加引号、漏了 binary；含空格路径（`...\Microsoft VS Code\bin\code.cmd`）被拆词（'Microsoft' is not recognized）静默失败。改为 `buildSpawnCommand` 把 binary 与 args 统一加引号（纯函数便于单测）。教训：**凡是 shell 拼接出的每条目都要转义，不要只处理参数、漏掉命令本身**。

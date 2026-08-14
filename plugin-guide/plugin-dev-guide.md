@@ -1,6 +1,6 @@
 # OpenCode 插件开发规范
 
-版本: 1.5.0
+版本: 1.6.0
 最后更新: 2026-08-14
 来源: opencode-session-mgmt 实践（参见 `opencode-session-mgmt/packages/plugin` 与 `opencode-session-mgmt/packages/shared`）
 
@@ -169,6 +169,7 @@ export default MyPlugin
 - 删除与清理操作保守化：在不能确保完整清单时不执行删除，避免因短暂不可达而误删。
 - 外部进程调用静默化：若需 spawn 外部命令（例如定位浏览器、taskkill 等），一律使用 `spawn`/`spawnSync` 并把 stdio 设为 `"ignore"` 或显式捕获 stderr；所有外部调用应显式捕获并记录可能的错误，但不得把 stderr 泄露到上游或上传日志中。
 - **跨平台二进制定位，win32 的 `where` 会返回多行**：同名命令常同时有无后缀的 POSIX sh 脚本（如 VS Code 的 `...\bin\code`，供 WSL/linux）与真正的 Windows shim（`code.cmd`/`code.exe`）。`where` 返回的**第一行可能是 sh 脚本**——cmd.exe 无法执行，`spawn` 加 `shell: true` 时静默失败（stdio ignore + unref 吞错误，表现为「工具返回成功但程序没起来」）。**必须跳过无后缀行**：按扩展名优先级 `.exe` → `.cmd` → `.bat` 挑选，全部无后缀才兜底第一行（不破坏仅有无后缀可执行程序的场景）。抽取为纯函数便于单测（先例 open-ide 的 `pickWindowsExecutable`，`src/ide.ts`）。
+- **win32 用 `shell: true` 时，binary 与参数都须加引号**：`spawn(binary, args, { shell: true })` 下 node 经 cmd.exe 执行**整条命令**，若只转义 args、漏掉 binary，含空格的 binary 路径（如 `...\Microsoft VS Code\bin\code.cmd`）会被拆词（'Microsoft' is not recognized）而静默失败。**凡是 shell 拼接出的每条目都要转义，包括命令本身**；把「binary + args 统一加引号」抽成纯函数（先例 open-ide 的 `buildSpawnCommand`）。
 
 ---
 
