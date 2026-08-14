@@ -1,11 +1,11 @@
 /**
- * 评测场景集(31 个,sdlc s1-s21 + reqdoc r1-r10)。覆盖关键规则:
+ * 评测场景集(32 个,sdlc s1-s22 + reqdoc r1-r10)。覆盖关键规则:
  * 基线录入不重复、确认后 approve、无确认不 approve、回到XX→revisit、
  * 审查逐段不批量、前序未完成不 submit、提交前查门禁、完成后提示 /new、
  * 完成后开新需求不重启、空档态继续进入下一阶段、
  * 审查全流程(正向 review_submit、片段未定论不 submit、reject 必带反馈、
  * 拒绝后 rewrite/manual、追问 ask、审查不可 advance approve、拒绝复议后 confirm)、
- * 手工修改走 open_ide 锁定、改完经确认解锁、
+ * 手工修改走 open_ide 锁定、改完经确认解锁、完结后提示解锁、
  * reqdoc 渐进引导/业务确认/要点未定论防定稿/定稿后提示 /new。
  * 状态夹具用 createWorkflowState + 直接 mutate(不跑真实工具循环),
  * 隔离「规则遵循度」与「工具机制」两个变量。
@@ -392,6 +392,23 @@ export const SCENARIOS: Scenario[] = [
       kind: "tool",
       expectTool: "unlock_file",
       args: { file: "auth/service.ts", developer_confirmed: true },
+    },
+  },
+  {
+    name: "s22 完结后提示解锁",
+    workflowType: "sdlc",
+    state: (() => {
+      const s = newSdlc()
+      approvePrior(s, "review")
+      return finish(s)
+    })(),
+    userTurn: "审查通过，工作流结束了",
+    // 合并 open-ide 后完成态注入解锁提示：全阶段 approved 且有文件被锁定 → 回复应含解锁引导。
+    // 提示由插件硬数据驱动（完成块注入 + review_submit 返回），此处校验弱模型对注入文本的响应。
+    judge: {
+      kind: "text",
+      type: "keyword",
+      keyword: "unlock_file",
     },
   },
 

@@ -1,14 +1,16 @@
 /**
- * 插件入口（设计文档 2.4、8）。
+ * 插件入口（设计文档 2.4、8；open-ide 合并 4、5）。
  * 由 opencode config.plugin 加载，运行于 daemon 进程内。
- * 注册 5 类 hooks：
- *   - experimental.chat.system.transform  每轮注入规则 + WorkflowState（7.1）
- *   - tool                                工作流工具集（4.1）
- *   - tool.execute.before                 提交门禁硬拦截（7.3）
+ * 注册 5 类 hooks + open-ide 合并部分：
+ *   - experimental.chat.system.transform  每轮注入规则 + WorkflowState（7.1）‖ 锁定提示（open-ide 5.4）
+ *   - tool                                工作流工具集（4.1）+ open_ide 打开/人工文件锁（open-ide 4、5）
+ *   - tool.execute.before                 提交门禁硬拦截（7.3）‖ 人工文件锁拦截（open-ide 5.2，先行）
  *   - tool.execute.after                  迭代计数
  *   - chat.message                        会话首次活动打 account_id（3.1）+ 汇报触发
  * 启动后台任务（孤儿清理/标题回填/补推汇报）延后触发，见 startup.ts。
+ * 合并后 open-ide 源码在 src/open-ide/；锁持久化进 Store（file_lock 表，重启自动恢复）。
  */
+import { join } from "node:path"
 import type { Plugin, PluginInput } from "@opencode-ai/plugin"
 import { readIdentity, resolveWorkflowType } from "sm-shared"
 import { Store, isPlaceholderTitle } from "./db"
@@ -21,6 +23,12 @@ import { createIterationCounter } from "./tools/quality"
 import { createReviewTools } from "./tools/review"
 import { createWorkflowTools } from "./tools/workflow"
 import { makeSubagentChecker } from "./subagent"
+import { loadIdeConfig } from "./open-ide/config"
+import { createLockRegistry } from "./open-ide/lock"
+import { createLockGate } from "./open-ide/lock-gate"
+import { createLockHintTransform } from "./open-ide/lock-hint"
+import { createOpenIdeTool } from "./open-ide/open-ide-tool"
+import { createLockTools } from "./open-ide/tools/lock-tools"
 
 /** 经上游 SDK 汇总会话 cost/tokens（step-finish 分段求和；失败返回空值，3.1）。 */
 function createUsageProvider(client: PluginInput["client"]) {
@@ -80,6 +88,14 @@ const SessionMgmtPlugin: Plugin = async (input) => {
   // 子代理会话识别器（2.4 统计纯净度）：对子代理跳过建记录/打标/汇报/规则注入
   const isSubagent = makeSubagentChecker(input.client)
 
+  // ---- open-ide 合并部分：config.json（插件根，上溯一层）+ 人工文件锁（SQLite 持久化） ----
+  const entries = loadIdeConfig(join(import.meta.dir, ".."))
+  const registry = createLockRegistry(input.directory, store)
+  const lockGate = createLockGate(registry, input.directory)
+  const lockHint = createLockHintTransform(registry)
+  const systemTransform = createSystemTransform(store, isSubagent)
+  const commitGate = createCommitGate(store)
+
   // 启动后台任务延后执行（错开 TUI 首屏 / daemon 启动竞态，启动慢根因之一）：
   // 一次 session.list 完成 孤儿清理 + 标题回填（startup.ts），随后补推缓冲汇报。
   const startup = setTimeout(() => {
@@ -92,14 +108,24 @@ const SessionMgmtPlugin: Plugin = async (input) => {
   }, 5 * 60 * 1000)
 
   return {
-    "experimental.chat.system.transform": createSystemTransform(store, isSubagent),
+    "experimental.chat.system.transform": async (hookInput, output) => {
+      // 锁定提示对子代理照常生效（合并决策：保留 open-ide 全局拦截行为）
+      await lockHint(hookInput, output)
+      await systemTransform(hookInput, output)
+    },
 
     tool: {
       ...createWorkflowTools(store),
       ...createReviewTools(store),
+      open_ide: createOpenIdeTool(entries, registry),
+      ...createLockTools(registry),
     },
 
-    "tool.execute.before": createCommitGate(store),
+    // 人工文件锁拦截先行，提交门禁随后；任一 throw 即阻断本次工具调用。
+    "tool.execute.before": async (hookInput, output) => {
+      await lockGate(hookInput, output)
+      await commitGate(hookInput, output)
+    },
 
     "tool.execute.after": createIterationCounter(store, isSubagent),
 

@@ -1,11 +1,12 @@
 /**
- * 人工文件锁 registry(设计文档 5「人工文件锁」、决策记录 D4)。
- * 进程内、按会话的文件锁集合:开发者打开 IDE 手工修改某文件时锁定,
- * 期间 tool.execute.before 拒绝 AI 对该文件的 write/edit/apply_patch,防覆盖。
- * 内存级(daemon 重启即失,与 stuck 短记忆同取舍);dispose 时 clear。
- * 相对路径一律以项目目录为基准 resolve 成绝对路径后比较,保证相对/绝对匹配一致。
+ * 人工文件锁 registry（open-ide 合并，5）。
+ * 接口与 open-ide 原版一致（lock/unlock/isLocked/list/clear/clearAll），
+ * 后端从内存 Map 改为 SQLite（Store.file_lock 表，v4 迁移）：
+ * 锁按会话隔离、磁盘持久化，daemon 重启自动恢复（合并决策）。
+ * 相对路径一律以项目目录为基准 resolve 成绝对路径后比较，保证相对/绝对匹配一致。
  */
 import { resolve } from "node:path"
+import type { Store } from "../db"
 
 export interface LockRegistry {
   /** 锁定一个文件(幂等:重复锁无副作用)。 */
@@ -27,34 +28,27 @@ export interface LockRegistry {
  * directory 为项目目录:相对路径以它为基准归一化,与 gate 侧(同样以项目目录解析
  * 工具入参)口径一致,保证锁定/拦截两端的相对与绝对路径都能正确匹配。
  */
-export function createLockRegistry(directory: string): LockRegistry {
-  const locks = new Map<string, Set<string>>()
-
+export function createLockRegistry(directory: string, store: Store): LockRegistry {
   const norm = (file: string): string => resolve(directory, file)
 
   return {
     lock(sessionID, file) {
-      const set = locks.get(sessionID) ?? new Set<string>()
-      set.add(norm(file))
-      locks.set(sessionID, set)
+      store.lockFile(sessionID, norm(file))
     },
     unlock(sessionID, file) {
-      const set = locks.get(sessionID)
-      if (!set) return
-      set.delete(norm(file))
-      if (set.size === 0) locks.delete(sessionID)
+      store.unlockFile(sessionID, norm(file))
     },
     isLocked(sessionID, file) {
-      return locks.get(sessionID)?.has(norm(file)) ?? false
+      return store.isFileLocked(sessionID, norm(file))
     },
     list(sessionID) {
-      return [...(locks.get(sessionID) ?? [])]
+      return store.listLocks(sessionID)
     },
     clear(sessionID) {
-      locks.delete(sessionID)
+      store.clearLocks(sessionID)
     },
     clearAll() {
-      locks.clear()
+      store.clearAllLocks()
     },
   }
 }

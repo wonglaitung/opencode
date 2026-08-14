@@ -1,6 +1,6 @@
 /**
- * config.json 读取与合并(设计文档 2.2、决策记录 D1)。
- * 配置文件位于插件目录根(非项目目录),用户编辑它来定自己的次序与工具。
+ * config.json 读取与合并(设计文档 2.2、决策记录 D1；open-ide 合并)。
+ * 配置文件位于插件包根(本文件上溯一层,即 packages/plugin/config.json),用户编辑它来定自己的次序与工具。
  * 合并语义:order 逐项取 tools 覆盖后的 binary;config.json 缺失/字段缺失 → 内置预设;
  * 无效 JSON 记 warning 回退默认,不崩溃。插件加载时只读一次。
  */

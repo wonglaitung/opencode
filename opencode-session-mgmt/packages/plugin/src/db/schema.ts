@@ -54,6 +54,12 @@ export const MIGRATIONS: string[] = [
   CREATE INDEX IF NOT EXISTS idx_outbox_session ON outbox(session_id);`,
   // v3：workflow_session 增 title 列——会话标题（上游自动生成，插件经 SDK 同步，5.2 离线可读）
   `ALTER TABLE workflow_session ADD COLUMN title TEXT;`,
+  // v4：人工文件锁表（open-ide 合并，5）——按会话隔离、磁盘持久化（daemon 重启自动恢复）
+  `CREATE TABLE IF NOT EXISTS file_lock (
+    session_id TEXT NOT NULL,
+    file_path TEXT NOT NULL,
+    PRIMARY KEY (session_id, file_path)
+  );`,
 ]
 
 export const SCHEMA_VERSION = MIGRATIONS.length

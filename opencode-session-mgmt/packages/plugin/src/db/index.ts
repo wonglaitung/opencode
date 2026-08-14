@@ -220,6 +220,54 @@ export class Store {
     this.db.query("DELETE FROM outbox WHERE id = ?").run(id)
   }
 
+  // ---- 人工文件锁（open-ide 合并，5）----
+
+  /** 锁定一个文件（幂等：已锁则无副作用）。file 为归一化后的绝对路径。 */
+  lockFile(sessionID: string, file: string): void {
+    this.db
+      .query("INSERT OR IGNORE INTO file_lock (session_id, file_path) VALUES (?, ?)")
+      .run(sessionID, file)
+  }
+
+  /** 解锁一个文件（幂等：未锁则 no-op）。 */
+  unlockFile(sessionID: string, file: string): void {
+    this.db.query("DELETE FROM file_lock WHERE session_id = ? AND file_path = ?").run(sessionID, file)
+  }
+
+  /** 该文件是否被会话锁定。 */
+  isFileLocked(sessionID: string, file: string): boolean {
+    return (
+      this.db.query("SELECT 1 FROM file_lock WHERE session_id = ? AND file_path = ?").get(sessionID, file) !==
+      null
+    )
+  }
+
+  /** 当前会话锁定的文件列表（绝对路径）。 */
+  listLocks(sessionID: string): string[] {
+    const rows = this.db
+      .query("SELECT file_path FROM file_lock WHERE session_id = ? ORDER BY file_path")
+      .all(sessionID) as { file_path: string }[]
+    return rows.map((r) => r.file_path)
+  }
+
+  /** 清理某会话的全部锁。 */
+  clearLocks(sessionID: string): void {
+    this.db.query("DELETE FROM file_lock WHERE session_id = ?").run(sessionID)
+  }
+
+  /** 清空全部锁（dispose 时调用；清内存语义，磁盘记录由会话解锁逐条消除）。 */
+  clearAllLocks(): void {
+    this.db.query("DELETE FROM file_lock").run()
+  }
+
+  /** 列出当前持有锁的所有会话（供孤儿清理/加载修剪）。 */
+  listLockedSessions(): string[] {
+    const rows = this.db.query("SELECT DISTINCT session_id FROM file_lock").all() as {
+      session_id: string
+    }[]
+    return rows.map((r) => r.session_id)
+  }
+
   close(): void {
     this.db.close()
   }

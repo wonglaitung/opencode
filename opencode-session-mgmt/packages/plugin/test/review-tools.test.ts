@@ -303,6 +303,35 @@ describe("review_submit 门禁", () => {
     ).rejects.toThrow(/审查前须先完成/)
     store.close()
   })
+
+  test("sdlc 审查通过 + 有锁文件 → 返回含解锁提示；reqdoc 无", async () => {
+    const { store, tools } = setup()
+    store.lockFile("s1", "/home/dev/project/src/A.java")
+    const out = await tools.review_submit!.execute(
+      { businessIntent: true, logicExplainable: true, behaviorVerifiable: true } as never,
+      ctx,
+    )
+    expect(String(out)).toContain("人工锁定")
+    expect(String(out)).toContain("unlock_file")
+    expect(String(out)).toContain("/new")
+    store.close()
+  })
+
+  test("reqdoc 审查通过 + 有锁文件 → 返回不含解锁提示（hasCommitGate 护栏）", async () => {
+    const store = Store.memory(() => "reqdoc" as const)
+    const tools = createReviewTools(store)
+    store.mutateWorkflow("r1", (w) => {
+      for (const name of ["goal", "rules", "edge", "prd"]) w.stages[name].status = "approved"
+    })
+    store.lockFile("r1", "/home/dev/project/src/A.java")
+    const out = await tools.review_submit!.execute(
+      { completeness: true, clarity: true, edgeCoverage: true, resolution: true } as never,
+      { sessionID: "r1" } as never,
+    )
+    expect(String(out)).not.toContain("人工锁定")
+    expect(String(out)).toContain("/new")
+    store.close()
+  })
 })
 
 describe("reqdoc 工作流（业务确认 PRD 要点）", () => {

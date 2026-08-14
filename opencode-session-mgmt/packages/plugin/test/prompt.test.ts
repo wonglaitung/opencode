@@ -85,4 +85,28 @@ describe("buildSystemFragment", () => {
     const done = buildSystemFragment(completeSdlc(), { "src/a.ts": 3 })
     expect(done).not.toContain("重复编辑模式")
   })
+
+  test("SDLC 完成 + 有锁文件 → 注入解锁提示（列文件清单）", () => {
+    const text = buildSystemFragment(completeSdlc(), {}, ["/home/dev/project/src/A.java"])
+    expect(text).toContain("人工锁定")
+    expect(text).toContain("src/A.java")
+    expect(text).toContain("unlock_file")
+  })
+
+  test("SDLC 完成 + 无锁文件 → 不注入解锁提示", () => {
+    const text = buildSystemFragment(completeSdlc())
+    expect(text).not.toContain("人工锁定")
+  })
+
+  test("reqdoc 完成 + 有锁文件 → 不注入解锁提示（hasCommitGate 护栏）", () => {
+    const text = buildSystemFragment(completeReqdoc(), {}, ["/home/dev/project/src/A.java"])
+    expect(text).not.toContain("人工锁定")
+  })
+
+  test("SDLC 进行中（未完成）+ 有锁文件 → 不注入解锁提示", () => {
+    const s = createWorkflowState("sdlc")
+    applyTransition(s, "requirements", "enter", 1)
+    const text = buildSystemFragment(s, {}, ["/home/dev/project/src/A.java"])
+    expect(text).not.toContain("人工锁定")
+  })
 })
