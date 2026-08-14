@@ -245,9 +245,12 @@ describe("WorkflowDefinition 注册表（3.2）", () => {
     ])
     expect(REQDOC.rules.some((r) => r.stage === "goal" && r.text.includes("workflow_baseline"))).toBe(true)
     expect(REQDOC.rules.some((r) => r.stage === "review" && r.text.includes("comprehension_confirm"))).toBe(true)
-    // 需求资料目录契约（7.5）
-    expect(REQDOC.rules.some((r) => r.text.includes("01_业务背景与目标"))).toBe(true)
-    expect(REQDOC.rules.some((r) => r.text.includes("07_需求规格产出"))).toBe(true)
+    // 需求资料目录契约（7.5 重构：材料区 01~04 + AI 工作区 05/06）
+    expect(REQDOC.rules.some((r) => r.text.includes("01_背景与目标"))).toBe(true)
+    expect(REQDOC.rules.some((r) => r.text.includes("06_需求规格产出"))).toBe(true)
+    // 双通道：文档扫描工具 + 功能点拆解确认工具（重构核心）
+    expect(REQDOC.rules.some((r) => r.text.includes("reqdoc_scan"))).toBe(true)
+    expect(REQDOC.rules.some((r) => r.text.includes("reqdoc_confirm_features"))).toBe(true)
   })
 
   test("createWorkflowState(reqdoc) 含 reqdoc 阶段与清单", () => {

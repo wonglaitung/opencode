@@ -236,4 +236,49 @@ export const EVAL_TOOLS: OpenAITool[] = [
       },
     },
   },
+  {
+    // reqdoc 双通道：文档扫描工具（重构核心，7.5）。评测只判 tool_use 契约。
+    type: "function",
+    function: {
+      name: "reqdoc_scan",
+      description:
+        "reqdoc 需求资料扫描：列出指定需求资料目录下的文件，解析并提取文本内容供分析。" +
+        "单目录参数，按阶段分步调用：goal→01_背景与目标、rules→03_流程与数据、edge→02_制度与合规 与 04_角色与权限、prd→06_需求规格产出。" +
+        "支持 docx/pdf/xlsx/txt/md/json/csv 等文本类；图像与不支持格式会明确提示降级。",
+      parameters: {
+        type: "object",
+        properties: {
+          directory: str("需求资料目录名(01_背景与目标 / 02_制度与合规 / 03_流程与数据 / 04_角色与权限 / 06_需求规格产出)"),
+        },
+        required: ["directory"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "reqdoc_confirm_features",
+      description:
+        "reqdoc prd 阶段：功能点拆解确认。AI 已向业务展示拟定的功能点清单(编号/名称/优先级)，业务明确确认后调用本工具记录清单，并在 05_功能点 下为每个功能点建子目录作为渲染来源区。仅 reqdoc 工作流有效。",
+      parameters: {
+        type: "object",
+        properties: {
+          features: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                name: str("功能点名称(如：名单排查)"),
+                priority: { type: "string", enum: ["high", "medium", "low"], description: "优先级" },
+                note: str("备注(可选)"),
+              },
+              required: ["name", "priority"],
+            },
+            description: "业务已确认的功能点清单(至少一个)",
+          },
+        },
+        required: ["features"],
+      },
+    },
+  },
 ]

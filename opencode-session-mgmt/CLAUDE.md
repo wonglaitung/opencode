@@ -22,6 +22,7 @@ OpenCode 会话管理定制：标准化开发流程（五阶段门禁）、理�
 - 工作流推进是**完成门禁模型**（AI 主动 `workflow_advance`，AI 引导人决定），不是审批流；提交门禁经 `tool.execute.before` 拦截 `git commit` 实现；迭代上限 3 轮；`comprehension_confirm` 单次只认一段（防批量走过场）。
 - **手工修改走 open_ide 锁定（sdlc-r12，软提示 + 硬拦截）**：开发者要手工改代码时 AI 先调 `open_ide`（带 file 自动锁定，防 AI 覆盖手工改动）；锁定期间 AI 可继续其它任务但不得改被锁文件（`tool.execute.before` 服务端硬拦截）；解锁须开发者明确确认后 `unlock_file`，并重新读取最新内容。open-ide 已**物理合并**进本工程（`packages/plugin/src/open-ide/`，原 `opencode-open-ide` 独立工程已移除）：锁持久化进 SQLite `file_lock` 表（daemon 重启自动恢复），**SDLC 完结时完成态注入解锁提示**（仅 sdlc，经 `hasCommitGate` 门控，reqdoc 不提示）。
 - 规则**阶段化注入**：`WorkflowDefinition.rules` 为 `RuleItem[]`（含 `stage` 归属），每轮只注入 global + 当前阶段（`rulesForStage`/`currentInProgressStage`）；状态以一行阶段条展示（`buildStateBar`），替代冗长 JSON。无 in_progress 分三态（未启动/空档/完成），**完成态注入专用完成块**（提交查门禁→引导 /new 开新需求保持统计隔离→workflow_revisit 改本需求），不注入常规规则（避免「尚未开始」与「已全部完成」自相矛盾）。`applyTransition` 严格执行状态机：enter 已 approved 须走 revisit、enter 已 in_progress 幂等；**revisit 级联回退该阶段之后所有已 approved 的下游阶段**（同样 revision++，下游结论建立在被回退阶段之上，须重走）。规则遵循度评测基线在 `scripts/eval-rules/`（不随 `bun test` 跑，需真实模型端点，见设计文档第 13 章）。
+- **reqdoc 重构（双通道 + 功能点拆解，目标：辅助业务写需求）**：业务「口述 + 丢材料」，AI 代笔。目录契约改 01~06（01_背景与目标 / 02_制度与合规 / 03_流程与数据 / 04_角色与权限为业务投放材料区；05_功能点、06_需求规格产出为 AI 工作区）。**文档扫描经专用工具 `reqdoc_scan(directory)`**（单目录参数、按阶段分步调用，解析 docx/pdf/xlsx/txt/md/json/csv；qwen3.6 纯文本无多模态，图像显式降级提示文字描述）。**prd 前置功能点拆解**：综合材料 + 问答拆功能点清单 → 业务确认后 `reqdoc_confirm_features(features)` 记录并建 `05_功能点/N_名称/` 子目录（来源摘录）→ 按《业务需求说明书》模板渲染，逐字段标来源 `[文档]/[问答]/[缺省]` 绝不杜撰；项目元数据（项目信息表/变更过程）不主动问业务、渲染留空。sdlc 完全不动。
 
 ## 结构
 

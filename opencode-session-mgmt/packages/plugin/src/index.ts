@@ -22,6 +22,8 @@ import { STARTUP_DELAY_MS, deferredStartup } from "./startup"
 import { createIterationCounter } from "./tools/quality"
 import { createReviewTools } from "./tools/review"
 import { createWorkflowTools } from "./tools/workflow"
+import { createReqdocScanTool } from "./tools/reqdoc-scan"
+import { createReqdocFeatureTools } from "./tools/reqdoc-features"
 import { makeSubagentChecker } from "./subagent"
 import { loadIdeConfig } from "./open-ide/config"
 import { createLockRegistry } from "./open-ide/lock"
@@ -117,6 +119,8 @@ const SessionMgmtPlugin: Plugin = async (input) => {
     tool: {
       ...createWorkflowTools(store),
       ...createReviewTools(store),
+      ...createReqdocScanTool(),
+      ...createReqdocFeatureTools(store),
       open_ide: createOpenIdeTool(entries, registry),
       ...createLockTools(registry),
     },

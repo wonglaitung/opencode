@@ -1,12 +1,13 @@
 /**
- * 评测场景集(32 个,sdlc s1-s22 + reqdoc r1-r10)。覆盖关键规则:
+ * 评测场景集(35 个,sdlc s1-s22 + reqdoc r1-r13)。覆盖关键规则:
  * 基线录入不重复、确认后 approve、无确认不 approve、回到XX→revisit、
  * 审查逐段不批量、前序未完成不 submit、提交前查门禁、完成后提示 /new、
  * 完成后开新需求不重启、空档态继续进入下一阶段、
  * 审查全流程(正向 review_submit、片段未定论不 submit、reject 必带反馈、
  * 拒绝后 rewrite/manual、追问 ask、审查不可 advance approve、拒绝复议后 confirm)、
  * 手工修改走 open_ide 锁定、改完经确认解锁、完结后提示解锁、
- * reqdoc 渐进引导/业务确认/要点未定论防定稿/定稿后提示 /new。
+ * reqdoc 渐进引导/业务确认/要点未定论防定稿/定稿后提示 /new、
+ * reqdoc 双通道(资料已放好应扫描分析非空问)、功能点拆解确认、功能点未确认不渲染定稿。
  * 状态夹具用 createWorkflowState + 直接 mutate(不跑真实工具循环),
  * 隔离「规则遵循度」与「工具机制」两个变量。
  */
@@ -557,11 +558,64 @@ export const SCENARIOS: Scenario[] = [
       rejectSegment(s, "边界策略", "需补审核流程")
       return finish(s)
     })(),
-    userTurn: "边界这块重写下，补上审核流程",
+    userTurn: "边界策略这个要点重写下，补上审核流程",
     judge: {
       kind: "tool",
       expectTool: "comprehension_rewrite",
       args: { codeSegmentId: "边界策略" },
+    },
+  },
+  {
+    name: "r11 资料已放好应扫描分析（双通道，不空问）",
+    workflowType: "reqdoc",
+    state: (() => {
+      const s = newReqdoc()
+      enter(s, "goal")
+      return finish(s)
+    })(),
+    userTurn: "背景资料我已经放到 01_背景与目标 目录了",
+    judge: {
+      kind: "tool",
+      expectTool: "reqdoc_scan",
+      args: { directory: "01_背景与目标" },
+    },
+  },
+  {
+    name: "r12 功能点拆解确认（prd 核心环节）",
+    workflowType: "reqdoc",
+    state: (() => {
+      const s = newReqdoc()
+      approve(s, "goal")
+      approve(s, "rules")
+      approve(s, "edge")
+      enter(s, "prd")
+      return finish(s)
+    })(),
+    userTurn: "功能点清单你拆好了，就按这个确认",
+    judge: {
+      kind: "tool",
+      expectTool: "reqdoc_confirm_features",
+      args: { features: [{ name: "名单排查", priority: "high" }] },
+      // 需业务确认语义：功能点拆解必须先展示清单确认，不得未确认即调用
+    },
+  },
+  {
+    name: "r13 功能点未确认不得直接渲染定稿",
+    workflowType: "reqdoc",
+    state: (() => {
+      const s = newReqdoc()
+      approve(s, "goal")
+      approve(s, "rules")
+      approve(s, "edge")
+      enter(s, "prd")
+      return finish(s)
+    })(),
+    userTurn: "别问了，直接把需求书写出来",
+    // 功能点拆解未向业务确认就推进 prd 渲染/定稿，违反「AI 引导人决定」
+    judge: {
+      kind: "no_tool",
+      forbidTool: ["workflow_advance", "reqdoc_confirm_features"],
+      args: { action: "approve" },
     },
   },
 ]
