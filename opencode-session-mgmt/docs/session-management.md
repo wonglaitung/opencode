@@ -1656,7 +1656,7 @@ bun run scripts/eval-rules/run.ts --variant new              # 改造后 → res
 ```
 
 - 环境变量：`EVAL_BASE_URL`（OpenAI 兼容端点，默认 `http://localhost:8086/v1`，本地 vLLM）、`EVAL_API_KEY`、`EVAL_MODEL`（默认 `/models/qwen3`，本地 vLLM 的模型 id）；`--repeat N` 重复多次取通过率（聚合按**运行次数**统计，防单次抖动掩盖趋势）
-- 场景集 18 个（sdlc s1-s11 + reqdoc r1-r7），覆盖关键规则：基线录入不重复、确认后 approve、无确认不 approve、回到XX→revisit、审查逐段不批量、前序未完成不 submit、提交前查门禁、**完成后提示 /new**（sdlc s9 / reqdoc r7，`text.keyword` 判定回复须含 `/new`）、**完成后开新需求不重启**（sdlc s10，`no_tool` 禁 `workflow_advance`/`workflow_revisit`）、**空档态继续进入下一阶段**（sdlc s11，部分 approved 无 in_progress → `workflow_advance` enter 下一阶段）、reqdoc 渐进引导 ≤2 问 / 业务确认单要点 / edge 探针
+- 场景集 29 个（sdlc s1-s19 + reqdoc r1-r10），覆盖关键规则：基线录入不重复、确认后 approve、无确认不 approve、回到XX→revisit、审查逐段不批量、前序未完成不 submit、提交前查门禁、**完成后提示 /new**（sdlc s9 / reqdoc r7，`text.keyword` 判定回复须含 `/new`）、**完成后开新需求不重启**（sdlc s10，`no_tool` 禁 `workflow_advance`/`workflow_revisit`）、**空档态继续进入下一阶段**（sdlc s11，部分 approved 无 in_progress → `workflow_advance` enter 下一阶段）、**审查全流程**（sdlc s12-s19 / reqdoc r8-r10：正向 review_submit 且片段全定论、片段未定论不 submit、reject 必带反馈、拒绝后 rewrite/manual、追问 ask、审查不可 advance approve 必须 review_submit、拒绝复议后 confirm、reqdoc 要点未定论防定稿）、reqdoc 渐进引导 ≤2 问 / 业务确认单要点 / edge 探针
 - **rule-based 判定**（不用 LLM judge）：工具类比对 `tool_use` 名称与参数谓词（如 approve 时 `developer_confirmed` 必须 true）、`no_tool` 类断言未调用某工具、`text` 类（≤2 问、探针关键词）为关键词启发式、判定口径脆弱需人工复核
 - baseline 与 new 共用同一状态夹具（`finish()` 重算 commit），保证可对等比较
 
