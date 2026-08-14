@@ -44,6 +44,11 @@ docs/                # 设计文档 session-management.md、同步方案 upstrea
 - 本地存储用 bun:sqlite。
 - `bun test` 跑测试；测试文件与源码同目录 `*.test.ts`。
 
+## 经验教训（通用约定）
+
+- **用户手写 JSON 配置含文件路径时，单反斜杠是陷阱**（三工程通用约定）：JSON 里 `\` 是转义符——`\P` 等非法转义导致解析失败（回退默认但用户不明所以）；更隐蔽的是 `\b`/`\n`/`\t` 是**合法**转义，`"C:\bin\..."` 会被静默转成控制字符，路径错但 JSON 解析"成功"。凡工程引入用户可编辑的 JSON 配置且可能含文件路径，文档必须明确要求**用正斜杠 `/`（Windows 原生接受）或双反斜杠 `\\`**；代码侧解析失败时 warning 要直接点出这个诱因。本工程现状：`identity.json`（账号/组/组织/服务地址）不含文件路径，`deploy/opencode.json.example` 的 plugin 路径为相对/正斜杠写法，暂无触发场景；将来若新增含路径的用户配置（如收集服务本地路径），须按本约定落实（先例：`opencode-open-ide` 的 `config.json`，见其 `src/config.ts` 与 docs）。
+- **配置文档示例须显式标注字段语义**（覆盖 / 新增 / 缺省用默认），避免用户误以为所有项都要写全才生效。本工程现状：无此类手写配置字段示例；若将来引入配置字段，示例须按此标注（先例：`opencode-open-ide` 的 `tools` 示例标注「cursor=新增、idea=覆盖」）。
+
 ## 文档与语言
 
 - 设计文档、注释、commit message 用**中文**；conventional commit 格式（本仓库历史可参照）。

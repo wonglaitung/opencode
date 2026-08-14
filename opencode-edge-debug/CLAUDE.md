@@ -47,6 +47,11 @@ test/
 - 插件 Hook 基于 `@opencode-ai/plugin` 的 `Hooks` 接口——**同步上游后优先核对 hook/tool 签名**；experimental hook 若将来引入，须集中于单一适配文件。
 - **入口文件只允许 default export**：上游 legacy loader 遍历模块全部导出，其他命名导出会导致「Plugin export is not a function」加载失败。工具经 `tool()` + `tool.schema` 注册，key 即工具名。
 
+## 经验教训（通用约定）
+
+- **用户手写 JSON 配置含文件路径时，单反斜杠是陷阱**（三工程通用约定）：JSON 里 `\` 是转义符——`\P` 等非法转义导致解析失败（回退默认但用户不明所以）；更隐蔽的是 `\b`/`\n`/`\t` 是**合法**转义，`"C:\bin\..."` 会被静默转成控制字符，路径错但 JSON 解析"成功"。凡工程引入用户可编辑的 JSON 配置且可能含文件路径，文档必须明确要求**用正斜杠 `/`（Windows 原生接受）或双反斜杠 `\\`**；代码侧解析失败时 warning 要直接点出这个诱因。本工程现状：暂无用户手写配置 JSON（无 config.json，端口/降噪均为硬编码），暂无触发场景；将来若新增含路径的用户配置，须按本约定落实（先例：`opencode-open-ide` 的 `config.json`，见其 `src/config.ts` 与 docs）。
+- **配置文档示例须显式标注字段语义**（覆盖 / 新增 / 缺省用默认），避免用户误以为所有项都要写全才生效。本工程现状：无此类手写配置文档示例；若将来引入配置字段，示例须按此标注（先例：`opencode-open-ide` 的 `tools` 示例标注「cursor=新增、idea=覆盖」）。
+
 ## 文档与语言
 
 - 设计文档、注释、commit message 用**中文**；conventional commit 格式（本仓库历史可参照）。

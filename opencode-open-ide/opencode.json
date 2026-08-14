@@ -1,0 +1,14 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["."],
+  "references": {
+    "open-ide-docs": {
+      "path": "./docs",
+      "description": "打开 IDE 插件设计文档与部署手册（预设与 config.json 自定义次序/工具、跨平台二进制定位、CLI 定位参数）"
+    },
+    "plugin-dev-guide": {
+      "path": "../opencode-session-mgmt/docs",
+      "description": "跨插件通用开发规范 plugin-dev-guide.md 与姊妹工程设计文档"
+    }
+  }
+}
