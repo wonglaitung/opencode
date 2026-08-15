@@ -175,4 +175,4 @@ sdlc 的审查清单（`ReviewChecklist`）由 `WorkflowDefinition.checklist` �
 - **手工修改走 open_ide 锁定与改完确认解锁**（s20-s21，sdlc-r12 规则，open_ide/unlock_file 契约——open-ide 已**物理合并**进本工程 `packages/plugin/src/open-ide/`，单一插件加载；锁持久化进 SQLite `file_lock` 表，daemon 重启自动恢复，会话删除后由启动时 `pruneLocks` 修剪）
 - **SDLC 完结 → 提示解锁**（合并新增，插件硬能力）：完成态注入与 `review_submit` 返回均直接读锁表，有锁时提示开发者确认后逐个 `unlock_file`；仅 sdlc（`hasCommitGate` 门控），reqdoc 完成态不提示
 
-> 规则改动须跑质量飞轮（见 session-management.md 13.6 决策图）验证 sdlc 零回退；reqdoc 侧 r7/r8-r10 同口径场景见 workflow-reqdoc.md 10 章。
+> sdlc 改动走**共享评测门**（session-management.md 13.6 改动分级决策图，baseline→new 对比）验证零回退，只看**通过率**不降；sdlc **不跑** reqdoc 的质量飞轮（打分卡 0-100 五维度量是 reqdoc 专属，见 workflow-reqdoc.md 10 章）。reqdoc 侧 r7/r8-r10 同口径场景见 workflow-reqdoc.md 10 章。

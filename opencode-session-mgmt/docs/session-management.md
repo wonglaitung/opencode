@@ -1407,7 +1407,7 @@ bun run scripts/eval-rules/run.ts --variant baseline         # 跑基线通过�
 bun run scripts/eval-rules/run.ts --variant new              # 改造后 → results/new.json，自动对比 baseline
 ```
 
-分三级验证（对应 13.6 决策图的 ①②③，何时跑哪级见「改动分级：何时跑质量飞轮」）：
+分三级验证（对应 13.6 决策图的 ①②③，何时跑哪级见「改动分级决策图」）：
 
 - **① 干跑（秒级，每次改完必做）**：`--variant new --dry` 与 `--variant baseline --dry` 各跑一次，验证 46 场景注入片段与判定期望渲染正常，不调模型。
 - **② mock 冒烟（仅改评测脚本时）**：临时起一个 mock OpenAI 端点返回罐装 tool_calls（针对新增场景命中其判定路径，如 r20 返回 `reqdoc_probe(asked=[...])`、r22 返回 `workflow_advance(enter prd)`），`EVAL_BASE_URL` 指过去非 dry 跑一遍，确认判定与聚合/对比路径不炸；跑完删掉 mock、`git checkout` 还原 `results/*.json`。
@@ -1438,6 +1438,8 @@ bun run scripts/eval-rules/run.ts --variant new              # 改造后 → res
 
 ### 13.3 判定方式（rule-based，不用 LLM judge）
 
+判定类分两类：**behavior 类**（`tool_use` / `no_tool` / `text`，断言「模型调了什么工具、怎么调、回复含什么」，sdlc 与 reqdoc 全部场景共用）与 **output 类**（`score` 质量飞轮 P0 / `render` 质量飞轮 P2，断言「模型渲染产出的 PRD 文本质量」，**reqdoc 专属**——reqdoc 用它将「通过/不通过」升级为 0-100 五维度量，sdlc 不跑 output 类、只走 behavior 类的通过率）。
+
 - 工具类比对 `tool_use` 名称与参数谓词（如 approve 时 `developer_confirmed` 必须 true）；`args` 为参数子集全等匹配，`argsContains`（质量飞轮 P1）为数组子集断言——期望每个元素须出现在实际数组参数中（如断言 asked 覆盖核心探针），两者互不影响、零回归
 - `no_tool` 类断言未调用某工具
 - `text` 类（maxQuestions 问句计数、optionsABC 问句 ≤max 且含「默认」+ ≥2 个 A/B/C 标记、categoryKeywords 探针关键词）为关键词启发式，判定口径脆弱需人工复核
@@ -1464,31 +1466,31 @@ bun run scripts/eval-rules/run.ts --variant new              # 改造后 → res
 - **场景 userTurn 避免二义性**：发言词不要同时是阶段名与要点 id（如「边界这块」既像 edge 阶段又像要点 id），否则强模型可能误走 `workflow_revisit`。
 - **hoisted 拷贝残留影响评测**：评测脚本经 `node_modules/sm-shared` 解析共享包，`node-linker=hoisted` 下它是真实拷贝；修改 `packages/shared` 后须删除 `node_modules/sm-shared` 并 `bun install` 重同步，否则评测读到旧规则文本（`typecheck`/`bun test` 仍全绿，易漏）。
 
-### 13.6 质量飞轮：改动分级决策图（何时跑飞轮）
+### 13.6 改动分级决策图（两个工作流共用评测门）
 
-不是任何改动都跑飞轮——只有碰触「模型行为面」的改动才需要（模型读进上下文的内容：规则文本 / 探针清单 / 打分卡 / 模板 / 工具描述 / 状态条注入格式 / 评测脚本自身）；机制面改动（工具逻辑 / 门禁 / 状态机 / DB / 汇报 / CLI / collector / 纯注释文档）由 `bun test` + `typecheck` 兜底，不跑飞轮。行为面改动的分级验证（①②是③的前置自检，**③真实模型对比是合入前唯一不可省的重闸**）：
+不是任何改动都跑评测门——只有碰触「模型行为面」的改动才需要（模型读进上下文的内容：规则文本 / 探针清单 / 打分卡 / 模板 / 工具描述 / 状态条注入格式 / 评测脚本自身）；机制面改动（工具逻辑 / 门禁 / 状态机 / DB / 汇报 / CLI / collector / 纯注释文档）由 `bun test` + `typecheck` 兜底，不跑评测门。行为面改动的分级验证（①②是③的前置自检，**③真实模型对比是合入前唯一不可省的重闸**）：
 
 ```mermaid
 flowchart LR
     A(["改动"]) --> B{"碰触模型行为面？"}
     B -->|"否 · 机制面<br/>工具逻辑/门禁/状态机/DB<br/>CLI/collector/纯注释文档"| C["bun test + typecheck<br/>（346 单测，秒级）"]
-    C --> Z(["合入 · 不跑飞轮"])
-    B -->|"是 · 行为面<br/>规则/探针/打分卡/模板<br/>工具描述/注入格式/评测脚本"| D["进入质量飞轮"]
+    C --> Z(["合入 · 不跑评测门"])
+    B -->|"是 · 行为面<br/>规则/探针/打分卡/模板<br/>工具描述/注入格式/评测脚本"| D["进入评测门"]
     D --> E["① --dry 渲染验证<br/>（46 场景，秒级，不调模型）"]
     E --> F{"改动类别？"}
     F -->|"规则/探针/打分卡/模板<br/>（模型看到的实质内容）"| H
     F -->|"评测脚本/判定口径/注入格式<br/>（评测自身或形态）"| G["② mock 冒烟<br/>（验证判定与聚合路径）"]
     G --> H
-    H["③ 真实模型 baseline→new 对比<br/>（重闸，必过）"] --> I{"五维分数有回退？"}
+    H["③ 真实模型 baseline→new 对比<br/>（重闸，必过）"] --> I{"对比基线：有回退？"}
     I -->|"是"| J(["不合入 · 回退改动"])
     I -->|"否"| K["沉淀资产<br/>（新场景/探针/规则进 fixture）"]
     K --> L(["合入"])
 ```
 
-①②③ 各级的**具体命令、读输出口径与 baseline 冻结纪律**见 13.1 运行方式。质量飞轮的三支柱机制（把 reqdoc 打分卡接进评测的 0-100 五维度量）、reqdoc 落地节奏（P0/P1/P2）与 reqdoc 实测轮次见 **workflow-reqdoc.md 10 章**。
+①②③ 各级的**具体命令、读输出口径与 baseline 冻结纪律**见 13.1 运行方式。本决策图两个工作流共用，但第③步比对口径不同：**sdlc 只看通过率**（baseline→new 不降即可），**reqdoc 额外看打分卡五维分数**（打分卡 0-100 五维度量是 reqdoc 专属度量）。质量飞轮的三支柱机制（把 reqdoc 打分卡接进评测）、reqdoc 落地节奏（P0/P1/P2）与 reqdoc 实测轮次见 **workflow-reqdoc.md 10 章**。
 
 **可持续的保障**
 
-- **一切改动必须过回归**：每次改规则 / 探针 / 模板跑 eval，对比 baseline，任何维度回退都不合入——13.4 迭代闭环从「通过率不降」升级为「五维分数不降」。
+- **一切改动必须过回归**：每次改规则 / 探针 / 模板跑 eval，对比 baseline，任何回退都不合入——reqdoc 以打分卡五维分数不降为准，sdlc 以通过率不降为准（13.4 迭代闭环从「通过率不降」升级为「五维分数不降」）。
 - **改进必须资产化**：新场景进 `scenarios.ts`、新探针进清单、新规则进 fixture——沉淀为可重复资产而非一次性修改。
 - **三同步铁律照旧**：规则 / 工具 / 文档 / mermaid 同步。

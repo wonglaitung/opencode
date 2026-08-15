@@ -305,6 +305,13 @@ reqdoc 会话不产出代码，sdlc 专属指标——AI 代码行数（业务/�
 
 > 完成后提示 /new（r7，`text.keyword` 判定回复须含 `/new`）与审查全流程（r8-r10：正向 review_submit 且要点全定论、要点未定论防定稿、reject 必带反馈、拒绝复议后 confirm）为 reqdoc 侧同口径场景，判定框架见 session-management.md 13.3。
 
+**两条评分通道别混（模型自评 ≠ 产出度量）**
+
+- 工作流内 `reqdoc_score` 工具：**模型自评**，是门禁输入（edge 阶段经五维打分决定能否进 prd），打分卡判据经 `reqdocScoreRubric()` 单一事实源注入规则文本，`total` 服务端算分。
+- eval 侧 `scorePrd()`（`judge.kind="score"` 配合 prd-render 场景 r18/r19）：**确定性产出度量**，不靠 LLM 判卷——按内容专属词表谓词对模型渲染出的 PRD 文本逐维扣分，供 baseline→new 逐维对比；高分自评却渲染不出对应内容，由产出度量暴露。
+
+判定类归属见 session-management.md 13.3：behavior 类（`tool_use`/`no_tool`/`text`）sdlc 与 reqdoc 共用，output 类（`score`/`render`）**reqdoc 专属**，sdlc 不跑（只走通过率）。
+
 **质量飞轮：把打分卡接进评测，从「过/不过」升级为「0-100 五维数字度量」**
 
 rule-based 布尔断言（session-management.md 13.3）只能回答「这版规则让模型遵循得更好吗」，回答不了「需求书质量高了几分」。而 `reqdoc_score` 五维打分（5 章 `ReqdocScore`，判定规则 + 扣分标准经 `reqdocScoreRubric()` 单一事实源注入）本就是质量度量器：**让它对每个场景渲染出的 PRD 自动评分**，评测就获得——
