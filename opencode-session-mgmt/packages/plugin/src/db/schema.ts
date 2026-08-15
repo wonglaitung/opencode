@@ -1,5 +1,5 @@
 /**
- * 插件库表定义（设计文档 3.1）。
+ * 插件库表定义（设计文档 session-management.md 3.1）。
  * 位置：<project>/.opencode/session-mgmt.db，每项目一个，bun:sqlite + WAL。
  * 两张表：workflow_session（会话工作流数据，以核心 sessionID 为主键）、
  *         outbox（汇报缓冲，收集服务不可用时暂存，见 report.ts）。

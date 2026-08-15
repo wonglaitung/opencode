@@ -1,5 +1,5 @@
 /**
- * AI 代码行数累计与统计测试（设计文档 3.2「AI 代码行数统计」、7.4 规则 26-27）。
+ * AI 代码行数累计与统计测试（设计文档 session-management.md 3.2「AI 代码行数统计」）。
  * 净增量口径：write 整文件替换、edit 新行−旧行（oldString="" 为新建语义）、
  * apply_patch 按文件 +行−−行；同会话去重累计；
  * sessionStats/aggregateProject 三分类汇总（逐文件 clamp ≥0，累加型求和）。

@@ -1,5 +1,5 @@
 /**
- * 审查与理解确认工具（设计文档 4.1、3.2、7.3、7.4 规则 9-14）。
+ * 审查与理解确认工具（设计文档 session-management.md 4.1、3.2、7.3；审查规则见 workflow-sdlc.md 3 章、workflow-reqdoc.md 4 章）。
  * 通用机制（工作流无关）：sdlc 确认「代码片段」、reqdoc 确认「PRD 要点」，
  * 统一以 codeSegmentId 参数承载标识（sdlc 为代码段 id、reqdoc 为要点 id）。
  * comprehension_add     —— 登记一个片段/要点及其自然语言解释（decision=pending）

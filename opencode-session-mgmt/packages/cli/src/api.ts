@@ -1,5 +1,5 @@
 /**
- * 数据源封装（设计文档 4.2、5.2）。
+ * 数据源封装（设计文档 session-management.md 4.2、5.2）。
  * 1. 上游 opencode SDK：session.list/messages（cost/tokens）——连运行中的 daemon
  * 2. 收集服务查询客户端：GET {collector_url}/api/stats（组/组织级统计）
  * 3. 本机插件库访问（复用 sm-plugin 的 Store，bun:sqlite）

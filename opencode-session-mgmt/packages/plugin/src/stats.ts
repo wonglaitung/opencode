@@ -1,5 +1,5 @@
 /**
- * 本机统计聚合查询（设计文档 4.3、6）。
+ * 本机统计聚合查询（设计文档 session-management.md 4.3、6）。
  * 会话级/项目级：插件库（工作流/会话内质量）+ 上游 session SDK（cost/tokens），
  * 按 sessionID 关联。纯函数实现，供 opencode-sm 复用（不依赖插件 SDK/数据库句柄）。
  */

@@ -1,5 +1,5 @@
 /**
- * 提交门禁硬拦截（设计文档 3.4、7.3）。
+ * 提交门禁硬拦截（设计文档 session-management.md 3.4、7.3）。
  * tool.execute.before hook：识别 bash 工具中的 git commit，
  * 未通过 commit_gate_check（有未 approved 阶段）时抛错阻断。
  * 这是插件层硬约束，不依赖 LLM 自觉。

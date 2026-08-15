@@ -1,6 +1,6 @@
 /**
  * opencode-sm workflow <sessionID> [checklist|comprehension|stats]
- * 工作流状态外部查看（设计文档 5.1）。只读本机插件库。
+ * 工作流状态外部查看（设计文档 session-management.md 5.1）。只读本机插件库。
  */
 import { REQDOC_SCORE_DIMS, REQDOC_SCORE_PASS, efficiencyRatio, getDefinition, reviewRecord, sumLinesByCategory } from "sm-shared"
 import { workflowDurationMs } from "sm-plugin/src/stats"

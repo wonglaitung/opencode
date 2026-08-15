@@ -1,5 +1,5 @@
 /**
- * 汇报与 CI 回写的 payload schema（设计文档 4.3、10）。
+ * 汇报与 CI 回写的 payload schema（设计文档 session-management.md 4.3、10 章）。
  * 插件 → 收集服务（POST /api/report）；CI → 收集服务（POST /api/ci-quality）。
  * 仅流程摘要，不含代码内容（12 安全与隐私）。
  */

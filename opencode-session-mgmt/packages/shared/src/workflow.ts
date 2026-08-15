@@ -1,9 +1,9 @@
 /**
- * WorkflowState 及子结构类型定义（设计文档 3.2）。
+ * WorkflowState 及子结构类型定义（设计文档 session-management.md 3.2；reqdoc 专属结构见 workflow-reqdoc.md 5/6/7 章）。
  * 插件、CLI、收集服务三方共用的契约——任何字段变更必须三包同步。
  *
  * 多流程就绪：阶段键/清单/规则/门禁均从 WorkflowDefinition 注册表驱动，而非硬编码。
- * 本轮只注册 sdlc（设计文档 3.2 注册表）；reqdoc 随需求书工作加入。
+ * sdlc 与 reqdoc 均已注册（设计文档 session-management.md 3.2 注册表；定义分别见 workflow-sdlc.md 2 章、workflow-reqdoc.md 2 章）。
  */
 import { renderCheckRubric } from "./reqdoc-render"
 import type { ReqdocRender } from "./reqdoc-render"
@@ -286,7 +286,7 @@ export interface QualityMetrics {
   firstPassRate: number | null
   /** 「同一段代码/文件」的最大生成-修改循环次数（3.2），取 iterationByFile 各文件最大值 */
   iterationCount: number | null
-  /** 合并后由 CI 按 sessionID 回写收集服务（设计文档 4.3） */
+  /** 合并后由 CI 按 sessionID 回写收集服务（设计文档 session-management.md 4.3） */
   reworkRate: number | null
   testCoverage: number | null
   /**
@@ -524,7 +524,7 @@ function createReviewStageRecord(def: WorkflowDefinition): ReviewStageRecord {
   }
 }
 
-/** 会话开始时初始化的全新工作流状态（所有阶段 not_started，7.4 规则 1）。 */
+/** 会话开始时初始化的全新工作流状态（所有阶段 not_started，初始化规则见 workflow-sdlc.md 3 章 sdlc-r1 / workflow-reqdoc.md 4 章 reqdoc-r1）。 */
 export function createWorkflowState(type: WorkflowType): WorkflowState {
   const def = getDefinition(type)
   const stages: Record<string, StageRecord> = {}

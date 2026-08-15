@@ -1,5 +1,5 @@
 /**
- * reqdoc Word 导出工具（设计文档 7.5，实施方案「标准 PRD (Markdown/Word)」）。
+ * reqdoc Word 导出工具（设计文档 workflow-reqdoc.md 8 章，实施方案「标准 PRD (Markdown/Word)」）。
  * reqdoc_export —— 将已渲染的 PRD Markdown（06_需求规格产出 下）转换为 Word（.docx）
  * 交付件，与源 md 同目录归档，供行方交付。仅 reqdoc 工作流使用（规则 reqdoc-r14 在
  * PRD 定稿后调用）。

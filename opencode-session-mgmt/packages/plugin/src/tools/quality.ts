@@ -1,5 +1,5 @@
 /**
- * 迭代计数与 AI 代码行数累计（设计文档 3.2、4.3、7.4 规则 15-20、26-27）。
+ * 迭代计数与 AI 代码行数累计（设计文档 session-management.md 3.2「重复编辑模式检测」「AI 代码行数统计」、4.3）。
  * 一次通过率 firstPassRate 已由 review.ts 的 review_submit 自动计算，不再依赖 Agent 上报（quality_report 已移除）。
  * tool.execute.after 同一观测点：按文件迭代计数（iterationByFile）+ 净增量行数累计（linesByFile），
  * 重复模式检测供 system prompt 提示人工介入。

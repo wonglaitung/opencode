@@ -1,5 +1,5 @@
 /**
- * opencode-sm workflow-type set <type> / get —— 查看/修改主要工作流类型（设计文档 5.1）。
+ * opencode-sm workflow-type set <type> / get —— 查看/修改主要工作流类型（设计文档 session-management.md 5.1）。
  * 工作流类型是用户级身份属性（identity.json 第五问），由用户角色决定。
  * 角色变化时用本命令轻量改身份，比重跑 init 更轻（与"调组重跑 init"同语义）。
  * 只影响之后新建会话，历史归属不追溯（身份快照语义，3.1）。

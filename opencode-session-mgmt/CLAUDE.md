@@ -32,7 +32,7 @@ packages/plugin/     # OpenCode 插件：system prompt 注入、工具注册、�
 packages/cli/        # opencode-sm 独立 CLI：init/tag/workflow/stats/list
 packages/collector/  # org 收集服务：三端点 + 聚合库
 deploy/              # 部署示例：收集服务 docker-compose、opencode.json.example
-docs/                # 设计文档 session-management.md、同步方案 upstream-sync.md
+docs/                # 设计文档族：session-management.md（通用机制/架构/CLI/统计/部署/评测）+ workflow-sdlc.md（工作流一 sdlc）+ workflow-reqdoc.md（工作流二 reqdoc）；同步方案 upstream-sync.md
 ```
 
 每个源文件 stub 顶部注明对应设计文档章节，实现前先读该章节。
@@ -55,5 +55,5 @@ docs/                # 设计文档 session-management.md、同步方案 upstrea
 
 - 设计文档、注释、commit message 用**中文**；conventional commit 格式（本仓库历史可参照）。
 - **任何文档与注释都不要用 `§` 符号**引用章节，一律用纯文字（「第 3 章」「3.4 节」或裸编号「见 3.4」）。
-- 设计文档任何行为变更须同步更新对应 mermaid 流程图（共 19 个），改链路必改图。
+- 设计文档任何行为变更须同步更新对应 mermaid 流程图（三个设计文档合计 19 个：session-management.md 16 个、workflow-reqdoc.md 3 个、workflow-sdlc.md 0 个；新增图块须整体搬入对应文档族文件，总数只减不增），改链路必改图。
 - 发布前 TODO 见 `README.md`（npm scope、插件发布形态、收集服务镜像）。

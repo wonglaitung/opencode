@@ -1,5 +1,5 @@
 /**
- * reqdoc 文档扫描工具（设计文档 7.5 重构：双通道）。
+ * reqdoc 文档扫描工具（设计文档 workflow-reqdoc.md 3 章、8 章）。
  * reqdoc_scan —— 按目录扫描需求资料并提取文本（单目录参数，AI 分阶段调用）：
  *   goal→01_背景与目标、rules→03_流程与数据、edge→02_制度与合规/04_角色与权限、prd→06_需求规格产出。
  * 解析范围：docx（jszip 解 document.xml）、pdf（pdfjs 文本层）、xlsx（exceljs）、

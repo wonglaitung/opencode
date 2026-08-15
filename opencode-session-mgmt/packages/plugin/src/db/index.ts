@@ -1,5 +1,5 @@
 /**
- * 插件 SQLite 初始化与迁移（设计文档 3.1）。
+ * 插件 SQLite 初始化与迁移（设计文档 session-management.md 3.1）。
  * 插件启动时自动建表，迁移由插件自管，与上游 schema 演进互不影响。
  * 对外暴露 Store：工作流状态、标签、身份打标的类型化读写 + 汇报 outbox。
  * 统一使用 `?` 位置绑定（bun:sqlite）。
@@ -97,7 +97,7 @@ export class Store {
     return raw ? rowFromRaw(raw) : null
   }
 
-  /** 取或创建会话行（创建时初始化全新 WorkflowState，7.4 规则 1）。 */
+  /** 取或创建会话行（创建时初始化全新 WorkflowState，初始化规则见 workflow-sdlc.md 3 章 sdlc-r1 / workflow-reqdoc.md 4 章 reqdoc-r1）。 */
   ensure(sessionID: string): WorkflowSessionRow {
     const existing = this.get(sessionID)
     if (existing) return existing

@@ -1,5 +1,5 @@
 /**
- * 工作流工具（设计文档 4.1）。
+ * 工作流工具（设计文档 session-management.md 4.1、3.3；reqdoc 打分卡门禁见 workflow-reqdoc.md 5 章）。
  * workflow_advance   —— 进入下一阶段 / 标记 approved（校验开发者确认语义）
  * workflow_revisit   —— 回退阶段（revision++）
  * workflow_baseline  —— 录入基线预估人工工时（6.3，AI 提效对比）

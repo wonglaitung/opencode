@@ -1,5 +1,5 @@
 /**
- * PRD 产出确定性评分（质量飞轮 P0「eval 评分模式」，设计文档 13.6）。
+ * PRD 产出确定性评分（质量飞轮 P0「eval 评分模式」，设计文档 session-management.md 13.6；打分卡标准见 workflow-reqdoc.md 5 章）。
  * 镜像 REQDOC_SCORE_DIMS 的五维扣分标准（workflow.ts），把每个扣分条件映射为
  * 纯文本谓词，对模型渲染出的 PRD 文本逐维扣分——无需 LLM 判卷，弱模型即可跑。
  *

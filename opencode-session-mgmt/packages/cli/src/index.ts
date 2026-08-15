@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * opencode-sm —— OpenCode Session Management CLI（设计文档 5）。
+ * opencode-sm —— OpenCode Session Management CLI（设计文档 session-management.md 5 章）。
  * 独立安装，与上游零耦合。命令：init / tag / workflow / stats / list。
  */
 import { runInit } from "./commands/init"

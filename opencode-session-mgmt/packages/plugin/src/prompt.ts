@@ -1,5 +1,5 @@
 /**
- * system prompt 注入（设计文档 7.1、7.4）。
+ * system prompt 注入（设计文档 session-management.md 7.1、7.4）。
  * experimental.chat.system.transform hook 的实现：
  * 从插件库读当前会话 WorkflowState，将阶段化规则（global + 当前阶段）+ 一行阶段条追加到 output.system。
  * 阶段化注入只给弱模型当前需要的规则，状态条替代冗长 JSON，降低弱模型遵循负担。

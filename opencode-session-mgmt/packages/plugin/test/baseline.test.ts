@@ -1,5 +1,5 @@
 /**
- * 基线对比统计测试（设计文档 6.3）。
+ * 基线对比统计测试（设计文档 session-management.md 6.3）。
  * sessionStats.efficiency =（预估 − 实际周期）÷ 预估（可为负，无基线/无周期为 null）；
  * aggregateProject.avgEfficiency 对「有基线且有有效周期」的会话求均值，
  * baselineCount 统计已录入基线的会话数。

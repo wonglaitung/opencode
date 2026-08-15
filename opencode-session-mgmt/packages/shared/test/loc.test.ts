@@ -1,5 +1,5 @@
 /**
- * AI 代码行数纯函数测试（设计文档 3.2「AI 代码行数统计」、7.4 规则 26-27）。
+ * AI 代码行数纯函数测试（设计文档 session-management.md 3.2「AI 代码行数统计」）。
  * countLines 物理行口径、classifyFile 三分类优先级、sumLinesByCategory 逐文件 clamp、
  * parsePatchLines 补丁扫描（格式依据上游 packages/core/src/patch.ts）。
  */

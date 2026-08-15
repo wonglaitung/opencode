@@ -1,5 +1,5 @@
 /**
- * 插件入口（设计文档 2.4、8；open-ide 合并 4、5）。
+ * 插件入口（设计文档 session-management.md 2.4、8 章；open-ide 合并 4、5）。
  * 由 opencode config.plugin 加载，运行于 daemon 进程内。
  * 注册 5 类 hooks + open-ide 合并部分：
  *   - experimental.chat.system.transform  每轮注入规则 + WorkflowState（7.1）‖ 锁定提示（open-ide 5.4）

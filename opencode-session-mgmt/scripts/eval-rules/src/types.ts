@@ -1,5 +1,5 @@
 /**
- * 规则遵循度评测共享类型(scripts/eval-rules,设计文档 12.1)。
+ * 规则遵循度评测共享类型(scripts/eval-rules,设计文档 session-management.md 13.1)。
  * 场景 → 注入片段(baseline/new)→ 弱模型 tool_use/文本 → rule-based 判定。
  */
 import type { ReqdocScoreDimKey, WorkflowType as SharedWorkflowType, WorkflowState } from "sm-shared"

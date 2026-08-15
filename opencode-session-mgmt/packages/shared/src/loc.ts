@@ -1,5 +1,5 @@
 /**
- * AI 代码行数：行数计算、业务/测试/配置三分类与分类汇总（设计文档 3.2「AI 代码行数统计」、7.4 规则 26-27）。
+ * AI 代码行数：行数计算、业务/测试/配置三分类与分类汇总（设计文档 session-management.md 3.2「AI 代码行数统计」）。
  * 纯函数，不触碰存储：plugin quality.ts 在 tool.execute.after 累计 linesByFile，
  * plugin stats.ts 汇总展示。
  * 隐私（12）：linesByFile 的键为文件路径，仅存本机插件库；汇报投影只上行三分类聚合数字。
