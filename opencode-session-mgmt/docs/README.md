@@ -16,7 +16,7 @@
 | [upstream-sync.md](upstream-sync.md) | 设计文档 | 上游同步方案：remote 布局、同步命令、冲突预案、同步记录 | [README.md](../README.md)、[CLAUDE.md](../CLAUDE.md)、[.opencode/command/sync-upstream.md](../.opencode/command/sync-upstream.md)、[deployment.md](deployment.md) | 改名需同步 4 处引用 |
 | [mixed-development-workflow.md](mixed-development-workflow.md) | 设计文档 | 混合开发工作流参考（人机协同写码的边界约定） | 无入站引用 | 可 |
 | [reqdoc-prd-template.md](reqdoc-prd-template.md) | 运行时资源 | reqdoc PRD 模板的 **md 渲染载体**（[模版.docx](模版.docx) 的运行时形态，prd 阶段由插件注入） | **代码硬引用**：[template.ts](../packages/plugin/src/template.ts)（`TEMPLATE_FILENAME` 常量拼接候选路径）、[workflow.ts](../packages/shared/src/workflow.ts)（r14/r20 规则文本）、[pack-bundle.sh](../scripts/pack-bundle.sh)（拷 docs/ 到 bundle 根）、[template.test.ts](../packages/plugin/test/template.test.ts) | **不可改名 / 不可移出 docs/ 根**（模板送达机制按 `docs/<此文件名>` 解析，移动即破坏） |
-| [模版.docx](模版.docx) | 运行时资源 | reqdoc PRD 模板的 **权威源**（内容以本文件为准，三处已知瑕疵已修复） | [pack-bundle.sh](../scripts/pack-bundle.sh)（整目录拷入 bundle）、[session-management.md](session-management.md)、[reqdoc-prd-template.md](reqdoc-prd-template.md) 头部标注 | 可改名（同步 3 处引用）；**改 docx 必须同步重渲染 md** |
+| [模版.docx](模版.docx) | 运行时资源 | reqdoc PRD 模板的 **权威源**（内容以本文件为准） | [pack-bundle.sh](../scripts/pack-bundle.sh)（整目录拷入 bundle）、[session-management.md](session-management.md)、[reqdoc-prd-template.md](reqdoc-prd-template.md) 头部标注 | 可改名（同步 3 处引用）；**改 docx 必须同步重渲染 md** |
 | [实施方案.docx](实施方案.docx) | 运行时资源（输入源） | 银行业务需求智能引导实施方案（reqdoc 重构的来源依据，历史决策输入） | **无引用（孤儿）** | 可改名 / 可归档至子目录 / 可删（仅历史决策依据） |
 | [qwen3.6-27b.chat-template.jinja](qwen3.6-27b.chat-template.jinja) | 部署参考 | 部署模型 qwen3.6-27b 的 chat template（vLLM 部署用） | [deployment.md](deployment.md) | 可（同步 deployment.md） |
 
@@ -28,7 +28,7 @@
 - **[reqdoc-prd-template.md](reqdoc-prd-template.md) 的位置是代码契约**：[template.ts](../packages/plugin/src/template.ts) 按 `packages/plugin/src` 上溯三级解析到
   `docs/reqdoc-prd-template.md`，[pack-bundle.sh](../scripts/pack-bundle.sh) 把整个 `docs/` 拷到 bundle 根。改名/移动会破坏
   「模板送达」机制，**不要动**。
-- **[模版.docx](模版.docx) 是模板权威源**：内容以本文件为准（第二章重复标题、3.0 附件编号、优先级默认不一致三处已知瑕疵已修复为规范模板）；若要改名，同步 [pack-bundle.sh](../scripts/pack-bundle.sh) 注释、
+- **[模版.docx](模版.docx) 是模板权威源**：内容以本文件为准；若要改名，同步 [pack-bundle.sh](../scripts/pack-bundle.sh) 注释、
   [session-management.md](session-management.md)、[reqdoc-prd-template.md](reqdoc-prd-template.md) 头部三处即可。
 - **[实施方案.docx](实施方案.docx) 是输入源不是产出**：零代码引用，仅作为需求决策的历史依据；与 [collector-spec.md](collector-spec.md)、
   [mixed-development-workflow.md](mixed-development-workflow.md) 两个「无入站引用的独立文档」不同，它不会被任何人消费。
