@@ -55,6 +55,19 @@ export function judgeScenario(judge: Judge, out: ModelOutput): { pass: boolean; 
           ? { pass: true, detail: `✓ 问句 ${n} 个(≤${judge.max})` }
           : { pass: false, detail: `问句 ${n} 个,超过上限 ${judge.max}` }
       }
+      if (judge.type === "optionsABC") {
+        const n = (out.text.match(/[?？]/g) ?? []).length
+        const hasDefault = out.text.includes("默认")
+        const markers = (out.text.match(/[A-C][.、:：)）]/g) ?? []).length
+        const minOptions = judge.minOptions ?? 2
+        const ok = n <= (judge.max ?? 3) && hasDefault && markers >= minOptions
+        return ok
+          ? { pass: true, detail: `✓ 问句 ${n} 个(≤${judge.max}) 且含「默认推荐」+ A/B/C 选项标记 ${markers} 个` }
+          : {
+              pass: false,
+              detail: `问句 ${n}/${judge.max},含「默认」:${hasDefault},A/B/C 标记:${markers}(需≥${minOptions});全文:${out.text.slice(0, 200)}`,
+            }
+      }
       if (judge.type === "categoryKeywords") {
         const categories = judge.categories ?? []
         const hit = categories.filter((kws) => kws.some((k) => out.text.includes(k)))

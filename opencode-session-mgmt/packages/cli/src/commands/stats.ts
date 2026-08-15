@@ -199,8 +199,9 @@ function printSessionStats(s: SessionStats): void {
       `  一次通过率: ${fmtPct(s.firstPassRate)}  迭代轮次: ${fmtIterations(s.iterationCount)}  覆盖率: ${fmtPct(s.testCoverage)}\n` +
       `  ${fmtLinesCategory(s.lines)}\n` +
       `  ${fmtBaselineLine(s.baselineHours, s.durationMs, s.efficiency)}\n` +
-      `  返工率: ${fmtPct(s.reworkRate)}  审查清单: ${s.checklistPassed}/4  理解确认: ${s.comprehension.confirmed}/${s.comprehension.total}\n\n` +
-      `AI 使用: ${s.cost === null ? "$N/A" : `$${s.cost.toFixed(4)}`} | ${fmtTokens(s.tokensInput)} in / ${fmtTokens(s.tokensOutput)} out\n`,
+      `  返工率: ${fmtPct(s.reworkRate)}  审查清单: ${s.checklistPassed}/4  理解确认: ${s.comprehension.confirmed}/${s.comprehension.total}\n` +
+      (s.score ? `  PRD 评分: ${s.score.total}/100${s.score.confirmed ? "（已业务确认）" : "（未确认）"}\n` : "") +
+      `\nAI 使用: ${s.cost === null ? "$N/A" : `$${s.cost.toFixed(4)}`} | ${fmtTokens(s.tokensInput)} in / ${fmtTokens(s.tokensOutput)} out\n`,
   )
 }
 

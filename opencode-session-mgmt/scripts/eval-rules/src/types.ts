@@ -32,9 +32,11 @@ export type Judge =
     }
   | {
       kind: "text"
-      type: "maxQuestions" | "categoryKeywords" | "keyword"
+      type: "maxQuestions" | "optionsABC" | "categoryKeywords" | "keyword"
       /** maxQuestions: 回复中问号(？/?)计数上限 */
       max?: number
+      /** optionsABC(追问约束 r2)：问号 ≤ max 且含「默认推荐」且 A/B/C 选项标记 ≥2(每个问题须附选项与默认推荐) */
+      minOptions?: number
       /** categoryKeywords: 命中 ≥minCategories 类关键词(每类任一命中即算该类) */
       categories?: string[][]
       minCategories?: number

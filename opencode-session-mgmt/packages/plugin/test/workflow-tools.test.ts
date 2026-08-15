@@ -74,6 +74,81 @@ describe("workflow_baseline（基线预估工时，6.3）", () => {
   })
 })
 
+describe("reqdoc 打分卡门禁（进入 prd 阶段前）", () => {
+  /** 推进 reqdoc 至 edge 完成，准备进入 prd。 */
+  function setupReqdocAtEdge() {
+    const store = Store.memory(() => "reqdoc")
+    const tools = createWorkflowTools(store)
+    return { store, tools }
+  }
+
+  function setScore(total: number, confirmed = true) {
+    return {
+      dims: {
+        businessValue: { score: 15, max: 15 },
+        flowClosure: { score: total > 85 ? 25 : 20, max: 25 },
+        edgeControl: { score: total > 85 ? 30 : 25, max: 30 },
+        compliance: { score: total > 85 ? 10 : 5, max: 20 },
+        authority: { score: 10, max: 10 },
+      },
+      deductions: [] as never[],
+      total,
+      confirmed,
+      confirmedAt: confirmed ? 1000 : null,
+      updatedAt: 1000,
+    }
+  }
+
+  test("无打分进入 prd 被拒", async () => {
+    const { store, tools } = setupReqdocAtEdge()
+    await expect(
+      tools.workflow_advance!.execute({ stage: "prd", action: "enter", developer_confirmed: false } as never, ctx),
+    ).rejects.toThrow(/先打分/)
+    store.close()
+  })
+
+  test("低于 85 分进入 prd 被拒", async () => {
+    const { store, tools } = setupReqdocAtEdge()
+    store.mutateWorkflow("s1", (w) => {
+      w.score = setScore(75)
+    })
+    await expect(
+      tools.workflow_advance!.execute({ stage: "prd", action: "enter", developer_confirmed: false } as never, ctx),
+    ).rejects.toThrow(/未达标/)
+    store.close()
+  })
+
+  test("已达标但未业务确认进入 prd 被拒", async () => {
+    const { store, tools } = setupReqdocAtEdge()
+    store.mutateWorkflow("s1", (w) => {
+      w.score = setScore(90, false)
+    })
+    await expect(
+      tools.workflow_advance!.execute({ stage: "prd", action: "enter", developer_confirmed: false } as never, ctx),
+    ).rejects.toThrow(/未获业务确认/)
+    store.close()
+  })
+
+  test("达标且业务确认后可进入 prd", async () => {
+    const { store, tools } = setupReqdocAtEdge()
+    store.mutateWorkflow("s1", (w) => {
+      w.score = setScore(90)
+    })
+    const out = await tools.workflow_advance!.execute({ stage: "prd", action: "enter", developer_confirmed: false } as never, ctx)
+    expect(String(out)).toContain("需求规格书")
+    expect(store.get("s1")!.workflow!.stages.prd.status).toBe("in_progress")
+    store.close()
+  })
+
+  test("sdlc 进入阶段不受打分卡门禁影响", async () => {
+    const store = Store.memory() // 缺省 sdlc
+    const tools = createWorkflowTools(store)
+    const out = await tools.workflow_advance!.execute({ stage: "design", action: "enter", developer_confirmed: false } as never, ctx)
+    expect(String(out)).toContain("设计")
+    store.close()
+  })
+})
+
 describe("workflow_revisit 级联回退", () => {
   test("回退早阶段返回信息含级联回退列表", async () => {
     const { store, tools } = setup()

@@ -4,7 +4,14 @@
  * 从插件库读当前会话 WorkflowState，将阶段化规则（global + 当前阶段）+ 一行阶段条追加到 output.system。
  * 阶段化注入只给弱模型当前需要的规则，状态条替代冗长 JSON，降低弱模型遵循负担。
  */
-import { currentInProgressStage, getDefinition, reviewRecord, rulesForStage, type WorkflowState } from "sm-shared"
+import {
+  REQDOC_SCORE_PASS,
+  currentInProgressStage,
+  getDefinition,
+  reviewRecord,
+  rulesForStage,
+  type WorkflowState,
+} from "sm-shared"
 import type { Store } from "./db"
 import { isComplete } from "./stats"
 import { getStuckFiles } from "./tools/quality"
@@ -104,6 +111,12 @@ export function buildStateBar(workflow: WorkflowState, stage: string | null): st
     }
   }
   if (workflow.baseline) lines.push(`基线：已录入 ${workflow.baseline.estimatedHours} 小时`)
+  if (workflow.score) {
+    const passed = workflow.score.total >= REQDOC_SCORE_PASS
+    lines.push(
+      `PRD 评分：${workflow.score.total}/100（${passed ? "达标 ✓" : `未达标，需 ≥${REQDOC_SCORE_PASS} 才可进入渲染/定稿`}）；业务确认：${workflow.score.confirmed ? "已" : "未"}`,
+    )
+  }
   const iteration = workflow.quality.iterationCount ?? 0
   if (iteration > 0) {
     const byFile = Object.entries(workflow.quality.iterationByFile ?? {})

@@ -2,7 +2,7 @@
  * opencode-sm workflow <sessionID> [checklist|comprehension|stats]
  * 工作流状态外部查看（设计文档 5.1）。只读本机插件库。
  */
-import { efficiencyRatio, getDefinition, reviewRecord, sumLinesByCategory } from "sm-shared"
+import { REQDOC_SCORE_DIMS, REQDOC_SCORE_PASS, efficiencyRatio, getDefinition, reviewRecord, sumLinesByCategory } from "sm-shared"
 import { workflowDurationMs } from "sm-plugin/src/stats"
 import { openPluginStore } from "../api"
 import type { ParsedArgs } from "../index"
@@ -12,7 +12,7 @@ export async function runWorkflow(args: ParsedArgs): Promise<void> {
   const sessionID = args.positionals[0]
   const sub = args.positionals[1]
   if (!sessionID) {
-    process.stderr.write("用法: opencode-sm workflow <sessionID> [checklist|comprehension|stats]\n")
+    process.stderr.write("用法: opencode-sm workflow <sessionID> [checklist|comprehension|score|stats]\n")
     process.exitCode = 1
     return
   }
@@ -43,6 +43,29 @@ export async function runWorkflow(args: ParsedArgs): Promise<void> {
         const loc = r.file && r.lines ? `（${r.file}:${r.lines[0]}-${r.lines[1]}）` : ""
         process.stdout.write(`${r.developerConfirmed ? "✅" : "⬜"} ${r.id}${loc}\n`)
       }
+      return
+    }
+    if (sub === "score") {
+      const score = workflow.score
+      if (!score) {
+        process.stdout.write("该会话尚未打分（reqdoc 未调用 reqdoc_score，或本会话不是 reqdoc）。\n")
+        return
+      }
+      const dimLines = REQDOC_SCORE_DIMS.map((d) => {
+        const dim = score.dims[d.key] ?? { score: 0, max: d.max }
+        return `  ${d.label.padEnd(10, " ")} ${dim.score}/${dim.max}${dim.score < d.max ? `（扣 ${d.max - dim.score}）` : ""}`
+      })
+      const dedLines = score.deductions.length
+        ? score.deductions.map((dd) => `  - ${dd.key}: -${dd.points} ${dd.reason}${dd.evidence ? `（证据: ${dd.evidence}）` : ""}`)
+        : "  （无扣分明细）"
+      const passed = score.total >= REQDOC_SCORE_PASS
+      process.stdout.write(
+        `PRD 质量打分卡（${sessionID}）\n` +
+          `${dimLines.join("\n")}\n` +
+          `扣分明细:\n${dedLines}\n` +
+          `总分: ${score.total}/100  ${passed ? `✓ 达标（≥${REQDOC_SCORE_PASS}）` : `✗ 未达标（<${REQDOC_SCORE_PASS}）`}\n` +
+          `业务确认: ${score.confirmed ? `已（${new Date(score.confirmedAt ?? 0).toLocaleString()}）` : "未"}\n`,
+      )
       return
     }
     if (sub === "stats") {

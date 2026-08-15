@@ -6,7 +6,7 @@
  * commit_gate_check  —— 提交门禁检查，返回未完成阶段列表
  */
 import { tool, type ToolDefinition } from "@opencode-ai/plugin"
-import { getDefinition, type WorkflowState } from "sm-shared"
+import { REQDOC_SCORE_PASS, getDefinition, type WorkflowState } from "sm-shared"
 import type { Store } from "../db"
 import { WorkflowOpError, applyTransition, recomputeCommit } from "../workflow-ops"
 
@@ -37,6 +37,23 @@ export function createWorkflowTools(store: Store): Record<string, ToolDefinition
       const saved = store.mutateWorkflow(context.sessionID, (workflow) => {
         assertStage(workflow, args.stage)
         const def = getDefinition(workflow.type)
+        // 打分卡硬门禁（实施方案第三节）：reqdoc 进入 prd（渲染）前须已打分且 total ≥ 85 并获业务确认。
+        if (args.action === "enter" && args.stage === "prd" && def.type === "reqdoc") {
+          const score = workflow.score
+          if (!score) {
+            throw new WorkflowOpError(
+              "进入 prd 前须先打分：请对照打分卡调用 reqdoc_score 输出各维得分与扣分明细并请业务确认（见 reqdoc-r21）",
+            )
+          }
+          if (score.total < REQDOC_SCORE_PASS) {
+            throw new WorkflowOpError(
+              `PRD 质量未达标（${score.total}/100 < ${REQDOC_SCORE_PASS}）：请按扣分明细回 edge 追问补缺后重打 reqdoc_score`,
+            )
+          }
+          if (!score.confirmed) {
+            throw new WorkflowOpError("PRD 打分结果未获业务确认：请向业务展示并确认扣分明细后重调 reqdoc_score(business_confirmed=true)")
+          }
+        }
         if (args.action === "approve") {
           if (def.reviewStage !== null && args.stage === def.reviewStage) {
             throw new WorkflowOpError("审查阶段不可由 AI 自行 approve，请改用 review_submit 工具")

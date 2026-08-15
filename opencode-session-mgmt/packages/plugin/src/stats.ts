@@ -51,6 +51,8 @@ export interface SessionStats {
   baselineHours: number | null
   /** AI 提效率 =（预估 − 实际周期）÷ 预估；无基线或无有效周期为 null，可为负（6.3） */
   efficiency: number | null
+  /** reqdoc PRD 质量打分（实施方案第三节）；reqdoc 未打分或 sdlc 为 null */
+  score: { total: number; confirmed: boolean } | null
   comprehension: { total: number; confirmed: number }
   checklistPassed: number
   cost: number | null
@@ -157,6 +159,7 @@ export function sessionStats(row: WorkflowSessionRow, usage: Usage): SessionStat
     lines: workflow.quality.linesByFile ? sumLinesByCategory(workflow.quality.linesByFile) : null,
     baselineHours: workflow.baseline?.estimatedHours ?? null,
     efficiency: complete ? efficiencyRatio(workflow.baseline?.estimatedHours, durationMs) : null,
+    score: workflow.score ? { total: workflow.score.total, confirmed: workflow.score.confirmed } : null,
     comprehension: { total: review.comprehension.length, confirmed },
     checklistPassed,
     cost: usage.cost,

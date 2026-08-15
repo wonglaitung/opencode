@@ -425,6 +425,8 @@ classDiagram
         +CommitGate commit
         +QualityMetrics quality
         +BaselineEstimate? baseline
+        +ReqdocFeature[]? features
+        +ReqdocScore? score
     }
 
     class StageRecord {
@@ -578,7 +580,7 @@ export function resolveWorkflowType(v: unknown): WorkflowType   // 未知值回�
 
 **sdlc 定义**：五阶段 `["requirements","design","implementation","testing","review"]`，审查阶段为 `review`，四清单项（businessIntent/logicExplainable/behaviorVerifiable/designRationale），`hasCommitGate=true`，结构化规则见 7.4。
 
-**reqdoc 定义**：需求书工作流（需求分析师角色），核心目标**尽量通过 AI 与流程辅助业务人员写需求**：业务「口述 + 丢材料」，AI 扫描提取 + 提问补缺 + 拆功能点 + 按模版代笔成稿，业务逐项确认。源于《业务需求难点与解决方案》的**四段式渐进引导**（目标与场景 → 主流程与规则 → 边界与异常探针 → 自动化排版），外加**功能点拆解**（prd 前置）与**业务确认闭环**。审查阶段（`reviewStage="review"`）语义为**业务确认 PRD 要点**（区别于 sdlc 的代码理解确认），复用同一套 comprehension/checklist/review_submit 闭环机制。四清单项（completeness 信息完整 / clarity 表达明确 / edgeCoverage 边界覆盖 / resolution 职责清晰），`hasCommitGate=false`（定稿无 git 门禁）。阶段键 `["goal","rules","edge","prd","review"]`，中文名 目标与场景 / 流程与规则 / 边界与异常 / 需求规格书 / 业务确认。prd 阶段产出按《业务需求说明书》模板渲染（`docs/reqdoc-prd-template.md`，源自 `docs/模版.docx`），逐字段标来源 `[文档]/[问答]/[缺省]` 不杜撰。`resolveWorkflowType` 支持 `"reqdoc"`。结构化规则见 7.4；需求资料目录契约（双通道）见 7.5。
+**reqdoc 定义**：需求书工作流（需求分析师角色），核心目标**尽量通过 AI 与流程辅助业务人员写需求**：业务「口述 + 丢材料」，AI 扫描提取 + 提问补缺 + 拆功能点 + 按模版代笔成稿，业务逐项确认。源于《业务需求难点与解决方案》的**四段式渐进引导**（目标与场景 → 主流程与规则 → 边界与异常探针 → 自动化排版），外加**功能点拆解**（prd 前置）、**PRD 质量打分卡**（实施方案第三节，5 维权重满分 100、≥85 硬门禁）与**业务确认闭环**。审查阶段（`reviewStage="review"`）语义为**业务确认 PRD 要点**（区别于 sdlc 的代码理解确认），复用同一套 comprehension/checklist/review_submit 闭环机制。四清单项（completeness 信息完整 / clarity 表达明确 / edgeCoverage 边界覆盖 / resolution 职责清晰），`hasCommitGate=false`（定稿无 git 门禁）。阶段键 `["goal","rules","edge","prd","review"]`，中文名 目标与场景 / 流程与规则 / 边界与异常 / 需求规格书 / 业务确认。prd 阶段产出按《业务需求说明书》模板渲染（`docs/reqdoc-prd-template.md`，源自 `docs/模版.docx`），逐字段标来源 `[文档]/[问答]/[缺省]` 不杜撰；渲染严格逐字遵循模板（模板瑕疵原样输出，见 7.4 reqdoc-r20）。`resolveWorkflowType` 支持 `"reqdoc"`。结构化规则见 7.4；需求资料目录契约（双通道）见 7.5；打分卡数据契约见 3.2 `ReqdocScore`。
 
 **reqdoc 五阶段推进流程**（与 sdlc 完成门控同构；定稿闭环为业务确认，目录 → 阶段映射见 7.5）：
 
@@ -598,6 +600,11 @@ graph TB
         F["综合材料+问答<br/>拆功能点清单"] --> FC["reqdoc_confirm_features<br/>业务确认"]
     end
 
+    subgraph ScoreGate["打分卡门禁（实施方案第三节）"]
+        SC["对照打分卡 reqdoc_score<br/>五维打分 + 扣分明细（r21）"] --> SG{"total ≥ 85 且<br/>业务确认?"}
+        SG -->|"✗ 未达标"| EBACK["回 edge 按扣分明细<br/>追问补缺后重打"]
+    end
+
     subgraph Close["定稿闭环（业务确认）"]
         C{"全部要点<br/>已定论?"}
     end
@@ -605,6 +612,9 @@ graph TB
     IterationZone --> F
     F --> FC
     FC --> IterationZone
+    E --> SC
+    SG -->|"✓"| P
+    EBACK --> E
     IterationZone --> C
     C -->|"✓ 全部确认"| PRD["PRD 定稿<br/>产出归档 06_需求规格产出"]
     C -->|"✗ 有未定论"| BACK["回到 prd/edge<br/>补充或重写要点"]
@@ -615,6 +625,10 @@ graph TB
 **BaselineEstimate — 基线预估人工工时（6.3）**：
 
 `baseline` 记录项目经理在需求创建时给出的**预估人工工时**（`estimatedHours`，小时、可小数），`setAt` 为录入时间戳。它给出实际周期的参照系：会话结束后，系统按 `（预估工时 − 实际周期）÷ 预估工时` 计算 **AI 提效百分比**。字段可选（无基线的会话提效率为 N/A），可随时重设（幂等覆盖、记最新值，见 7.4 规则 28-29）；录入由开发者在 TUI 对话中转述项目经理的预估（见 4.1 `workflow_baseline`）。
+
+**ReqdocScore — reqdoc PRD 质量打分卡（实施方案第三节，reqdoc 专属）**：
+
+`score` 记录 PRD 质量打分结果（五维权重满分 100），由 `reqdoc_score` 工具写入。字段可选（未打分或 sdlc 恒缺省），可多次重打覆盖（追问补缺后更新 `updatedAt`）。`dims` 为各维度实得分（键来自 `REQDOC_SCORE_DIMS`，`max` 为对应满分）；`deductions` 为扣分明细（`reason` 原因 + `evidence` 证据引用，含文件路径仅本机留痕，汇报投影不上行）；`total` 由**服务端 = Σ dims 校验后计算**（不信任模型自报总分）；`confirmed`/`confirmedAt` 为业务确认（`business_confirmed=true` 时置真，与 `developer_confirmed` 同属「AI 代转」语义）。达标判定 = `total ≥ REQDOC_SCORE_PASS(85)`，门禁在进入 prd 阶段（`workflow_advance`）与定稿（`review_submit`）两处硬拦截，只对 `def.type === "reqdoc"` 生效；追问轮数上限（最长 3 轮）为规则文本约束（reqdoc-r2），不入状态。
 
 **ReviewChecklist — 可接手标准检查项（sdlc 专属）**：
 
@@ -849,6 +863,9 @@ flowchart TD
 | `review_submit` | 提交审查清单结果（从 `def.checklist` 生成具名参数） | 由 `def.checklist` 生成具名输入参数（非 auto 项布尔，auto 项插件置真）；**前序阶段须全部 `approved`（审查是最后一关）**；有片段/要点时须已 `comprehension_add` 登记、且**全部处于终态 accepted/manual，不允许 pending/rejected 悬空**；通过时自动计算 `firstPassRate`（sdlc 与 reqdoc 均适用） |
 | `commit_gate_check` | 提交前门禁检查（`def.hasCommitGate=true` 时启用） | 返回未完成阶段列表；未通过时 `tool.execute.before` 阻断 `git commit` |
 | `commit_force_unlock` | 强制提交授权（`def.hasCommitGate=true` 时，3.4 逃生口） | `developer_confirmed` 必须为 true、原因必填；写入一次性授权，门禁放行一次后置 `used` 留痕 |
+| `reqdoc_scan` | reqdoc 需求资料扫描：单目录参数、按阶段分步调用（goal→01、rules→03、edge→02/04、prd→06），解析 docx/pdf/xlsx/txt/md/json/csv 等文本类 | 仅列目录 + 提取文本；图像与不支持格式显式降级提示文字描述（qwen3.6 无多模态，7.5 硬约束） |
+| `reqdoc_confirm_features` | reqdoc prd：功能点拆解确认（业务已确认清单后记录） | 仅 reqdoc；建 `05_功能点/N_名称/`（来源摘录）与 `06_需求规格产出/N_名称/` 子目录；重复调用覆盖记录 |
+| `reqdoc_score` | reqdoc 打分卡：对照打分卡逐维打分，附扣分明细与证据引用，业务确认后记录（实施方案第三节） | 仅 reqdoc；`business_confirmed` 必须为 true（防 AI 自评）；五维齐全、`0 ≤ 得分 ≤ 该维度满分`；`total` 由服务端 = Σ 各维计算（不信任模型自报）；可多次重打覆盖 |
 
 工具定义遵循上游插件 `ToolDefinition` 接口（`packages/plugin/src/tool.ts`），由 `tool` hook 注册后自动进入 LLM 可用工具集（上游 `tool/registry.ts` 已接线）。
 
@@ -1389,19 +1406,21 @@ reqdoc 无 `git commit` 门禁，表中「绕过门禁直接提交」风险不�
 | id | stage | 注入文本 |
 |----|-------|----------|
 | reqdoc-r1 | global | 会话开始时，调用 workflow_advance(stage=goal, action=enter) 初始化工作流。 |
-| reqdoc-r2 | global | 采用渐进式分段引导，不要一次性抛出所有问题；单次提问不超过 2 个问题，避免业务有被「质问」的挫败感。 |
+| reqdoc-r2 | global | 采用渐进式分段引导，不要一次性抛出所有问题；单次提问 2-3 个问题，每个问题必须附 A/B/C 选项并标注【默认推荐项】（业务回复「同意默认」即按推荐确认）；同一需求追问最长 3 轮，3 轮后仍未澄清项标 [缺省] 进入下一环节，避免业务有被「质问」的挫败感。 |
 | reqdoc-r3 | global | 阶段可能完成时，先输出摘要并询问确认；仅业务明确表示「确认/可以」才算确认——模糊表态不算，不得自行 approve。确认后调用 workflow_advance(action=approve, developer_confirmed=true)。 |
 | reqdoc-r4 | global | 业务说「回到XX」时，立即调用 workflow_revisit(stage=XX)。绝不自行判断阶段已完成。 |
 | reqdoc-r5 | global | 业务确认完成（review_submit 通过）后，建议执行 /new 开始下一个需求，保持统计隔离。 |
-| reqdoc-r6 | goal | 用一两句话引导业务说明：上线后谁在用、解决什么痛点；提炼【核心用户】【业务场景】【业务价值】，表达模糊时给出 2-3 个选项让业务勾选确认。 |
+| reqdoc-r6 | goal | 用一两句话引导业务说明：上线后谁在用、解决什么痛点；提炼【核心用户】【业务场景】【业务价值】，表达模糊时给出 A/B/C 选项并标注【默认推荐项】让业务勾选确认。 |
 | reqdoc-r7 | goal | 进入 goal 阶段时，主动询问预估人工书写工时（小时）；业务明确给出后调用 workflow_baseline(developer_confirmed=true)。未提供不阻塞；已录入后不必重复询问。 |
 | reqdoc-r8 | goal | 目录就绪检查：项目根约定 01~06 需求资料目录（01_背景与目标、02_制度与合规、03_流程与数据、04_角色与权限，此四目录业务投放材料；05_功能点、06_需求规格产出为 AI 工作区）。尚无时询问业务是否搭建骨架，确认后创建（幂等，绝不重建或覆盖业务已放材料）；业务说资料已放好则调用 reqdoc_scan(directory=01_背景与目标) 扫描提取作引导输入。 |
 | reqdoc-r9 | rules | 引导补全主流程：用户输入哪些信息、系统处理后给什么结果；将自然语言转化为字段定义（数据项 / 是否必填 / 校验规则）。 |
 | reqdoc-r10 | rules | 自动推演 Mermaid 流程图，反向展示给业务确认；业务说资料已放好则调用 reqdoc_scan(directory=03_流程与数据) 扫描提取字段与流程作输入。 |
 | reqdoc-r11 | edge | 主动追问三类探针：数据与权限（所有岗位可见还是按机构/层级隔离）、异常流程（接口超时 / 操作失败 / 审批驳回，报错还是人工补单）、合规留痕（资金/敏感变更是否留审计日志、是否二次授权）。 |
 | reqdoc-r12 | edge | 按已投放材料反问缺口（如已有制度但缺权限，追问「不同岗位的权限如何隔离」）；业务说资料已放好则调用 reqdoc_scan(directory=02_制度与合规) 与 reqdoc_scan(directory=04_角色与权限) 扫描提取作输入。 |
+| reqdoc-r21 | edge | 打分时机与门禁（实施方案打分卡）：边界与异常收集完成、准备进入 prd 前，基于已扫描材料 + 问答对照打分卡逐维打分——业务目标与价值（15）、主流程逻辑闭环（25）、异常与边界控制（30）、合规与数据安全（20）、权限与机构隔离（10），满分 100。调用 reqdoc_score 输出各维得分与扣分明细（附证据引用），向业务展示并请其确认；business_confirmed=true 且 total≥85 后才可 workflow_advance(stage=prd, action=enter)。<85 分按扣分明细继续追问补缺后重打 reqdoc_score；严禁未展示扣分明细即自报达标。 |
 | reqdoc-r13 | prd | 功能点拆解（核心）：综合 goal/rules/edge 收集的信息（材料提取 + 问答）把需求拆成功能点清单（编号/名称/优先级），先向业务展示确认；业务确认后调用 reqdoc_confirm_features(features=[{name,priority}]...) 记录，并为每个功能点在 05_功能点 下建子目录写入来源摘录（标注 [文档]/[问答] 来源）。业务说资料已放好则先调用 reqdoc_scan(directory=06_需求规格产出) 检查已有产出。 |
 | reqdoc-r14 | prd | 按《业务需求说明书》模板渲染最终 PRD（模板 `docs/reqdoc-prd-template.md`，源 `docs/模版.docx`；运行目录可读则按完整模板，否则按内联骨架）：封面（项目信息表、文档变更过程表）→ 第一章 需求概述（需求类型/流程优化/跨部门/总行开发/希望完成时间/提出原因及功能概述）→ 第二章 需求概述（术语定义、业务规则）→ 第三章 需求功能详述（按已确认功能点：输入要素/处理要求/异常/清算/差错/交易安全/数据存贮/附件）。每功能点内容从 05_功能点/N_名称/ 来源摘录 + 问答补全，逐字段标来源 [文档]/[问答]/[缺省]，绝不杜撰；未涉及项选「不涉及/不适用」并留白；项目信息表与文档变更过程属项目元数据，不主动问业务，渲染时留空占位。产出归档：澄清记录、Mermaid 流程图、最终 PRD 写入 06_需求规格产出。 |
+| reqdoc-r20 | prd | 渲染铁律 + 字段映射（模板冻结约束）：渲染严格逐字遵循《模版.docx》（`docs/reqdoc-prd-template.md` 为 md 渲染版），不调整章节顺序/标题/字段名；即使模板内部存在编号或标题瑕疵（第二章重复标题、3.0 附件编号、功能点优先级默认不一致）也一律原样输出、不擅自修正，结构问题归行方模板主管部门。打分卡扣分项按以下映射落位到模板既有字段：脱敏规则（手机号/身份证遮罩）→功能点 2.8 交易安全性/2.9 数据存贮和清理；资金或高危变更留痕与双人复核→1.2 控制要求/2.8 交易安全性；总/分/支行数据边界与岗位权限→1.2 控制要求/2.1 输入要素的检查；异常边界（网络超时/操作失败/并发重复提交/逆向撤销驳回）→2.3 异常处理要求/2.6 清算处理/2.7 差错处理；模板确无对应字段的补充内容→2.2 系统处理过程或功能点描述，来源标注注明「补」。模板外成果（Mermaid 流程图、UAT 验收测试用例、低保真界面说明）不插入模板正文，用 write 写入 06_需求规格产出 下子目录（附_流程图/、测试用例/、界面草图/），并在对应功能点「3.0 附件」列出清单与相对路径。 |
 | reqdoc-r15 | review | review 是唯一不可由 AI 自行推进的阶段（必须经 review_submit），确保业务真正理解并确认 PRD 要点。 |
 | reqdoc-r16 | review | 将 PRD 拆分为可确认要点（业务目标 / 核心字段 / 异常规则 / 合规要求），comprehension_add 逐段复述输出。 |
 | reqdoc-r17 | review | 业务确认某要点时，立即调用 comprehension_confirm(codeSegmentId=该要点 id)；单次只接受一个要点，逐段确认、禁止一次确认多个。 |
@@ -1410,7 +1429,7 @@ reqdoc 无 `git commit` 门禁，表中「绕过门禁直接提交」风险不�
 
 ### 7.5 reqdoc 需求资料目录契约（重构：双通道）
 
-该目录由 `REQDOC.rules`（见 7.4）驱动 Agent 落地：目录就绪检查落在 goal 阶段规则（reqdoc-r8），各阶段扫描映射嵌在 rules/edge/prd 规则（reqdoc-r10/12/13），产出归档在 reqdoc-r14。**文档扫描经专用工具 `reqdoc_scan` 执行**（单目录参数、按阶段分步调用），对话补缺沿用渐进引导——「分析文档 + 提问题」双通道。
+该目录由 `REQDOC.rules`（见 7.4）驱动 Agent 落地：目录就绪检查落在 goal 阶段规则（reqdoc-r8），各阶段扫描映射嵌在 rules/edge/prd 规则（reqdoc-r10/12/13），产出归档在 reqdoc-r14，进入 prd 前的打分卡门禁在 reqdoc-r21。**文档扫描经专用工具 `reqdoc_scan` 执行**（单目录参数、按阶段分步调用），对话补缺沿用渐进引导——「分析文档 + 提问题」双通道。
 
 reqdoc 面向**业务人员**。业务习惯把现成资料（监管发文、旧流程 Word、Excel 台账）散着给，而非结构化表达。为此约定一套**需求资料目录**：业务「按图索骥」分类投放，Agent 经 `reqdoc_scan` 按目录语义精准检索，支撑 7.4 的渐进式引导。目录信息不进汇报（见第 11 章）、不占用插件库，仅存在于 Agent 的引导行为与 `reqdoc_scan` 工具。
 
@@ -1423,7 +1442,7 @@ reqdoc 面向**业务人员**。业务习惯把现成资料（监管发文、旧
 ├── 03_流程与数据/          # 【业务投放】旧流程/SOP、数据字段说明、Excel 台账
 ├── 04_角色与权限/          # 【业务投放】岗位角色与权限矩阵
 ├── 05_功能点/              # 【Agent 工作区】功能点拆解确认后，每功能点一个子目录（N_名称/来源摘录）
-├── 06_需求规格产出/        # 【Agent 输出区】澄清记录 / Mermaid 流程图 / 最终 PRD
+├── 06_需求规格产出/        # 【Agent 输出区】澄清记录 / Mermaid 流程图 / 最终 PRD；每功能点一个子目录（N_名称/，含 附_流程图/ 测试用例/ 界面草图/）
 └── README.md               # 填写指引
 ```
 
@@ -1458,15 +1477,21 @@ flowchart TD
     I --> J["reqdoc_scan 扫描对应目录提取"]
     J --> K["对照缺口提问补全（渐进引导 goal→rules→edge）"]
     F --> K
-    K --> L["prd：功能点拆解 → reqdoc_confirm_features 确认 → 按模版渲染"]
-    L --> M["产出归档 06_需求规格产出 + review 业务确认"]
+    K --> S["reqdoc_score 五维打分<br/>展示扣分明细（r21）"]
+    S --> SG{"total ≥ 85 且<br/>业务确认?"}
+    SG -->|"✗"| K2["按扣分明细回 edge 追问<br/>补缺后重打"]
+    K2 --> K
+    SG -->|"✓"| L["prd：功能点拆解 → reqdoc_confirm_features 确认 → 按模版渲染（r20 铁律）"]
+    L --> M["产出归档 06_需求规格产出（附_流程图/测试用例/界面草图 + 3.0 附件清单）+ review 业务确认"]
 ```
 
 - **就绪检查**：进入 goal 阶段时检查 01~06 是否存在；缺失则询问业务确认后创建（含 `README.md`），业务拒绝则直接对话式引导。
 - **扫描工具**：`reqdoc_scan(directory)` 单目录参数、按阶段分步调用（goal→01、rules→03、edge→02 与 04、prd→06 检查已有产出），解析 docx/pdf/xlsx/txt/md/json/csv 等文本类文档。
 - **缺失度校验**：扫描后按映射主动反问——`01` 缺失则优先问「系统要解决的核心痛点」；有 `02` 制度却无 `04` 权限则追问「该制度要求不同岗位的权限如何隔离」。
-- **功能点拆解**：prd 阶段综合材料 + 问答信息拆功能点清单，业务确认后 `reqdoc_confirm_features` 记录，每功能点建 `05_功能点/N_名称/` 子目录 + 来源摘录，作为渲染依据。
-- **产出归档**：澄清记录、Mermaid 流程图、终稿 PRD 写入 `06_需求规格产出`；渲染逐字段标来源 `[文档]/[问答]/[缺省]`，绝不杜撰。
+- **功能点拆解**：prd 阶段综合材料 + 问答信息拆功能点清单，业务确认后 `reqdoc_confirm_features` 记录，每功能点建 `05_功能点/N_名称/` 子目录 + 来源摘录，并幂等预建 `06_需求规格产出/N_名称/`（模板外成果落盘位），作为渲染依据。
+- **打分卡门禁**：edge 收集完成、准备进入 prd 前，对照打分卡（业务目标与价值 15 / 主流程逻辑闭环 25 / 异常与边界控制 30 / 合规与数据安全 20 / 权限与机构隔离 10，满分 100）调用 `reqdoc_score` 输出各维得分与扣分明细（附证据），向业务展示确认后 `business_confirmed=true`；total ≥ 85 且业务确认才可 `workflow_advance(stage=prd, action=enter)`。低于 85 分回 edge 按扣分明细追问补缺后重打覆盖。门禁两处硬拦截：进入 prd 阶段（workflow_advance）与定稿（review_submit），只对 `def.type === "reqdoc"` 生效；`reqdoc_score` 的 `business_confirmed` 由 AI 转述业务确认，与 `developer_confirmed` 同属「AI 代转」语义，缓解靠扣分明细结构化留痕 + 状态条/CLI 可见 + 评测场景约束。
+- **产出归档**：澄清记录、Mermaid 流程图、终稿 PRD 写入 `06_需求规格产出/N_名称/`；Mermaid 流程图、UAT 验收测试用例、低保真界面说明不插入模板正文，按 reqdoc-r20 写入 `附_流程图/`、`测试用例/`、`界面草图/` 子目录，并在对应功能点「3.0 附件」列出清单与相对路径；渲染逐字段标来源 `[文档]/[问答]/[缺省]`，绝不杜撰。
+- **渲染铁律（模板冻结）**：渲染严格逐字遵循《模版.docx》，模板内部瑕疵（第二章重复标题、3.0 附件编号、功能点优先级默认不一致）一律原样输出、不擅自修正，结构问题归行方模板主管部门；打分卡扣分项按 reqdoc-r20 映射表落位（无对应字段标「补」）。
 
 **多模态边界（硬约束）**：`reqdoc_scan` 目标部署模型（qwen3.6）为纯文本模型，**不支持读图**。扫描件图片/截图由工具显式降级（返回「无法解析图像，请业务文字描述或提供文本版」），杜绝 Agent 空承诺看图。
 
@@ -1505,8 +1530,11 @@ flowchart TD
 | `src/db/index.ts` | 插件 SQLite 初始化与迁移（bun:sqlite，WAL 模式） |
 | `src/identity.ts` | 读全局 `identity.json`，会话首次活动时打标 `account_id` |
 | `src/prompt.ts` | system prompt 注入片段：阶段化注入（rulesForStage 取 global + 当前阶段规则）+ buildStateBar 一行阶段条替代冗长 JSON；`stage===null` 三态化：未启动（起步）/ 空档态（部分 approved：继续→进入下一阶段 / 回退→revisit）/ 完成态（专用完成块：「提交 commit_gate_check / 开新需求 /new / 改本需求 workflow_revisit」，不注入常规全局规则；合并 open-ide 后完成态另读锁表提示解锁，仅 sdlc） |
-| `src/tools/workflow.ts` | `workflow_advance` / `workflow_revisit` / `workflow_baseline` / `commit_gate_check` / `commit_force_unlock` 工具 |
-| `src/tools/review.ts` | `comprehension_add` / `comprehension_confirm` / `comprehension_reject` / `comprehension_rewrite` / `comprehension_manual` / `comprehension_ask` / `review_submit` 工具（含防批量确认校验与终态门禁） |
+| `src/tools/workflow.ts` | `workflow_advance`（含 reqdoc 进入 prd 的打分卡门禁）/ `workflow_revisit` / `workflow_baseline` / `commit_gate_check` / `commit_force_unlock` 工具 |
+| `src/tools/review.ts` | `comprehension_add` / `comprehension_confirm` / `comprehension_reject` / `comprehension_rewrite` / `comprehension_manual` / `comprehension_ask` / `review_submit` 工具（含防批量确认校验、终态门禁、reqdoc 定稿打分卡兜底校验） |
+| `src/tools/reqdoc-scan.ts` | reqdoc 文档扫描工具（单目录、按阶段分步、文本类解析，图像显式降级） |
+| `src/tools/reqdoc-features.ts` | `reqdoc_confirm_features` 功能点拆解确认（建 05_功能点 与 06_需求规格产出 子目录） |
+| `src/tools/reqdoc-score.ts` | `reqdoc_score` 打分卡工具（五维校验、服务端算总分、business_confirmed 强制、可重打覆盖） |
 | `src/tools/quality.ts` | 迭代计数 + AI 代码行数累计逻辑（`quality_report` 已移除，firstPassRate 由 review.ts 自动计算） |
 | `src/workflow-ops.ts` | 阶段转换（enter/approve/revisit，3.3）与提交门禁重算（3.4），工具与门禁共用的状态机 |
 | `src/gate.ts` | `tool.execute.before` 提交门禁拦截（git commit 阻断） |
@@ -1614,6 +1642,7 @@ opencode-sm init                                  # 3. 五问：账号 / 组 / �
 
 - 本机会话数据存储于本地插件 SQLite；跨机汇聚仅传输**流程摘要**（阶段时间戳、cost/tokens、质量指标、身份字段），**不含代码内容**
 - 迭代计数明细 `iterationByFile`、行数明细 `linesByFile`（键均为文件路径）仅存本机插件库，汇报投影（`summarizeWorkflow`）已剥离——与理解确认片段剥离 `file`/`lines`/`explanation` 的口径一致，文件路径不上行；行数仅以业务/测试/配置三类聚合数字上行
+- reqdoc 打分卡 `score`（含 `deductions.evidence` 证据引用的文件路径）整体**不进入汇报投影**（`summarizeWorkflow` 未包含 `score` 字段），仅存本机插件库供 `opencode-sm workflow <id> score` / 状态条展示——比文件路径剥离更保守
 - 强制提交授权 `commit.force`（原因、时间、是否已用）随汇报上行：原因是开发者口述的流程元数据、非代码内容；上行是为让"绕过审查的提交"在组/组织统计中可见，服务于退出风险监控
 - 汇报携带的账号邮箱属个人信息：收集服务应仅内网可达、最小化留存，访问权限限于组/组织管理者
 - 组织级分析基于收集服务聚合库（各人汇报快照），不读上游账号体系
@@ -1641,6 +1670,7 @@ opencode-sm tag <id> --add feature auth
 opencode-sm workflow <id>
 opencode-sm workflow <id> checklist
 opencode-sm workflow <id> comprehension --unconfirmed
+opencode-sm workflow <id> score                   # reqdoc 打分卡明细（五维/扣分/总分/确认状态）
 opencode-sm workflow-type get                    # 查看当前工作流类型
 opencode-sm workflow-type set reqdoc             # 轻量改角色（只影响之后新会话）
 opencode-sm stats <id>
@@ -1677,7 +1707,7 @@ bun run scripts/eval-rules/run.ts --variant new              # 改造后 → res
 
 ### 13.2 场景集
 
-35 个场景（sdlc s1-s22 + reqdoc r1-r13），覆盖关键规则：
+39 个场景（sdlc s1-s22 + reqdoc r1-r17），覆盖关键规则：
 
 - 基线录入不重复、确认后 approve、无确认不 approve、回到XX→revisit、审查逐段不批量、前序未完成不 submit、提交前查门禁
 - **完成后提示 /new**（sdlc s9 / reqdoc r7，`text.keyword` 判定回复须含 `/new`）
@@ -1686,14 +1716,15 @@ bun run scripts/eval-rules/run.ts --variant new              # 改造后 → res
 - **审查全流程**（sdlc s12-s19 / reqdoc r8-r10：正向 review_submit 且片段全定论、片段未定论不 submit、reject 必带反馈、拒绝后 rewrite/manual、追问 ask、审查不可 advance approve 必须 review_submit、拒绝复议后 confirm、reqdoc 要点未定论防定稿）
 - **手工修改走 open_ide 锁定与改完确认解锁**（sdlc s20-s21，sdlc-r12 规则，open_ide/unlock_file 契约——open-ide 已**物理合并**进本工程 `packages/plugin/src/open-ide/`，单一插件加载；锁持久化进 SQLite `file_lock` 表，daemon 重启自动恢复，会话删除后由启动时 `pruneLocks` 修剪）
 - **SDLC 完结 → 提示解锁**（合并新增，插件硬能力）：完成态注入与 `review_submit` 返回均直接读锁表，有锁时提示开发者确认后逐个 `unlock_file`；仅 sdlc（`hasCommitGate` 门控），reqdoc 完成态不提示
-- reqdoc 渐进引导 ≤2 问 / 业务确认单要点 / edge 探针
+- reqdoc 渐进引导 2-3 问带 A/B/C 选项与【默认推荐项】（r1，`text.optionsABC`，问句 ≤3 + 含「默认」+ ≥2 个选项标记）/ 业务确认单要点 / edge 探针
 - **reqdoc 双通道与功能点拆解**（重构新增 r11-r13）：资料已放好应 `reqdoc_scan` 扫描分析而非空问（r11）、prd 功能点拆解经 `reqdoc_confirm_features` 确认（r12）、功能点未确认不得直接渲染定稿（r13，no_tool 禁 workflow_advance/reqdoc_confirm_features）
+- **打分卡门禁**（实施方案新增 r14-r17）：进 prd 前先 `reqdoc_score` 打分（r14）、低于 85 分不定稿（r15，no_tool 禁 review_submit）、高分未业务确认不定稿（r16）、达标且业务确认后定稿（r17，正向 review_submit）；r8/r9 正向/未定论定稿场景夹具同步补打分卡（保持与真实门禁一致）
 
 ### 13.3 判定方式（rule-based，不用 LLM judge）
 
 - 工具类比对 `tool_use` 名称与参数谓词（如 approve 时 `developer_confirmed` 必须 true）
 - `no_tool` 类断言未调用某工具
-- `text` 类（≤2 问、探针关键词）为关键词启发式，判定口径脆弱需人工复核
+- `text` 类（maxQuestions 问句计数、optionsABC 问句 ≤max 且含「默认」+ ≥2 个 A/B/C 标记、categoryKeywords 探针关键词）为关键词启发式，判定口径脆弱需人工复核
 
 ### 13.4 实测记录与迭代闭环
 
@@ -1704,6 +1735,8 @@ bun run scripts/eval-rules/run.ts --variant new              # 改造后 → res
 **实测结果二**（2026-08-14，29 场景，repeat 1）：本地 qwen3.6（vLLM 8086）整体 **28/29（97%）**，唯一失败 `r1 渐进引导 ≤2 问`（问句 17 个超上限 2）；远端 deepseek-v4-flash（zen/go）整体 **28/29（97%）**，唯一失败 `r10 要点拒绝后重写`（userTurn「边界这块」存在二义——edge 阶段名 vs 要点 id，模型偶发改走 `workflow_revisit`）。
 
 **实测结果三**（2026-08-14，31 场景含 s20-s21，repeat 1）：新增 `open_ide`/`unlock_file` 手工文件锁场景（sdlc-r12，open-ide 此后并入本工程）。远端 deepseek-v4-flash（zen/go，`EVAL_MAX_TOKENS=4096`）整体 **31/31（100%）**；本地 qwen3.6（`EVAL_MAX_TOKENS=2048`）整体 **28/31（90%）**，sdlc **21/21（100%）**（r12 改动零回归），reqdoc 仅 `r1 渐进引导`（既有稳定失败）与 `r2/r10 要点 id 参数匹配`（qwen3.6 对中文 id 精确复述波动，与 r12 无关）。s20/s21 初版 userTurn 未指明文件却期望模型杜撰 `file` 调 `open_ide`（与「未明确文件先询问」规则矛盾），两模型均失败；改为明确 `auth/service.ts` 后通过——**新增场景的 userTurn 须先满足规则触发前提**。
+
+**本轮（打分卡补齐）场景集扩至 39 个（r1 改为 optionsABC 断言 2-3 问带选项与默认推荐；新增 r14-r17 打分卡门禁）**：需对端点重新跑 `--variant baseline` → `--variant new` 对比（见验证步骤），确认 sdlc 零回归、reqdoc 打分门禁场景通过后再入库。
 
 ### 13.5 关键教训（多次迭代沉淀）
 

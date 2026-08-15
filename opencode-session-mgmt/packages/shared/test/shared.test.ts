@@ -4,6 +4,8 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
   REQDOC,
+  REQDOC_SCORE_DIMS,
+  REQDOC_SCORE_PASS,
   SDLC,
   WORKFLOW_DEFINITIONS,
   createWorkflowState,
@@ -251,6 +253,24 @@ describe("WorkflowDefinition 注册表（3.2）", () => {
     // 双通道：文档扫描工具 + 功能点拆解确认工具（重构核心）
     expect(REQDOC.rules.some((r) => r.text.includes("reqdoc_scan"))).toBe(true)
     expect(REQDOC.rules.some((r) => r.text.includes("reqdoc_confirm_features"))).toBe(true)
+    // 打分卡（实施方案第三节）：追问约束（r2 2-3 问带 A/B/C 与默认推荐、最长 3 轮）、
+    // 打分时机与门禁（r21，edge）、渲染铁律 + 字段映射（r20，prd）
+    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r2" && r.text.includes("2-3 个问题") && r.text.includes("默认推荐"))).toBe(true)
+    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r6" && r.text.includes("默认推荐"))).toBe(true)
+    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r20" && r.text.includes("渲染铁律") && r.text.includes("字段映射"))).toBe(true)
+    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r21" && r.stage === "edge" && r.text.includes("reqdoc_score"))).toBe(true)
+  })
+
+  test("打分卡契约：五维权重满分 100、达标线 85", () => {
+    expect(REQDOC_SCORE_DIMS.map((d) => d.key)).toEqual([
+      "businessValue",
+      "flowClosure",
+      "edgeControl",
+      "compliance",
+      "authority",
+    ])
+    expect(REQDOC_SCORE_DIMS.reduce((sum, d) => sum + d.max, 0)).toBe(100)
+    expect(REQDOC_SCORE_PASS).toBe(85)
   })
 
   test("createWorkflowState(reqdoc) 含 reqdoc 阶段与清单", () => {

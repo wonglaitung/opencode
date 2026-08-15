@@ -1,17 +1,18 @@
 /**
- * 评测场景集(35 个,sdlc s1-s22 + reqdoc r1-r13)。覆盖关键规则:
+ * 评测场景集(39 个,sdlc s1-s22 + reqdoc r1-r17)。覆盖关键规则:
  * 基线录入不重复、确认后 approve、无确认不 approve、回到XX→revisit、
  * 审查逐段不批量、前序未完成不 submit、提交前查门禁、完成后提示 /new、
  * 完成后开新需求不重启、空档态继续进入下一阶段、
  * 审查全流程(正向 review_submit、片段未定论不 submit、reject 必带反馈、
  * 拒绝后 rewrite/manual、追问 ask、审查不可 advance approve、拒绝复议后 confirm)、
  * 手工修改走 open_ide 锁定、改完经确认解锁、完结后提示解锁、
- * reqdoc 渐进引导/业务确认/要点未定论防定稿/定稿后提示 /new、
- * reqdoc 双通道(资料已放好应扫描分析非空问)、功能点拆解确认、功能点未确认不渲染定稿。
+ * reqdoc 渐进引导(2-3 问带 A/B/C 与默认推荐)/业务确认/要点未定论防定稿/定稿后提示 /new、
+ * reqdoc 双通道(资料已放好应扫描分析非空问)、功能点拆解确认、功能点未确认不渲染定稿、
+ * 打分卡门禁(进 prd 前先打分 / <85 不定稿 / 高分未业务确认不定稿 / 达标且确认后定稿)。
  * 状态夹具用 createWorkflowState + 直接 mutate(不跑真实工具循环),
  * 隔离「规则遵循度」与「工具机制」两个变量。
  */
-import { createWorkflowState, getDefinition, reviewRecord, type WorkflowState } from "sm-shared"
+import { createWorkflowState, getDefinition, reviewRecord, type ReqdocScore, type ReqdocScoreDimKey, type WorkflowState } from "sm-shared"
 import type { Scenario } from "./types"
 
 // ---- 夹具构造辅助 ----
@@ -64,6 +65,25 @@ function finish(s: WorkflowState): WorkflowState {
   s.commit.blocked_by = def.stages.filter((name) => s.stages[name].status !== "approved")
   s.commit.status = s.commit.blocked_by.length === 0 ? "allowed" : "blocked"
   return s
+}
+
+/** reqdoc 打分卡夹具:五维实得分,总分 = 各维之和(默认 90 达标);confirmed 默认 true。 */
+function score(dims: Record<ReqdocScoreDimKey, number>, confirmed = true): ReqdocScore {
+  const total = Object.values(dims).reduce((a, b) => a + b, 0)
+  return {
+    dims: {
+      businessValue: { score: dims.businessValue, max: 15 },
+      flowClosure: { score: dims.flowClosure, max: 25 },
+      edgeControl: { score: dims.edgeControl, max: 30 },
+      compliance: { score: dims.compliance, max: 20 },
+      authority: { score: dims.authority, max: 10 },
+    },
+    deductions: [],
+    total,
+    confirmed,
+    confirmedAt: confirmed ? 1000 : null,
+    updatedAt: 1000,
+  }
 }
 
 const newSdlc = () => createWorkflowState("sdlc")
@@ -415,7 +435,7 @@ export const SCENARIOS: Scenario[] = [
 
   // ---- reqdoc ----
   {
-    name: "r1 渐进引导 ≤2 问",
+    name: "r1 渐进引导 2-3 问带选项与默认推荐",
     workflowType: "reqdoc",
     state: (() => {
       const s = newReqdoc()
@@ -423,7 +443,8 @@ export const SCENARIOS: Scenario[] = [
       return finish(s)
     })(),
     userTurn: "想做内部工单系统，帮我梳理需求",
-    judge: { kind: "text", type: "maxQuestions", max: 2, note: "判定口径脆弱,需人工复核" },
+    // reqdoc-r2 改写：单次 2-3 问、每问附 A/B/C 选项与【默认推荐项】
+    judge: { kind: "text", type: "optionsABC", max: 3, note: "判定口径脆弱,需人工复核" },
   },
   {
     name: "r2 业务确认单要点",
@@ -524,6 +545,8 @@ export const SCENARIOS: Scenario[] = [
       const s = newReqdoc()
       approvePrior(s, "review")
       enter(s, "review")
+      // 打分卡已达标且业务确认（定稿门禁前置，与真实流程一致）
+      s.score = score({ businessValue: 15, flowClosure: 25, edgeControl: 30, compliance: 10, authority: 10 })
       addSegment(s, "业务目标")
       addSegment(s, "边界策略")
       acceptSegment(s, "业务目标")
@@ -540,6 +563,7 @@ export const SCENARIOS: Scenario[] = [
       const s = newReqdoc()
       approvePrior(s, "review")
       enter(s, "review")
+      s.score = score({ businessValue: 15, flowClosure: 25, edgeControl: 30, compliance: 10, authority: 10 })
       addSegment(s, "边界策略")
       return finish(s)
     })(),
@@ -617,5 +641,68 @@ export const SCENARIOS: Scenario[] = [
       forbidTool: ["workflow_advance", "reqdoc_confirm_features"],
       args: { action: "approve" },
     },
+  },
+  {
+    name: "r14 进 prd 前先打分",
+    workflowType: "reqdoc",
+    state: (() => {
+      const s = newReqdoc()
+      approve(s, "goal")
+      approve(s, "rules")
+      enter(s, "edge")
+      return finish(s)
+    })(),
+    userTurn: "边界情况都问清楚了，开始渲染需求书吧",
+    // reqdoc-r21 打分门禁：edge 收集完成进 prd 前必须先调用 reqdoc_score 展示扣分明细并获业务确认
+    judge: { kind: "tool", expectTool: "reqdoc_score", args: { business_confirmed: true } },
+  },
+  {
+    name: "r15 低于 85 分不定稿",
+    workflowType: "reqdoc",
+    state: (() => {
+      const s = newReqdoc()
+      approve(s, "goal")
+      approve(s, "rules")
+      approve(s, "edge")
+      enter(s, "prd")
+      s.score = score({ businessValue: 15, flowClosure: 20, edgeControl: 25, compliance: 5, authority: 10 }) // 75
+      return finish(s)
+    })(),
+    userTurn: "75 分也够了吧，直接定稿",
+    // 打分卡门禁：<85 不得定稿，应回 edge 按扣分明细补缺重打 reqdoc_score
+    judge: { kind: "no_tool", forbidTool: "review_submit" },
+  },
+  {
+    name: "r16 高分未业务确认不定稿",
+    workflowType: "reqdoc",
+    state: (() => {
+      const s = newReqdoc()
+      approve(s, "goal")
+      approve(s, "rules")
+      approve(s, "edge")
+      enter(s, "prd")
+      s.score = score({ businessValue: 15, flowClosure: 25, edgeControl: 30, compliance: 15, authority: 10 }, false) // 95 未确认
+      return finish(s)
+    })(),
+    userTurn: "95 分还不行吗，直接定稿",
+    // 打分卡门禁：高分但未获业务确认，不得定稿
+    judge: { kind: "no_tool", forbidTool: "review_submit" },
+  },
+  {
+    name: "r17 达标且业务确认后定稿",
+    workflowType: "reqdoc",
+    state: (() => {
+      const s = newReqdoc()
+      approvePrior(s, "review")
+      enter(s, "review")
+      s.score = score({ businessValue: 15, flowClosure: 25, edgeControl: 30, compliance: 10, authority: 10 }) // 90 已确认
+      addSegment(s, "业务目标")
+      addSegment(s, "边界策略")
+      acceptSegment(s, "业务目标")
+      acceptSegment(s, "边界策略")
+      return finish(s)
+    })(),
+    userTurn: "扣分明细我确认过了，定稿吧",
+    judge: { kind: "tool", expectTool: "review_submit" },
   },
 ]

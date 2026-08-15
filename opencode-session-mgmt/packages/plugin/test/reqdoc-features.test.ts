@@ -44,6 +44,8 @@ describe("reqdoc_confirm_features", () => {
     const dir = join(worktree, "05_功能点", "1_名单排查")
     expect(readdirSync(dir)).toContain("来源摘录.md")
     expect(readFileSync(join(dir, "来源摘录.md"), "utf8")).toContain("功能点 1")
+    // 重构：同时预建 06_需求规格产出/N_名称/（模板外成果落盘位，reqdoc-r20 归档要求）
+    expect(readdirSync(join(worktree, "06_需求规格产出", "1_名单排查"))).toEqual([])
     store.close()
   })
 

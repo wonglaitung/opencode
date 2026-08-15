@@ -11,7 +11,7 @@
  * review_submit         —— 提交审查清单：所有片段处于终态(accepted/manual)，通过时自动计算 firstPassRate
  */
 import { tool, type ToolDefinition } from "@opencode-ai/plugin"
-import { WORKFLOW_DEFINITIONS, getDefinition, reviewRecord, type ComprehensionRecord } from "sm-shared"
+import { REQDOC_SCORE_PASS, WORKFLOW_DEFINITIONS, getDefinition, reviewRecord, type ComprehensionRecord } from "sm-shared"
 import type { Store } from "../db"
 import { WorkflowOpError, applyTransition, recomputeCommit } from "../workflow-ops"
 
@@ -225,6 +225,22 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
             throw new WorkflowOpError(
               `审查前须先完成 ${def.labels[name]}（当前 ${def.labels[name]} 尚未 approved），请先推进该阶段`,
             )
+          }
+        }
+        // 打分卡定稿兜底（实施方案第三节）：reqdoc 定稿前须已打分达标（≥85）且获业务确认，
+        // 防止越序/未打分直接定稿。prd 入口门禁之外的第二道闸（防弱模型跳过）。
+        if (def.type === "reqdoc") {
+          const score = workflow.score
+          if (!score) {
+            throw new WorkflowOpError("PRD 未打分，不能定稿：请先调用 reqdoc_score 对照打分卡记录扣分明细并获业务确认")
+          }
+          if (score.total < REQDOC_SCORE_PASS) {
+            throw new WorkflowOpError(
+              `PRD 质量未达标（${score.total}/100 < ${REQDOC_SCORE_PASS}），不能定稿：请回 edge 按扣分明细追问补缺后重打 reqdoc_score`,
+            )
+          }
+          if (!score.confirmed) {
+            throw new WorkflowOpError("PRD 打分结果未获业务确认，不能定稿")
           }
         }
         const total = review.comprehension.length

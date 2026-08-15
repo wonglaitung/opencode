@@ -281,4 +281,45 @@ export const EVAL_TOOLS: OpenAITool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "reqdoc_score",
+      description:
+        "reqdoc 打分卡：AI 对照打分卡(业务目标与价值 15 / 主流程逻辑闭环 25 / 异常与边界控制 30 / 合规与数据安全 20 / 权限与机构隔离 10，满分 100)逐维打分，并附扣分明细与证据引用。" +
+        "必须先向业务展示各维得分与扣分明细，业务明确认可后才调用本工具记录；total 由服务端计算。仅 reqdoc 工作流有效；<85 分可按扣分明细回 edge 追问补缺后重打覆盖。",
+      parameters: {
+        type: "object",
+        properties: {
+          dims: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                key: { type: "string", enum: ["businessValue", "flowClosure", "edgeControl", "compliance", "authority"], description: "维度键" },
+                score: { type: "integer", description: "该维度实得分(0~该维度满分)" },
+                deductions: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      reason: str("扣分原因(如「未提及任何异常流程」)"),
+                      points: { type: "integer", description: "该条扣分数(≤该维度满分)" },
+                      evidence: str("证据引用：文档路径/段落或 [问答] 轮次"),
+                    },
+                    required: ["reason", "points"],
+                  },
+                  description: "该维度扣分明细(无扣分可省略)",
+                },
+              },
+              required: ["key", "score"],
+            },
+            description: "五个维度实得分，须全部给出",
+          },
+          business_confirmed: bool("业务是否已明确认可本打分结果与扣分明细；防止 AI 自评自批"),
+        },
+        required: ["dims", "business_confirmed"],
+      },
+    },
+  },
 ]

@@ -46,7 +46,8 @@ export function createReqdocFeatureTools(store: Store): Record<string, ToolDefin
         }))
         workflow.features = records
       })
-      // 为每个功能点在 05_功能点 下建子目录（AI 工作区，幂等不覆盖）
+      // 为每个功能点在 05_功能点 下建子目录（AI 工作区，幂等不覆盖），并预建 06_需求规格产出 同名子目录
+      // （模板外成果落盘位：附_流程图/、测试用例/、界面草图/ 与最终 PRD，见 reqdoc-r20 归档要求）。
       let created = 0
       for (const f of saved.features ?? []) {
         const dir = join(context.worktree, "05_功能点", `${f.no}_${f.name}`)
@@ -55,12 +56,13 @@ export function createReqdocFeatureTools(store: Store): Record<string, ToolDefin
           join(dir, "来源摘录.md"),
           `# 功能点 ${f.no}：${f.name}\n\n- 优先级：${f.priority}\n- 业务确认时间：${new Date(f.confirmedAt).toISOString()}\n\n渲染时从本目录来源摘录 + 问答补全填充模版第三章（逐字段标 [文档]/[问答]/[缺省]）。\n`,
         )
+        await mkdir(join(context.worktree, "06_需求规格产出", `${f.no}_${f.name}`), { recursive: true })
         created++
       }
       const list = (saved.features ?? [])
         .map((f) => `  ${f.no}. ${f.name}（${f.priority === "high" ? "高" : f.priority === "medium" ? "中" : "低"}）`)
         .join("\n")
-      return `✅ 已确认 ${created} 个功能点（写入 05_功能点 目录）：\n${list}\n接下来按《业务需求说明书》模板逐功能点渲染，内容来源标注 [文档]/[问答]/[缺省]。`
+      return `✅ 已确认 ${created} 个功能点（写入 05_功能点 目录，并预建 06_需求规格产出 同名子目录）：\n${list}\n接下来按《业务需求说明书》模板逐功能点渲染，内容来源标注 [文档]/[问答]/[缺省]。`
     },
   })
 

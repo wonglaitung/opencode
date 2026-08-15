@@ -7,6 +7,26 @@ function reviewOf(store: Store, id = "s1") {
   return reviewRecord(store.get(id)!.workflow!)
 }
 
+/** reqdoc 门禁夹具：写入一个已业务确认的打分卡（默认 total 90 ≥ 85），供正向用例通过打分门禁。 */
+function setReqdocScore(store: Store, id = "r1", total = 90): void {
+  store.mutateWorkflow(id, (w) => {
+    w.score = {
+      dims: {
+        businessValue: { score: 15, max: 15 },
+        flowClosure: { score: 25, max: 25 },
+        edgeControl: { score: 30, max: 30 },
+        compliance: { score: 10, max: 20 },
+        authority: { score: 10, max: 10 },
+      },
+      deductions: [],
+      total,
+      confirmed: true,
+      confirmedAt: 1000,
+      updatedAt: 1000,
+    }
+  })
+}
+
 const ctx = { sessionID: "s1" } as never
 
 function setup() {
@@ -323,6 +343,7 @@ describe("review_submit 门禁", () => {
     store.mutateWorkflow("r1", (w) => {
       for (const name of ["goal", "rules", "edge", "prd"]) w.stages[name].status = "approved"
     })
+    setReqdocScore(store, "r1")
     store.lockFile("r1", "/home/dev/project/src/A.java")
     const out = await tools.review_submit!.execute(
       { completeness: true, clarity: true, edgeCoverage: true, resolution: true } as never,
@@ -330,6 +351,78 @@ describe("review_submit 门禁", () => {
     )
     expect(String(out)).not.toContain("人工锁定")
     expect(String(out)).toContain("/new")
+    store.close()
+  })
+
+  test("reqdoc 门禁：未打分不得定稿", async () => {
+    const store = Store.memory(() => "reqdoc" as const)
+    const tools = createReviewTools(store)
+    store.mutateWorkflow("r1", (w) => {
+      for (const name of ["goal", "rules", "edge", "prd"]) w.stages[name].status = "approved"
+    })
+    // 未调用 reqdoc_score（无 workflow.score）→ 定稿被拒
+    await expect(
+      tools.review_submit!.execute(
+        { completeness: true, clarity: true, edgeCoverage: true, resolution: true } as never,
+        { sessionID: "r1" } as never,
+      ),
+    ).rejects.toThrow(/未打分/)
+    store.close()
+  })
+
+  test("reqdoc 门禁：低于 85 分不得定稿", async () => {
+    const store = Store.memory(() => "reqdoc" as const)
+    const tools = createReviewTools(store)
+    store.mutateWorkflow("r1", (w) => {
+      for (const name of ["goal", "rules", "edge", "prd"]) w.stages[name].status = "approved"
+    })
+    setReqdocScore(store, "r1", 75)
+    await expect(
+      tools.review_submit!.execute(
+        { completeness: true, clarity: true, edgeCoverage: true, resolution: true } as never,
+        { sessionID: "r1" } as never,
+      ),
+    ).rejects.toThrow(/未达标/)
+    store.close()
+  })
+
+  test("reqdoc 门禁：高分但未业务确认不得定稿", async () => {
+    const store = Store.memory(() => "reqdoc" as const)
+    const tools = createReviewTools(store)
+    store.mutateWorkflow("r1", (w) => {
+      for (const name of ["goal", "rules", "edge", "prd"]) w.stages[name].status = "approved"
+      w.score = {
+        dims: {
+          businessValue: { score: 15, max: 15 },
+          flowClosure: { score: 25, max: 25 },
+          edgeControl: { score: 30, max: 30 },
+          compliance: { score: 15, max: 20 },
+          authority: { score: 10, max: 10 },
+        },
+        deductions: [],
+        total: 95,
+        confirmed: false,
+        confirmedAt: null,
+        updatedAt: 1000,
+      }
+    })
+    await expect(
+      tools.review_submit!.execute(
+        { completeness: true, clarity: true, edgeCoverage: true, resolution: true } as never,
+        { sessionID: "r1" } as never,
+      ),
+    ).rejects.toThrow(/未获业务确认/)
+    store.close()
+  })
+
+  test("sdlc 定稿不受打分卡门禁影响", async () => {
+    const { store, tools } = setup()
+    // sdlc 无 score 也照常通过（门禁分支按 def.type === "reqdoc" 隔离）
+    const out = await tools.review_submit!.execute(
+      { businessIntent: true, logicExplainable: true, behaviorVerifiable: true } as never,
+      ctx,
+    )
+    expect(String(out)).toContain("审查阶段通过")
     store.close()
   })
 })
@@ -341,10 +434,11 @@ describe("reqdoc 工作流（业务确认 PRD 要点）", () => {
     const ctx = { sessionID: "r1" } as never
     const wf = store.ensure("r1").workflow!
     expect(wf.type).toBe("reqdoc")
-    // 审查是最后一关：先推进前序阶段（goal/rules/edge/prd approved）
+    // 审查是最后一关：先推进前序阶段（goal/rules/edge/prd approved）+ 打分达标（门禁前置）
     store.mutateWorkflow("r1", (w) => {
       for (const name of ["goal", "rules", "edge", "prd"]) w.stages[name].status = "approved"
     })
+    setReqdocScore(store, "r1")
     // reqdoc 要点：不填 file/lineStart/lineEnd
     await tools.comprehension_add!.execute(
       { codeSegmentId: "目标与场景", explanation: "面向一线柜员，缩短开户录入时间" } as never,

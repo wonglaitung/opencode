@@ -109,4 +109,57 @@ describe("buildSystemFragment", () => {
     const text = buildSystemFragment(s, {}, ["/home/dev/project/src/A.java"])
     expect(text).not.toContain("人工锁定")
   })
+
+  test("reqdoc 已打分 → 状态条含 PRD 评分行", () => {
+    const s = createWorkflowState("reqdoc")
+    applyTransition(s, "edge", "enter", 1)
+    s.score = {
+      dims: {
+        businessValue: { score: 15, max: 15 },
+        flowClosure: { score: 25, max: 25 },
+        edgeControl: { score: 30, max: 30 },
+        compliance: { score: 10, max: 20 },
+        authority: { score: 10, max: 10 },
+      },
+      deductions: [],
+      total: 90,
+      confirmed: true,
+      confirmedAt: 1000,
+      updatedAt: 1000,
+    }
+    const text = buildSystemFragment(s)
+    expect(text).toContain("PRD 评分：90/100")
+    expect(text).toContain("达标")
+    expect(text).toContain("业务确认：已")
+  })
+
+  test("reqdoc 未打分 → 状态条不含 PRD 评分行；低分未确认标注清晰", () => {
+    const s = createWorkflowState("reqdoc")
+    applyTransition(s, "edge", "enter", 1)
+    expect(buildSystemFragment(s)).not.toContain("PRD 评分")
+    s.score = {
+      dims: {
+        businessValue: { score: 15, max: 15 },
+        flowClosure: { score: 20, max: 25 },
+        edgeControl: { score: 25, max: 30 },
+        compliance: { score: 5, max: 20 },
+        authority: { score: 10, max: 10 },
+      },
+      deductions: [],
+      total: 75,
+      confirmed: false,
+      confirmedAt: null,
+      updatedAt: 1000,
+    }
+    const text = buildSystemFragment(s)
+    expect(text).toContain("PRD 评分：75/100")
+    expect(text).toContain("未达标")
+    expect(text).toContain("业务确认：未")
+  })
+
+  test("sdlc 恒无 PRD 评分行（打分卡仅 reqdoc）", () => {
+    const s = createWorkflowState("sdlc")
+    applyTransition(s, "implementation", "enter", 1)
+    expect(buildSystemFragment(s)).not.toContain("PRD 评分")
+  })
 })
