@@ -205,7 +205,7 @@ export default MyPlugin
 
 | 步骤 | 参考文件/示例 |
 |------|--------------|
-| 场景集 | `opencode-session-mgmt/scripts/eval-rules/src/scenarios.ts`（31 场景：每场景 = name + workflowType + 状态夹具 state + userTurn + judge）；judge 三种形态见 `src/types.ts`（`tool`/`no_tool`/`text`） |
+| 场景集 | `opencode-session-mgmt/scripts/eval-rules/src/scenarios.ts`（46 场景：sdlc s1-s22 + reqdoc r1-r24，每场景 = name + workflowType + 状态夹具 state + userTurn + judge）；judge 形态见 `src/types.ts`——行为类 `tool`/`no_tool`/`text`（sdlc 与 reqdoc 共用），产出类 `score`/`render`（reqdoc 专属，五维打分与渲染 diff，见 `opencode-session-mgmt/docs/workflow-reqdoc.md` 10 章） |
 | 工具契约同步 | `opencode-session-mgmt/scripts/eval-rules/src/tool-defs.ts`——评测用精简工具定义须与插件真实工具 description/参数名一致（改插件工具时同步改这里，否则测的不是真实契约）；跨插件工具（如 open-ide 的 `open_ide`/`unlock_file`）也在此声明 |
 | 状态夹具 | `scenarios.ts` 顶部辅助：`enter`/`approve`/`addSegment`/`rejectSegment`/`finish()`（按阶段重算 commit）——直接构造 WorkflowState，不跑真实工具循环 |
 | 运行入口 | `opencode-session-mgmt/scripts/eval-rules/run.ts`（`--variant baseline\|new`、`--repeat N`、`--dry`；环境变量 `EVAL_BASE_URL`/`EVAL_MODEL`/`EVAL_API_KEY`） |
