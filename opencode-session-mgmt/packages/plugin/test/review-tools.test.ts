@@ -415,6 +415,56 @@ describe("review_submit 门禁", () => {
     store.close()
   })
 
+  test("reqdoc 门禁：缺口探针对应维度满分不得定稿（缺口+满分矛盾）", async () => {
+    const store = Store.memory(() => "reqdoc" as const)
+    const tools = createReviewTools(store)
+    store.mutateWorkflow("r1", (w) => {
+      for (const name of ["goal", "rules", "edge", "prd"]) w.stages[name].status = "approved"
+      // exception 缺口映射 edgeControl，但该维打了满分 30/30（setReqdocScore 默认）——自评不诚实
+      w.probes = { asked: ["main_flow", "exception"], gaps: ["exception"], round: 1, updatedAt: 1000 }
+    })
+    setReqdocScore(store, "r1")
+    await expect(
+      tools.review_submit!.execute(
+        { completeness: true, clarity: true, edgeCoverage: true, resolution: true } as never,
+        { sessionID: "r1" } as never,
+      ),
+    ).rejects.toThrow(/自相矛盾/)
+    store.close()
+  })
+
+  test("reqdoc 门禁：探针覆盖达标（无缺口）可定稿", async () => {
+    const store = Store.memory(() => "reqdoc" as const)
+    const tools = createReviewTools(store)
+    store.mutateWorkflow("r1", (w) => {
+      for (const name of ["goal", "rules", "edge", "prd"]) w.stages[name].status = "approved"
+      w.probes = { asked: ["main_flow", "exception"], gaps: [], round: 2, updatedAt: 1000 }
+    })
+    setReqdocScore(store, "r1")
+    const out = await tools.review_submit!.execute(
+      { completeness: true, clarity: true, edgeCoverage: true, resolution: true } as never,
+      { sessionID: "r1" } as never,
+    )
+    expect(String(out)).toContain("/new")
+    store.close()
+  })
+
+  test("reqdoc 门禁：未记录探针（柔性）达标可定稿", async () => {
+    const store = Store.memory(() => "reqdoc" as const)
+    const tools = createReviewTools(store)
+    store.mutateWorkflow("r1", (w) => {
+      for (const name of ["goal", "rules", "edge", "prd"]) w.stages[name].status = "approved"
+      // 无 probes：柔性门禁不强制记录，放行
+    })
+    setReqdocScore(store, "r1")
+    const out = await tools.review_submit!.execute(
+      { completeness: true, clarity: true, edgeCoverage: true, resolution: true } as never,
+      { sessionID: "r1" } as never,
+    )
+    expect(String(out)).toContain("/new")
+    store.close()
+  })
+
   test("sdlc 定稿不受打分卡门禁影响", async () => {
     const { store, tools } = setup()
     // sdlc 无 score 也照常通过（门禁分支按 def.type === "reqdoc" 隔离）

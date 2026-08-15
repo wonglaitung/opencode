@@ -19,6 +19,9 @@ export type Judge =
       expectTool: string
       /** 期望参数子集(全部匹配即通过),如 { stage: "requirements", action: "approve", developer_confirmed: true } */
       args?: Record<string, unknown>
+      /** 数组子集断言(质量飞轮 P1 追问可测化):期望每个元素须出现在实际数组参数中。
+       *  如 { asked: ["exception","authority"] } 断言至少问过异常与权限;与 args 全等语义互不影响(零回归)。 */
+      argsContains?: Record<string, unknown[]>
       /** 若设置,调用次数须恰为该值(防批量/防漏) */
       exactCount?: number
       /** 若设置,各次调用的该参数值必须互不相同(防重复确认同一 id) */

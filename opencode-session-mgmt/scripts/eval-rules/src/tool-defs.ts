@@ -13,7 +13,10 @@ export type OpenAITool = {
   }
 }
 
-import { reqdocScoreRubric } from "sm-shared"
+import { REQDOC_PROBES, reqdocProbeRubric, reqdocScoreRubric } from "sm-shared"
+
+/** 探针 id 枚举（与 packages/plugin/src/tools/reqdoc-probe.ts 同源；改 REQDOC_PROBES 时同步此处手写）。 */
+const PROBE_IDS = REQDOC_PROBES.map((p) => p.id)
 
 const str = (description: string) => ({ type: "string", description })
 const bool = (description: string) => ({ type: "boolean", description })
@@ -321,6 +324,33 @@ export const EVAL_TOOLS: OpenAITool[] = [
           business_confirmed: bool("业务是否已明确认可本打分结果与扣分明细；防止 AI 自评自批"),
         },
         required: ["dims", "business_confirmed"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "reqdoc_probe",
+      description:
+        `reqdoc 追问探针：每轮追问结束后调用，记录本轮问过与仍缺口的探针（探针清单，同源 r11）：\n${reqdocProbeRubric()}\n` +
+        "asked = 本轮新问的探针 id；gaps = 问过后仍缺口的探针 id；round = 本轮次(1-3)。" +
+        "材料已全覆盖、无追问时可调用一次(asked/gaps 可为空)；不调用不强求。仅 reqdoc 工作流有效。",
+      parameters: {
+        type: "object",
+        properties: {
+          asked: {
+            type: "array",
+            items: { type: "string", enum: PROBE_IDS, description: "探针 id(探针清单之一)" },
+            description: "本轮新问过的探针 id(可空)",
+          },
+          gaps: {
+            type: "array",
+            items: { type: "string", enum: PROBE_IDS, description: "探针 id(探针清单之一)" },
+            description: "问过后仍缺口的探针 id(可空)",
+          },
+          round: { type: "integer", minimum: 1, maximum: 3, description: "当前追问轮次(1-3)" },
+        },
+        required: ["asked", "gaps"],
       },
     },
   },

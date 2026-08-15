@@ -140,6 +140,43 @@ describe("reqdoc 打分卡门禁（进入 prd 阶段前）", () => {
     store.close()
   })
 
+  test("缺口探针对应维度满分进入 prd 被拒（缺口+满分自相矛盾）", async () => {
+    const { store, tools } = setupReqdocAtEdge()
+    store.mutateWorkflow("s1", (w) => {
+      // exception 缺口映射 edgeControl，但该维打了满分 30/30 —— 自评不诚实
+      w.score = setScore(90) // edgeControl 30 满分
+      w.probes = { asked: ["main_flow", "exception"], gaps: ["exception"], round: 1, updatedAt: 1000 }
+    })
+    await expect(
+      tools.workflow_advance!.execute({ stage: "prd", action: "enter", developer_confirmed: false } as never, ctx),
+    ).rejects.toThrow(/自相矛盾/)
+    expect(store.get("s1")!.workflow!.stages.prd.status).toBe("not_started")
+    store.close()
+  })
+
+  test("探针覆盖达标（无缺口）且打分达标可进入 prd（正向）", async () => {
+    const { store, tools } = setupReqdocAtEdge()
+    store.mutateWorkflow("s1", (w) => {
+      w.score = setScore(90)
+      w.probes = { asked: ["main_flow", "exception"], gaps: [], round: 2, updatedAt: 1000 }
+    })
+    const out = await tools.workflow_advance!.execute({ stage: "prd", action: "enter", developer_confirmed: false } as never, ctx)
+    expect(String(out)).toContain("需求规格书")
+    expect(store.get("s1")!.workflow!.stages.prd.status).toBe("in_progress")
+    store.close()
+  })
+
+  test("未记录探针（柔性）达标可进入 prd", async () => {
+    const { store, tools } = setupReqdocAtEdge()
+    store.mutateWorkflow("s1", (w) => {
+      w.score = setScore(90)
+      // 无 probes：柔性门禁不强制记录，放行
+    })
+    const out = await tools.workflow_advance!.execute({ stage: "prd", action: "enter", developer_confirmed: false } as never, ctx)
+    expect(String(out)).toContain("需求规格书")
+    store.close()
+  })
+
   test("sdlc 进入阶段不受打分卡门禁影响", async () => {
     const store = Store.memory() // 缺省 sdlc
     const tools = createWorkflowTools(store)

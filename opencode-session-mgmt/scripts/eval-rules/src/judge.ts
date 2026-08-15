@@ -25,6 +25,21 @@ export function judgeScenario(judge: Judge, out: ModelOutput): { pass: boolean; 
       if (!matched.some((c) => argsMatch(judge.args, c.args))) {
         return { pass: false, detail: `${judge.expectTool} 参数不匹配,期望 ${JSON.stringify(judge.args)}` }
       }
+      // 数组子集断言(质量飞轮 P1):每个期望元素须出现在某次调用的该数组参数中
+      if (judge.argsContains) {
+        for (const [k, want] of Object.entries(judge.argsContains)) {
+          const ok = matched.some((c) => {
+            const actual = c.args[k]
+            return Array.isArray(actual) && want.every((w) => actual.includes(w))
+          })
+          if (!ok) {
+            return {
+              pass: false,
+              detail: `${judge.expectTool} 的 ${k} 未覆盖期望元素 ${JSON.stringify(want)}(实际:${matched.map((c) => JSON.stringify(c.args[k])).join("、")})`,
+            }
+          }
+        }
+      }
       if (judge.exactCount !== undefined && matched.length !== judge.exactCount) {
         return { pass: false, detail: `${judge.expectTool} 应恰好调用 ${judge.exactCount} 次,实际 ${matched.length} 次` }
       }

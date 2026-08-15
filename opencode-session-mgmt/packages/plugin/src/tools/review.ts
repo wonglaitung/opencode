@@ -11,7 +11,7 @@
  * review_submit         —— 提交审查清单：所有片段处于终态(accepted/manual)，通过时自动计算 firstPassRate
  */
 import { tool, type ToolDefinition } from "@opencode-ai/plugin"
-import { REQDOC_SCORE_PASS, WORKFLOW_DEFINITIONS, getDefinition, reviewRecord, type ComprehensionRecord } from "sm-shared"
+import { REQDOC_SCORE_PASS, WORKFLOW_DEFINITIONS, getDefinition, probeGapViolations, reviewRecord, type ComprehensionRecord } from "sm-shared"
 import type { Store } from "../db"
 import { WorkflowOpError, applyTransition, recomputeCommit } from "../workflow-ops"
 
@@ -241,6 +241,13 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
           }
           if (!score.confirmed) {
             throw new WorkflowOpError("PRD 打分结果未获业务确认，不能定稿")
+          }
+          // 柔性一致校验（质量飞轮 P1）：缺口探针对应维度不得打满分（报缺口却打满分 = 自评不诚实）。
+          const violations = probeGapViolations(workflow.probes, score)
+          if (violations.length > 0) {
+            throw new WorkflowOpError(
+              `追问缺口与打分自相矛盾：${violations.join("；")}。请回 edge 补齐缺口后重打 reqdoc_score 如实扣分，或去掉缺口记录（reqdoc_probe）`,
+            )
           }
         }
         const total = review.comprehension.length

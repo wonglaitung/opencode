@@ -5,6 +5,7 @@
  * 阶段化注入只给弱模型当前需要的规则，状态条替代冗长 JSON，降低弱模型遵循负担。
  */
 import {
+  REQDOC_PROBES,
   REQDOC_SCORE_PASS,
   currentInProgressStage,
   getDefinition,
@@ -129,6 +130,16 @@ export function buildStateBar(workflow: WorkflowState, stage: string | null): st
     const passed = workflow.score.total >= REQDOC_SCORE_PASS
     lines.push(
       `PRD 评分：${workflow.score.total}/100（${passed ? "达标 ✓" : `未达标，需 ≥${REQDOC_SCORE_PASS} 才可进入渲染/定稿`}）；业务确认：${workflow.score.confirmed ? "已" : "未"}`,
+    )
+  }
+  // 追问探针覆盖（质量飞轮 P1）：reqdoc 记录过探针才展示（柔性：未记录不打扰）
+  if (workflow.probes) {
+    const total = REQDOC_PROBES.length
+    const gapNames = workflow.probes.gaps
+      .map((id) => REQDOC_PROBES.find((p) => p.id === id)?.label ?? id)
+      .join("、")
+    lines.push(
+      `追问覆盖：已问 ${workflow.probes.asked.length}/${total} 探针；缺口：${gapNames || "无"}；轮次 ${workflow.probes.round}`,
     )
   }
   const iteration = workflow.quality.iterationCount ?? 0

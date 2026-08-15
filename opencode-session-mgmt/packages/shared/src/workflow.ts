@@ -171,6 +171,41 @@ export function reqdocScoreRubric(): string {
   }).join("\n")
 }
 
+/**
+ * reqdoc 追问探针清单（质量飞轮 P1「追问可测化」）。
+ * 把 edge 阶段该问的内容落成结构化清单，每维映射打分卡维度（扣分项即探针地图）。
+ * 单点定义：reqdoc_probe 工具、reqdoc-r11 规则文本、状态条/评测共用——经
+ * reqdocProbeRubric() 生成文本注入 r11 与工具描述，自持续「漏问频率前移」改 round 即可。
+ * businessValue（角色/痛点/量化目标）由 goal 阶段 reqdoc-r6 负责，不入 edge 清单。
+ */
+export interface ReqdocProbe {
+  /** 探针 id（工具/状态/评测共用） */
+  id: string
+  /** 业务语言中文名 */
+  label: string
+  /** 映射打分卡维度（缺口 → 该维扣分项） */
+  dim: ReqdocScoreDimKey
+  /** 建议追问轮次（1-3；自持续「前移」即改此处） */
+  round: number
+  /** 业务语言问题模板（模型转述为 A/B/C + 默认推荐） */
+  question: string
+}
+
+export const REQDOC_PROBES: readonly ReqdocProbe[] = [
+  { id: "main_flow", label: "主流程闭环", dim: "flowClosure", round: 1, question: "这项业务从发起到最后完成，要经过哪些步骤？" },
+  { id: "flow_trigger", label: "流程触发条件", dim: "flowClosure", round: 1, question: "什么情况下会开始这笔业务？" },
+  { id: "exception", label: "异常处理", dim: "edgeControl", round: 1, question: "同一笔交易被重复点了几次、网络中断或提交失败，怎么处理？" },
+  { id: "reverse", label: "逆向撤销/驳回", dim: "edgeControl", round: 2, question: "办错了想撤销、或提交后被驳回，怎么处理？" },
+  { id: "desensitize", label: "敏感字段脱敏", dim: "compliance", round: 2, question: "手机号、身份证这些敏感信息，界面上怎么展示？" },
+  { id: "audit", label: "留痕与复核", dim: "compliance", round: 2, question: "资金或重要操作，要不要留痕、双人复核？" },
+  { id: "authority", label: "权限与机构隔离", dim: "authority", round: 2, question: "谁能看、谁能办？数据在总行/分行/支行之间怎么隔离？" },
+]
+
+/** 追问探针清单文本（质量飞轮 P1）：reqdoc-r11 规则文本与 reqdoc_probe 工具描述共用同一来源。 */
+export function reqdocProbeRubric(): string {
+  return REQDOC_PROBES.map((p) => `- ${p.id}（${p.label}）→${p.dim}，建议第 ${p.round} 轮：${p.question}`).join("\n")
+}
+
 /** 打分卡扣分明细条目（含证据引用，本机留痕可审计）。 */
 export interface ReqdocScoreDeduction {
   /** 维度键（REQDOC_SCORE_DIMS 之一） */
@@ -201,6 +236,45 @@ export interface ReqdocScore {
   confirmedAt: number | null
   /** 最近一次打分时间戳（重打覆盖更新） */
   updatedAt: number
+}
+
+/**
+ * reqdoc 追问探针覆盖记录（质量飞轮 P1，reqdoc_probe 工具写入）。
+ * 可选字段：首次记录前缺省；sdlc 恒缺省。随汇报上行。
+ * asked 按轮追加去重（保留追问历史供自持续「漏问频率」分析）；gaps 为仍缺口探针。
+ * 柔性门禁：缺口探针对应打分卡维度不得打满分（见 probeGapViolations）。
+ */
+export interface ReqdocProbes {
+  /** 已问过的探针 id（追加去重，含历史轮次） */
+  asked: string[]
+  /** 仍缺口的探针 id（问过未得全或未问；进入 prd 前如仍缺口须在 reqdoc_score 中如实扣分） */
+  gaps: string[]
+  /** 当前追问轮次（1-3；规则上限「最长 3 轮」） */
+  round: number
+  /** 最近一次记录时间戳（覆盖更新） */
+  updatedAt: number
+}
+
+/**
+ * 缺口-扣分一致性校验（质量飞轮 P1 柔性门禁，workflow_advance 进 prd 与 review_submit 两处共用）：
+ * 对每个缺口探针，若其映射打分卡维度打了满分（score == max），说明自评与缺口矛盾（报缺口却打满分），
+ * 返回违规条目；无 probes / 无 score / 缺口为空 → 返回空（柔性：不强制记录探针）。
+ */
+export function probeGapViolations(
+  probes: ReqdocProbes | undefined,
+  score: ReqdocScore | undefined,
+): string[] {
+  if (!probes || !score || probes.gaps.length === 0) return []
+  const violations: string[] = []
+  for (const id of probes.gaps) {
+    const probe = REQDOC_PROBES.find((p) => p.id === id)
+    if (!probe) continue
+    const dimScore = score.dims[probe.dim]
+    if (dimScore && dimScore.score >= dimScore.max) {
+      violations.push(`探针 ${id}（${probe.label}）是缺口，但维度 ${probe.dim} 打了满分（${dimScore.score}/${dimScore.max}）`)
+    }
+  }
+  return violations
 }
 
 export interface QualityMetrics {
@@ -254,6 +328,11 @@ export interface WorkflowState {
    * 可选字段：打分前缺省；sdlc 恒缺省。扣分明细含 evidence（本机留痕）。
    */
   score?: ReqdocScore
+  /**
+   * reqdoc 追问探针覆盖记录（质量飞轮 P1，reqdoc_probe 工具写入）。
+   * 可选字段：首次记录前缺省；sdlc 恒缺省。随汇报上行。
+   */
+  probes?: ReqdocProbes
 }
 
 /** 工作流阶段键（Record 泛化，3.2）。 */
@@ -385,8 +464,9 @@ export const REQDOC: WorkflowDefinition = {
     { id: "reqdoc-r9", stage: "rules", text: "引导补全主流程：用户输入哪些信息、系统处理后给什么结果；将自然语言转化为字段定义（数据项 / 是否必填 / 校验规则）。" },
     { id: "reqdoc-r10", stage: "rules", text: "自动推演 Mermaid 流程图，反向展示给业务确认；业务说资料已放好则调用 reqdoc_scan(directory=03_流程与数据) 扫描提取字段与流程作输入；综合扫描材料与问答生成数据字典与库表设计（数据实体/字段/主外键关系/校验规则），向业务展示确认。" },
     // ---- edge 边界与异常（最关键）----
-    { id: "reqdoc-r11", stage: "edge", text: "主动追问三类探针：数据与权限（所有岗位可见还是按机构/层级隔离）、异常流程（接口超时 / 操作失败 / 审批驳回，报错还是人工补单）、合规留痕（资金/敏感变更是否留审计日志、是否二次授权）。" },
+    { id: "reqdoc-r11", stage: "edge", text: `按探针清单推进追问（清单与 reqdoc_probe 工具描述同源，每维映射打分卡扣分项）：\n${reqdocProbeRubric()}\n逐轮追问 2-3 问（见 r2，带 A/B/C 与【默认推荐项】），每轮结束调用 reqdoc_probe(asked=本轮新问探针, gaps=仍缺口探针, round=轮次) 记录覆盖；追问最多 3 轮，3 轮后仍未澄清项标 [缺省] 停止追问。` },
     { id: "reqdoc-r12", stage: "edge", text: "按已投放材料反问缺口（如已有制度但缺权限，追问「不同岗位的权限如何隔离」）；业务说资料已放好则调用 reqdoc_scan(directory=02_制度与合规) 与 reqdoc_scan(directory=04_角色与权限) 扫描提取作输入；综合岗位角色矩阵、机构隔离、审批授权与双人复核材料生成 RBAC 权限控制矩阵与审批流控制逻辑，向业务展示确认。" },
+    { id: "reqdoc-r22", stage: "edge", text: "探针覆盖度（柔性门禁）：进入 prd 前，若已调用 reqdoc_probe 记录过探针，服务端校验缺口与打分一致——缺口探针对应打分卡维度不得打满分（缺口+满分=自评不诚实，workflow_advance 进 prd 与 review_submit 会被拒绝）；建议每轮追问结束调用 reqdoc_probe 记录（覆盖度在状态条可见，帮助自评一致）；材料已全覆盖无追问时可记录一次（asked/gaps 可为空），不记录不强求。" },
     { id: "reqdoc-r21", stage: "edge", text: `打分时机与门禁（实施方案打分卡）：边界与异常收集完成、准备进入 prd 前，基于已扫描材料 + 问答对照打分卡逐维打分（满分 100）：\n${reqdocScoreRubric()}\n调用 reqdoc_score 输出各维得分与扣分明细（附证据引用），向业务展示并请其确认；business_confirmed=true 且 total≥85 后才可 workflow_advance(stage=prd, action=enter)。未达标按三档引导重打：<60 分（不合格）优先继续提问主流程与异常边界，补齐流程闭环与异常覆盖；60-84 分（良好）引导补充脱敏规则、权限与机构隔离、逆向撤销/驳回流程；≥85 分（达标）输出扣分明细、业务确认通过后即停止追问、不再重复盘问。展示得分时必须附质量得分进度条（如 [▓▓▓▓▓░░░░░ 50%]，进度直观反映达标进度）。严禁未展示扣分明细即自报达标。` },
     // ---- prd 需求规格书 ----
     { id: "reqdoc-r13", stage: "prd", text: "功能点拆解（核心）：综合前面 goal/rules/edge 收集的信息（材料提取 + 问答），把需求拆成功能点清单（编号/名称/优先级），先向业务展示清单确认；业务确认后调用 reqdoc_confirm_features(features=[{name,priority}]...) 记录，并为每个功能点在 05_功能点 下建子目录写入来源摘录（标注 [文档]/[问答] 来源）。业务说资料已放好则先调用 reqdoc_scan(directory=06_需求规格产出) 检查已有产出。" },

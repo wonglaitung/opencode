@@ -1,5 +1,5 @@
 /**
- * 评测场景集(41 个,sdlc s1-s22 + reqdoc r1-r19)。覆盖关键规则:
+ * 评测场景集(44 个,sdlc s1-s22 + reqdoc r1-r22)。覆盖关键规则:
  * 基线录入不重复、确认后 approve、无确认不 approve、回到XX→revisit、
  * 审查逐段不批量、前序未完成不 submit、提交前查门禁、完成后提示 /new、
  * 完成后开新需求不重启、空档态继续进入下一阶段、
@@ -12,6 +12,8 @@
  * 评分模式(质量飞轮 P0,judge.kind="score"):prd-render 场景对渲染产出的 PRD 文本做
  * 五维确定性评分——材料齐全渲染应高分、缺异常材料渲染应低分(不杜撰),验证产出度量
  * 的区分度,供 baseline→new 逐维对比。
+ * 追问可测化(质量飞轮 P1,judge.argsContains 数组子集断言):追问结束记录探针(asked
+ * 覆盖断言)、缺口与满分矛盾不推进(柔性一致校验)、覆盖达标正向进 prd。
  * 状态夹具用 createWorkflowState + 直接 mutate(不跑真实工具循环),
  * 隔离「规则遵循度」与「工具机制」两个变量。
  */
@@ -761,5 +763,65 @@ export const SCENARIOS: Scenario[] = [
       minTotal: 20,
       dimMax: { edgeControl: 5 },
     },
+  },
+  // ---- 追问可测化（质量飞轮 P1，探针清单 + 覆盖度柔性门禁） ----
+  {
+    name: "r20 追问结束记录探针（reqdoc_probe）",
+    workflowType: "reqdoc",
+    state: (() => {
+      const s = newReqdoc()
+      approve(s, "goal")
+      approve(s, "rules")
+      enter(s, "edge")
+      return finish(s)
+    })(),
+    userTurn:
+      "按上一轮问的答：主流程是柜员点发起、系统校验后入账、通知客户归档；异常是超时自动冲正、同一笔重复点击要去重；权限这块…材料里真没写。",
+    // r11：每轮追问结束调 reqdoc_probe 记录本轮问过的探针——argsContains 断言 asked 至少覆盖
+    // 异常与权限（确定性 tool-call 断言，替代脆弱的关键词启发式）
+    judge: {
+      kind: "tool",
+      expectTool: "reqdoc_probe",
+      argsContains: { asked: ["exception", "authority"] },
+    },
+  },
+  {
+    name: "r21 缺口与满分矛盾不推进",
+    workflowType: "reqdoc",
+    state: (() => {
+      const s = newReqdoc()
+      approve(s, "goal")
+      approve(s, "rules")
+      enter(s, "edge")
+      // 已记录探针：exception 仍是缺口；但打分卡 edgeControl 打了满分 30/30——自评矛盾
+      s.probes = { asked: ["main_flow", "exception"], gaps: ["exception"], round: 1, updatedAt: 1000 }
+      s.score = score({ businessValue: 15, flowClosure: 25, edgeControl: 30, compliance: 15, authority: 5 }) // 90 已确认
+      return finish(s)
+    })(),
+    userTurn: "边界情况问完了，开始渲染吧",
+    // 柔性一致校验（reqdoc-r22）：报缺口却打满分，workflow_advance(enter prd) 会被门禁拒绝
+    judge: { kind: "no_tool", forbidTool: "workflow_advance", args: { stage: "prd", action: "enter" } },
+  },
+  {
+    name: "r22 覆盖达标进 prd（正向）",
+    workflowType: "reqdoc",
+    state: (() => {
+      const s = newReqdoc()
+      approve(s, "goal")
+      approve(s, "rules")
+      enter(s, "edge")
+      // 探针全覆盖（无缺口）+ 打分 90 已确认 → 一致，放行进 prd
+      s.probes = {
+        asked: ["main_flow", "flow_trigger", "exception", "reverse", "desensitize", "audit", "authority"],
+        gaps: [],
+        round: 2,
+        updatedAt: 1000,
+      }
+      s.score = score({ businessValue: 15, flowClosure: 25, edgeControl: 30, compliance: 10, authority: 10 }) // 90 已确认
+      return finish(s)
+    })(),
+    userTurn: "缺口都补齐了、打分也确认了，进入渲染吧",
+    // 打分 + 探针覆盖双达标（r21/r22 正向路径）：放行 workflow_advance(enter prd)
+    judge: { kind: "tool", expectTool: "workflow_advance", args: { stage: "prd", action: "enter" } },
   },
 ]

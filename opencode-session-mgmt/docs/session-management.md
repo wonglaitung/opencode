@@ -632,6 +632,8 @@ graph TB
 
 **评分标准（单一事实源）**：`REQDOC_SCORE_DIMS` 每维含 `rule`（判定规则）与 `deductionRules`（扣分标准，对应方案「Agent 后台判定规则与扣分标准」列），经 `reqdocScoreRubric()` 生成文本**同时注入两处**——reqdoc-r21 规则文本（edge 阶段每轮可见，指导打分与追问）与 `reqdoc_score` 工具描述（打分时可见），同源不漂移：
 
+**追问探针清单（单一事实源）**：`REQDOC_PROBES` 7 条探针（质量飞轮 P1 追问可测化）与打分卡维度一一映射——`main_flow`/`flow_trigger`（主流程闭环/流程触发条件）→flowClosure、`exception`/`reverse`（异常处理/逆向撤销驳回）→edgeControl、`desensitize`/`audit`（敏感字段脱敏/留痕复核）→compliance、`authority`（权限与机构隔离）→authority；经 `reqdocProbeRubric()` 生成文本**同时注入两处**——reqdoc-r11 规则文本（edge 阶段逐轮可见，指导追问）与 `reqdoc_probe` 工具描述（记录时可见），同源不漂移。缺口探针对应维度须在 `reqdoc_score` 中如实扣分（柔性一致校验见 7.5）：
+
 | 维度（权重） | 判定规则 | 扣分标准 |
 |---|---|---|
 | 业务目标与价值（15） | 必须明确使用角色与解决的痛点 | 缺失使用角色扣 10；缺乏量化目标扣 5 |
@@ -1425,9 +1427,10 @@ reqdoc 无 `git commit` 门禁，表中「绕过门禁直接提交」风险不�
 | reqdoc-r8 | goal | 目录就绪检查：项目根约定 01~06 需求资料目录（01_背景与目标、02_制度与合规、03_流程与数据、04_角色与权限，此四目录业务投放材料；05_功能点、06_需求规格产出为 AI 工作区）。尚无时询问业务是否搭建骨架，确认后创建（幂等，绝不重建或覆盖业务已放材料）；业务说资料已放好则调用 reqdoc_scan(directory=01_背景与目标) 扫描提取作引导输入。 |
 | reqdoc-r9 | rules | 引导补全主流程：用户输入哪些信息、系统处理后给什么结果；将自然语言转化为字段定义（数据项 / 是否必填 / 校验规则）。 |
 | reqdoc-r10 | rules | 自动推演 Mermaid 流程图，反向展示给业务确认；业务说资料已放好则调用 reqdoc_scan(directory=03_流程与数据) 扫描提取字段与流程作输入；综合扫描材料与问答生成数据字典与库表设计（数据实体/字段/主外键关系/校验规则），向业务展示确认。 |
-| reqdoc-r11 | edge | 主动追问三类探针：数据与权限（所有岗位可见还是按机构/层级隔离）、异常流程（接口超时 / 操作失败 / 审批驳回，报错还是人工补单）、合规留痕（资金/敏感变更是否留审计日志、是否二次授权）。 |
+| reqdoc-r11 | edge | 按探针清单推进追问（清单 `REQDOC_PROBES`，与 reqdoc_probe 工具描述同源；7 条探针每维映射打分卡扣分项：main_flow/flow_trigger→flowClosure，exception/reverse→edgeControl，desensitize/audit→compliance，authority→authority，见 3.2/7.5）：逐轮追问 2-3 问（见 r2，带 A/B/C 与【默认推荐项】），每轮结束调用 reqdoc_probe(asked=本轮新问探针, gaps=仍缺口探针, round=轮次) 记录覆盖；追问最多 3 轮，3 轮后仍未澄清项标 [缺省] 停止追问。 |
 | reqdoc-r12 | edge | 按已投放材料反问缺口（如已有制度但缺权限，追问「不同岗位的权限如何隔离」）；业务说资料已放好则调用 reqdoc_scan(directory=02_制度与合规) 与 reqdoc_scan(directory=04_角色与权限) 扫描提取作输入；综合岗位角色矩阵、机构隔离、审批授权与双人复核材料生成 RBAC 权限控制矩阵与审批流控制逻辑，向业务展示确认。 |
 | reqdoc-r21 | edge | 打分时机与门禁（实施方案打分卡）：边界与异常收集完成、准备进入 prd 前，基于已扫描材料 + 问答对照打分卡逐维打分（满分 100；评分标准经 `reqdocScoreRubric()` 注入——判定规则 + 逐条扣分标准，见 3.2 表格）。调用 reqdoc_score 输出各维得分与扣分明细（附证据引用），向业务展示并请其确认；business_confirmed=true 且 total≥85 后才可 workflow_advance(stage=prd, action=enter)。未达标按三档引导重打：<60 分（不合格）优先继续提问主流程与异常边界，补齐流程闭环与异常覆盖；60-84 分（良好）引导补充脱敏规则、权限与机构隔离、逆向撤销/驳回流程；≥85 分（达标）输出扣分明细、业务确认通过后即停止追问、不再重复盘问。展示得分时必须附质量得分进度条（如 [▓▓▓▓▓░░░░░ 50%]，进度直观反映达标）。严禁未展示扣分明细即自报达标。 |
+| reqdoc-r22 | edge | 探针覆盖度（柔性门禁，质量飞轮 P1）：进入 prd 前，若已调用 reqdoc_probe 记录过探针，服务端校验缺口与打分一致——缺口探针对应打分卡维度不得打满分（缺口+满分=自评不诚实，workflow_advance 进 prd 与 review_submit 会被拒绝，见 7.5）；建议每轮追问结束调用 reqdoc_probe 记录（覆盖度在状态条可见，帮助自评一致）；材料已全覆盖无追问时可记录一次（asked/gaps 可为空），不记录不强求。 |
 | reqdoc-r13 | prd | 功能点拆解（核心）：综合 goal/rules/edge 收集的信息（材料提取 + 问答）把需求拆成功能点清单（编号/名称/优先级），先向业务展示确认；业务确认后调用 reqdoc_confirm_features(features=[{name,priority}]...) 记录，并为每个功能点在 05_功能点 下建子目录写入来源摘录（标注 [文档]/[问答] 来源）。业务说资料已放好则先调用 reqdoc_scan(directory=06_需求规格产出) 检查已有产出。 |
 | reqdoc-r14 | prd | 按《业务需求说明书》模板渲染最终 PRD（模板 `docs/reqdoc-prd-template.md`；模板全文由插件在 prd 阶段自动注入系统提示（见「模板全文」段），以注入的模板全文为唯一依据，渲染须严格逐字遵循（见 r20），插件找不到模板文件时才按内联骨架渲染）：封面（项目信息表、文档变更过程表）→ 第一章 需求概述（需求类型/流程优化/跨部门/总行开发/希望完成时间/提出原因及功能概述）→ 第二章 术语定义与业务规则（术语定义、业务规则）→ 第三章 需求功能详述（按已确认功能点：输入要素/处理要求/异常/清算/差错/交易安全/数据存贮/附件）。每功能点内容从 05_功能点/N_名称/ 来源摘录 + 问答补全，逐字段标来源 [文档]/[问答]/[缺省]，绝不杜撰；未涉及项选「不涉及/不适用」并留白；项目信息表与文档变更过程属项目元数据，不主动问业务，渲染时留空占位。产出归档：澄清记录、Mermaid 流程图、数据字典与库表设计、RBAC 权限控制矩阵与审批流控制逻辑、最终 PRD 写入 06_需求规格产出；PRD 定稿后调用 reqdoc_export(source=PRD 路径) 生成 Word 版（.docx）交付件，与 md 同目录归档。 |
 | reqdoc-r20 | prd | 渲染铁律 + 字段映射（模板权威约束）：模板全文已由插件注入对话（见「模板全文」段，无需自行读文件），以注入的模板全文为唯一依据，渲染严格逐字遵循、不调整章节顺序/标题/字段名；如发现模板结构问题如实上报、不擅自修正（归行方模板主管部门）。打分卡扣分项按以下映射落位到模板既有字段：脱敏规则（手机号/身份证遮罩）→功能点 2.8 交易安全性/2.9 数据存贮和清理；资金或高危变更留痕与双人复核→1.2 控制要求/2.8 交易安全性；总/分/支行数据边界与岗位权限→1.2 控制要求/2.1 输入要素的检查；异常边界（网络超时/操作失败/并发重复提交/逆向撤销驳回）→2.3 异常处理要求/2.6 清算处理/2.7 差错处理；模板确无对应字段的补充内容→2.2 系统处理过程或功能点描述，来源标注注明「补」。模板外成果（Mermaid 流程图、UAT 验收测试用例、低保真界面说明、数据字典与库表设计、RBAC 权限控制矩阵与审批流控制逻辑）不插入模板正文，用 write 写入 06_需求规格产出 下子目录（附_流程图/、测试用例/、界面草图/、数据字典与库表设计/、权限矩阵与审批流/），并在对应功能点「2.10 附件」列出清单与相对路径。 |
@@ -1511,9 +1514,9 @@ flowchart TD
     I --> J["reqdoc_scan 扫描对应目录提取"]
     J --> K["对照缺口提问补全（渐进引导 goal→rules→edge）"]
     F --> K
-    K --> S["reqdoc_score 五维打分<br/>展示扣分明细（r21）"]
-    S --> SG{"total ≥ 85 且<br/>业务确认?"}
-    SG -->|"✗"| K2["按扣分明细回 edge 追问<br/>补缺后重打"]
+    K --> S["追问逐轮 reqdoc_probe 记录探针<br/>reqdoc_score 五维打分展示（r21/r22）"]
+    S --> SG{"total ≥ 85 且业务确认<br/>且缺口探针已如实扣分?"}
+    SG -->|"✗"| K2["按扣分明细/缺口回 edge<br/>追问补缺后重打"]
     K2 --> K
     SG -->|"✓"| L["prd：功能点拆解 → reqdoc_confirm_features 确认 → 按模版渲染（模板注入 + r20 铁律）→ reqdoc_export 导 Word"]
     L --> M["产出归档 06_需求规格产出（附_流程图/测试用例/界面草图/数据字典与库表设计/权限矩阵与审批流 + Word(.docx) + 2.10 附件清单）+ review 业务确认"]
@@ -1524,6 +1527,8 @@ flowchart TD
 - **缺失度校验**：扫描后按映射主动反问——`01` 缺失则优先问「系统要解决的核心痛点」；有 `02` 制度却无 `04` 权限则追问「该制度要求不同岗位的权限如何隔离」。
 - **功能点拆解**：prd 阶段综合材料 + 问答信息拆功能点清单，业务确认后 `reqdoc_confirm_features` 记录，每功能点建 `05_功能点/N_名称/` 子目录 + 来源摘录，并幂等预建 `06_需求规格产出/N_名称/`（模板外成果落盘位），作为渲染依据。
 - **打分卡门禁**：edge 收集完成、准备进入 prd 前，对照打分卡逐维打分（评分标准=判定规则 + 逐条扣分标准，经 `reqdocScoreRubric()` 同时注入 reqdoc-r21 规则文本与 `reqdoc_score` 工具描述，见 3.2 表格）调用 `reqdoc_score` 输出各维得分与扣分明细（附证据），向业务展示确认后 `business_confirmed=true`；total ≥ 85 且业务确认才可 `workflow_advance(stage=prd, action=enter)`。低于 85 分按**三档分级**回 edge 引导重打（<60 补主流程与异常边界；60-84 补脱敏/权限/逆向流程；≥85 达标即停止追问，见 7.4 reqdoc-r21）；展示得分附**质量得分进度条**（如 `[▓▓▓▓▓░░░░░ 50%]`，服务端在 `reqdoc_score` 返回文本中渲染，10 格）。门禁两处硬拦截：进入 prd 阶段（workflow_advance）与定稿（review_submit），只对 `def.type === "reqdoc"` 生效；`reqdoc_score` 的 `business_confirmed` 由 AI 转述业务确认，与 `developer_confirmed` 同属「AI 代转」语义，缓解靠扣分明细结构化留痕 + 状态条/CLI 可见 + 评测场景约束。
+- **追问探针清单（质量飞轮 P1，追问可测化）**：edge 该问什么落成结构化清单 `REQDOC_PROBES`（7 条探针，每维映射打分卡扣分项：main_flow/flow_trigger→flowClosure、exception/reverse→edgeControl、desensitize/audit→compliance、authority→authority，单点定义见 3.2，经 `reqdocProbeRubric()` 同源注入 reqdoc-r11 规则文本与 `reqdoc_probe` 工具描述）。每轮追问结束调用 `reqdoc_probe(asked, gaps, round)` 把「问了什么/还缺什么」写进 `WorkflowState.probes`（asked 跨轮追加去重，round 1-3 自动递增），状态条展示「追问覆盖：已问 X/7；缺口；轮次」。
+- **柔性一致校验门禁（用户定：只拦矛盾、不强制记录）**：一旦记录了缺口，缺口探针对应打分卡维度不得打满分（`probeGapViolations`，报缺口却打满分=自评不诚实），workflow_advance 进 prd 与 review_submit 两处拒绝；材料全覆盖无追问、不记录探针的合法流程零打扰（产出端 P0 评分器兜底）。因打分卡扣分粒度粗（如 edgeControl 要么 30 要么 5），诚实地认缺口必然掉到 85 以下被分数门禁拦回——一致性校验专抓「报缺口却打满分」的撒谎场景，与分数门禁互补不重叠。
 - **产出归档**：澄清记录、Mermaid 流程图、数据字典与库表设计、RBAC 权限控制矩阵与审批流控制逻辑、终稿 PRD 写入 `06_需求规格产出/N_名称/`；模板外成果不插入模板正文，按 reqdoc-r20 写入 `附_流程图/`、`测试用例/`、`界面草图/`、`数据字典与库表设计/`、`权限矩阵与审批流/` 子目录，并在对应功能点「2.10 附件」列出清单与相对路径；PRD 定稿后经 `reqdoc_export` 导出 Word（.docx）交付件，与源 md 同目录归档（实施方案「标准 PRD (Markdown/Word)」）；渲染逐字段标来源 `[文档]/[问答]/[缺省]`，绝不杜撰。
 - **渲染铁律（模板权威约束）**：渲染严格逐字遵循《模版.docx》，如发现模板结构问题如实上报、不擅自修正（归行方模板主管部门）；打分卡扣分项按 reqdoc-r20 映射表落位（无对应字段标「补」）。**模板送达**：prd 阶段插件自动读取并注入模板全文（部署包随带 `docs/`），客户端不依赖运行目录有模板文件；找不到模板文件时退内联骨架（reqdoc-r14 兜底）。
 - **docx 与 md 的维护约定**：`docs/模版.docx` 为权威源，`docs/reqdoc-prd-template.md` 为运行时载体（插件注入的是 md，模型只以注入的 md 为唯一依据——r14/r20 规则文本不引用 docx，避免双权威歧义）。**改 docx 必须同步重渲染 md**，否则「严格逐字遵循」名不副实。
@@ -1749,7 +1754,7 @@ bun run scripts/eval-rules/run.ts --variant new              # 改造后 → res
 
 ### 13.2 场景集
 
-41 个场景（sdlc s1-s22 + reqdoc r1-r19），覆盖关键规则：
+44 个场景（sdlc s1-s22 + reqdoc r1-r22），覆盖关键规则：
 
 - 基线录入不重复、确认后 approve、无确认不 approve、回到XX→revisit、审查逐段不批量、前序未完成不 submit、提交前查门禁
 - **完成后提示 /new**（sdlc s9 / reqdoc r7，`text.keyword` 判定回复须含 `/new`）
@@ -1762,10 +1767,11 @@ bun run scripts/eval-rules/run.ts --variant new              # 改造后 → res
 - **reqdoc 双通道与功能点拆解**（重构新增 r11-r13）：资料已放好应 `reqdoc_scan` 扫描分析而非空问（r11）、prd 功能点拆解经 `reqdoc_confirm_features` 确认（r12）、功能点未确认不得直接渲染定稿（r13，no_tool 禁 workflow_advance/reqdoc_confirm_features）
 - **打分卡门禁**（实施方案新增 r14-r17）：进 prd 前先 `reqdoc_score` 打分（r14）、低于 85 分不定稿（r15，no_tool 禁 review_submit）、高分未业务确认不定稿（r16）、达标且业务确认后定稿（r17，正向 review_submit）；r8/r9 正向/未定论定稿场景夹具同步补打分卡（保持与真实门禁一致）
 - **评分模式**（质量飞轮 P0，`judge.kind="score"`，新增 r18-r19）：prd-render 场景对渲染产出的 PRD 文本做五维确定性评分——材料齐全渲染应高分（r18，dimMin 下限）、缺异常材料渲染应低分不杜撰（r19，dimMax 上限），构造产出度量区分度，供 baseline→new 逐维对比
+- **追问可测化**（质量飞轮 P1，新增 r20-r22）：追问结束调用 `reqdoc_probe` 记录探针（r20，`argsContains` 断言 asked 至少覆盖异常与权限）、缺口与满分矛盾不推进（r21，no_tool 禁 workflow_advance enter prd）、覆盖达标正向进 prd（r22，tool 断言 workflow_advance enter prd）
 
 ### 13.3 判定方式（rule-based，不用 LLM judge）
 
-- 工具类比对 `tool_use` 名称与参数谓词（如 approve 时 `developer_confirmed` 必须 true）
+- 工具类比对 `tool_use` 名称与参数谓词（如 approve 时 `developer_confirmed` 必须 true）；`args` 为参数子集全等匹配，`argsContains`（质量飞轮 P1）为数组子集断言——期望每个元素须出现在实际数组参数中（如断言 asked 覆盖核心探针），两者互不影响、零回归
 - `no_tool` 类断言未调用某工具
 - `text` 类（maxQuestions 问句计数、optionsABC 问句 ≤max 且含「默认」+ ≥2 个 A/B/C 标记、categoryKeywords 探针关键词）为关键词启发式，判定口径脆弱需人工复核
 - `score` 类（质量飞轮 P0）：渲染标记命中 + `scorePrd()` 五维总分/维度上下限校验——同样是 rule-based，只是判定对象从「工具行为」换成「渲染产出质量」
@@ -1783,6 +1789,8 @@ bun run scripts/eval-rules/run.ts --variant new              # 改造后 → res
 **本轮（打分卡补齐）场景集扩至 39 个（r1 改为 optionsABC 断言 2-3 问带选项与默认推荐；新增 r14-r17 打分卡门禁）**：需对端点重新跑 `--variant baseline` → `--variant new` 对比（见验证步骤），确认 sdlc 零回归、reqdoc 打分门禁场景通过后再入库。
 
 **本轮（质量飞轮 P0）场景集扩至 41 个（新增 r18-r19 评分模式，`judge.kind="score"`）**：`score.ts` 确定性评分器 + prd-render 场景 + run.ts 五维聚合与 baseline→new 逐维对比 + prd 模板送达注入（render-new）。代码与脚本已落地并过 typecheck / bun test（302 全绿）/ 双 variant dry；**真实模型端点的五维基线待跑**（`--variant baseline` → `--variant new`，见 13.6 P0）。
+
+**本轮（质量飞轮 P1）场景集扩至 44 个（新增 r20-r22 追问可测化，`judge.argsContains`）**：`reqdoc_probe` 工具（探针清单 `REQDOC_PROBES` 7 条单点定义，经 `reqdocProbeRubric()` 同源注入 r11 与工具描述）+ `WorkflowState.probes` 记录 + 柔性一致校验门禁（`probeGapViolations`，workflow_advance 进 prd 与 review_submit 两处拦截，只拦「缺口+满分矛盾」、不强制记录）+ 状态条「追问覆盖」行 + eval 侧 probe schema 与 argsContains 数组子集断言。代码与脚本已落地并过 typecheck / bun test（315 全绿）/ 双 variant dry；**真实模型端点的基线待跑**（`--variant baseline` → `--variant new`，见 13.6 P1，确认 r20-r22 判定与五维无回退）。
 
 ### 13.5 关键教训（多次迭代沉淀）
 
@@ -1819,10 +1827,10 @@ flowchart LR
 
 **三支柱各自的可持续动作**
 
-1. **追问（最软，优先级最高）→ 规则文本升级为结构化探针清单**
-   - 现状：追问约束是纯规则文本（r2/r6/r11/r12/r21），无强制、不可测。
-   - 规划：把三档分级要补的内容（主流程 / 异常 / 权限 / 脱敏 / 逆向 / 合规留痕）落成**结构化探针清单**，追问轮次与已问探针入 `WorkflowState`（`probes: { asked, gaps }`），进入 prd 前服务端校验覆盖度，缺口直接映射打分卡扣分项。
-   - 自持续：eval 数据里哪个探针被漏问频率最高，就把该探针**前移**到更早追问轮次——探针清单本身数据驱动迭代。
+1. **追问（最软，优先级最高）→ 已升级为结构化探针清单（P1 已落地）**
+   - 现状：追问约束已是结构化清单——`REQDOC_PROBES` 7 条探针（单点定义，经 `reqdocProbeRubric()` 同源注入 r11 与 `reqdoc_probe` 工具描述），每轮追问结束调用 `reqdoc_probe(asked, gaps, round)` 把已问/缺口探针写进 `WorkflowState.probes`（跨轮追加去重），状态条展示覆盖，评测经 `argsContains` 断言 asked 覆盖核心探针。
+   - 门禁：**柔性一致校验**（用户定，只拦矛盾不强制记录）——缺口探针对应打分卡维度不得打满分（`probeGapViolations`，workflow_advance 进 prd 与 review_submit 两处拦截）；材料全覆盖无追问、不记录探针的合法流程零打扰，产出端 P0 评分器兜底。
+   - 自持续：eval 数据里哪个探针被漏问频率最高，就把该探针**前移**到更早追问轮次（改 `REQDOC_PROBES` 的 round 即可）——探针清单本身数据驱动迭代。
 
 2. **打分（已固化）→ 更准 + 更可信**
    - **一致性监控**：同一材料多次重打（`ReqdocScore.updatedAt` 可覆盖）的分数漂移——漂移大说明 rubric 模糊，需细化扣分标准；eval 场景自动测。
@@ -1848,7 +1856,7 @@ flowchart LR
 ```
 
 - **P0（轴承）已落地**：`score.ts` 五维评分器 + prd-render 场景（r18/r19）+ run.ts 聚合与逐维对比 + prd 模板送达注入（render-new 复刻插件行为）。待办：对真实模型端点跑 `--variant baseline` → `--variant new` 冻结五维基线（13.1），用 r18/r19 区分度校准各维阈值。
-- **P1（追问可测化，规划）**：结构化探针清单 + 覆盖度校验。
+- **P1（追问可测化）已落地**：结构化探针清单 `REQDOC_PROBES`（7 条）+ `reqdoc_probe` 工具 + `WorkflowState.probes` 记录 + 柔性一致校验门禁（缺口+满分矛盾拒绝，只拦矛盾不强制记录）+ 评测 `argsContains` 断言（r20-r22）。待办：对真实模型端点跑 `--variant baseline` → `--variant new` 确认 r20-r22 判定与五维无回退。
 - **P2（渲染可测化，规划）**：模板结构 schema + 渲染 diff 门禁。
 
 
