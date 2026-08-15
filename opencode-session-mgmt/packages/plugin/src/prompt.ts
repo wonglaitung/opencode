@@ -15,12 +15,14 @@ import {
 import type { Store } from "./db"
 import { isComplete } from "./stats"
 import { getStuckFiles } from "./tools/quality"
+import { loadReqdocTemplate } from "./template"
 
 /** 将当前工作流压缩为注入片段：阶段化规则 + 状态条 + stuck 警告（完成态见下方专用分支）。 */
 export function buildSystemFragment(
   workflow: WorkflowState,
   stuck: Record<string, number> = {},
   lockedFiles: string[] = [],
+  templateText: string | null = null,
 ): string {
   const def = getDefinition(workflow.type)
   const stage = currentInProgressStage(workflow)
@@ -76,6 +78,18 @@ export function buildSystemFragment(
     }
   }
   parts.push("", buildStateBar(workflow, stage))
+
+  // 模板送达（渲染铁律的部署保障，见 template.ts）：reqdoc 且当前阶段为 prd 时注入模板全文，
+  // 客户端模型无需自行按「docs/...」读文件（运行目录未必有），逐字遵循才真正可执行；
+  // templateText 为 null（插件找不到模板文件）时退化为 reqdoc-r14 的内联骨架，不注入。
+  if (def.type === "reqdoc" && stage === "prd" && templateText) {
+    parts.push(
+      "",
+      "# 《业务需求说明书》模板全文（插件自动送达；渲染须严格逐字遵循，见 reqdoc-r20）",
+      "",
+      templateText,
+    )
+  }
 
   const stuckEntries = Object.entries(stuck)
   if (stuckEntries.length > 0) {
@@ -144,7 +158,12 @@ export function createSystemTransform(store: Store, isSubagent: (sessionID: stri
     const workflow = row.workflow
     if (!workflow) return
     output.system.push(
-      buildSystemFragment(workflow, getStuckFiles(input.sessionID), store.listLocks(input.sessionID)),
+      buildSystemFragment(
+        workflow,
+        getStuckFiles(input.sessionID),
+        store.listLocks(input.sessionID),
+        loadReqdocTemplate(),
+      ),
     )
   }
 }

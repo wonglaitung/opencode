@@ -10,6 +10,7 @@ import {
   REQDOC_SCORE_DIMS,
   REQDOC_SCORE_PASS,
   getDefinition,
+  reqdocScoreRubric,
   type ReqdocScore,
   type ReqdocScoreDeduction,
   type ReqdocScoreDimKey,
@@ -24,8 +25,7 @@ const dimKeys = REQDOC_SCORE_DIMS.map((d) => d.key) as [ReqdocScoreDimKey, ...Re
 export function createReqdocScoreTools(store: Store): Record<string, ToolDefinition> {
   const reqdoc_score = tool({
     description:
-      "reqdoc 打分卡：AI 对照打分卡（业务目标与价值 15 / 主流程逻辑闭环 25 / 异常与边界控制 30 / " +
-      "合规与数据安全 20 / 权限与机构隔离 10，满分 100）逐维打分，并附扣分明细与证据引用。" +
+      `reqdoc 打分卡：AI 对照评分标准逐维打分，评分标准（满分 100）：\n${reqdocScoreRubric()}\n` +
       "必须先向业务展示各维得分与扣分明细，业务明确认可后才调用本工具记录；total 由服务端计算。" +
       "仅 reqdoc 工作流有效；<85 分可按扣分明细回 edge 追问补缺后重打覆盖。",
     args: {

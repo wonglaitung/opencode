@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { createWorkflowState, type WorkflowState } from "sm-shared"
 import { buildSystemFragment } from "../src/prompt"
+import { loadReqdocTemplate } from "../src/template"
 import { applyTransition } from "../src/workflow-ops"
 
 /** 推进到全部阶段 approved（完成态）。 */
@@ -161,5 +162,49 @@ describe("buildSystemFragment", () => {
     const s = createWorkflowState("sdlc")
     applyTransition(s, "implementation", "enter", 1)
     expect(buildSystemFragment(s)).not.toContain("PRD 评分")
+  })
+
+  describe("模板送达（reqdoc prd 阶段注入模板全文）", () => {
+    /** 推进 reqdoc 至 prd 进行中（goal/rules/edge 均已 approve）。 */
+    function reqdocAtPrd(): WorkflowState {
+      const s = createWorkflowState("reqdoc")
+      for (const name of ["goal", "rules", "edge"]) {
+        applyTransition(s, name, "enter", 1)
+        applyTransition(s, name, "approve", 2)
+      }
+      applyTransition(s, "prd", "enter", 3)
+      return s
+    }
+
+    test("reqdoc prd 阶段：注入真实模板全文（送达）", () => {
+      const text = buildSystemFragment(reqdocAtPrd(), {}, [], loadReqdocTemplate())
+      // 注入块头部标记（规则文本无此字样，可精确区分）
+      expect(text).toContain("# 《业务需求说明书》模板全文（插件自动送达")
+      expect(text).toContain("# 业务需求说明书模板") // 模板正文首行
+      expect(text).toContain("## 一、项目信息")
+    })
+
+    test("reqdoc prd 阶段 + 模板读不到（null）→ 不注入，退内联骨架", () => {
+      const text = buildSystemFragment(reqdocAtPrd(), {}, [], null)
+      expect(text).not.toContain("插件自动送达")
+    })
+
+    test("reqdoc 非 prd 阶段 → 不注入模板", () => {
+      const s = createWorkflowState("reqdoc")
+      applyTransition(s, "edge", "enter", 1)
+      const text = buildSystemFragment(s, {}, [], loadReqdocTemplate())
+      expect(text).not.toContain("插件自动送达")
+    })
+
+    test("reqdoc 完成态 → 不注入模板", () => {
+      const text = buildSystemFragment(completeReqdoc(), {}, [], loadReqdocTemplate())
+      expect(text).not.toContain("插件自动送达")
+    })
+
+    test("sdlc → 恒不注入模板（模板送达仅 reqdoc）", () => {
+      const s = createWorkflowState("sdlc")
+      applyTransition(s, "implementation", "enter", 1)
+      expect(buildSystemFragment(s, {}, [], loadReqdocTemplate())).not.toContain("插件自动送达")
+    })
   })
 })

@@ -105,13 +105,52 @@ export interface ReqdocFeature {
 /**
  * reqdoc 打分卡五维度（实施方案第三节，满分 100 = Σ max）。
  * 单点定义：reqdoc_score 工具、prd 门禁、状态条/CLI 展示、评测脚本共用。
+ * 每维含 `rule`（判定规则）与 `deductionRules`（扣分标准，方案「Agent 后台判定规则与
+ * 扣分标准」列），经 reqdocScoreRubric() 生成提示文本——r21 规则文本与工具描述双通道同源，
+ * 模型在 edge 打分与追问时即可见完整评分标准。
  */
 export const REQDOC_SCORE_DIMS = [
-  { key: "businessValue", label: "业务目标与价值", max: 15 },
-  { key: "flowClosure", label: "主流程逻辑闭环", max: 25 },
-  { key: "edgeControl", label: "异常与边界控制", max: 30 },
-  { key: "compliance", label: "合规与数据安全", max: 20 },
-  { key: "authority", label: "权限与机构隔离", max: 10 },
+  {
+    key: "businessValue",
+    label: "业务目标与价值",
+    max: 15,
+    rule: "必须明确使用角色与解决的痛点",
+    deductionRules: [
+      { points: 10, condition: "缺失使用角色" },
+      { points: 5, condition: "缺乏量化目标" },
+    ],
+  },
+  {
+    key: "flowClosure",
+    label: "主流程逻辑闭环",
+    max: 25,
+    rule: "输入、处理、输出必须闭环",
+    deductionRules: [
+      { points: 15, condition: "流程有头无尾" },
+      { points: 10, condition: "步骤缺少触发条件" },
+    ],
+  },
+  {
+    key: "edgeControl",
+    label: "异常与边界控制",
+    max: 30,
+    rule: "必须覆盖网络超时、扣款/提交失败、并发重复提交、逆向撤销/驳回流程",
+    deductionRules: [{ points: 25, condition: "未提及任何异常" }],
+  },
+  {
+    key: "compliance",
+    label: "合规与数据安全",
+    max: 20,
+    rule: "敏感字段（手机号/身份证）必须明确遮罩脱敏规则；资金或高危变更操作必须声明留痕与复核机制",
+    deductionRules: [{ points: 10, condition: "未定义脱敏" }],
+  },
+  {
+    key: "authority",
+    label: "权限与机构隔离",
+    max: 10,
+    rule: "必须明确总/分/支行数据查看边界及岗位权限",
+    deductionRules: [{ points: 10, condition: "描述为「所有人均可使用」" }],
+  },
 ] as const
 
 /** reqdoc 打分卡维度键（类型安全，消费方遍历 REQDOC_SCORE_DIMS 即可）。 */
@@ -119,6 +158,18 @@ export type ReqdocScoreDimKey = (typeof REQDOC_SCORE_DIMS)[number]["key"]
 
 /** 打分卡达标门禁线（实施方案：≥85 分 + 业务确认才可定稿）。 */
 export const REQDOC_SCORE_PASS = 85
+
+/**
+ * 打分卡评分标准文本（实施方案第三节「判定规则与扣分标准」），r21 规则文本与
+ * reqdoc_score 工具描述共用同一来源，避免两份漂移。
+ * 每维格式：`label(key)满分：判定规则。扣X分：条件；扣Y分：条件`
+ */
+export function reqdocScoreRubric(): string {
+  return REQDOC_SCORE_DIMS.map((d) => {
+    const penalties = d.deductionRules.map((p) => `扣${p.points}分：${p.condition}`).join("；")
+    return `${d.label}(${d.key})${d.max}分：${d.rule}${penalties ? `。${penalties}` : ""}`
+  }).join("\n")
+}
 
 /** 打分卡扣分明细条目（含证据引用，本机留痕可审计）。 */
 export interface ReqdocScoreDeduction {
@@ -322,7 +373,7 @@ export const REQDOC: WorkflowDefinition = {
   rules: [
     // ---- global：所有阶段通用 ----
     { id: "reqdoc-r1", stage: "global", text: "会话开始时，调用 workflow_advance(stage=goal, action=enter) 初始化工作流。" },
-    { id: "reqdoc-r2", stage: "global", text: "采用渐进式分段引导，不要一次性抛出所有问题；单次提问 2-3 个问题，每个问题必须附 A/B/C 选项并标注【默认推荐项】（业务回复「同意默认」即按推荐确认）；同一需求追问最长 3 轮，3 轮后仍未澄清项标 [缺省] 进入下一环节，避免业务有被「质问」的挫败感。" },
+    { id: "reqdoc-r2", stage: "global", text: "采用渐进式分段引导，不要一次性抛出所有问题；单次提问 2-3 个问题，每个问题必须附 A/B/C 选项并标注【默认推荐项】（业务回复「同意默认」即按推荐确认）；同一需求追问最长 3 轮，3 轮后仍未澄清项标 [缺省] 进入下一环节，避免业务有被「质问」的挫败感。提问一律用业务语言，严禁出现「高并发、幂等性、API」等纯技术词汇——同一含义必须转述为业务说法（如并发重复提交→「同一笔交易被重复点了几次怎么处理」）。" },
     { id: "reqdoc-r3", stage: "global", text: "阶段可能完成时，先输出摘要并询问确认；仅业务明确表示「确认/可以」才算确认——模糊表态不算，不得自行 approve。确认后调用 workflow_advance(action=approve, developer_confirmed=true)。" },
     { id: "reqdoc-r4", stage: "global", text: "业务说「回到XX」时，立即调用 workflow_revisit(stage=XX)。绝不自行判断阶段已完成。" },
     { id: "reqdoc-r5", stage: "global", text: "业务确认完成（review_submit 通过）后，建议执行 /new 开始下一个需求，保持统计隔离。" },
@@ -336,11 +387,11 @@ export const REQDOC: WorkflowDefinition = {
     // ---- edge 边界与异常（最关键）----
     { id: "reqdoc-r11", stage: "edge", text: "主动追问三类探针：数据与权限（所有岗位可见还是按机构/层级隔离）、异常流程（接口超时 / 操作失败 / 审批驳回，报错还是人工补单）、合规留痕（资金/敏感变更是否留审计日志、是否二次授权）。" },
     { id: "reqdoc-r12", stage: "edge", text: "按已投放材料反问缺口（如已有制度但缺权限，追问「不同岗位的权限如何隔离」）；业务说资料已放好则调用 reqdoc_scan(directory=02_制度与合规) 与 reqdoc_scan(directory=04_角色与权限) 扫描提取作输入。" },
-    { id: "reqdoc-r21", stage: "edge", text: "打分时机与门禁（实施方案打分卡）：边界与异常收集完成、准备进入 prd 前，基于已扫描材料 + 问答对照打分卡逐维打分——业务目标与价值（15）、主流程逻辑闭环（25）、异常与边界控制（30）、合规与数据安全（20）、权限与机构隔离（10），满分 100。调用 reqdoc_score 输出各维得分与扣分明细（附证据引用），向业务展示并请其确认；business_confirmed=true 且 total≥85 后才可 workflow_advance(stage=prd, action=enter)。<85 分按扣分明细继续追问补缺后重打 reqdoc_score；严禁未展示扣分明细即自报达标。" },
+    { id: "reqdoc-r21", stage: "edge", text: `打分时机与门禁（实施方案打分卡）：边界与异常收集完成、准备进入 prd 前，基于已扫描材料 + 问答对照打分卡逐维打分（满分 100）：\n${reqdocScoreRubric()}\n调用 reqdoc_score 输出各维得分与扣分明细（附证据引用），向业务展示并请其确认；business_confirmed=true 且 total≥85 后才可 workflow_advance(stage=prd, action=enter)。未达标按三档引导重打：<60 分（不合格）优先继续提问主流程与异常边界，补齐流程闭环与异常覆盖；60-84 分（良好）引导补充脱敏规则、权限与机构隔离、逆向撤销/驳回流程；≥85 分（达标）输出扣分明细、业务确认通过后即停止追问、不再重复盘问。严禁未展示扣分明细即自报达标。` },
     // ---- prd 需求规格书 ----
     { id: "reqdoc-r13", stage: "prd", text: "功能点拆解（核心）：综合前面 goal/rules/edge 收集的信息（材料提取 + 问答），把需求拆成功能点清单（编号/名称/优先级），先向业务展示清单确认；业务确认后调用 reqdoc_confirm_features(features=[{name,priority}]...) 记录，并为每个功能点在 05_功能点 下建子目录写入来源摘录（标注 [文档]/[问答] 来源）。业务说资料已放好则先调用 reqdoc_scan(directory=06_需求规格产出) 检查已有产出。" },
-    { id: "reqdoc-r14", stage: "prd", text: "按《业务需求说明书》模板渲染最终 PRD（模板：docs/reqdoc-prd-template.md，源 docs/模版.docx；运行目录可读则按完整模板，否则按内联骨架）：封面（项目信息表、文档变更过程表）→ 第一章 需求概述（需求类型：新增/更改、流程优化/跨部门/总行开发、希望完成时间、提出原因及功能概述）→ 第二章 需求概述（术语定义、业务规则）→ 第三章 需求功能详述（按已确认功能点：编号/名称/优先级，输入要素：简要概述/控制要求，处理要求：输入要素检查/系统处理过程/异常处理/提示信息/其他要求/清算处理/差错处理/交易安全性/数据存贮和清理/附件）。每功能点内容从 05_功能点/N_名称/ 子目录的来源摘录 + 问答补全，逐字段标来源：文档提取标 [文档]、问答补全标 [问答]、尚未获得的信息留白并标 [缺省]，绝不杜撰；未涉及项在 ○/● 中选「不涉及/不适用」并留白正文；项目信息表与文档变更过程属项目元数据，不主动问业务，渲染时留空占位。产出归档：需求澄清记录、自动提取的 Mermaid 流程图、最终 PRD 一律写入 06_需求规格产出 目录。" },
-    { id: "reqdoc-r20", stage: "prd", text: "渲染铁律 + 字段映射（模板冻结约束）：渲染严格逐字遵循《模版.docx》（docs/reqdoc-prd-template.md 为 md 渲染版），不调整章节顺序/标题/字段名；即使模板内部存在编号或标题瑕疵（第二章重复标题、3.0 附件编号、功能点优先级默认不一致）也一律原样输出、不擅自修正，结构问题归行方模板主管部门。打分卡扣分项按以下映射落位到模板既有字段：脱敏规则（手机号/身份证遮罩）→功能点 2.8 交易安全性/2.9 数据存贮和清理；资金或高危变更留痕与双人复核→1.2 控制要求/2.8 交易安全性；总/分/支行数据边界与岗位权限→1.2 控制要求/2.1 输入要素的检查；异常边界（网络超时/操作失败/并发重复提交/逆向撤销驳回）→2.3 异常处理要求/2.6 清算处理/2.7 差错处理；模板确无对应字段的补充内容→2.2 系统处理过程或功能点描述，来源标注注明「补」。模板外成果（Mermaid 流程图、UAT 验收测试用例、低保真界面说明）不插入模板正文，用 write 写入 06_需求规格产出 下子目录（附_流程图/、测试用例/、界面草图/），并在对应功能点「3.0 附件」列出清单与相对路径。" },
+    { id: "reqdoc-r14", stage: "prd", text: "按《业务需求说明书》模板渲染最终 PRD（模板：docs/reqdoc-prd-template.md；模板全文由插件在 prd 阶段自动注入系统提示，见「模板全文」段；以注入的模板全文为唯一依据，渲染须严格逐字遵循，见 reqdoc-r20；仅当插件找不到模板文件时才按内联骨架渲染）：封面（项目信息表、文档变更过程表）→ 第一章 需求概述（需求类型：新增/更改、流程优化/跨部门/总行开发、希望完成时间、提出原因及功能概述）→ 第二章 需求概述（术语定义、业务规则）→ 第三章 需求功能详述（按已确认功能点：编号/名称/优先级，输入要素：简要概述/控制要求，处理要求：输入要素检查/系统处理过程/异常处理/提示信息/其他要求/清算处理/差错处理/交易安全性/数据存贮和清理/附件）。每功能点内容从 05_功能点/N_名称/ 子目录的来源摘录 + 问答补全，逐字段标来源：文档提取标 [文档]、问答补全标 [问答]、尚未获得的信息留白并标 [缺省]，绝不杜撰；未涉及项在 ○/● 中选「不涉及/不适用」并留白正文；项目信息表与文档变更过程属项目元数据，不主动问业务，渲染时留空占位。产出归档：需求澄清记录、自动提取的 Mermaid 流程图、最终 PRD 一律写入 06_需求规格产出 目录。" },
+    { id: "reqdoc-r20", stage: "prd", text: "渲染铁律 + 字段映射（模板冻结约束）：模板全文已由插件注入对话（见系统提示「模板全文」段，无需自行读文件），以注入的模板全文为唯一依据，渲染严格逐字遵循、不调整章节顺序/标题/字段名；即使模板内部存在编号或标题瑕疵（第二章重复标题、3.0 附件编号、功能点优先级默认不一致）也一律原样输出、不擅自修正，结构问题归行方模板主管部门。打分卡扣分项按以下映射落位到模板既有字段：脱敏规则（手机号/身份证遮罩）→功能点 2.8 交易安全性/2.9 数据存贮和清理；资金或高危变更留痕与双人复核→1.2 控制要求/2.8 交易安全性；总/分/支行数据边界与岗位权限→1.2 控制要求/2.1 输入要素的检查；异常边界（网络超时/操作失败/并发重复提交/逆向撤销驳回）→2.3 异常处理要求/2.6 清算处理/2.7 差错处理；模板确无对应字段的补充内容→2.2 系统处理过程或功能点描述，来源标注注明「补」。模板外成果（Mermaid 流程图、UAT 验收测试用例、低保真界面说明）不插入模板正文，用 write 写入 06_需求规格产出 下子目录（附_流程图/、测试用例/、界面草图/），并在对应功能点「3.0 附件」列出清单与相对路径。" },
     // ---- review 业务确认（核心）----
     { id: "reqdoc-r15", stage: "review", text: "review 是唯一不可由 AI 自行推进的阶段（必须经 review_submit），确保业务真正理解并确认 PRD 要点。" },
     { id: "reqdoc-r16", stage: "review", text: "将 PRD 拆分为可确认要点（业务目标 / 核心字段 / 异常规则 / 合规要求），comprehension_add 逐段复述输出。" },

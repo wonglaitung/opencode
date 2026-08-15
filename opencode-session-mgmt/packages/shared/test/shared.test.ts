@@ -15,6 +15,7 @@ import {
   getDefinition,
   getStage,
   readIdentity,
+  reqdocScoreRubric,
   resolveWorkflowType,
   reviewRecord,
   rulesForStage,
@@ -256,6 +257,8 @@ describe("WorkflowDefinition 注册表（3.2）", () => {
     // 打分卡（实施方案第三节）：追问约束（r2 2-3 问带 A/B/C 与默认推荐、最长 3 轮）、
     // 打分时机与门禁（r21，edge）、渲染铁律 + 字段映射（r20，prd）
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r2" && r.text.includes("2-3 个问题") && r.text.includes("默认推荐"))).toBe(true)
+    // 追问原则：严禁纯技术词汇（业务语言转述，实施方案「追问原则」）
+    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r2" && r.text.includes("严禁") && r.text.includes("纯技术词汇") && r.text.includes("幂等"))).toBe(true)
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r6" && r.text.includes("默认推荐"))).toBe(true)
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r20" && r.text.includes("渲染铁律") && r.text.includes("字段映射"))).toBe(true)
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r21" && r.stage === "edge" && r.text.includes("reqdoc_score"))).toBe(true)
@@ -271,6 +274,34 @@ describe("WorkflowDefinition 注册表（3.2）", () => {
     ])
     expect(REQDOC_SCORE_DIMS.reduce((sum, d) => sum + d.max, 0)).toBe(100)
     expect(REQDOC_SCORE_PASS).toBe(85)
+  })
+
+  test("打分卡评分标准：每维含判定规则与扣分标准，逐条未超满分（实施方案判定规则列）", () => {
+    for (const d of REQDOC_SCORE_DIMS) {
+      expect(d.rule.length).toBeGreaterThan(0)
+      expect(d.deductionRules.length).toBeGreaterThan(0)
+      for (const p of d.deductionRules) {
+        expect(p.points).toBeGreaterThan(0)
+        expect(p.points).toBeLessThanOrEqual(d.max)
+      }
+    }
+    // 方案原表的关键扣分标准全部落位
+    const rubric = reqdocScoreRubric()
+    expect(rubric).toContain("扣10分：缺失使用角色")
+    expect(rubric).toContain("扣15分：流程有头无尾")
+    expect(rubric).toContain("扣25分：未提及任何异常")
+    expect(rubric).toContain("扣10分：未定义脱敏")
+    expect(rubric).toContain("扣10分：描述为「所有人均可使用」")
+    // r21 规则文本已嵌入完整评分标准（edge 阶段注入提示，模型打分可见）
+    const r21 = REQDOC.rules.find((r) => r.id === "reqdoc-r21")!
+    expect(r21.text).toContain("网络超时")
+    expect(r21.text).toContain("扣25分")
+    expect(r21.text).toContain("reqdoc_score")
+    // 三档分级引导（实施方案「<60 不合格 / 60-84 良好 / ≥85 达标」）
+    expect(r21.text).toContain("<60 分（不合格）")
+    expect(r21.text).toContain("60-84 分（良好）")
+    expect(r21.text).toContain("≥85 分（达标）")
+    expect(r21.text).toContain("停止追问")
   })
 
   test("createWorkflowState(reqdoc) 含 reqdoc 阶段与清单", () => {

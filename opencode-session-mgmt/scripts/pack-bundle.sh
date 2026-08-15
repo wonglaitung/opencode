@@ -98,6 +98,11 @@ cp .npmrc "$bundle_dir/"
 # 避免解压后链接目标缺失断链(与下方 workspace 包处理一致)。
 cp -rL packages "$bundle_dir/"
 
+# 模板送达（渲染铁律在客户端的落地保障）：docs/（含 docs/reqdoc-prd-template.md 与源
+# docs/模版.docx）随包分发到 bundle 根。插件 prd 阶段按 <bundle>/packages/plugin/src
+# 相对 ../../../docs 解析即命中 <bundle>/docs，客户端模型无需自行按「docs/...」读文件。
+cp -rL docs "$bundle_dir/"
+
 # 让 bundle 根 package.json 兼作插件入口（与 edge-debug 一致，opencode 可直接指 bundle 根）。
 # 只改 bundle 里的副本，源码根 package.json 不动。
 bundle_main="packages/plugin/src/index.ts"
@@ -304,6 +309,10 @@ Windows 注意：JSON 中路径用正斜杠 \`/\` 或双反斜杠 \`\\\\\`。
 
 本包使用 hoisted 模式安装依赖（\`node-linker=hoisted\`），所有包以真实文件形式
 存在于 node_modules 中，无符号链接、无硬链接，可直接移动目录。
+
+reqdoc 工作流的《业务需求说明书》模板（\`docs/reqdoc-prd-template.md\` 与源
+\`docs/模版.docx\`）已随包分发到解压目录 \`docs/\`，插件在 prd 阶段自动读取全文并
+注入提示（渲染须逐字遵循模板），无需在项目目录放置模板文件。
 
 如需重新安装依赖（例如升级版本）：
 
