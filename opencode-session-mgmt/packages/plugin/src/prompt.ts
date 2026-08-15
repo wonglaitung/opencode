@@ -9,6 +9,7 @@ import {
   REQDOC_SCORE_PASS,
   currentInProgressStage,
   getDefinition,
+  renderStructureViolations,
   reviewRecord,
   rulesForStage,
   type WorkflowState,
@@ -141,6 +142,17 @@ export function buildStateBar(workflow: WorkflowState, stage: string | null): st
     lines.push(
       `追问覆盖：已问 ${workflow.probes.asked.length}/${total} 探针；缺口：${gapNames || "无"}；轮次 ${workflow.probes.round}`,
     )
+  }
+  // 渲染结构校验（质量飞轮 P2）：reqdoc_check 记录过才展示明细；reqdoc 未记录则提示未执行（柔性，不打扰 sdlc）
+  if (workflow.render) {
+    const rv = renderStructureViolations(workflow.render)
+    lines.push(
+      rv.length === 0
+        ? `渲染校验：✓ 结构合规（${workflow.render.featureCount} 功能点）`
+        : `渲染校验：✗ ${rv[0]}${rv.length > 1 ? ` 等 ${rv.length} 项` : ""}；功能点 ${workflow.render.featureCount}/${workflow.render.expectedFeatures}`,
+    )
+  } else if (getDefinition(workflow.type).type === "reqdoc") {
+    lines.push(`渲染校验：未执行 reqdoc_check（定稿不复核，需评分卡 ≥${REQDOC_SCORE_PASS} 兜底）`)
   }
   const iteration = workflow.quality.iterationCount ?? 0
   if (iteration > 0) {

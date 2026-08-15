@@ -26,6 +26,7 @@ import { createReqdocScanTool } from "./tools/reqdoc-scan"
 import { createReqdocFeatureTools } from "./tools/reqdoc-features"
 import { createReqdocScoreTools } from "./tools/reqdoc-score"
 import { createReqdocProbeTools } from "./tools/reqdoc-probe"
+import { createReqdocCheckTools } from "./tools/reqdoc-check"
 import { createReqdocExportTool } from "./tools/reqdoc-export"
 import { makeSubagentChecker } from "./subagent"
 import { loadIdeConfig } from "./open-ide/config"
@@ -126,6 +127,7 @@ const SessionMgmtPlugin: Plugin = async (input) => {
       ...createReqdocFeatureTools(store),
       ...createReqdocScoreTools(store),
       ...createReqdocProbeTools(store),
+      ...createReqdocCheckTools(store),
       ...createReqdocExportTool(),
       open_ide: createOpenIdeTool(entries, registry),
       ...createLockTools(registry),

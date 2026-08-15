@@ -59,6 +59,22 @@ export type Judge =
       /** 附加维度下限(材料齐全场景)：该维实得分 ≥ 下限 */
       dimMin?: Partial<Record<ReqdocScoreDimKey, number>>
     }
+  | {
+      kind: "render"
+      /** 渲染 diff 判定（质量飞轮 P2）：用共享 parseRenderStructure 解析模型回复文本，
+       *  断言章节骨架/顺序/功能点块数/来源标注（与运行时 reqdoc_check 同源，无真实文件，
+       *  judge 解析 out.text——评测模型在回复文本里渲染 PRD 骨架）。 */
+      /** 必查章节标题（缺省=REQDOC_TEMPLATE_CHAPTERS 全部）；断言这些标题都出现 */
+      requiredChapters?: string[]
+      /** 章节顺序须正确（outOfOrder 为空），缺省 true */
+      ordered?: boolean
+      /** 功能点块数下限（第三章每功能点一段） */
+      minFeatures?: number
+      /** 所有映射字段在所有功能点块都带来源标注（covered[key] ≥ featureCount） */
+      sourceAll?: boolean
+      /** 至少一个映射字段标 [缺省]（缺料不杜撰的结构信号） */
+      anyDefault?: boolean
+    }
 
 export interface Scenario {
   name: string

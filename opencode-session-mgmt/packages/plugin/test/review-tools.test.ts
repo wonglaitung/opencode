@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test"
+import { afterEach } from "bun:test"
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { dirname, join } from "node:path"
 import { reviewRecord } from "sm-shared"
 import { Store } from "../src/db"
+import { createReqdocCheckTools } from "../src/tools/reqdoc-check"
 import { createReviewTools } from "../src/tools/review"
 
 function reviewOf(store: Store, id = "s1") {
@@ -604,6 +609,110 @@ describe("firstPassRate 自动计算", () => {
       ctx,
     )
     expect(store.get("s1")!.workflow!.quality.firstPassRate).toBe(100)
+    store.close()
+  })
+})
+
+describe("reqdoc 渲染定稿复核门禁（质量飞轮 P2）", () => {
+  const dirs: string[] = []
+  const tempDir = (): string => {
+    const d = mkdtempSync(join(tmpdir(), "sm-rvrender-"))
+    dirs.push(d)
+    return d
+  }
+  afterEach(() => {
+    for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true })
+  })
+  const writeMd = (worktree: string, rel: string, md: string) => {
+    mkdirSync(dirname(join(worktree, rel)), { recursive: true })
+    writeFileSync(join(worktree, rel), md, "utf8")
+  }
+
+  /** 结构齐全的单功能点 PRD（映射字段全标来源；2.3 默认 [文档]，不触发缺省↔满分）。 */
+  const goodMd = (): string =>
+    `## 一、项目信息\n## 二、文档变更过程\n## 第一章 需求概述\n### 1.1 需求类型\n### 1.2 属于流程优化项目\n### 1.3 涉及跨部门项目\n### 1.4 涉及总行开发\n### 1.5 希望完成时间\n### 1.6 需求提出原因及功能概述\n## 第二章 术语定义与业务规则\n### 2.1 术语定义\n### 2.2 业务规则\n## 第三章 需求功能详述\n### 功能点 1\n#### 1. 功能点输入要素\n##### 1.1 简要概述 [文档]\n##### 1.2 控制要求 [文档]\n#### 2. 功能点处理要求\n##### 2.1 输入要素的检查 [文档]\n##### 2.2 系统处理过程 [文档]\n##### 2.3 异常处理要求 [文档]\n##### 2.4 提示信息 [文档]\n##### 2.5 其他要求 [文档]\n##### 2.6 清算处理 [文档]\n##### 2.7 差错处理 [文档]\n##### 2.8 交易安全性 [文档]\n##### 2.9 数据存贮和清理 [文档]\n##### 2.10 附件 [文档]\n`
+
+  /** reqdoc 定稿前置：前序阶段 approved + 1 个已确认功能点 + 达标已确认打分（edgeControl 默认 30/30）。 */
+  const setupReqdoc = (): { store: Store; worktree: string; ctx: never; rel: string } => {
+    const store = Store.memory(() => "reqdoc" as const)
+    store.mutateWorkflow("r1", (w) => {
+      for (const name of ["goal", "rules", "edge", "prd"]) w.stages[name].status = "approved"
+      w.features = [{ no: 1, name: "公告发布", priority: "medium", confirmedAt: 1000 }]
+    })
+    setReqdocScore(store, "r1")
+    const worktree = tempDir()
+    const rel = "06_需求规格产出/1_公告发布/需求规格书.md"
+    return { store, worktree, ctx: { sessionID: "r1", worktree } as never, rel }
+  }
+
+  const reviewArgs = { completeness: true, clarity: true, edgeCoverage: true, resolution: true } as never
+
+  test("记录 render 且结构合规 → 定稿通过", async () => {
+    const { store, worktree, ctx, rel } = setupReqdoc()
+    writeMd(worktree, rel, goodMd())
+    const checkTools = createReqdocCheckTools(store)
+    await checkTools.reqdoc_check!.execute({ source: rel } as never, ctx)
+    const out = String(await createReviewTools(store).review_submit!.execute(reviewArgs, ctx))
+    expect(out).toContain("审查阶段通过")
+    expect(reviewRecord(store.get("r1")!.workflow!).status).toBe("approved")
+    store.close()
+  })
+
+  test("结构违规（缺章节）拒定稿：reqdoc_check 记录后 review_submit 拦", async () => {
+    const { store, worktree, ctx, rel } = setupReqdoc()
+    writeMd(worktree, rel, goodMd().replace("## 第二章 术语定义与业务规则\n### 2.1 术语定义\n### 2.2 业务规则\n", ""))
+    const checkTools = createReqdocCheckTools(store)
+    await checkTools.reqdoc_check!.execute({ source: rel } as never, ctx)
+    await expect(
+      createReviewTools(store).review_submit!.execute(reviewArgs, ctx),
+    ).rejects.toThrow(/渲染定稿复核未通过.*缺章节.*第二章 术语定义与业务规则/)
+    store.close()
+  })
+
+  test("[缺省]↔满分矛盾拒定稿：缺省字段对应维度打满分被拦", async () => {
+    const { store, worktree, ctx, rel } = setupReqdoc()
+    // 2.3 异常处理要求标 [缺省]，但 edgeControl 已打满分 30/30（setReqdocScore 默认）——自评矛盾
+    writeMd(worktree, rel, goodMd().replace("##### 2.3 异常处理要求 [文档]", "##### 2.3 异常处理要求 [缺省]"))
+    const checkTools = createReqdocCheckTools(store)
+    await checkTools.reqdoc_check!.execute({ source: rel } as never, ctx)
+    await expect(
+      createReviewTools(store).review_submit!.execute(reviewArgs, ctx),
+    ).rejects.toThrow(/渲染定稿复核未通过.*2\.3 异常处理要求.*edgeControl/)
+    store.close()
+  })
+
+  test("定稿复核重读源 md：reqdoc_check 后改动源文件（删第三章）仍拒", async () => {
+    const { store, worktree, ctx, rel } = setupReqdoc()
+    writeMd(worktree, rel, goodMd())
+    const checkTools = createReqdocCheckTools(store)
+    const out = String(await checkTools.reqdoc_check!.execute({ source: rel } as never, ctx))
+    expect(out).toContain("结构合规")
+    // 记录后改动源 md（快照防篡改：定稿复核须重读，发现缺第三章）
+    writeMd(worktree, rel, goodMd().replace("## 第三章 需求功能详述", "## 第三章 需求功能详述（仅标题）"))
+    await expect(
+      createReviewTools(store).review_submit!.execute(reviewArgs, ctx),
+    ).rejects.toThrow(/渲染定稿复核未通过.*缺章节.*第三章 需求功能详述/)
+    store.close()
+  })
+
+  test("未记录 render → 柔性放行（不强制 reqdoc_check）", async () => {
+    const { store, worktree, ctx } = setupReqdoc()
+    void worktree
+    const out = String(await createReviewTools(store).review_submit!.execute(reviewArgs, ctx))
+    expect(out).toContain("审查阶段通过")
+    expect(store.get("r1")!.workflow!.render).toBeUndefined()
+    store.close()
+  })
+
+  test("render 源文件被删除 → 定稿复核拒（无法复核）", async () => {
+    const { store, worktree, ctx, rel } = setupReqdoc()
+    writeMd(worktree, rel, goodMd())
+    const checkTools = createReqdocCheckTools(store)
+    await checkTools.reqdoc_check!.execute({ source: rel } as never, ctx)
+    rmSync(join(worktree, rel)) // 记录后源文件被删
+    await expect(
+      createReviewTools(store).review_submit!.execute(reviewArgs, ctx),
+    ).rejects.toThrow(/渲染定稿复核未通过.*不可读或已删除/)
     store.close()
   })
 })

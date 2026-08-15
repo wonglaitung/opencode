@@ -3,9 +3,17 @@
  * 工具名 + 参数谓词即达标,无需强模型打分。
  * kind="score" 例外:判定对象是渲染产出的 PRD 文本,用 scorePrd 确定性评分
  * (见 score.ts)——同样是 rule-based,只是从「工具行为」换到「产出质量」。
+ * kind="render"(质量飞轮 P2):对渲染文本用共享 parseRenderStructure 解析结构,
+ * 与运行时 reqdoc_check 同源,只换「工具+文件」为「评测回复文本」。
  */
 import type { Judge, ModelOutput } from "./types"
-import { REQDOC_SCORE_DIMS, type ReqdocScoreDimKey } from "sm-shared"
+import {
+  REQDOC_SCORE_DIMS,
+  REQDOC_TEMPLATE_CHAPTERS,
+  REQDOC_TEMPLATE_FIELDS,
+  parseRenderStructure,
+  type ReqdocScoreDimKey,
+} from "sm-shared"
 import { scorePrd, type PrdScore } from "./score"
 
 /** 参数子集匹配:judge.args 的每一项都须等于调用实参(实参缺键视为不匹配)。 */
@@ -139,6 +147,37 @@ export function judgeScenario(judge: Judge, out: ModelOutput): { pass: boolean; 
         score: prd,
         detail: `${pass ? "✓" : "✗"} 渲染命中 ${markers.length} 标记;总分 ${prd.total}(需≥${judge.minTotal})` +
           `${fails.length ? `;未达标:${fails.join("、")}` : ""} [${dimLine}]`,
+      }
+    }
+
+    case "render": {
+      // 渲染 diff 判定(质量飞轮 P2)：同源 parseRenderStructure 解析模型回复文本
+      const struct = parseRenderStructure(out.text)
+      const required = judge.requiredChapters ?? REQDOC_TEMPLATE_CHAPTERS.map((c) => c.title)
+      const fails: string[] = []
+      const missing = required.filter((t) => !struct.chaptersPresent.includes(t))
+      if (missing.length) fails.push(`缺章节 ${missing.join("、")}`)
+      if ((judge.ordered ?? true) && struct.outOfOrder.length) fails.push(`章节乱序 ${struct.outOfOrder.join("、")}`)
+      if (judge.minFeatures !== undefined && struct.featureCount < judge.minFeatures) {
+        fails.push(`功能点块 ${struct.featureCount}<${judge.minFeatures}`)
+      }
+      if (judge.sourceAll) {
+        if (struct.featureCount === 0) {
+          fails.push("无功能点块(第三章须每功能点一段)")
+        } else {
+          const uncovered = REQDOC_TEMPLATE_FIELDS.filter((f) => struct.covered[f.key] < struct.featureCount)
+          if (uncovered.length) fails.push(`映射字段未全标来源 ${uncovered.map((f) => f.key).join("、")}`)
+        }
+      }
+      if (judge.anyDefault && !REQDOC_TEMPLATE_FIELDS.some((f) => (struct.defaults[f.key] ?? 0) > 0)) {
+        fails.push("无 [缺省] 标注(缺料却硬写=杜撰风险)")
+      }
+      return {
+        pass: fails.length === 0,
+        detail: fails.length
+          ? `✗ ${fails.join(";")}（功能点块 ${struct.featureCount}，缺章节 ${struct.missing.join("、") || "无"}，乱序 ${struct.outOfOrder.join("、") || "无"}）`
+          : `✓ 渲染结构达标（章节 ${struct.chaptersPresent.length}/${REQDOC_TEMPLATE_CHAPTERS.length}，功能点块 ${struct.featureCount}` +
+            `${judge.sourceAll ? "，映射字段全标来源" : ""}${judge.anyDefault ? "，含 [缺省]" : ""}）`,
       }
     }
   }

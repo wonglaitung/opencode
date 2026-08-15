@@ -3,6 +3,12 @@
  * 与 packages/plugin/src/tools/workflow.ts、review.ts 的 description/参数名保持一致——
  * 改插件工具时须同步这里,确保评测测的是真实插件暴露给模型的工具契约。
  * 评测只判 tool_use、不执行工具,故省略插件的 Store/execute 上下文。
+ *
+ * reqdoc_check（质量飞轮 P2 渲染校验）为**运行时专用、不入 EVAL_TOOLS**：
+ * 它读取真实文件（Bun.file + context.worktree），评测沙箱无文件系统，模型调它只会拿到
+ * 不存在的路径；渲染达标性改由 judge.kind="render" 判定——用共享 parseRenderStructure 解析
+ * 模型回复文本里的 PRD 渲染骨架（评测模型无 write 工具，须在文本中渲染），与运行时同源。
+ * 运行时契约供参考：reqdoc_check(source: string)，source=PRD md 相对项目根路径。
  */
 export type OpenAITool = {
   type: "function"

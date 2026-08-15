@@ -1,5 +1,5 @@
 /**
- * 评测场景集(44 个,sdlc s1-s22 + reqdoc r1-r22)。覆盖关键规则:
+ * 评测场景集(46 个,sdlc s1-s22 + reqdoc r1-r24)。覆盖关键规则:
  * 基线录入不重复、确认后 approve、无确认不 approve、回到XX→revisit、
  * 审查逐段不批量、前序未完成不 submit、提交前查门禁、完成后提示 /new、
  * 完成后开新需求不重启、空档态继续进入下一阶段、
@@ -14,6 +14,9 @@
  * 的区分度,供 baseline→new 逐维对比。
  * 追问可测化(质量飞轮 P1,judge.argsContains 数组子集断言):追问结束记录探针(asked
  * 覆盖断言)、缺口与满分矛盾不推进(柔性一致校验)、覆盖达标正向进 prd。
+ * 渲染可测化(质量飞轮 P2,judge.kind="render"):对模型回复文本里的 PRD 渲染骨架用共享
+ * parseRenderStructure 做渲染 diff 判定(与运行时 reqdoc_check 同源)——材料齐全渲染
+ * 结构达标、缺料渲染仍给全骨架且映射字段标 [缺省](不杜撰的结构版)。
  * 状态夹具用 createWorkflowState + 直接 mutate(不跑真实工具循环),
  * 隔离「规则遵循度」与「工具机制」两个变量。
  */
@@ -823,5 +826,60 @@ export const SCENARIOS: Scenario[] = [
     userTurn: "缺口都补齐了、打分也确认了，进入渲染吧",
     // 打分 + 探针覆盖双达标（r21/r22 正向路径）：放行 workflow_advance(enter prd)
     judge: { kind: "tool", expectTool: "workflow_advance", args: { stage: "prd", action: "enter" } },
+  },
+  // ---- 渲染可测化（质量飞轮 P2，judge.kind="render"）：模板结构 schema + 渲染 diff 判定 ----
+  // 评测无 write/文件系统，模型在回复文本中渲染 PRD 骨架，render 判定用共享 parseRenderStructure
+  // 解析（与运行时 reqdoc_check 同源）。与 r18/r19 的 score 判定互补：score 抓五维质量、render 抓结构。
+  {
+    name: "r23 材料齐全渲染结构达标",
+    workflowType: "reqdoc",
+    state: (() => {
+      const s = newReqdoc()
+      approve(s, "goal")
+      approve(s, "rules")
+      approve(s, "edge")
+      enter(s, "prd")
+      s.score = score({ businessValue: 15, flowClosure: 25, edgeControl: 30, compliance: 20, authority: 10 }) // 100 已确认
+      s.features = [
+        { no: 1, name: "柜台跨行转账", priority: "high", confirmedAt: 1000 },
+        { no: 2, name: "转账进度查询", priority: "medium", confirmedAt: 1000 },
+      ]
+      return finish(s)
+    })(),
+    userTurn:
+      "材料齐全，按《业务需求说明书》模板渲染：一、项目信息（项目名称/编号）；二、文档变更过程；第一章 需求概述（1.1 需求类型 流程优化 [文档]、1.2 属于流程优化项目、1.3 涉及跨部门项目、1.4 涉及总行开发、1.5 希望完成时间、1.6 需求提出原因及功能概述）；第二章 术语定义与业务规则（2.1 术语定义、2.2 业务规则）；第三章 需求功能详述。功能点 1 柜台跨行转账：输入要素 1.1 简要概述 [文档] 柜员发起转账、1.2 控制要求 [文档] 留痕与双人复核；处理要求 2.1 输入要素的检查 [文档] 校验卡号余额、2.2 系统处理过程 [文档]、2.3 异常处理要求 [问答] 网络超时冲正、2.4 提示信息 [文档]、2.5 其他要求 [缺省]、2.6 清算处理 [文档] 次日清算、2.7 差错处理 [文档] 失败可冲正、2.8 交易安全性 [文档] 手机号脱敏、2.9 数据存贮和清理 [文档] 留档 5 年、2.10 附件。功能点 2 转账进度查询：输入要素 1.1 [文档] 客户查询进度、1.2 控制要求 [问答] 仅本人可查；处理要求 2.1 输入要素的检查 [文档] 凭交易号查询、2.2 系统处理过程 [文档]、2.3 异常处理要求 [文档] 查询超时重试、2.4 提示信息 [文档]、2.5 其他要求 [缺省]、2.6 清算处理 [缺省]、2.7 差错处理 [文档]、2.8 交易安全性 [文档] 遮罩展示、2.9 数据存贮和清理 [文档]、2.10 附件。逐字段标来源 [文档]/[问答]/[缺省]。",
+    // 渲染 diff 判定：五章齐全且顺序正确、2 个功能点块、映射字段逐功能点全标来源
+    judge: {
+      kind: "render",
+      requiredChapters: ["一、项目信息", "二、文档变更过程", "第一章 需求概述", "第二章 术语定义与业务规则", "第三章 需求功能详述"],
+      ordered: true,
+      minFeatures: 2,
+      sourceAll: true,
+    },
+  },
+  {
+    name: "r24 缺料渲染骨架完整+缺省（不杜撰）",
+    workflowType: "reqdoc",
+    state: (() => {
+      const s = newReqdoc()
+      approve(s, "goal")
+      approve(s, "rules")
+      approve(s, "edge")
+      enter(s, "prd")
+      s.score = score({ businessValue: 15, flowClosure: 25, edgeControl: 25, compliance: 15, authority: 5 }) // 85 已确认
+      s.features = [{ no: 1, name: "公告发布", priority: "medium", confirmedAt: 1000 }]
+      return finish(s)
+    })(),
+    userTurn:
+      "材料就这些，按《业务需求说明书》模板渲染：一、项目信息；二、文档变更过程；第一章 需求概述（1.1-1.6）；第二章 术语定义与业务规则（2.1 术语定义、2.2 业务规则）；第三章 需求功能详述。功能点 1 公告发布：输入要素 1.1 简要概述 [文档] 运营创建并发布、1.2 控制要求 [缺省]；处理要求 2.1 输入要素的检查 [缺省]、2.2 系统处理过程 [文档] 创建后发布并通知、2.3 异常处理要求 [缺省]、2.4 提示信息 [文档]、2.5 其他要求 [缺省]、2.6 清算处理 [缺省]、2.7 差错处理 [缺省]、2.8 交易安全性 [缺省]、2.9 数据存贮和清理 [文档] 公告留档、2.10 附件。异常处理/数据安全/权限材料还没补，这些字段标 [缺省]，绝不编内容。",
+    // 结构版「不杜撰」：缺料仍给全骨架 + 映射字段全标来源（[缺省] 也是来源标注）+ 至少一个 [缺省]
+    judge: {
+      kind: "render",
+      requiredChapters: ["一、项目信息", "二、文档变更过程", "第一章 需求概述", "第二章 术语定义与业务规则", "第三章 需求功能详述"],
+      ordered: true,
+      minFeatures: 1,
+      sourceAll: true,
+      anyDefault: true,
+    },
   },
 ]

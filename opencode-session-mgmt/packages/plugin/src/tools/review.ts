@@ -10,8 +10,20 @@
  * comprehension_ask     —— 追问，问答追加到 explanation
  * review_submit         —— 提交审查清单：所有片段处于终态(accepted/manual)，通过时自动计算 firstPassRate
  */
+import { join } from "node:path"
 import { tool, type ToolDefinition } from "@opencode-ai/plugin"
-import { REQDOC_SCORE_PASS, WORKFLOW_DEFINITIONS, getDefinition, probeGapViolations, reviewRecord, type ComprehensionRecord } from "sm-shared"
+import {
+  REQDOC_SCORE_PASS,
+  WORKFLOW_DEFINITIONS,
+  getDefinition,
+  parseRenderStructure,
+  probeGapViolations,
+  renderGapViolations,
+  renderStructureViolations,
+  reviewRecord,
+  type ComprehensionRecord,
+  type ReqdocRender,
+} from "sm-shared"
 import type { Store } from "../db"
 import { WorkflowOpError, applyTransition, recomputeCommit } from "../workflow-ops"
 
@@ -213,6 +225,30 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
       "通过时自动计算一次通过率 firstPassRate 写入质量指标。具名参数由当前工作流类型的审查清单生成。",
     args: reviewChecklistArgs,
     async execute(args, context) {
+      // 渲染定稿复核（质量飞轮 P2）：reqdoc_check 记录过 render 才复核——重读源 md 重新解析，
+      // 防记录快照与磁盘不一致（reqdoc_check 后改动渲染文件会被再拦）；未记录则柔性放行。
+      // 文件读取必须在 mutateWorkflow 同步回调外 await，违规值闭包传入回调内抛错。
+      const preRender = store.ensure(context.sessionID).workflow?.render
+      let renderErrors: string[] = []
+      if (preRender) {
+        try {
+          const md = await Bun.file(join(context.worktree, preRender.source)).text()
+          const live = parseRenderStructure(md)
+          const liveRender: ReqdocRender = {
+            ...live,
+            source: preRender.source,
+            checkedAt: preRender.checkedAt,
+            expectedFeatures: preRender.expectedFeatures,
+          }
+          const preScore = store.ensure(context.sessionID).workflow?.score
+          renderErrors = [
+            ...renderStructureViolations(liveRender),
+            ...renderGapViolations(liveRender, preScore),
+          ]
+        } catch {
+          renderErrors = [`PRD 渲染源文件不可读或已删除：${preRender.source}，定稿复核无法执行`]
+        }
+      }
       const saved = store.mutateWorkflow(context.sessionID, (workflow) => {
         const def = getDefinition(workflow.type)
         const review = reviewRecord(workflow)
@@ -247,6 +283,14 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
           if (violations.length > 0) {
             throw new WorkflowOpError(
               `追问缺口与打分自相矛盾：${violations.join("；")}。请回 edge 补齐缺口后重打 reqdoc_score 如实扣分，或去掉缺口记录（reqdoc_probe）`,
+            )
+          }
+          // 渲染定稿复核（质量飞轮 P2）：记录了 render 才复核，违规（结构/缺省↔满分矛盾）拦截；
+          // 未记录 = 柔性放行（评分卡 ≥85 + P0 兜底）。
+          if (workflow.render && renderErrors.length > 0) {
+            throw new WorkflowOpError(
+              `渲染定稿复核未通过：${renderErrors.join("；")}。` +
+                `结构问题请回 prd 修正渲染后重调 reqdoc_check 复查；[缺省]↔满分矛盾请回 edge 补缺后重打 reqdoc_score 如实扣分，或把渲染 [缺省] 改为 [文档]/[问答]`,
             )
           }
         }

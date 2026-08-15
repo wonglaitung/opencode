@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { createWorkflowState, type WorkflowState } from "sm-shared"
-import { buildSystemFragment } from "../src/prompt"
+import { createWorkflowState, type ReqdocRender, type WorkflowState } from "sm-shared"
+import { buildStateBar, buildSystemFragment } from "../src/prompt"
 import { loadReqdocTemplate } from "../src/template"
 import { applyTransition } from "../src/workflow-ops"
 
@@ -206,5 +206,50 @@ describe("buildSystemFragment", () => {
       applyTransition(s, "implementation", "enter", 1)
       expect(buildSystemFragment(s, {}, [], loadReqdocTemplate())).not.toContain("插件自动送达")
     })
+  })
+})
+
+describe("buildStateBar 渲染校验行（质量飞轮 P2）", () => {
+  /** 结构合规的单功能点 render 记录。 */
+  const okRender = (): ReqdocRender => ({
+    source: "06_需求规格产出/1_测试/需求规格书.md",
+    checkedAt: 1000,
+    expectedFeatures: 1,
+    ok: true,
+    chaptersPresent: ["一、项目信息", "二、文档变更过程", "第一章 需求概述", "第二章 术语定义与业务规则", "第三章 需求功能详述"],
+    missing: [],
+    outOfOrder: [],
+    missingSections: [],
+    featureCount: 1,
+    featureOk: true,
+    missingFeatureSections: [],
+    covered: { "1.2": 1, "2.1": 1, "2.3": 1, "2.6": 1, "2.7": 1, "2.8": 1, "2.9": 1 },
+    defaults: { "1.2": 0, "2.1": 0, "2.3": 0, "2.6": 0, "2.7": 0, "2.8": 0, "2.9": 0 },
+  })
+
+  test("reqdoc 记录过且结构合规 → ✓ 结构合规（N 功能点）", () => {
+    const s = createWorkflowState("reqdoc")
+    s.render = okRender()
+    const bar = buildStateBar(s, "prd")
+    expect(bar).toContain("渲染校验：✓ 结构合规（1 功能点）")
+  })
+
+  test("reqdoc 记录过但有违规 → ✗ 缺章节等明细", () => {
+    const s = createWorkflowState("reqdoc")
+    s.render = { ...okRender(), missing: ["第二章 术语定义与业务规则"], ok: false, chaptersPresent: okRender().chaptersPresent.filter((c) => c !== "第二章 术语定义与业务规则") }
+    const bar = buildStateBar(s, "prd")
+    expect(bar).toContain("渲染校验：✗ 缺章节：第二章 术语定义与业务规则")
+  })
+
+  test("reqdoc 未记录 → 提示未执行 reqdoc_check（柔性提示）", () => {
+    const s = createWorkflowState("reqdoc")
+    const bar = buildStateBar(s, "prd")
+    expect(bar).toContain("渲染校验：未执行 reqdoc_check")
+  })
+
+  test("sdlc → 不出现渲染校验行（仅 reqdoc 提示，不打扰）", () => {
+    const s = createWorkflowState("sdlc")
+    applyTransition(s, "implementation", "enter", 1)
+    expect(buildStateBar(s, "implementation")).not.toContain("渲染校验")
   })
 })
