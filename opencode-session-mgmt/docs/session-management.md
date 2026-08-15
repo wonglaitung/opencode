@@ -1396,7 +1396,7 @@ opencode
 
 ## 13. 评测驱动规则迭代（数据驱动优化）
 
-规则文本优化（阶段化注入、状态条、审查清单引导）以**数据驱动**验证：量化弱模型对注入规则的遵循度，改前跑基线、改后对比。这是本方案的**核心方法论**——规则的每一步措辞调整都必须先有基线数据支撑，避免凭直觉改规则伤害弱模型。脚本 `scripts/eval-rules/`（不入 `bun test`，需真实模型端点）。**通用方法论**（适用于所有 AI 深度绑定开发）见 `plugin-guide/eval-driven-rule-iteration.md`；本章为其在 opencode-session-mgmt 的落地实例。
+规则文本优化（阶段化注入、状态条、审查清单引导）以**数据驱动**验证：量化弱模型对注入规则的遵循度，改前跑基线、改后对比。这是本方案的**核心方法论**——规则的每一步措辞调整都必须先有基线数据支撑，避免凭直觉改规则伤害弱模型。脚本 `scripts/eval-rules/`（不入 `bun test`，需真实模型端点）。**通用方法论**（适用于所有 AI 深度绑定开发）见 `plugin-guide/eval-driven-rule-iteration.md`；本章为其在 opencode-session-mgmt 的落地实例。**评测与质量飞轮实操手册（技能）见 `.opencode/skills/workflow-rules-eval/SKILL.md`**——冻结基线 / 三级验证 / 五维 delta 读法 / 归因地图 / 收敛判据可直接照其执行。
 
 ### 13.1 运行方式
 
