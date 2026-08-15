@@ -117,7 +117,7 @@ flowchart LR
 | 判定口径适配 | `opencode-session-mgmt/scripts/eval-rules/src/judge.ts`（如 s5 放宽为「≥1 次 confirm + `distinctArg` 不重复」） |
 | 方法论文档 | `opencode-session-mgmt/docs/session-management.md` 第 13 章（本项目落地实例：运行/改动分级决策图/判定/实测记录/教训）；sdlc 场景 s1-s22 见 `opencode-session-mgmt/docs/workflow-sdlc.md` 8 章、reqdoc 场景 r1-r24 与质量飞轮见 `opencode-session-mgmt/docs/workflow-reqdoc.md` 10 章 |
 
-**质量飞轮（进阶应用）**：`reqdoc` 工作流把「通过/不通过」升级为 **0-100 五维数字度量**——把 reqdoc 打分卡（五维扣分标准，单一事实源经 `reqdocScoreRubric()` 注入）接进评测，让确定性评分器 `scorePrd()` 对每个场景渲染出的 PRD 自动评分，获得每维数字基线、回归检测（哪一维掉了）与归因（哪个维度系统性薄弱 → 对应三支柱哪一根）。三支柱机制、落地节奏与实测轮次见 `opencode-session-mgmt/docs/workflow-reqdoc.md` 10 章；**度量对象与改进落点辨析**（直接度量需求书质量、改进应用行为面能力，非机制面代码质量）见该章质量飞轮一节。
+**质量飞轮（进阶应用）**：`reqdoc` 工作流把「通过/不通过」升级为 **0-100 五维数字度量**——把 reqdoc 打分卡（五维扣分标准，单一事实源经 `reqdocScoreRubric()` 注入）接进评测，让确定性评分器 `scorePrd()` 对每个场景渲染出的 PRD 自动评分，获得每维数字基线、回归检测（哪一维掉了）与归因（哪个维度系统性薄弱 → 对应三支柱哪一根）。三支柱机制、落地节奏与实测轮次见 `opencode-session-mgmt/docs/workflow-reqdoc.md` 10 章；**度量对象与改进落点辨析、迭代方式与收敛点**（直接度量需求书质量、改进应用行为面能力，非机制面代码质量；人机协同迭代、范围框定、收敛判据）见该章质量飞轮一节。
 
 ## 8. 与设计文档族的关系
 
