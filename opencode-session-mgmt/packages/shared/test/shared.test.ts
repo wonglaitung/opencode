@@ -262,6 +262,11 @@ describe("WorkflowDefinition 注册表（3.2）", () => {
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r6" && r.text.includes("默认推荐"))).toBe(true)
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r20" && r.text.includes("渲染铁律") && r.text.includes("字段映射"))).toBe(true)
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r21" && r.stage === "edge" && r.text.includes("reqdoc_score"))).toBe(true)
+    // 实施方案 01~06 产出：03→数据字典与库表设计（r10），04→RBAC 矩阵与审批流（r12），落盘进 r14/r20
+    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r10" && r.text.includes("数据字典") && r.text.includes("库表设计"))).toBe(true)
+    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r12" && r.text.includes("RBAC 权限控制矩阵") && r.text.includes("审批流控制逻辑"))).toBe(true)
+    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r14" && r.text.includes("数据字典与库表设计") && r.text.includes("RBAC 权限控制矩阵"))).toBe(true)
+    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r20" && r.text.includes("数据字典与库表设计/") && r.text.includes("权限矩阵与审批流/"))).toBe(true)
   })
 
   test("打分卡契约：五维权重满分 100、达标线 85", () => {
