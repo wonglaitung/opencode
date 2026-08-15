@@ -7,7 +7,7 @@ OpenCode 会话管理定制：**标准化开发流程、理解保障与效能分
 
 - **文档索引**：[`docs/README.md`](docs/README.md)（docs/ 全部文件的分类、消费方、改名约束——新增文档先登记）
 - **部署与使用手册**：[`docs/deployment.md`](docs/deployment.md)（从零上手：装 OpenCode、启用插件、CLI、收集服务、内网隔离部署、FAQ）——**新人先看这个**
-- **设计文档**：[`docs/session-management.md`](docs/session-management.md)
+- **设计文档族**：[`docs/session-management.md`](docs/session-management.md)（通用机制 / 架构 / CLI / 统计 / 部署 / 评测，主文档）、[`docs/workflow-sdlc.md`](docs/workflow-sdlc.md)（工作流一：sdlc 定义与规则）、[`docs/workflow-reqdoc.md`](docs/workflow-reqdoc.md)（工作流二：reqdoc 定义与规则）
 - **上游同步方案**：[`docs/upstream-sync.md`](docs/upstream-sync.md)（remote 布局、同步命令、冲突预案、同步记录）
 
 ## 结构

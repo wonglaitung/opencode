@@ -375,7 +375,7 @@ OPENCODE_SM_COLLECTOR_DB=/var/lib/opencode-sm/collector.db PORT=8787 \
 - **提交门禁是硬拦截**：即便 AI「想」提交，`git commit` 也会被插件拦下，除非走完审查；确有特殊情况可让 AI 调 `commit_force_unlock`（需你确认 + 填原因，一次性，且会留痕进统计）。
 - **同一段代码 AI 迭代到 3 轮**会被要求停手、转人工重写。
 
-完整对话示例见设计文档 7.2 节。
+完整对话示例见 workflow-sdlc.md 4 章（场景一~四）；reqdoc 场景五见 workflow-reqdoc.md 9 章。
 
 ### 6.2 在 TUI 之外查看（opencode-sm）
 
