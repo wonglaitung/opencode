@@ -1748,9 +1748,27 @@ bun run scripts/eval-rules/run.ts --variant baseline         # 跑基线通过�
 bun run scripts/eval-rules/run.ts --variant new              # 改造后 → results/new.json，自动对比 baseline
 ```
 
+分三级验证（对应 13.6 决策图的 ①②③，何时跑哪级见「改动分级：何时跑质量飞轮」）：
+
+- **① 干跑（秒级，每次改完必做）**：`--variant new --dry` 与 `--variant baseline --dry` 各跑一次，验证 44 场景注入片段与判定期望渲染正常，不调模型。
+- **② mock 冒烟（仅改评测脚本时）**：临时起一个 mock OpenAI 端点返回罐装 tool_calls（针对新增场景命中其判定路径，如 r20 返回 `reqdoc_probe(asked=[...])`、r22 返回 `workflow_advance(enter prd)`），`EVAL_BASE_URL` 指过去非 dry 跑一遍，确认判定与聚合/对比路径不炸；跑完删掉 mock、`git checkout` 还原 `results/*.json`。
+- **③ 真实模型对比（重闸，合入前必过）**：
+  ```bash
+  # 本地 vLLM（默认端点 http://localhost:8086/v1，qwen3.6）
+  bun run scripts/eval-rules/run.ts --variant new --repeat 3
+  # 远端推理模型（deepseek-v4-flash 等，EVAL_MAX_TOKENS=4096 留 thinking 空间）
+  EVAL_BASE_URL=https://<端点>/v1 EVAL_API_KEY=<key> EVAL_MODEL=<model-id> EVAL_MAX_TOKENS=4096 \
+  bun run scripts/eval-rules/run.ts --variant new --repeat 3
+  ```
+
+**读输出与合入门槛**：per-scenario 通过表（`✅`/`❌`，r20-r22 在 reqdoc 段）→ 聚合通过率（整体 / sdlc / reqdoc）→ `=== 对比(baseline → new) ===` 的 PRD 五维逐维 delta（仅 `--variant new` 且库里已有 baseline.json 时打印）。**五维任何一维回退（负号）就不合入**，回滚改动；全过或持平才沉淀资产合入。
+
+**baseline 冻结纪律**：`results/baseline.json` 是**入库冻结参照**（fixtures 里改造前规则快照 + 指定模型实测结果），`--variant new` 自动读它对比。只有首次搭评测 / 换模型 / 换端点时才跑 `--variant baseline` 重新冻结并 commit；日常改动**只跑 `--variant new`，不要重跑 baseline 覆盖参照**，否则对比失效。
+
+**陷阱**：改了 `packages/shared` 后必须 `rm -rf node_modules/sm-shared && bun install`（hoisted 拷贝残留，见 13.5），否则评测读到旧规则文本而 `bun test` 仍全绿，易漏。
+
 - 环境变量：`EVAL_BASE_URL`（OpenAI 兼容端点，默认 `http://localhost:8086/v1`，本地 vLLM）、`EVAL_API_KEY`、`EVAL_MODEL`（默认 `/models/qwen3`，本地 vLLM 的模型 id）、`EVAL_MAX_TOKENS`（输出上限，默认 2048；推理模型如 deepseek-*-flash 显式 4096 留 thinking 空间，慢速弱模型 4096 会拖到超时）、`EVAL_TIMEOUT_MS`（单请求超时，默认 180000，含网络/超时错误重试 3 次）；`--repeat N` 重复多次取通过率（聚合按**运行次数**统计，防单次抖动掩盖趋势）
 - **baseline 与 new 共用同一状态夹具**（`finish()` 重算 commit），保证可对等比较
-- `--dry` 不调模型，只打印各场景注入片段与判定期望，用于验证渲染
 
 ### 13.2 场景集
 
@@ -1847,6 +1865,29 @@ flowchart LR
 - **一切改动必须过回归**：每次改规则 / 探针 / 模板跑 eval，对比 baseline，任何维度回退都不合入——13.4 迭代闭环从「通过率不降」升级为「五维分数不降」。
 - **改进必须资产化**：新场景进 `scenarios.ts`、新探针进清单、新规则进 fixture——沉淀为可重复资产而非一次性修改。
 - **三同步铁律照旧**：规则 / 工具 / 文档 / mermaid 同步。
+
+**改动分级：何时跑质量飞轮（决策图）**
+
+不是任何改动都跑飞轮——只有碰触「模型行为面」的改动才需要（模型读进上下文的内容：规则文本 / 探针清单 / 打分卡 / 模板 / 工具描述 / 状态条注入格式 / 评测脚本自身）；机制面改动（工具逻辑 / 门禁 / 状态机 / DB / 汇报 / CLI / collector / 纯注释文档）由 `bun test` + `typecheck` 兜底，不跑飞轮。行为面改动的分级验证（①②是③的前置自检，**③真实模型对比是合入前唯一不可省的重闸**）：
+
+```mermaid
+flowchart LR
+    A(["改动"]) --> B{"碰触模型行为面？"}
+    B -->|"否 · 机制面<br/>工具逻辑/门禁/状态机/DB<br/>CLI/collector/纯注释文档"| C["bun test + typecheck<br/>（315 单测，秒级）"]
+    C --> Z(["合入 · 不跑飞轮"])
+    B -->|"是 · 行为面<br/>规则/探针/打分卡/模板<br/>工具描述/注入格式/评测脚本"| D["进入质量飞轮"]
+    D --> E["① --dry 渲染验证<br/>（44 场景，秒级，不调模型）"]
+    E --> F{"改动类别？"}
+    F -->|"规则/探针/打分卡/模板<br/>（模型看到的实质内容）"| H
+    F -->|"评测脚本/判定口径/注入格式<br/>（评测自身或形态）"| G["② mock 冒烟<br/>（验证判定与聚合路径）"]
+    G --> H
+    H["③ 真实模型 baseline→new 对比<br/>（重闸，必过）"] --> I{"五维分数有回退？"}
+    I -->|"是"| J(["不合入 · 回退改动"])
+    I -->|"否"| K["沉淀资产<br/>（新场景/探针/规则进 fixture）"]
+    K --> L(["合入"])
+```
+
+①②③ 各级的**具体命令、读输出口径与 baseline 冻结纪律**见 13.1 运行方式。
 
 **落地节奏与优先级**
 
