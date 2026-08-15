@@ -35,6 +35,8 @@ describe("reqdoc_score", () => {
     )
     expect(String(out)).toContain("90/100")
     expect(String(out)).toContain("达标")
+    // 质量得分进度条（实施方案第四节）：90 分 → 10 格中 9 格已满
+    expect(String(out)).toContain("质量得分进度：[▓▓▓▓▓▓▓▓▓░] 90%")
     const score = store.get("s1")!.workflow!.score!
     expect(score.total).toBe(90)
     expect(score.confirmed).toBe(true)

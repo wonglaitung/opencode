@@ -266,6 +266,7 @@ describe("WorkflowDefinition 注册表（3.2）", () => {
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r10" && r.text.includes("数据字典") && r.text.includes("库表设计"))).toBe(true)
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r12" && r.text.includes("RBAC 权限控制矩阵") && r.text.includes("审批流控制逻辑"))).toBe(true)
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r14" && r.text.includes("数据字典与库表设计") && r.text.includes("RBAC 权限控制矩阵"))).toBe(true)
+    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r14" && r.text.includes("reqdoc_export") && r.text.includes("Word"))).toBe(true)
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r20" && r.text.includes("数据字典与库表设计/") && r.text.includes("权限矩阵与审批流/"))).toBe(true)
   })
 
@@ -307,6 +308,7 @@ describe("WorkflowDefinition 注册表（3.2）", () => {
     expect(r21.text).toContain("60-84 分（良好）")
     expect(r21.text).toContain("≥85 分（达标）")
     expect(r21.text).toContain("停止追问")
+    expect(r21.text).toContain("进度条")
   })
 
   test("createWorkflowState(reqdoc) 含 reqdoc 阶段与清单", () => {

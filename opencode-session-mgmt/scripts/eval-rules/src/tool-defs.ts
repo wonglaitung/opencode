@@ -324,4 +324,20 @@ export const EVAL_TOOLS: OpenAITool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "reqdoc_export",
+      description:
+        "reqdoc prd 阶段：将已渲染的 PRD Markdown 导出为 Word（.docx）交付件，与源 md 同目录归档。" +
+        "在 PRD 渲染（write 到 06_需求规格产出）定稿后调用。",
+      parameters: {
+        type: "object",
+        properties: {
+          source: str("PRD Markdown 相对项目根路径（06_需求规格产出/N_名称/xxx.md）"),
+        },
+        required: ["source"],
+      },
+    },
+  },
 ]

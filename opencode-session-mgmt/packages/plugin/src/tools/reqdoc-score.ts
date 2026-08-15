@@ -113,9 +113,13 @@ function formatScoreCard(score: ReqdocScore): string {
     ? score.deductions.map((d) => `  - ${d.key}：-${d.points} ${d.reason}${d.evidence ? `（证据：${d.evidence}）` : ""}`).join("\n")
     : "  （无扣分明细）"
   const passed = score.total >= REQDOC_SCORE_PASS
+  // 质量得分进度条（实施方案第四节：如 [▓▓▓▓▓░░░░░ 50%]；10 格，进度直观反映达标）
+  const barLen = 10
+  const filled = Math.round((score.total / 100) * barLen)
+  const bar = "▓".repeat(filled) + "░".repeat(barLen - filled)
   return (
     `📊 已记录 PRD 质量打分（业务已确认，total 由服务端计算）：\n${dimLines}\n` +
-    `扣分明细：\n${deductionLines}\n总分：${score.total}/100\n` +
+    `扣分明细：\n${deductionLines}\n质量得分进度：[${bar}] ${score.total}%（${score.total}/100）\n` +
     `→ ${passed ? `达标（≥${REQDOC_SCORE_PASS}）✓，可 workflow_advance(stage=prd, action=enter) 进入渲染。` : `未达标（<${REQDOC_SCORE_PASS}）✗，请按扣分明细回 edge 追问补缺后重打 reqdoc_score。`}`
   )
 }
