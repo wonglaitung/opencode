@@ -2,7 +2,8 @@
  * 规则遵循度评测共享类型(scripts/eval-rules,设计文档 12.1)。
  * 场景 → 注入片段(baseline/new)→ 弱模型 tool_use/文本 → rule-based 判定。
  */
-import type { WorkflowType as SharedWorkflowType, WorkflowState } from "sm-shared"
+import type { ReqdocScoreDimKey, WorkflowType as SharedWorkflowType, WorkflowState } from "sm-shared"
+import type { PrdScore } from "./score"
 
 export type WorkflowType = SharedWorkflowType
 
@@ -44,6 +45,17 @@ export type Judge =
       keyword?: string
       note?: string
     }
+  | {
+      kind: "score"
+      /** 渲染结构校验：文本命中任一标记才算真的渲染出 PRD(防空谈不渲染) */
+      renderMarkers: string[]
+      /** 通过条件：scorePrd(text).total ≥ minTotal */
+      minTotal: number
+      /** 附加维度上限(缺料场景验证「不杜撰」)：该维实得分 ≤ 上限 */
+      dimMax?: Partial<Record<ReqdocScoreDimKey, number>>
+      /** 附加维度下限(材料齐全场景)：该维实得分 ≥ 下限 */
+      dimMin?: Partial<Record<ReqdocScoreDimKey, number>>
+    }
 
 export interface Scenario {
   name: string
@@ -73,6 +85,14 @@ export interface ScenarioResult {
   passCount: number
   runCount: number
   detail: string
+  /** 评分场景（judge.kind==="score"）：多次运行的平均分，供 run.ts 聚合逐维对比 */
+  scoreAvg?: {
+    total: number
+    dims: Record<ReqdocScoreDimKey, number>
+    maxDims: Record<ReqdocScoreDimKey, number>
+  }
+  /** 评分场景：多次运行的 PrdScore 明细（本机留痕，汇报仅带上行 summary.score） */
+  scores?: PrdScore[]
 }
 
 export interface GroupSummary {
@@ -82,11 +102,28 @@ export interface GroupSummary {
   rate: number
 }
 
+/** 评分场景聚合：跨评分场景按「每场景多运行平均」求五维平均分（质量飞轮 P0 产出度量）。 */
+export interface ScoreDimAvg {
+  key: ReqdocScoreDimKey
+  label: string
+  max: number
+  avg: number
+  /** 平均分占满分比例（0-100） */
+  rate: number
+}
+
+export interface ScoreSummary {
+  /** 参与聚合的评分场景数 */
+  scenarios: string[]
+  totalAvg: number
+  dims: ScoreDimAvg[]
+}
+
 export interface EvalReport {
   variant: "baseline" | "new"
   model: string
   dry: boolean
   runAt: string
   results: ScenarioResult[]
-  summary: { overall: GroupSummary; sdlc: GroupSummary; reqdoc: GroupSummary }
+  summary: { overall: GroupSummary; sdlc: GroupSummary; reqdoc: GroupSummary; score?: ScoreSummary }
 }

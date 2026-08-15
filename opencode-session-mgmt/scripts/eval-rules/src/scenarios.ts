@@ -1,5 +1,5 @@
 /**
- * 评测场景集(39 个,sdlc s1-s22 + reqdoc r1-r17)。覆盖关键规则:
+ * 评测场景集(41 个,sdlc s1-s22 + reqdoc r1-r19)。覆盖关键规则:
  * 基线录入不重复、确认后 approve、无确认不 approve、回到XX→revisit、
  * 审查逐段不批量、前序未完成不 submit、提交前查门禁、完成后提示 /new、
  * 完成后开新需求不重启、空档态继续进入下一阶段、
@@ -8,7 +8,10 @@
  * 手工修改走 open_ide 锁定、改完经确认解锁、完结后提示解锁、
  * reqdoc 渐进引导(2-3 问带 A/B/C 与默认推荐)/业务确认/要点未定论防定稿/定稿后提示 /new、
  * reqdoc 双通道(资料已放好应扫描分析非空问)、功能点拆解确认、功能点未确认不渲染定稿、
- * 打分卡门禁(进 prd 前先打分 / <85 不定稿 / 高分未业务确认不定稿 / 达标且确认后定稿)。
+ * 打分卡门禁(进 prd 前先打分 / <85 不定稿 / 高分未业务确认不定稿 / 达标且确认后定稿)、
+ * 评分模式(质量飞轮 P0,judge.kind="score"):prd-render 场景对渲染产出的 PRD 文本做
+ * 五维确定性评分——材料齐全渲染应高分、缺异常材料渲染应低分(不杜撰),验证产出度量
+ * 的区分度,供 baseline→new 逐维对比。
  * 状态夹具用 createWorkflowState + 直接 mutate(不跑真实工具循环),
  * 隔离「规则遵循度」与「工具机制」两个变量。
  */
@@ -704,5 +707,59 @@ export const SCENARIOS: Scenario[] = [
     })(),
     userTurn: "扣分明细我确认过了，定稿吧",
     judge: { kind: "tool", expectTool: "review_submit" },
+  },
+  {
+    // 评分模式（质量飞轮 P0）：材料齐全，渲染产物理应高分——五维自评 100 与产出度量的各维
+    // 下限对齐。场景区分度对照 r19：同样是渲染，材料齐 vs 缺料，scorePrd 五维应有明显落差。
+    name: "r18 材料齐全渲染成稿（高分）",
+    workflowType: "reqdoc",
+    state: (() => {
+      const s = newReqdoc()
+      approve(s, "goal")
+      approve(s, "rules")
+      approve(s, "edge")
+      enter(s, "prd")
+      s.score = score({ businessValue: 15, flowClosure: 25, edgeControl: 30, compliance: 20, authority: 10 }) // 100 已确认
+      s.features = [
+        { no: 1, name: "柜台跨行转账", priority: "high", confirmedAt: 1000 },
+        { no: 2, name: "转账进度查询", priority: "medium", confirmedAt: 1000 },
+      ]
+      return finish(s)
+    })(),
+    userTurn:
+      "都齐了，开始渲染。系统是柜台跨行转账：使用角色是柜员和客户，目标是缩短单笔处理时间到 3 分钟以内、降低柜面压力。主流程：柜员点击发起转账，系统校验后处理，成功后通知客户并归档。异常：网络超时自动冲正、同一笔交易被重复点击需去重、失败重试有上限。数据安全：手机号脱敏展示、关键操作留痕并复核。权限：仅本支行柜员与复核员可查看。",
+    // 渲染出模板结构 + 总分达标 + 价值/异常/权限三维达下限（区别于 r19 缺料渲染）
+    judge: {
+      kind: "score",
+      renderMarkers: ["业务需求说明书", "功能点"],
+      minTotal: 60,
+      dimMin: { businessValue: 5, edgeControl: 15, authority: 5 },
+    },
+  },
+  {
+    // 评分模式（质量飞轮 P0）：材料缺异常与权限，渲染必须「不杜撰」——异常维应低分，
+    // 暴露自评分数与产出质量的落差。与 r18 同为渲染场景，构造度量区分度。
+    name: "r19 缺异常与权限渲染（低分暴露）",
+    workflowType: "reqdoc",
+    state: (() => {
+      const s = newReqdoc()
+      approve(s, "goal")
+      approve(s, "rules")
+      approve(s, "edge")
+      enter(s, "prd")
+      // 自评 85 达标已确认（业务未意识到缺料，门禁放行），进入渲染——评测产出度量的区分度
+      s.score = score({ businessValue: 15, flowClosure: 25, edgeControl: 25, compliance: 15, authority: 5 }) // 85
+      s.features = [{ no: 1, name: "公告发布", priority: "medium", confirmedAt: 1000 }]
+      return finish(s)
+    })(),
+    userTurn:
+      "材料就这些，先渲染。系统是内部公告发布：运营同事发布公告，省去邮件群发的麻烦。流程：运营点击发起，系统处理，发布成功后通知全员。异常处理、数据安全、权限这三块材料还没补，先标 [缺省]。",
+    // 渲染出模板结构，但异常维必须低分（材料没给就不能编出异常内容）——区分度场景
+    judge: {
+      kind: "score",
+      renderMarkers: ["业务需求说明书", "功能点"],
+      minTotal: 20,
+      dimMax: { edgeControl: 5 },
+    },
   },
 ]

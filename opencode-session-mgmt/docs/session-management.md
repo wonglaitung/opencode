@@ -1749,7 +1749,7 @@ bun run scripts/eval-rules/run.ts --variant new              # 改造后 → res
 
 ### 13.2 场景集
 
-39 个场景（sdlc s1-s22 + reqdoc r1-r17），覆盖关键规则：
+41 个场景（sdlc s1-s22 + reqdoc r1-r19），覆盖关键规则：
 
 - 基线录入不重复、确认后 approve、无确认不 approve、回到XX→revisit、审查逐段不批量、前序未完成不 submit、提交前查门禁
 - **完成后提示 /new**（sdlc s9 / reqdoc r7，`text.keyword` 判定回复须含 `/new`）
@@ -1761,12 +1761,14 @@ bun run scripts/eval-rules/run.ts --variant new              # 改造后 → res
 - reqdoc 渐进引导 2-3 问带 A/B/C 选项与【默认推荐项】（r1，`text.optionsABC`，问句 ≤3 + 含「默认」+ ≥2 个选项标记）/ 业务确认单要点 / edge 探针
 - **reqdoc 双通道与功能点拆解**（重构新增 r11-r13）：资料已放好应 `reqdoc_scan` 扫描分析而非空问（r11）、prd 功能点拆解经 `reqdoc_confirm_features` 确认（r12）、功能点未确认不得直接渲染定稿（r13，no_tool 禁 workflow_advance/reqdoc_confirm_features）
 - **打分卡门禁**（实施方案新增 r14-r17）：进 prd 前先 `reqdoc_score` 打分（r14）、低于 85 分不定稿（r15，no_tool 禁 review_submit）、高分未业务确认不定稿（r16）、达标且业务确认后定稿（r17，正向 review_submit）；r8/r9 正向/未定论定稿场景夹具同步补打分卡（保持与真实门禁一致）
+- **评分模式**（质量飞轮 P0，`judge.kind="score"`，新增 r18-r19）：prd-render 场景对渲染产出的 PRD 文本做五维确定性评分——材料齐全渲染应高分（r18，dimMin 下限）、缺异常材料渲染应低分不杜撰（r19，dimMax 上限），构造产出度量区分度，供 baseline→new 逐维对比
 
 ### 13.3 判定方式（rule-based，不用 LLM judge）
 
 - 工具类比对 `tool_use` 名称与参数谓词（如 approve 时 `developer_confirmed` 必须 true）
 - `no_tool` 类断言未调用某工具
 - `text` 类（maxQuestions 问句计数、optionsABC 问句 ≤max 且含「默认」+ ≥2 个 A/B/C 标记、categoryKeywords 探针关键词）为关键词启发式，判定口径脆弱需人工复核
+- `score` 类（质量飞轮 P0）：渲染标记命中 + `scorePrd()` 五维总分/维度上下限校验——同样是 rule-based，只是判定对象从「工具行为」换成「渲染产出质量」
 
 ### 13.4 实测记录与迭代闭环
 
@@ -1780,6 +1782,8 @@ bun run scripts/eval-rules/run.ts --variant new              # 改造后 → res
 
 **本轮（打分卡补齐）场景集扩至 39 个（r1 改为 optionsABC 断言 2-3 问带选项与默认推荐；新增 r14-r17 打分卡门禁）**：需对端点重新跑 `--variant baseline` → `--variant new` 对比（见验证步骤），确认 sdlc 零回归、reqdoc 打分门禁场景通过后再入库。
 
+**本轮（质量飞轮 P0）场景集扩至 41 个（新增 r18-r19 评分模式，`judge.kind="score"`）**：`score.ts` 确定性评分器 + prd-render 场景 + run.ts 五维聚合与 baseline→new 逐维对比 + prd 模板送达注入（render-new）。代码与脚本已落地并过 typecheck / bun test（302 全绿）/ 双 variant dry；**真实模型端点的五维基线待跑**（`--variant baseline` → `--variant new`，见 13.6 P0）。
+
 ### 13.5 关键教训（多次迭代沉淀）
 
 - **规则文本保持简洁**：曾尝试给 r9/r11/r17/r19 补「须调用工具、逐段各调用一次」等详细措辞，实测发现弱模型对复杂措辞敏感（qwen3.6 出现 r2 确认要点不再调工具、r10 要点 id 错填），已全部回滚——提升应走脚本适配与判定口径，而非规则膨胀。
@@ -1790,17 +1794,17 @@ bun run scripts/eval-rules/run.ts --variant new              # 改造后 → res
 - **场景 userTurn 避免二义性**：发言词不要同时是阶段名与要点 id（如「边界这块」既像 edge 阶段又像要点 id），否则强模型可能误走 `workflow_revisit`。
 - **hoisted 拷贝残留影响评测**：评测脚本经 `node_modules/sm-shared` 解析共享包，`node-linker=hoisted` 下它是真实拷贝；修改 `packages/shared` 后须删除 `node_modules/sm-shared` 并 `bun install` 重同步，否则评测读到旧规则文本（`typecheck`/`bun test` 仍全绿，易漏）。
 
-### 13.6 质量飞轮（可持续改进机制，规划）
+### 13.6 质量飞轮（可持续改进机制）
 
 **核心：把打分卡接进评测，从「过/不过」升级为「0-100 五维数字度量」**
 
 13.2/13.3 的判定是 rule-based 布尔断言——评测只能回答「这版规则让模型遵循得更好吗」，回答不了「需求书质量高了几分」。而 `reqdoc_score` 五维打分（3.2 `ReqdocScore`，判定规则 + 扣分标准经 `reqdocScoreRubric()` 单一事实源注入）本就是质量度量器：**让它对每个场景渲染出的 PRD 自动评分**，评测就获得——
 
-- **每维数字基线**（business_value 业务目标 / flow_closure 主流程闭环 / edge_control 异常边界 / compliance 合规数据安全 / authority 权限机构隔离，各维多少分）
+- **每维数字基线**（businessValue 业务目标 / flowClosure 主流程闭环 / edgeControl 异常边界 / compliance 合规数据安全 / authority 权限机构隔离，各维多少分）
 - **回归检测**（改一条规则后哪一维掉了 → 精确定位改坏了什么）
 - **归因**（哪个维度系统性薄弱 → 对应三支柱哪一根、哪条规则）
 
-这是整架飞轮的轴承：`scripts/eval-rules` 增加「评分模式」，场景产出的 PRD 文本过 `reqdocScoreRubric()` 打分，分数与判定结果一并写入 `results/{baseline,new}.json`。
+这是整架飞轮的轴承，**P0 已落地**（见「落地节奏」）：`scripts/eval-rules` 增加「评分模式」——新增 prd-render 场景（r18 材料齐全渲染高分 / r19 缺异常材料渲染低分），模型渲染产出的 PRD 文本过 eval 侧确定性评分器 `scorePrd()`（镜像 `REQDOC_SCORE_DIMS` 扣分标准，与工具/r21 规则单点同源，非 LLM 判卷）打分，分数与判定结果一并写入 `results/{baseline,new}.json`，run.ts 聚合五维平均分并做 baseline→new 逐维对比。
 
 ```mermaid
 flowchart LR
@@ -1843,8 +1847,8 @@ flowchart LR
 → 回归对比 → 通过则沉淀 → 下一轮
 ```
 
-- **P0（轴承）**：`scripts/eval-rules` 接 `reqdocScoreRubric()` 评分模式，先跑通真实模型端点的五维基线（13.1 的 `--variant baseline/new`）。
-- **P1（追问可测化）**：结构化探针清单 + 覆盖度校验。
-- **P2（渲染可测化）**：模板结构 schema + 渲染 diff 门禁。
+- **P0（轴承）已落地**：`score.ts` 五维评分器 + prd-render 场景（r18/r19）+ run.ts 聚合与逐维对比 + prd 模板送达注入（render-new 复刻插件行为）。待办：对真实模型端点跑 `--variant baseline` → `--variant new` 冻结五维基线（13.1），用 r18/r19 区分度校准各维阈值。
+- **P1（追问可测化，规划）**：结构化探针清单 + 覆盖度校验。
+- **P2（渲染可测化，规划）**：模板结构 schema + 渲染 diff 门禁。
 
 

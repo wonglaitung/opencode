@@ -1,8 +1,12 @@
 /**
  * rule-based 判定(不用 LLM judge)。对弱模型的 tool_use 有清晰 ground truth:
  * 工具名 + 参数谓词即达标,无需强模型打分。
+ * kind="score" 例外:判定对象是渲染产出的 PRD 文本,用 scorePrd 确定性评分
+ * (见 score.ts)——同样是 rule-based,只是从「工具行为」换到「产出质量」。
  */
 import type { Judge, ModelOutput } from "./types"
+import { REQDOC_SCORE_DIMS, type ReqdocScoreDimKey } from "sm-shared"
+import { scorePrd, type PrdScore } from "./score"
 
 /** 参数子集匹配:judge.args 的每一项都须等于调用实参(实参缺键视为不匹配)。 */
 function argsMatch(expect: Record<string, unknown> | undefined, actual: Record<string, unknown>): boolean {
@@ -10,7 +14,7 @@ function argsMatch(expect: Record<string, unknown> | undefined, actual: Record<s
   return Object.entries(expect).every(([k, v]) => actual[k] === v)
 }
 
-export function judgeScenario(judge: Judge, out: ModelOutput): { pass: boolean; detail: string } {
+export function judgeScenario(judge: Judge, out: ModelOutput): { pass: boolean; detail: string; score?: PrdScore } {
   switch (judge.kind) {
     case "tool": {
       const matched = out.toolCalls.filter((c) => c.name === judge.expectTool)
@@ -83,6 +87,44 @@ export function judgeScenario(judge: Judge, out: ModelOutput): { pass: boolean; 
           : { pass: false, detail: `回复未包含「${kw}」;全文:${out.text.slice(0, 200)}` }
       }
       return { pass: false, detail: `未知 text 判定类型 ${(judge as any).type}` }
+    }
+
+    case "score": {
+      const prd = scorePrd(out.text)
+      const markers = judge.renderMarkers.filter((m) => out.text.includes(m))
+      const noMarker = markers.length === 0
+      const okTotal = prd.total >= judge.minTotal
+      const okMax = Object.entries(judge.dimMax ?? {}).every(
+        ([k, v]) => prd.dims[k as ReqdocScoreDimKey].score <= (v ?? 0),
+      )
+      const okMin = Object.entries(judge.dimMin ?? {}).every(
+        ([k, v]) => prd.dims[k as ReqdocScoreDimKey].score >= (v ?? 0),
+      )
+      const pass = !noMarker && okTotal && okMax && okMin
+      const dimLine = REQDOC_SCORE_DIMS.map(
+        (d) => `${d.key}:${prd.dims[d.key].score}/${d.max}`,
+      ).join(" ")
+      if (noMarker) {
+        return {
+          pass: false,
+          score: prd,
+          detail: `未渲染出 PRD(命中标记 0/${judge.renderMarkers.length} 个,标记:${judge.renderMarkers.join("、")});总分 ${prd.total}`,
+        }
+      }
+      const fails: string[] = []
+      if (!okTotal) fails.push(`总分 ${prd.total}<${judge.minTotal}`)
+      for (const [k, v] of Object.entries(judge.dimMax ?? {})) {
+        if (prd.dims[k as ReqdocScoreDimKey].score > (v ?? 0)) fails.push(`${k} ${prd.dims[k as ReqdocScoreDimKey].score}>${v}`)
+      }
+      for (const [k, v] of Object.entries(judge.dimMin ?? {})) {
+        if (prd.dims[k as ReqdocScoreDimKey].score < (v ?? 0)) fails.push(`${k} ${prd.dims[k as ReqdocScoreDimKey].score}<${v}`)
+      }
+      return {
+        pass,
+        score: prd,
+        detail: `${pass ? "✓" : "✗"} 渲染命中 ${markers.length} 标记;总分 ${prd.total}(需≥${judge.minTotal})` +
+          `${fails.length ? `;未达标:${fails.join("、")}` : ""} [${dimLine}]`,
+      }
     }
   }
 }
