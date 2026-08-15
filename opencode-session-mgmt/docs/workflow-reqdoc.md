@@ -266,11 +266,101 @@ Agent:  好的，已记录。我将补充「币种」字段后重新呈现该要
 
 业务逐段确认（`comprehension_confirm` 单要点）直至全部终态后 `review_submit` 通过，业务确认闭环完成；未通过的要点经 reject/rewrite 或 manual 定论。
 
+**统计输出示例（reqdoc 会话级）**（统计分层与口径见 session-management.md 6）：
+
+```
+📋 需求书 "合同管理流程" (sess_def456)
+分析师: analyst@example.com
+周期: 1.8 天
+
+工作流:
+  目标与场景  ██████████░░  1.1h  ✓ approved
+  流程与规则  ████████░░░░  0.9h  ✓ approved
+  边界与异常  ████████████  1.4h  ✓ approved
+  需求规格书  ██████░░░░░░  0.7h  ✓ approved
+  业务确认    ████░░░░░░░░  0.4h  ✓ approved (一次确认通过率 80%, 要点确认 4/5)
+
+质量:
+  一次确认通过率: 80%  |  迭代轮次: 1 轮
+  基线对比: 预估 40h / 实际 1.8d → AI 提效 30%
+  审查清单: ✓全部通过(4/4)  |  要点确认: 5 要点 ✓已确认
+
+AI 使用: 对话 32轮 | $0.12 | 28K tokens
+```
+
+reqdoc 会话不产出代码，sdlc 专属指标——AI 代码行数（业务/测试/配置三分类）、覆盖率、返工率——为 `null`（显示 N/A）。
+
 ## 10. 评测与质量飞轮
 
-规则遵循度评测方法论（run 方式、baseline 冻结纪律、决策图）见 session-management.md 13。reqdoc 场景 r1-r24 覆盖：渐进引导 2-3 问带 A/B/C 与【默认推荐项】（r1）、双通道与功能点拆解（r11-r13）、打分卡门禁（r14-r17）、评分模式（r18-r19，`judge.kind="score"`）、追问可测化（r20-r22，`judge.argsContains`）、渲染可测化（r23-r24，`judge.kind="render"`）。
+规则遵循度评测**方法论**（run 方式、baseline 冻结纪律、判定方式、关键教训、改动分级决策图）见 session-management.md 13.1 / 13.3 / 13.5 / 13.6；sdlc 场景 s1-s22 见 workflow-sdlc.md 8 章。reqdoc 场景 r1-r24 明细如下。
 
-三大支柱的质量飞轮落地点（P0/P1/P2 均已落地，待办：真实模型端点跑 `--variant baseline → new` 冻结基线，见 session-management.md 13.6）：
-- **P0（打分，轴承）**：eval 侧 `scorePrd()` 确定性评分器 + prd-render 场景（r18 材料齐全渲染高分 / r19 缺料低分不杜撰）+ run.ts 五维聚合与 baseline→new 逐维对比。
-- **P1（追问，最软优先级最高）**：`REQDOC_PROBES` 探针清单 + `reqdoc_probe` 记录 + 柔性一致校验（`probeGapViolations`）；eval 数据里哪个探针被漏问频率最高就把它前移到更早追问轮次。
-- **P2（模板）**：结构 schema + `parseRenderStructure` 渲染 diff 校验 + `reqdoc_check` 工具 + 定稿复核门禁（柔性 + 定稿复核）；模板后续演进 schema 同步更新，评测 r23/r24 从结构侧守渲染可测。
+**场景明细（r1-r24）**
+
+- reqdoc 渐进引导 2-3 问带 A/B/C 选项与【默认推荐项】（r1，`text.optionsABC`，问句 ≤3 + 含「默认」+ ≥2 个选项标记）/ 业务确认单要点 / edge 探针
+- **reqdoc 双通道与功能点拆解**（重构新增 r11-r13）：资料已放好应 `reqdoc_scan` 扫描分析而非空问（r11）、prd 功能点拆解经 `reqdoc_confirm_features` 确认（r12）、功能点未确认不得直接渲染定稿（r13，no_tool 禁 workflow_advance/reqdoc_confirm_features）
+- **打分卡门禁**（实施方案新增 r14-r17）：进 prd 前先 `reqdoc_score` 打分（r14）、低于 85 分不定稿（r15，no_tool 禁 review_submit）、高分未业务确认不定稿（r16）、达标且业务确认后定稿（r17，正向 review_submit）；r8/r9 正向/未定论定稿场景夹具同步补打分卡（保持与真实门禁一致）
+- **评分模式**（质量飞轮 P0，`judge.kind="score"`，新增 r18-r19）：prd-render 场景对渲染产出的 PRD 文本做五维确定性评分——材料齐全渲染应高分（r18，dimMin 下限）、缺异常材料渲染应低分不杜撰（r19，dimMax 上限），构造产出度量区分度，供 baseline→new 逐维对比
+- **追问可测化**（质量飞轮 P1，新增 r20-r22）：追问结束调用 `reqdoc_probe` 记录探针（r20，`argsContains` 断言 asked 至少覆盖异常与权限）、缺口与满分矛盾不推进（r21，no_tool 禁 workflow_advance enter prd）、覆盖达标正向进 prd（r22，tool 断言 workflow_advance enter prd）
+- **渲染可测化**（质量飞轮 P2，`judge.kind="render"`，新增 r23-r24）：对模型回复文本里的 PRD 渲染骨架用共享 `parseRenderStructure` 做渲染 diff 判定（与运行时 `reqdoc_check` 同源）——材料齐全渲染结构达标（r23，五章齐全且顺序正确 + 2 功能点块 + 映射字段全标来源）、缺料渲染仍给全骨架且映射字段标 [缺省]（r24，`sourceAll` + `anyDefault` 结构版不杜撰）
+
+> 完成后提示 /new（r7，`text.keyword` 判定回复须含 `/new`）与审查全流程（r8-r10：正向 review_submit 且要点全定论、要点未定论防定稿、reject 必带反馈、拒绝复议后 confirm）为 reqdoc 侧同口径场景，判定框架见 session-management.md 13.3。
+
+**质量飞轮：把打分卡接进评测，从「过/不过」升级为「0-100 五维数字度量」**
+
+rule-based 布尔断言（session-management.md 13.3）只能回答「这版规则让模型遵循得更好吗」，回答不了「需求书质量高了几分」。而 `reqdoc_score` 五维打分（5 章 `ReqdocScore`，判定规则 + 扣分标准经 `reqdocScoreRubric()` 单一事实源注入）本就是质量度量器：**让它对每个场景渲染出的 PRD 自动评分**，评测就获得——
+
+- **每维数字基线**（businessValue 业务目标 / flowClosure 主流程闭环 / edgeControl 异常边界 / compliance 合规数据安全 / authority 权限机构隔离，各维多少分）
+- **回归检测**（改一条规则后哪一维掉了 → 精确定位改坏了什么）
+- **归因**（哪个维度系统性薄弱 → 对应三支柱哪一根、哪条规则）
+
+这是整架飞轮的轴承，**P0 已落地**（见「落地节奏与优先级」）：`scripts/eval-rules` 增加「评分模式」——新增 prd-render 场景（r18 材料齐全渲染高分 / r19 缺异常材料渲染低分），模型渲染产出的 PRD 文本过 eval 侧确定性评分器 `scorePrd()`（镜像 `REQDOC_SCORE_DIMS` 扣分标准，与工具/r21 规则单点同源，非 LLM 判卷）打分，分数与判定结果一并写入 `results/{baseline,new}.json`，run.ts 聚合五维平均分并做 baseline→new 逐维对比。
+
+```mermaid
+flowchart LR
+    R["改一条规则 / 探针 / 模板"] --> E["跑 eval（baseline / new 对比）"]
+    E --> S["reqdoc_score 五维自动评分"]
+    S --> C{"对比基线：有维度回退?"}
+    C -->|"是"| X["不合入，回退改动"]
+    C -->|"否"| A["沉淀资产：新场景 / 新探针 / 新规则进 fixture"]
+    A --> R
+    X --> R
+```
+
+**三支柱各自的可持续动作**
+
+1. **追问（最软，优先级最高）→ 已升级为结构化探针清单（P1 已落地）**
+   - 现状：追问约束已是结构化清单——`REQDOC_PROBES` 7 条探针（单点定义，经 `reqdocProbeRubric()` 同源注入 r11 与 `reqdoc_probe` 工具描述），每轮追问结束调用 `reqdoc_probe(asked, gaps, round)` 把已问/缺口探针写进 `WorkflowState.probes`（跨轮追加去重），状态条展示覆盖，评测经 `argsContains` 断言 asked 覆盖核心探针。
+   - 门禁：**柔性一致校验**（用户定，只拦矛盾不强制记录）——缺口探针对应打分卡维度不得打满分（`probeGapViolations`，workflow_advance 进 prd 与 review_submit 两处拦截）；材料全覆盖无追问、不记录探针的合法流程零打扰，产出端 P0 评分器兜底。
+   - 自持续：eval 数据里哪个探针被漏问频率最高，就把该探针**前移**到更早追问轮次（改 `REQDOC_PROBES` 的 round 即可）——探针清单本身数据驱动迭代。
+
+2. **打分（已固化）→ 更准 + 更可信**
+   - **一致性监控**：同一材料多次重打（`ReqdocScore.updatedAt` 可覆盖）的分数漂移——漂移大说明 rubric 模糊，需细化扣分标准；eval 场景自动测。
+   - **证据可回溯**：`evidence` 现为 LLM 自填，升级为结构化引用（`05_功能点/N_名称/` 来源摘录的文件/行号），eval 层校验「扣分项是否真存在于材料」，杜绝「扣了但无依据」。
+   - **分数分布反哺**：哪个维度常被扣、扣分理由最含糊——从 eval 分数分布导出，反哺扣分标准文本。
+
+3. **模板（权威源）→ 「严格逐字」从提示词变成可测门禁（P2 已落地）**
+   - 已落地：模板抽象为**结构 schema**（`REQDOC_TEMPLATE_CHAPTERS` 章节树 / `REQDOC_TEMPLATE_FIELDS` 必填字段映射），渲染输出对照 schema 做**渲染 diff 校验**（章节出现/顺序、功能点块数与已确认功能点一致、映射字段逐功能点来源标注），轻量工具 `reqdoc_check` + 定稿复核门禁（**用户定：柔性 + 定稿复核**——不强制调用，一旦记录 review_submit 重读源 md 复核）。
+   - 自持续：模板后续演进，schema 同步更新，铁律始终可测（7 章已承诺同步）；评测 r23/r24 从结构侧守渲染可测。
+
+**落地节奏与优先级**
+
+```
+每轮迭代：跑 eval（打分卡自动评分）→ 看五维分数分布 → 归因到三支柱 → 改一处
+→ 回归对比 → 通过则沉淀 → 下一轮
+```
+
+- **P0（轴承）已落地**：`score.ts` 五维评分器 + prd-render 场景（r18/r19）+ run.ts 聚合与逐维对比 + prd 模板送达注入（render-new 复刻插件行为）。待办：对真实模型端点跑 `--variant baseline` → `--variant new` 冻结五维基线（session-management.md 13.1），用 r18/r19 区分度校准各维阈值。
+- **P1（追问可测化）已落地**：结构化探针清单 `REQDOC_PROBES`（7 条）+ `reqdoc_probe` 工具 + `WorkflowState.probes` 记录 + 柔性一致校验门禁（缺口+满分矛盾拒绝，只拦矛盾不强制记录）+ 评测 `argsContains` 断言（r20-r22）。待办：对真实模型端点跑 `--variant baseline` → `--variant new` 确认 r20-r22 判定与五维无回退。
+- **P2（渲染可测化）已落地**：模板结构 schema（`REQDOC_TEMPLATE_CHAPTERS`/`REQDOC_TEMPLATE_FIELDS`）+ 共享 `parseRenderStructure` 渲染 diff 校验 + `reqdoc_check` 工具 + 定稿复核门禁（`renderStructureViolations`/`renderGapViolations`，**用户定：柔性 + 定稿复核**——未记录放行、一旦记录 review_submit 重读源 md 复核）+ 状态条「渲染校验」行 + 评测 render 判定类（r23/r24）。待办：对真实模型端点跑 `--variant baseline` → `--variant new` 确认 r23-r24 判定与五维无回退。
+
+**reqdoc 实测记录（质量飞轮迭代闭环）**
+
+规则遵循度评测的**迭代闭环与历史结果**（含 sdlc 侧 s1-s22 的混合里程碑）见 session-management.md 13.4。reqdoc 侧质量飞轮轮次：
+
+**本轮（打分卡补齐）场景集扩至 39 个（r1 改为 optionsABC 断言 2-3 问带选项与默认推荐；新增 r14-r17 打分卡门禁）**：需对端点重新跑 `--variant baseline` → `--variant new` 对比（见 session-management.md 13.1），确认 sdlc 零回归、reqdoc 打分门禁场景通过后再入库。
+
+**本轮（质量飞轮 P0）场景集扩至 41 个（新增 r18-r19 评分模式，`judge.kind="score"`）**：`score.ts` 确定性评分器 + prd-render 场景 + run.ts 五维聚合与 baseline→new 逐维对比 + prd 模板送达注入（render-new）。代码与脚本已落地并过 typecheck / bun test（302 全绿）/ 双 variant dry；**真实模型端点的五维基线待跑**（`--variant baseline` → `--variant new`，见「落地节奏与优先级」P0）。
+
+**本轮（质量飞轮 P1）场景集扩至 44 个（新增 r20-r22 追问可测化，`judge.argsContains`）**：`reqdoc_probe` 工具（探针清单 `REQDOC_PROBES` 7 条单点定义，经 `reqdocProbeRubric()` 同源注入 r11 与工具描述）+ `WorkflowState.probes` 记录 + 柔性一致校验门禁（`probeGapViolations`，workflow_advance 进 prd 与 review_submit 两处拦截，只拦「缺口+满分矛盾」、不强制记录）+ 状态条「追问覆盖」行 + eval 侧 probe schema 与 argsContains 数组子集断言。代码与脚本已落地并过 typecheck / bun test（315 全绿）/ 双 variant dry；**真实模型端点的基线待跑**（`--variant baseline` → `--variant new`，见「落地节奏与优先级」P1，确认 r20-r22 判定与五维无回退）。
+
+**本轮（质量飞轮 P2）场景集扩至 46 个（新增 r23-r24 渲染可测化，`judge.kind="render"`）**：模板抽象为结构 schema（`REQDOC_TEMPLATE_CHAPTERS`/`REQDOC_TEMPLATE_FIELDS`，r20 字段映射结构化，经 `renderCheckRubric()` 同源注入 r23 与 `reqdoc_check` 工具描述）+ 共享 `parseRenderStructure` 渲染结构解析（章节/功能点块/来源标注，运行时工具与评测判定同源）+ `reqdoc_check` 工具（渲染后对照 schema 做 diff 校验，写入 `WorkflowState.render`，返回校验卡片）+ 定稿复核门禁（`renderStructureViolations`/`renderGapViolations`，review_submit 重读源 md 复核，柔性：未记录放行）+ 状态条「渲染校验」行 + eval 侧 render 判定类（r23 材料齐全结构达标 / r24 缺料全骨架 + [缺省]）。代码与脚本已落地并过 typecheck / bun test（346 全绿）/ 双 variant dry；**真实模型端点的基线待跑**（`--variant baseline` → `--variant new`，见「落地节奏与优先级」P2，确认 r23-r24 判定与五维无回退）。

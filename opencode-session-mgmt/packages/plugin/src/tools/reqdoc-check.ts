@@ -1,5 +1,5 @@
 /**
- * reqdoc 渲染结构校验工具（质量飞轮 P2「渲染可测化」，设计文档 workflow-reqdoc.md 7 章、session-management.md 13.6）。
+ * reqdoc 渲染结构校验工具（质量飞轮 P2「渲染可测化」，设计文档 workflow-reqdoc.md 7 章、10 章）。
  * reqdoc_check —— PRD 渲染完成并写入 06_需求规格产出 后调用，对照模板结构 schema
  * （REQDOC_TEMPLATE_CHAPTERS / REQDOC_TEMPLATE_FIELDS，同源 renderCheckRubric）做渲染 diff 校验：
  * 章节齐全/顺序、功能点块数与已确认功能点一致、映射字段逐功能点带来源标注。

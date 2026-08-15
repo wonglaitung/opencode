@@ -6,7 +6,7 @@
  *   兼作「必填字段须标来源」清单与「[缺省]↔满分」矛盾映射。
  * - parseRenderStructure：纯函数解析渲染 md（标题/功能点块/来源标注），运行时 reqdoc_check 工具
  *   与评测 render 判定类共用同一函数（同源，避免两份漂移）。
- * 模板演进须同步本文件 schema（13.6 已承诺），docs/reqdoc-prd-template.md 本身不动。
+ * 模板演进须同步本文件 schema（workflow-reqdoc.md 10 章已承诺），docs/reqdoc-prd-template.md 本身不动。
  */
 import type { ReqdocScore, ReqdocScoreDimKey } from "./workflow"
 

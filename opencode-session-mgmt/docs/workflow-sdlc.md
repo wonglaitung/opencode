@@ -165,4 +165,14 @@ sdlc 的审查清单（`ReviewChecklist`）由 `WorkflowDefinition.checklist` �
 
 ## 8. 评测场景（s1-s22）
 
-规则遵循度评测方法论见 session-management.md 13。sdlc 场景 s1-s22 覆盖：基线录入、确认后 approve、无确认不 approve、回到XX→revisit、审查逐段不批量、前序未完成不 submit、提交前查门禁、完成后提示 /new、完成后开新需求不重启、空档态继续进入下一阶段、审查全流程（s12-s19）、手工修改走 open_ide 锁定与改完确认解锁（s20-s21）、SDLC 完结提示解锁。规则改动须跑质量飞轮（见 session-management.md 13.6 决策图）验证 sdlc 零回退。
+规则遵循度评测**方法论**（run 方式、baseline 冻结纪律、判定方式、关键教训、改动分级决策图）见 session-management.md 13；reqdoc 场景 r1-r24 见 workflow-reqdoc.md 10 章。sdlc 场景 s1-s22 明细如下：
+
+- 基线录入不重复、确认后 approve、无确认不 approve、回到XX→revisit、审查逐段不批量、前序未完成不 submit、提交前查门禁
+- **完成后提示 /new**（s9，`text.keyword` 判定回复须含 `/new`；reqdoc 侧 r7 同口径）
+- **完成后开新需求不重启**（s10，`no_tool` 禁 `workflow_advance`/`workflow_revisit`）
+- **空档态继续进入下一阶段**（s11，部分 approved 无 in_progress → `workflow_advance` enter 下一阶段）
+- **审查全流程**（s12-s19：正向 review_submit 且片段全定论、片段未定论不 submit、reject 必带反馈、拒绝后 rewrite/manual、追问 ask、审查不可 advance approve 必须 review_submit、拒绝复议后 confirm）
+- **手工修改走 open_ide 锁定与改完确认解锁**（s20-s21，sdlc-r12 规则，open_ide/unlock_file 契约——open-ide 已**物理合并**进本工程 `packages/plugin/src/open-ide/`，单一插件加载；锁持久化进 SQLite `file_lock` 表，daemon 重启自动恢复，会话删除后由启动时 `pruneLocks` 修剪）
+- **SDLC 完结 → 提示解锁**（合并新增，插件硬能力）：完成态注入与 `review_submit` 返回均直接读锁表，有锁时提示开发者确认后逐个 `unlock_file`；仅 sdlc（`hasCommitGate` 门控），reqdoc 完成态不提示
+
+> 规则改动须跑质量飞轮（见 session-management.md 13.6 决策图）验证 sdlc 零回退；reqdoc 侧 r7/r8-r10 同口径场景见 workflow-reqdoc.md 10 章。
