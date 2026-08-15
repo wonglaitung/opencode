@@ -1,13 +1,13 @@
 # OpenCode 插件开发规范
 
-版本: 1.6.0
-最后更新: 2026-08-14
+版本: 1.6.2
+最后更新: 2026-08-16
 来源: opencode-session-mgmt 实践（参见 `opencode-session-mgmt/packages/plugin` 与 `opencode-session-mgmt/packages/shared`）
 
 说明
 - 本文档提炼自仓内实践，适用于在本仓库中新增的所有 OpenCode 插件（`opencode-session-mgmt`、`opencode-edge-debug`）。注：原 `opencode-open-ide` 插件已于 2026-08 物理合并进 `opencode-session-mgmt`（`packages/plugin/src/open-ide/`），不再作为独立工程。
 - 目标：统一约定、降低侵入性、确保安全与可测试性。
-- 位置：本文件为**跨插件通用规范**，独立存放于仓库根 `plugin-guide/`（不隶属任一插件工程），避免被埋没于某工程 docs 下。文中的 `opencode-session-mgmt/...` 路径均以仓库根为基准；「设计文档 X 章」指 `opencode-session-mgmt/docs/session-management.md`。
+- 位置：本文件为**跨插件通用规范**，独立存放于仓库根 `plugin-guide/`（不隶属任一插件工程），避免被埋没于某工程 docs 下。文中的 `opencode-session-mgmt/...` 路径均以仓库根为基准；「设计文档 X 章」指 `opencode-session-mgmt/docs/session-management.md`（通用机制/评测方法论）；两个工作流的专属设计分文件存放——`workflow-sdlc.md`（工作流一）/ `workflow-reqdoc.md`（工作流二，含 reqdoc 专属评测与质量飞轮 10 章）。评测迭代方法论独立成文见 `eval-driven-rule-iteration.md`（本目录，单一事实源）。
 
 目录
 1. 总则
@@ -18,7 +18,7 @@
 6. 数据存储规范
 7. 健壮性与降级策略
 8. 安全与隐私
-9. 测试规范（含评测驱动规则迭代标准作法）
+9. 测试规范（评测基线；标准作法见 eval-driven-rule-iteration.md）
 10. 编码与文档风格
 11. 打包与分发
 12. 验证清单（合并前必查，含规则改动评测对比）
@@ -190,39 +190,9 @@ export default MyPlugin
 - 优先测真实实现，尽量零 mock：存储使用内存库，依赖通过构造注入。
 - 用例名称用中文描述行为；对于每个硬约束（拦截、幂等、上限等），应包含正反两组用例（验收与拒绝路径）。
 - 建议增加 CI 步骤：`bun test`、`bun run typecheck`（strict）与一个轻量的插件启停脚本（启用插件、触发核心路径、移除插件并确认恢复）。
-- 注入规则/提示词的遵循度建议建**评测基线**：用脚本对真实模型端点批量跑场景，对比改前/改后通过率，量化弱模型对规则文本的遵循度（先例 `opencode-session-mgmt/scripts/eval-rules`，见设计文档第 13 章；此类评测需真实模型端点，不随 `bun test` 跑）。
+- 注入规则/提示词的遵循度建议建**评测基线**：用脚本对真实模型端点批量跑场景，对比改前/改后通过率，量化弱模型对规则文本的遵循度（先例 `opencode-session-mgmt/scripts/eval-rules`，见设计文档第 13 章；此类评测需真实模型端点，不随 `bun test` 跑）。**通过率口径是两个工作流共用的评测门**（sdlc 只看通过率回退）；reqdoc 另有**质量飞轮**把 reqdoc 打分卡接进评测，把「通过/不通过」升级为 0-100 五维数字度量，见 `opencode-session-mgmt/docs/workflow-reqdoc.md` 10 章。
 
-**评测驱动规则迭代的标准作法**（实测于 2026-08-12/14，见设计文档 13.4、13.5）：改任何注入规则前必须走以下闭环，凭数据而非直觉：
-
-1. **写场景集**（rule-based 判定，不用 LLM judge）：每个关键规则一个场景，`userTurn` 是对应触发语，判定断言「模型应调用哪个工具 + 哪些参数谓词」（如 approve 时 `developer_confirmed` 必须 true）。状态夹具直接构造（不跑真实工具循环），隔离「规则遵循度」与「工具机制」两个变量；baseline 与 new 共用同一夹具保证可对等比较。
-2. **冻结基线**：跑 `--variant baseline` 记录通过率快照（结果 json 入库 + 必要时冻结旧规则全文，可复现旧注入格式）；`--dry` 只打印注入片段与判定期望，不调模型，先验证渲染。
-3. **改规则/脚本**：一次只改一处，避免多变量无法归因。
-4. **对比**：跑 `--variant new` 自动对比 baseline，通过率不降才保留改动。
-5. **逐个归因失败场景**：按「规则措辞 / 判定口径 / 场景二义性」三类归因——优先调**脚本适配与判定口径**，其次修场景，**规则文本保持简洁**（弱模型对复杂措辞极敏感，为提升某模型把规则写细实测反而伤害弱模型）；多模型验证（本地弱模型 + 远端强模型），避免过拟合单一模型。
-6. **`--repeat N` 多次取通过率**（聚合按运行次数统计），防单次抖动掩盖趋势。
-
-**项目中可参考的实例**（`opencode-session-mgmt` 为完整落地，新插件可照抄骨架）：
-
-| 步骤 | 参考文件/示例 |
-|------|--------------|
-| 场景集 | `opencode-session-mgmt/scripts/eval-rules/src/scenarios.ts`（46 场景：sdlc s1-s22 + reqdoc r1-r24，每场景 = name + workflowType + 状态夹具 state + userTurn + judge）；judge 形态见 `src/types.ts`——行为类 `tool`/`no_tool`/`text`（sdlc 与 reqdoc 共用），产出类 `score`/`render`（reqdoc 专属，五维打分与渲染 diff，见 `opencode-session-mgmt/docs/workflow-reqdoc.md` 10 章） |
-| 工具契约同步 | `opencode-session-mgmt/scripts/eval-rules/src/tool-defs.ts`——评测用精简工具定义须与插件真实工具 description/参数名一致（改插件工具时同步改这里，否则测的不是真实契约）；跨插件工具（如 open-ide 的 `open_ide`/`unlock_file`）也在此声明 |
-| 状态夹具 | `scenarios.ts` 顶部辅助：`enter`/`approve`/`addSegment`/`rejectSegment`/`finish()`（按阶段重算 commit）——直接构造 WorkflowState，不跑真实工具循环 |
-| 运行入口 | `opencode-session-mgmt/scripts/eval-rules/run.ts`（`--variant baseline\|new`、`--repeat N`、`--dry`；环境变量 `EVAL_BASE_URL`/`EVAL_MODEL`/`EVAL_API_KEY`） |
-| 冻结快照 | `opencode-session-mgmt/scripts/eval-rules/fixtures/baseline/`（旧规则全文）+ `results/{baseline,new}.json`（通过率快照入库，可重跑对比） |
-| 模型适配 | `opencode-session-mgmt/scripts/eval-rules/src/client.ts`（content 空回退 `reasoning_content`、`max_tokens` 可配、超时/重试） |
-| 判定口径适配 | `opencode-session-mgmt/scripts/eval-rules/src/judge.ts`（如 s5 放宽为「≥1 次 confirm + `distinctArg` 不重复」） |
-| 方法论文档 | `opencode-session-mgmt/docs/session-management.md` 第 13 章（运行/场景集/判定/实测记录/教训） |
-
-沉淀的实践要点：
-
-- **规则文本保持简洁，改前必须数据驱动 + 多模型验证**：弱模型对复杂措辞极敏感——为提升某模型而把规则写细（如补「须调用 X 工具」「逐段各调用一次」）实测反而伤害弱模型（不再调工具、要点 id 错填）。为特定模型（如推理模型）提升应优先走**脚本适配与判定口径**，而非规则膨胀。
-- **评测脚本对推理模型的适配**：`msg.content` 为空时回退 `reasoning_content`（推理模型正文可能在 thinking，`text` 类判定读不到 content）；输出上限用 `EVAL_MAX_TOKENS` 可配——推理模型显式 4096 留 thinking 空间，**慢速弱模型（本地 qwen3.6 实测 ~16 tok/s）默认 2048**，4096 会让长生成场景拖到超时。
-- **评测请求须带超时 + 重试**：弱/推理模型单请求可达数十秒、vLLM 排队时更久；`client.ts` 用 `EVAL_TIMEOUT_MS`（默认 180s）+ 网络/超时错误重试 3 次（HTTP 4xx/5xx 不重试），否则偶发超时会中断整轮评测（曾丢 25 分钟全量结果）。
-- **新增场景的 userTurn 须与规则前提一致**：场景输入要先满足规则触发条件再期望动作——s20 曾用未指明文件的发言却期望模型杜撰 `file` 调 `open_ide`（规则要求「先询问要改哪个文件」），两模型均失败；改为 userTurn 明确 `auth/service.ts` 后通过。
-- **判定口径适配模型能力**：`exactCount`（恰 N 次）对单轮单发 tool_call 的推理模型过苛，可放宽为「≥1 次 + `distinctArg` 不重复」，反映能力基线而非单次抖动。
-- **场景 userTurn 避免二义性**：发言词不要同时是阶段名与要点 id（如「边界这块」既像 edge 阶段又像要点 id「边界策略」），否则强模型可能误走 `workflow_revisit`。
-- **hoisted 拷贝残留影响评测**：评测脚本经 `opencode-session-mgmt/node_modules/sm-shared` 解析共享包，`node-linker=hoisted` 下它是真实拷贝；修改 `opencode-session-mgmt/packages/shared` 后须删除 `opencode-session-mgmt/node_modules/sm-shared` 并 `bun install` 重同步，否则评测读到旧规则文本（`typecheck`/`bun test` 仍全绿，易漏）。
+- **完整方法论**（为什么与传统开发不同、六步闭环、场景/判定/基线纪律、模型适配与防过拟合）见 `eval-driven-rule-iteration.md`（本目录，单一事实源）；`opencode-session-mgmt` 为完整落地实例，场景/命令/实测见其 `docs/session-management.md` 第 13 章。
 
 ---
 
@@ -278,7 +248,7 @@ export default MyPlugin
 6. 安全审计：确保上传数据为白名单投影，已列举允许上报字段并在 CI 中有变更告警。
 7. 打包校验：执行一次 `pack:bundle` 并在干净环境中验证解压即用（含依赖）。
 8. 改动 `opencode-session-mgmt/packages/shared`（契约）后重装 workspace 依赖（`rm -rf node_modules/<共享包> && bun install`），确认测试与评测脚本读到最新契约而非 hoisted 旧拷贝。
-9. 改动注入规则/提示词文本时，按第 9 章「评测驱动规则迭代标准作法」跑基线对比（改前 baseline → 改后 new → 通过率不降才合并），不得凭直觉改规则。
+9. 改动注入规则/提示词文本时，按 `eval-driven-rule-iteration.md`（第 9 章评测基线）跑基线对比（改前 baseline → 改后 new → sdlc 通过率不降、reqdoc 打分卡五维分数不降才合并），不得凭直觉改规则。
 
 ---
 
