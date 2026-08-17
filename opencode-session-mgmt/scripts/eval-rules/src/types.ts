@@ -74,6 +74,8 @@ export type Judge =
       sourceAll?: boolean
       /** 至少一个映射字段标 [缺省]（缺料不杜撰的结构信号） */
       anyDefault?: boolean
+      /** 模糊匹配章节标题（includes 而非精确相等），弱模型可能用不同标题格式 */
+      fuzzy?: boolean
     }
 
 export interface Scenario {

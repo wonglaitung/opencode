@@ -155,7 +155,10 @@ export function judgeScenario(judge: Judge, out: ModelOutput): { pass: boolean; 
       const struct = parseRenderStructure(out.text)
       const required = judge.requiredChapters ?? REQDOC_TEMPLATE_CHAPTERS.map((c) => c.title)
       const fails: string[] = []
-      const missing = required.filter((t) => !struct.chaptersPresent.includes(t))
+      // fuzzy: 用 includes 匹配（弱模型可能用「需求概述」而非「第一章 需求概述」）
+      const matchChapter = (title: string, present: string[]) =>
+        judge.fuzzy ? present.some((p) => p.includes(title) || title.includes(p)) : present.includes(title)
+      const missing = required.filter((t) => !matchChapter(t, struct.chaptersPresent))
       if (missing.length) fails.push(`缺章节 ${missing.join("、")}`)
       if ((judge.ordered ?? true) && struct.outOfOrder.length) fails.push(`章节乱序 ${struct.outOfOrder.join("、")}`)
       if (judge.minFeatures !== undefined && struct.featureCount < judge.minFeatures) {

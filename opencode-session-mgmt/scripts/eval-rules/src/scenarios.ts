@@ -854,6 +854,7 @@ export const SCENARIOS: Scenario[] = [
       ordered: true,
       minFeatures: 2,
       sourceAll: true,
+      fuzzy: true,
     },
   },
   {
@@ -879,6 +880,7 @@ export const SCENARIOS: Scenario[] = [
       minFeatures: 1,
       sourceAll: true,
       anyDefault: true,
+      fuzzy: true,
     },
   },
 ]
