@@ -270,7 +270,7 @@ export const EVAL_TOOLS: OpenAITool[] = [
     function: {
       name: "reqdoc_confirm_features",
       description:
-        "reqdoc prd 阶段：功能点拆解确认。AI 已向业务展示拟定的功能点清单(编号/名称/优先级)，业务明确确认后调用本工具记录清单，并在 05_功能点 下为每个功能点建子目录作为渲染来源区。仅 reqdoc 工作流有效。",
+        "reqdoc prd 阶段：功能点拆解确认。AI 已向业务展示拟定的功能点清单(编号/名称/优先级)，业务明确确认后调用本工具记录清单，并在 05_功能点 下为每个功能点建子目录作为渲染来源区。**prd 门禁：渲染 PRD 或 reqdoc_check 之前必须先调用本工具确认功能点清单**。仅 reqdoc 工作流有效。",
       parameters: {
         type: "object",
         properties: {
@@ -298,7 +298,7 @@ export const EVAL_TOOLS: OpenAITool[] = [
       name: "reqdoc_score",
       description:
         `reqdoc 打分卡：AI 对照评分标准逐维打分，评分标准（满分 100）：\n${reqdocScoreRubric()}\n` +
-        "必须先向业务展示各维得分与扣分明细，业务明确认可后才调用本工具记录；total 由服务端计算。仅 reqdoc 工作流有效；<85 分可按扣分明细回 edge 追问补缺后重打覆盖。",
+        "必须先向业务展示各维得分与扣分明细，业务明确认可后才调用本工具记录；total 由服务端计算。**prd 门禁：workflow_advance(stage=prd, action=enter) 之前必须先调用本工具并获业务确认（business_confirmed=true），total≥85 才可推进**。仅 reqdoc 工作流有效；<85 分可按扣分明细回 edge 追问补缺后重打覆盖。",
       parameters: {
         type: "object",
         properties: {

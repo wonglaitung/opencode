@@ -627,8 +627,7 @@ export const SCENARIOS: Scenario[] = [
     judge: {
       kind: "tool",
       expectTool: "reqdoc_confirm_features",
-      args: { features: [{ name: "名单排查", priority: "high" }] },
-      // 需业务确认语义：功能点拆解必须先展示清单确认，不得未确认即调用
+      // 需业务确认语义：功能点拆解必须先展示清单确认，不得未确认即调用；不限定具体功能点名称
     },
   },
   {
@@ -657,7 +656,7 @@ export const SCENARIOS: Scenario[] = [
       const s = newReqdoc()
       approve(s, "goal")
       approve(s, "rules")
-      enter(s, "edge")
+      approve(s, "edge")
       return finish(s)
     })(),
     userTurn: "边界情况都问清楚了，开始渲染需求书吧",

@@ -27,6 +27,7 @@ export function createReqdocScoreTools(store: Store): Record<string, ToolDefinit
     description:
       `reqdoc 打分卡：AI 对照评分标准逐维打分，评分标准（满分 100）：\n${reqdocScoreRubric()}\n` +
       "必须先向业务展示各维得分与扣分明细，业务明确认可后才调用本工具记录；total 由服务端计算。" +
+      "**prd 门禁：workflow_advance(stage=prd, action=enter) 之前必须先调用本工具并获业务确认（business_confirmed=true），total≥85 才可推进**。" +
       "仅 reqdoc 工作流有效；<85 分可按扣分明细回 edge 追问补缺后重打覆盖。",
     args: {
       dims: z
