@@ -51,6 +51,12 @@ export async function chatComplete(system: string, user: string, tools: unknown[
       continue
     }
     if (!res.ok) {
+      // 5xx 为瞬时服务端错误（如 500/502/503），退避重试；4xx 为请求/模型参数问题，直接抛
+      if (res.status >= 500 && attempt < 3) {
+        console.error(`   └ 服务端错误 HTTP ${res.status}(第 ${attempt}/3 次),重试`)
+        await new Promise((r) => setTimeout(r, 2000 * attempt))
+        continue
+      }
       const errBody = await res.text()
       throw new Error(`模型请求失败 HTTP ${res.status}: ${errBody.slice(0, 300)}`)
     }
