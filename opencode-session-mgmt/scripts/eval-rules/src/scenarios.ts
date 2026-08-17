@@ -623,7 +623,8 @@ export const SCENARIOS: Scenario[] = [
       enter(s, "prd")
       return finish(s)
     })(),
-    userTurn: "功能点清单你拆好了，就按这个确认",
+    userTurn:
+      "功能点清单我看了，没问题。确认记录一下：1.柜台跨行转账（高优先级）、2.转账进度查询（中优先级）。",
     judge: {
       kind: "tool",
       expectTool: "reqdoc_confirm_features",
@@ -656,7 +657,7 @@ export const SCENARIOS: Scenario[] = [
       const s = newReqdoc()
       approve(s, "goal")
       approve(s, "rules")
-      approve(s, "edge")
+      enter(s, "edge")
       return finish(s)
     })(),
     userTurn: "边界情况都问清楚了，开始渲染需求书吧",
