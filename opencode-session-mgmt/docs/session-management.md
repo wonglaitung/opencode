@@ -1469,6 +1469,8 @@ flowchart TD
 
 **实测结果三**（2026-08-14，31 场景含 s20-s21，repeat 1）：新增 `open_ide`/`unlock_file` 手工文件锁场景（sdlc-r12，open-ide 此后并入本工程）。远端 deepseek-v4-flash（zen/go，`EVAL_MAX_TOKENS=4096`）整体 **31/31（100%）**；本地 qwen3.6（`EVAL_MAX_TOKENS=2048`）整体 **28/31（90%）**，sdlc **21/21（100%）**（r12 改动零回归），reqdoc 仅 `r1 渐进引导`（既有稳定失败）与 `r2/r10 要点 id 参数匹配`（qwen3.6 对中文 id 精确复述波动，与 r12 无关）。s20/s21 初版 userTurn 未指明文件却期望模型杜撰 `file` 调 `open_ide`（与「未明确文件先询问」规则矛盾），两模型均失败；改为明确 `auth/service.ts` 后通过——**新增场景的 userTurn 须先满足规则触发前提**。
 
+**实测结果四**（2026-08-17，46 场景含 P1/P2 质量飞轮，reqdoc 24 场景三模型对比）：reqdoc 工作流新增打分卡（reqdoc_score）、探针清单（reqdoc_probe）、渲染校验（reqdoc_check）后，三模型 reqdoc 通过率：**DeepSeek-V4-Flash 52/72 (72%)** > **qwen3.6 16/24 (67%, repeat 1)** > **mimo-v2.5 39/72 (54%)**。SDLC 未改动，mimo-v2.5 SDLC baseline 41/66 (62%) 与 deepseek 持平。关键发现：(1) r23/r24 渲染结构场景三模型均 0/3（模型不按模板生成结构化 PRD）；(2) qwen3.6 唯一通过 r24（缺料渲染+缺省标注）；(3) DeepSeek 在工具调用场景（r5/r11/r17/r20）显著更强。工具描述加 prd 门禁约束（reqdoc_score/reqdoc_confirm_features）对 mimo-v2.5 无显著效果（53%→54%），render judge 加 fuzzy 匹配对 r23/r24 无效果（模型不生成 markdown 标题）。
+
 ### 13.5 关键教训（多次迭代沉淀）
 
 - **规则文本保持简洁**：曾尝试给 r9/r11/r17/r19 补「须调用工具、逐段各调用一次」等详细措辞，实测发现弱模型对复杂措辞敏感（qwen3.6 出现 r2 确认要点不再调工具、r10 要点 id 错填），已全部回滚——提升应走脚本适配与判定口径，而非规则膨胀。
