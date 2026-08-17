@@ -37,6 +37,8 @@ if (variantRaw !== "baseline" && variantRaw !== "new") {
 const variant = variantRaw as "baseline" | "new"
 const repeat = Math.max(1, Number(argValue("--repeat") ?? "1") || 1)
 const dry = process.argv.includes("--dry")
+const workflowRaw = argValue("--workflow")
+const workflow = workflowRaw === "sdlc" || workflowRaw === "reqdoc" ? workflowRaw : undefined
 
 async function renderSystem(state: Parameters<typeof renderNew>[0]): Promise<string> {
   return variant === "baseline" ? renderBaseline(state) : renderNew(state)
@@ -44,8 +46,9 @@ async function renderSystem(state: Parameters<typeof renderNew>[0]): Promise<str
 
 console.log(`评测模型: ${modelId()} | variant: ${variant} | repeat: ${repeat}${dry ? " | dry(不调模型)" : ""}\n`)
 
+const scenarios = workflow ? SCENARIOS.filter((s) => s.workflowType === workflow) : SCENARIOS
 const results: ScenarioResult[] = []
-for (const sc of SCENARIOS) {
+for (const sc of scenarios) {
   const system = await renderSystem(sc.state)
 
   if (dry) {
@@ -108,7 +111,7 @@ for (const sc of SCENARIOS) {
 }
 
 if (dry) {
-  console.log(`dry 模式共 ${SCENARIOS.length} 个场景,已打印注入片段,未调模型。`)
+  console.log(`dry 模式共 ${scenarios.length} 个场景,已打印注入片段,未调模型。`)
   process.exit(0)
 }
 
@@ -169,9 +172,9 @@ if (variant === "new") {
     const prev: EvalReport = JSON.parse(await Bun.file("scripts/eval-rules/results/baseline.json").text())
     const lines = [
       `整体   ${prev.summary.overall.rate}% → ${overall.rate}%`,
-      `sdlc   ${prev.summary.sdlc.rate}% → ${sdlc.rate}%`,
-      `reqdoc ${prev.summary.reqdoc.rate}% → ${reqdoc.rate}%`,
     ]
+    if (prev.summary.sdlc.total > 0) lines.push(`sdlc   ${prev.summary.sdlc.rate}% → ${sdlc.rate}%`)
+    if (prev.summary.reqdoc.total > 0) lines.push(`reqdoc ${prev.summary.reqdoc.rate}% → ${reqdoc.rate}%`)
     // 质量飞轮 P0：baseline→new 的 PRD 渲染产出逐维对比（打分卡五维平均分）
     if (prev.summary.score && report.summary.score) {
       lines.push("", "PRD 评分对比（baseline → new，五维平均分）:")
