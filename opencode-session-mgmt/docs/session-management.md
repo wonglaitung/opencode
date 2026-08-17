@@ -1469,7 +1469,9 @@ flowchart TD
 
 **实测结果三**（2026-08-14，31 场景含 s20-s21，repeat 1）：新增 `open_ide`/`unlock_file` 手工文件锁场景（sdlc-r12，open-ide 此后并入本工程）。远端 deepseek-v4-flash（zen/go，`EVAL_MAX_TOKENS=4096`）整体 **31/31（100%）**；本地 qwen3.6（`EVAL_MAX_TOKENS=2048`）整体 **28/31（90%）**，sdlc **21/21（100%）**（r12 改动零回归），reqdoc 仅 `r1 渐进引导`（既有稳定失败）与 `r2/r10 要点 id 参数匹配`（qwen3.6 对中文 id 精确复述波动，与 r12 无关）。s20/s21 初版 userTurn 未指明文件却期望模型杜撰 `file` 调 `open_ide`（与「未明确文件先询问」规则矛盾），两模型均失败；改为明确 `auth/service.ts` 后通过——**新增场景的 userTurn 须先满足规则触发前提**。
 
-**实测结果四**（2026-08-17，46 场景含 P1/P2 质量飞轮，reqdoc 24 场景三模型对比）：reqdoc 工作流新增打分卡（reqdoc_score）、探针清单（reqdoc_probe）、渲染校验（reqdoc_check）后，三模型 reqdoc 通过率：**DeepSeek-V4-Flash 52/72 (72%)** > **qwen3.6 16/24 (67%, repeat 1)** > **mimo-v2.5 39/72 (54%)**。SDLC 未改动，mimo-v2.5 SDLC baseline 41/66 (62%) 与 deepseek 持平。关键发现：(1) r23/r24 渲染结构场景三模型均 0/3（模型不按模板生成结构化 PRD）；(2) qwen3.6 唯一通过 r24（缺料渲染+缺省标注）；(3) DeepSeek 在工具调用场景（r5/r11/r17/r20）显著更强。工具描述加 prd 门禁约束（reqdoc_score/reqdoc_confirm_features）对 mimo-v2.5 无显著效果（53%→54%），render judge 加 fuzzy 匹配对 r23/r24 无效果（模型不生成 markdown 标题）。
+**实测结果四**（2026-08-17，46 场景含 P1/P2 质量飞轮，reqdoc 24 场景三模型对比）：reqdoc 工作流新增打分卡（reqdoc_score）、探针清单（reqdoc_probe）、渲染校验（reqdoc_check）后，三模型 reqdoc 通过率：**DeepSeek-V4-Flash 49/72 (68%)** > **qwen3.6 16/24 (67%, repeat 1)** > **mimo-v2.5 39/72 (54%)**。SDLC 未改动，mimo-v2.5 SDLC baseline 41/66 (62%) 与 deepseek 持平。关键发现：(1) r23/r24 渲染结构场景三模型均 0/3（模型不按模板生成结构化 PRD）；(2) qwen3.6 唯一通过 r24（缺料渲染+缺省标注）；(3) DeepSeek 在工具调用场景（r5/r11/r17/r20）显著更强。工具描述加 prd 门禁约束（reqdoc_score/reqdoc_confirm_features）对 mimo-v2.5 无显著效果（53%→54%），render judge 加 fuzzy 匹配对 r23/r24 无效果（模型不生成 markdown 标题）。
+
+**实测结果五**（2026-08-17，deepseek-v4-pro-0813，repeat 3）：r12/r14 场景缺陷修复后的全量重跑，整体 **108/138 (78%)**（sdlc 57/66 (86%)，reqdoc 51/72 (71%)，PRD 评分 88.6/100）。**r12 确认语修复生效（3/3）**；**r14 仍未通过（0/3）**——注入已正确（edge 阶段注入打分门禁规则），但模型在「资料放好则 reqdoc_scan」与「进 prd 前 reqdoc_score」两条 edge 路径间优先走 scan，属 userTurn 二义性（未说明材料状态）而非注入缺陷。既有已知失败延续：r23/r24 渲染结构 0/3、r1 渐进引导 0/3；s15 拒绝后重写 0/3、r20 追问探针 0/3、r22 进 prd 0/3 为该模型新暴露。
 
 ### 13.5 关键教训（多次迭代沉淀）
 

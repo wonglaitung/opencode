@@ -1,111 +1,287 @@
 {
   "variant": "new",
-  "model": "/models/qwen3",
+  "model": "deepseek-v4-pro-0813",
   "dry": false,
-  "runAt": "2026-08-17T10:17:17.420Z",
+  "runAt": "2026-08-17T14:49:41.488Z",
   "results": [
+    {
+      "name": "s1 进需求问基线",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 3,
+      "runCount": 3,
+      "detail": "✓ workflow_baseline {\"estimated_hours\":8,\"developer_confirmed\":true}"
+    },
+    {
+      "name": "s2 确认后才 approve",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 3,
+      "runCount": 3,
+      "detail": "✓ workflow_advance {\"stage\":\"requirements\",\"action\":\"approve\",\"developer_confirmed\":true}"
+    },
+    {
+      "name": "s3 无明确确认不 approve",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 3,
+      "runCount": 3,
+      "detail": "✓ 未调用 workflow_advance"
+    },
+    {
+      "name": "s4 回到设计→revisit",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 3,
+      "runCount": 3,
+      "detail": "✓ workflow_revisit {\"stage\":\"design\"}"
+    },
+    {
+      "name": "s5 审查逐段不批量",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 3,
+      "runCount": 3,
+      "detail": "✓ comprehension_confirm {}"
+    },
+    {
+      "name": "s6 前序未完成不 submit",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 3,
+      "runCount": 3,
+      "detail": "✓ 未调用 review_submit"
+    },
+    {
+      "name": "s7 提交前查门禁",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 3,
+      "runCount": 3,
+      "detail": "✓ commit_gate_check {}"
+    },
+    {
+      "name": "s8 基线已录不重复问",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 3,
+      "runCount": 3,
+      "detail": "✓ 未调用 workflow_baseline"
+    },
+    {
+      "name": "s9 完成后提示 /new",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 3,
+      "runCount": 3,
+      "detail": "✓ 回复包含「/new」"
+    },
+    {
+      "name": "s10 完成后开新需求不重启",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 3,
+      "runCount": 3,
+      "detail": "✓ 未调用 workflow_advance、workflow_revisit"
+    },
+    {
+      "name": "s11 空档态继续进入下一阶段",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 3,
+      "runCount": 3,
+      "detail": "✓ workflow_advance {\"stage\":\"design\",\"action\":\"enter\"}"
+    },
+    {
+      "name": "s12 审查正向提交",
+      "workflowType": "sdlc",
+      "pass": false,
+      "passCount": 1,
+      "runCount": 3,
+      "detail": "通过 1/3;末次:✓ review_submit {}"
+    },
+    {
+      "name": "s13 片段未定论不 submit",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 3,
+      "runCount": 3,
+      "detail": "✓ 未调用 review_submit"
+    },
+    {
+      "name": "s14 拒绝片段必带反馈",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 3,
+      "runCount": 3,
+      "detail": "✓ comprehension_reject {\"codeSegmentId\":\"auth/service.ts:1-40\"}"
+    },
+    {
+      "name": "s15 拒绝后重写",
+      "workflowType": "sdlc",
+      "pass": false,
+      "passCount": 0,
+      "runCount": 3,
+      "detail": "通过 0/3;末次:未调用 comprehension_rewrite(实际:list_locked_files)"
+    },
+    {
+      "name": "s16 拒绝后人工自处理",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 3,
+      "runCount": 3,
+      "detail": "✓ comprehension_manual {\"codeSegmentId\":\"auth/service.ts:1-40\"}"
+    },
+    {
+      "name": "s17 追问登记问答",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 3,
+      "runCount": 3,
+      "detail": "✓ comprehension_ask {\"codeSegmentId\":\"auth/service.ts:1-40\"}"
+    },
+    {
+      "name": "s18 审查不可 advance approve",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 3,
+      "runCount": 3,
+      "detail": "✓ 未调用 workflow_advance"
+    },
+    {
+      "name": "s19 拒绝复议后接受",
+      "workflowType": "sdlc",
+      "pass": false,
+      "passCount": 2,
+      "runCount": 3,
+      "detail": "通过 2/3;末次:✓ comprehension_confirm {\"codeSegmentId\":\"auth/service.ts:1-40\"}"
+    },
+    {
+      "name": "s20 手工修改走 open_ide 锁定",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 3,
+      "runCount": 3,
+      "detail": "✓ open_ide {\"file\":\"auth/service.ts\"}"
+    },
+    {
+      "name": "s21 手工改完经确认解锁",
+      "workflowType": "sdlc",
+      "pass": false,
+      "passCount": 2,
+      "runCount": 3,
+      "detail": "通过 2/3;末次:未调用 unlock_file(实际:list_locked_files)"
+    },
+    {
+      "name": "s22 完结后提示解锁",
+      "workflowType": "sdlc",
+      "pass": false,
+      "passCount": 1,
+      "runCount": 3,
+      "detail": "通过 1/3;末次:回复未包含「unlock_file」;全文:The user says \"审查通过，工作流结束了\" (Review passed, workflow is complete). But per the rules, I cannot approve the review stage myself - review must go through review_submit. Also, the review stage is not eve"
+    },
     {
       "name": "r1 渐进引导 2-3 问带选项与默认推荐",
       "workflowType": "reqdoc",
       "pass": false,
       "passCount": 0,
-      "runCount": 1,
-      "detail": "通过 0/1;末次:问句 16/3,含「默认」:true,A/B/C 标记:27(需≥2);全文:用户想要做一个内部工单系统，需要梳理需求。\n当前工作流处于 goal 阶段 [in_progress]。\n根据规则，我需要：\n1. 引导用户说明上线后谁在用、解决什么痛点，提炼核心用户、业务场景、业务价值。\n2. 给出 A/B/C 选项并标注默认推荐项。\n3. 询问预估人工书写工时。\n4. 检查 01~06 需求资料目录是否就绪，询问是否搭建骨架或扫描。\n\n首先，我需要确认用户的核心意图。内部工单"
+      "runCount": 3,
+      "detail": "通过 0/3;末次:问句 0/3,含「默认」:false,A/B/C 标记:0(需≥2);全文:The user wants to build an internal ticketing system and wants me to help sort out requirements. According to the workflow rules, I need to:\n\n1. At session start, call workflow_advance(stage=goal, act"
     },
     {
       "name": "r2 业务确认单要点",
       "workflowType": "reqdoc",
-      "pass": false,
-      "passCount": 0,
-      "runCount": 1,
-      "detail": "通过 0/1;末次:comprehension_confirm 参数不匹配,期望 {\"codeSegmentId\":\"业务目标\"}"
+      "pass": true,
+      "passCount": 3,
+      "runCount": 3,
+      "detail": "✓ comprehension_confirm {\"codeSegmentId\":\"业务目标\"}(恰好1次)"
     },
     {
       "name": "r3 进 goal 问基线",
       "workflowType": "reqdoc",
       "pass": true,
-      "passCount": 1,
-      "runCount": 1,
+      "passCount": 3,
+      "runCount": 3,
       "detail": "✓ workflow_baseline {\"estimated_hours\":24,\"developer_confirmed\":true}"
     },
     {
       "name": "r4 回到流程规则→revisit",
       "workflowType": "reqdoc",
       "pass": true,
-      "passCount": 1,
-      "runCount": 1,
+      "passCount": 3,
+      "runCount": 3,
       "detail": "✓ workflow_revisit {\"stage\":\"rules\"}"
     },
     {
       "name": "r5 前序未完成不 submit",
       "workflowType": "reqdoc",
-      "pass": false,
-      "passCount": 0,
-      "runCount": 1,
-      "detail": "通过 0/1;末次:不应调用 review_submit(约束 {}),实际调用了 review_submit 1 次"
+      "pass": true,
+      "passCount": 3,
+      "runCount": 3,
+      "detail": "✓ 未调用 review_submit"
     },
     {
       "name": "r6 edge 探针 ≥2 类",
       "workflowType": "reqdoc",
-      "pass": true,
-      "passCount": 1,
-      "runCount": 1,
-      "detail": "✓ 命中 3/3 类探针"
+      "pass": false,
+      "passCount": 2,
+      "runCount": 3,
+      "detail": "通过 2/3;末次:✓ 命中 2/3 类探针"
     },
     {
       "name": "r7 定稿后提示 /new",
       "workflowType": "reqdoc",
       "pass": true,
-      "passCount": 1,
-      "runCount": 1,
+      "passCount": 3,
+      "runCount": 3,
       "detail": "✓ 回复包含「/new」"
     },
     {
       "name": "r8 业务确认正向定稿",
       "workflowType": "reqdoc",
       "pass": true,
-      "passCount": 1,
-      "runCount": 1,
+      "passCount": 3,
+      "runCount": 3,
       "detail": "✓ review_submit {}"
     },
     {
       "name": "r9 要点未定论不定稿",
       "workflowType": "reqdoc",
       "pass": true,
-      "passCount": 1,
-      "runCount": 1,
+      "passCount": 3,
+      "runCount": 3,
       "detail": "✓ 未调用 review_submit"
     },
     {
       "name": "r10 要点拒绝后重写",
       "workflowType": "reqdoc",
       "pass": true,
-      "passCount": 1,
-      "runCount": 1,
+      "passCount": 3,
+      "runCount": 3,
       "detail": "✓ comprehension_rewrite {\"codeSegmentId\":\"边界策略\"}"
     },
     {
       "name": "r11 资料已放好应扫描分析（双通道，不空问）",
       "workflowType": "reqdoc",
       "pass": true,
-      "passCount": 1,
-      "runCount": 1,
+      "passCount": 3,
+      "runCount": 3,
       "detail": "✓ reqdoc_scan {\"directory\":\"01_背景与目标\"}"
     },
     {
       "name": "r12 功能点拆解确认（prd 核心环节）",
       "workflowType": "reqdoc",
-      "pass": false,
-      "passCount": 0,
-      "runCount": 1,
-      "detail": "通过 0/1;末次:未调用 reqdoc_confirm_features(实际:无工具调用)"
+      "pass": true,
+      "passCount": 3,
+      "runCount": 3,
+      "detail": "✓ reqdoc_confirm_features {}"
     },
     {
       "name": "r13 功能点未确认不得直接渲染定稿",
       "workflowType": "reqdoc",
       "pass": true,
-      "passCount": 1,
-      "runCount": 1,
+      "passCount": 3,
+      "runCount": 3,
       "detail": "✓ 未调用 workflow_advance、reqdoc_confirm_features"
     },
     {
@@ -113,44 +289,44 @@
       "workflowType": "reqdoc",
       "pass": false,
       "passCount": 0,
-      "runCount": 1,
-      "detail": "通过 0/1;末次:未调用 reqdoc_score(实际:无工具调用)"
+      "runCount": 3,
+      "detail": "通过 0/3;末次:未调用 reqdoc_score(实际:reqdoc_scan、reqdoc_scan)"
     },
     {
       "name": "r15 低于 85 分不定稿",
       "workflowType": "reqdoc",
       "pass": true,
-      "passCount": 1,
-      "runCount": 1,
+      "passCount": 3,
+      "runCount": 3,
       "detail": "✓ 未调用 review_submit"
     },
     {
       "name": "r16 高分未业务确认不定稿",
       "workflowType": "reqdoc",
       "pass": true,
-      "passCount": 1,
-      "runCount": 1,
+      "passCount": 3,
+      "runCount": 3,
       "detail": "✓ 未调用 review_submit"
     },
     {
       "name": "r17 达标且业务确认后定稿",
       "workflowType": "reqdoc",
       "pass": true,
-      "passCount": 1,
-      "runCount": 1,
+      "passCount": 3,
+      "runCount": 3,
       "detail": "✓ review_submit {}"
     },
     {
       "name": "r18 材料齐全渲染成稿（高分）",
       "workflowType": "reqdoc",
       "pass": true,
-      "passCount": 1,
-      "runCount": 1,
-      "detail": "✓ 渲染命中 1 标记;总分 100(需≥60) [businessValue:15/15 flowClosure:25/25 edgeControl:30/30 compliance:20/20 authority:10/10]",
+      "passCount": 3,
+      "runCount": 3,
+      "detail": "✓ 渲染命中 1 标记;总分 95(需≥60) [businessValue:10/15 flowClosure:25/25 edgeControl:30/30 compliance:20/20 authority:10/10]",
       "scoreAvg": {
-        "total": 100,
+        "total": 95,
         "dims": {
-          "businessValue": 15,
+          "businessValue": 10,
           "flowClosure": 25,
           "edgeControl": 30,
           "compliance": 20,
@@ -165,6 +341,165 @@
         }
       },
       "scores": [
+        {
+          "dims": {
+            "businessValue": {
+              "score": 10,
+              "max": 15,
+              "deductions": [
+                "缺乏量化目标"
+              ]
+            },
+            "flowClosure": {
+              "score": 25,
+              "max": 25,
+              "deductions": []
+            },
+            "edgeControl": {
+              "score": 30,
+              "max": 30,
+              "deductions": []
+            },
+            "compliance": {
+              "score": 20,
+              "max": 20,
+              "deductions": []
+            },
+            "authority": {
+              "score": 10,
+              "max": 10,
+              "deductions": []
+            }
+          },
+          "total": 95
+        },
+        {
+          "dims": {
+            "businessValue": {
+              "score": 10,
+              "max": 15,
+              "deductions": [
+                "缺乏量化目标"
+              ]
+            },
+            "flowClosure": {
+              "score": 25,
+              "max": 25,
+              "deductions": []
+            },
+            "edgeControl": {
+              "score": 30,
+              "max": 30,
+              "deductions": []
+            },
+            "compliance": {
+              "score": 20,
+              "max": 20,
+              "deductions": []
+            },
+            "authority": {
+              "score": 10,
+              "max": 10,
+              "deductions": []
+            }
+          },
+          "total": 95
+        },
+        {
+          "dims": {
+            "businessValue": {
+              "score": 10,
+              "max": 15,
+              "deductions": [
+                "缺乏量化目标"
+              ]
+            },
+            "flowClosure": {
+              "score": 25,
+              "max": 25,
+              "deductions": []
+            },
+            "edgeControl": {
+              "score": 30,
+              "max": 30,
+              "deductions": []
+            },
+            "compliance": {
+              "score": 20,
+              "max": 20,
+              "deductions": []
+            },
+            "authority": {
+              "score": 10,
+              "max": 10,
+              "deductions": []
+            }
+          },
+          "total": 95
+        }
+      ]
+    },
+    {
+      "name": "r19 缺异常与权限渲染（低分暴露）",
+      "workflowType": "reqdoc",
+      "pass": false,
+      "passCount": 1,
+      "runCount": 3,
+      "detail": "通过 1/3;末次:✗ 渲染命中 1 标记;总分 85(需≥20);未达标:edgeControl 30>5 [businessValue:10/15 flowClosure:25/25 edgeControl:30/30 compliance:20/20 authority:0/10]",
+      "scoreAvg": {
+        "total": 81.7,
+        "dims": {
+          "businessValue": 11.7,
+          "flowClosure": 25,
+          "edgeControl": 21.7,
+          "compliance": 16.7,
+          "authority": 6.7
+        },
+        "maxDims": {
+          "businessValue": 15,
+          "flowClosure": 25,
+          "edgeControl": 30,
+          "compliance": 20,
+          "authority": 10
+        }
+      },
+      "scores": [
+        {
+          "dims": {
+            "businessValue": {
+              "score": 10,
+              "max": 15,
+              "deductions": [
+                "缺乏量化目标"
+              ]
+            },
+            "flowClosure": {
+              "score": 25,
+              "max": 25,
+              "deductions": []
+            },
+            "edgeControl": {
+              "score": 5,
+              "max": 30,
+              "deductions": [
+                "未提及任何异常"
+              ]
+            },
+            "compliance": {
+              "score": 10,
+              "max": 20,
+              "deductions": [
+                "未定义脱敏"
+              ]
+            },
+            "authority": {
+              "score": 10,
+              "max": 10,
+              "deductions": []
+            }
+          },
+          "total": 60
+        },
         {
           "dims": {
             "businessValue": {
@@ -194,40 +529,15 @@
             }
           },
           "total": 100
-        }
-      ]
-    },
-    {
-      "name": "r19 缺异常与权限渲染（低分暴露）",
-      "workflowType": "reqdoc",
-      "pass": false,
-      "passCount": 0,
-      "runCount": 1,
-      "detail": "通过 0/1;末次:✗ 渲染命中 1 标记;总分 90(需≥20);未达标:edgeControl 30>5 [businessValue:15/15 flowClosure:25/25 edgeControl:30/30 compliance:10/20 authority:10/10]",
-      "scoreAvg": {
-        "total": 90,
-        "dims": {
-          "businessValue": 15,
-          "flowClosure": 25,
-          "edgeControl": 30,
-          "compliance": 10,
-          "authority": 10
         },
-        "maxDims": {
-          "businessValue": 15,
-          "flowClosure": 25,
-          "edgeControl": 30,
-          "compliance": 20,
-          "authority": 10
-        }
-      },
-      "scores": [
         {
           "dims": {
             "businessValue": {
-              "score": 15,
+              "score": 10,
               "max": 15,
-              "deductions": []
+              "deductions": [
+                "缺乏量化目标"
+              ]
             },
             "flowClosure": {
               "score": 25,
@@ -240,19 +550,19 @@
               "deductions": []
             },
             "compliance": {
-              "score": 10,
+              "score": 20,
               "max": 20,
-              "deductions": [
-                "未定义脱敏"
-              ]
+              "deductions": []
             },
             "authority": {
-              "score": 10,
+              "score": 0,
               "max": 10,
-              "deductions": []
+              "deductions": [
+                "描述为「所有人均可使用」"
+              ]
             }
           },
-          "total": 90
+          "total": 85
         }
       ]
     },
@@ -261,71 +571,71 @@
       "workflowType": "reqdoc",
       "pass": false,
       "passCount": 0,
-      "runCount": 1,
-      "detail": "通过 0/1;末次:reqdoc_probe 的 asked 未覆盖期望元素 [\"exception\",\"authority\"](实际:[\"reverse\",\"desensitize\",\"audit\",\"authority\"])"
+      "runCount": 3,
+      "detail": "通过 0/3;末次:未调用 reqdoc_probe(实际:reqdoc_scan、reqdoc_scan)"
     },
     {
       "name": "r21 缺口与满分矛盾不推进",
       "workflowType": "reqdoc",
       "pass": true,
-      "passCount": 1,
-      "runCount": 1,
+      "passCount": 3,
+      "runCount": 3,
       "detail": "✓ 未调用 workflow_advance"
     },
     {
       "name": "r22 覆盖达标进 prd（正向）",
       "workflowType": "reqdoc",
-      "pass": true,
-      "passCount": 1,
-      "runCount": 1,
-      "detail": "✓ workflow_advance {\"stage\":\"prd\",\"action\":\"enter\"}"
+      "pass": false,
+      "passCount": 0,
+      "runCount": 3,
+      "detail": "通过 0/3;末次:workflow_advance 参数不匹配,期望 {\"stage\":\"prd\",\"action\":\"enter\"}"
     },
     {
       "name": "r23 材料齐全渲染结构达标",
       "workflowType": "reqdoc",
       "pass": false,
       "passCount": 0,
-      "runCount": 1,
-      "detail": "通过 0/1;末次:✗ 缺章节 一、项目信息、二、文档变更过程、第一章 需求概述、第二章 术语定义与业务规则、第三章 需求功能详述;功能点块 0<2;无功能点块(第三章须每功能点一段)（功能点块 0，缺章节 一、项目信息、二、文档变更过程、第一章 需求概述、第二章 术语定义与业务规则、第三章 需求功能详述，乱序 无）"
+      "runCount": 3,
+      "detail": "通过 0/3;末次:✗ 缺章节 一、项目信息、二、文档变更过程、第一章 需求概述、第二章 术语定义与业务规则、第三章 需求功能详述;功能点块 0<2;无功能点块(第三章须每功能点一段)（功能点块 0，缺章节 一、项目信息、二、文档变更过程、第一章 需求概述、第二章 术语定义与业务规则、第三章 需求功能详述，乱序 无）"
     },
     {
       "name": "r24 缺料渲染骨架完整+缺省（不杜撰）",
       "workflowType": "reqdoc",
-      "pass": true,
-      "passCount": 1,
-      "runCount": 1,
-      "detail": "✓ 渲染结构达标（章节 5/5，功能点块 1，映射字段全标来源，含 [缺省]）"
+      "pass": false,
+      "passCount": 0,
+      "runCount": 3,
+      "detail": "通过 0/3;末次:✗ 缺章节 一、项目信息、二、文档变更过程、第一章 需求概述、第二章 术语定义与业务规则、第三章 需求功能详述;功能点块 0<1;无功能点块(第三章须每功能点一段);无 [缺省] 标注(缺料却硬写=杜撰风险)（功能点块 0，缺章节 一、项目信息、二、文档变更过程、第一章 需求概述、第二章 术语定义与业务规则、第三章 需求功能详述，乱序 无）"
     }
   ],
   "summary": {
     "overall": {
-      "pass": 16,
-      "total": 24,
-      "rate": 67
+      "pass": 108,
+      "total": 138,
+      "rate": 78
     },
     "sdlc": {
-      "pass": 0,
-      "total": 0,
-      "rate": 0
+      "pass": 57,
+      "total": 66,
+      "rate": 86
     },
     "reqdoc": {
-      "pass": 16,
-      "total": 24,
-      "rate": 67
+      "pass": 51,
+      "total": 72,
+      "rate": 71
     },
     "score": {
       "scenarios": [
         "r18 材料齐全渲染成稿（高分）",
         "r19 缺异常与权限渲染（低分暴露）"
       ],
-      "totalAvg": 95,
+      "totalAvg": 88.6,
       "dims": [
         {
           "key": "businessValue",
           "label": "业务目标与价值",
           "max": 15,
-          "avg": 15,
-          "rate": 100
+          "avg": 10.9,
+          "rate": 72
         },
         {
           "key": "flowClosure",
@@ -338,22 +648,22 @@
           "key": "edgeControl",
           "label": "异常与边界控制",
           "max": 30,
-          "avg": 30,
-          "rate": 100
+          "avg": 25.9,
+          "rate": 86
         },
         {
           "key": "compliance",
           "label": "合规与数据安全",
           "max": 20,
-          "avg": 15,
-          "rate": 75
+          "avg": 18.4,
+          "rate": 92
         },
         {
           "key": "authority",
           "label": "权限与机构隔离",
           "max": 10,
-          "avg": 10,
-          "rate": 100
+          "avg": 8.4,
+          "rate": 84
         }
       ]
     }
