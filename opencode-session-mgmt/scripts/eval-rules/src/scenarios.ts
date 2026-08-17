@@ -658,10 +658,20 @@ export const SCENARIOS: Scenario[] = [
       approve(s, "goal")
       approve(s, "rules")
       enter(s, "edge")
+      // 预置探针全覆盖（无缺口）：「材料已扫、边界已问清」要有状态证据，否则模型会先走 reqdoc_scan 取材料再打分（避免凭空打分被柔性门禁拒）
+      s.probes = {
+        asked: ["main_flow", "flow_trigger", "exception", "reverse", "desensitize", "audit", "authority"],
+        gaps: [],
+        round: 2,
+        updatedAt: 1000,
+      }
       return finish(s)
     })(),
-    userTurn: "边界情况都问清楚了，开始渲染需求书吧",
-    // reqdoc-r21 打分门禁：edge 收集完成进 prd 前必须先调用 reqdoc_score 展示扣分明细并获业务确认
+    userTurn:
+      "材料都扫描分析完了，边界情况也都问清楚了：这是柜台跨行转账需求，使用角色是柜员和客户，目标是缩短单笔处理时间到 3 分钟以内。主流程：柜员点击发起转账→系统校验→处理→通知客户并归档；重复点击要去重、失败重试有上限。异常：网络超时自动冲正、提交失败可重试。数据安全：手机号脱敏展示、资金操作留痕双人复核。权限：仅本支行柜员与复核员可查看。这个评分结果我确认没问题，就按这个打分卡记录并开始渲染需求书吧",
+    // reqdoc-r21 打分门禁：edge 收集完成进 prd 前必须先调用 reqdoc_score 展示扣分明细并获业务确认。
+    // userTurn 已给足材料内容 + 业务明确确认评分，模型可直接调用 reqdoc_score(business_confirmed=true) 推进，
+    // 不会因「缺证据」先走 reqdoc_scan、也不会因「未获确认」只展示不调用（单轮评测无法模拟展示→确认两阶段）
     judge: { kind: "tool", expectTool: "reqdoc_score", args: { business_confirmed: true } },
   },
   {

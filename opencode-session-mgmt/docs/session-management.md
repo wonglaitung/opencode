@@ -1415,8 +1415,8 @@ bun run scripts/eval-rules/run.ts --variant new              # 改造后 → res
   ```bash
   # 本地 vLLM（默认端点 http://localhost:8086/v1，qwen3.6）
   bun run scripts/eval-rules/run.ts --variant new --repeat 3
-  # 远端推理模型（deepseek-v4-flash 等，EVAL_MAX_TOKENS=4096 留 thinking 空间）
-  EVAL_BASE_URL=https://<端点>/v1 EVAL_API_KEY=<key> EVAL_MODEL=<model-id> EVAL_MAX_TOKENS=4096 \
+  # 远端推理模型（deepseek-v4-flash 等，EVAL_MAX_TOKENS=4096 留 thinking 空间；deepseek-v4-pro-0813 等长 reasoning 推理模型实测须 16384，否则 thinking 截断发不出工具调用）
+  EVAL_BASE_URL=https://<端点>/v1 EVAL_API_KEY=<key> EVAL_MODEL=<model-id> EVAL_MAX_TOKENS=16384 \
   bun run scripts/eval-rules/run.ts --variant new --repeat 3
   ```
 
@@ -1426,7 +1426,7 @@ bun run scripts/eval-rules/run.ts --variant new              # 改造后 → res
 
 **陷阱**：改了 `packages/shared` 后必须 `rm -rf node_modules/sm-shared && bun install`（hoisted 拷贝残留，见 13.5），否则评测读到旧规则文本而 `bun test` 仍全绿，易漏。
 
-- 环境变量：`EVAL_BASE_URL`（OpenAI 兼容端点，默认 `http://localhost:8086/v1`，本地 vLLM）、`EVAL_API_KEY`、`EVAL_MODEL`（默认 `/models/qwen3`，本地 vLLM 的模型 id）、`EVAL_MAX_TOKENS`（输出上限，默认 2048；推理模型如 deepseek-*-flash 显式 4096 留 thinking 空间，慢速弱模型 4096 会拖到超时）、`EVAL_TIMEOUT_MS`（单请求超时，默认 180000，含网络/超时错误重试 3 次）；`--repeat N` 重复多次取通过率（聚合按**运行次数**统计，防单次抖动掩盖趋势）
+- 环境变量：`EVAL_BASE_URL`（OpenAI 兼容端点，默认 `http://localhost:8086/v1`，本地 vLLM）、`EVAL_API_KEY`、`EVAL_MODEL`（默认 `/models/qwen3`，本地 vLLM 的模型 id）、`EVAL_MAX_TOKENS`（输出上限，默认 2048；推理模型须按需留 thinking 空间——deepseek-*-flash 4096，deepseek-v4-pro-0813 等长 reasoning 模型实测 16384 才够发出工具调用，4096 下 thinking 截断、content 与 tool_calls 双双为空导致误判失败；慢速弱模型 2048 防拖超时）、`EVAL_TIMEOUT_MS`（单请求超时，默认 180000，含网络/超时错误重试 3 次；16k token 渲染长输出的 reqdoc 场景须提至 300000）；`--repeat N` 重复多次取通过率（聚合按**运行次数**统计，防单次抖动掩盖趋势）
 - **baseline 与 new 共用同一状态夹具**（`finish()` 重算 commit），保证可对等比较
 
 ### 13.2 场景集
@@ -1473,10 +1473,12 @@ flowchart TD
 
 **实测结果五**（2026-08-17，deepseek-v4-pro-0813，repeat 3）：r12/r14 场景缺陷修复后的全量重跑，整体 **108/138 (78%)**（sdlc 57/66 (86%)，reqdoc 51/72 (71%)，PRD 评分 88.6/100）。**r12 确认语修复生效（3/3）**；**r14 仍未通过（0/3）**——注入已正确（edge 阶段注入打分门禁规则），但模型在「资料放好则 reqdoc_scan」与「进 prd 前 reqdoc_score」两条 edge 路径间优先走 scan，属 userTurn 二义性（未说明材料状态）而非注入缺陷。既有已知失败延续：r23/r24 渲染结构 0/3、r1 渐进引导 0/3；s15 拒绝后重写 0/3、r20 追问探针 0/3、r22 进 prd 0/3 为该模型新暴露。
 
+**实测结果六**（2026-08-17，deepseek-v4-pro-0813，repeat 3，`EVAL_MAX_TOKENS=16384` + `EVAL_TIMEOUT_MS=300000`）：整体 **112/138 (81%)**（sdlc 59/66 (89%)，reqdoc 53/72 (74%)，PRD 评分 87.6/100）。**关键：EVAL_MAX_TOKENS 4096 → 16384 是必要前提**——r14 修复后模型 reasoning 极长，4096 下 thinking 截断、content 与 tool_calls 双双为空被误判失败；提升后**r14 0/3 → 2/3**、s12 1/3→3/3、s15 0/3→2/3、s19 2/3→3/3、r20 0/3→2/3。r14 仍偶发走 reqdoc_scan（userTurn 已给足材料+业务确认，2/3 稳定）。稳定失败延续：r1 渐进引导 0/3、r22 进 prd 0/3（workflow_advance 参数不匹配）、r23/r24 渲染结构 0/3（模型不逐字段标来源/不按模板结构）、s21/s22 解锁 2/3。**评测脚本加固**：run.ts 加 `--name` 场景过滤与 per-scenario 容错（单次请求重试耗尽记为失败并继续，不再中断整轮），长输出渲染场景须提 `EVAL_TIMEOUT_MS`。
+
 ### 13.5 关键教训（多次迭代沉淀）
 
 - **规则文本保持简洁**：曾尝试给 r9/r11/r17/r19 补「须调用工具、逐段各调用一次」等详细措辞，实测发现弱模型对复杂措辞敏感（qwen3.6 出现 r2 确认要点不再调工具、r10 要点 id 错填），已全部回滚——提升应走脚本适配与判定口径，而非规则膨胀。
-- **评测脚本对推理模型的适配**：`msg.content` 为空时回退 `reasoning_content`（推理模型正文可能在 thinking，text 类判定读不到 content）；输出上限用 `EVAL_MAX_TOKENS` 可配——推理模型显式 4096 留 thinking 空间，**慢速弱模型默认 2048**（本地 qwen3.6 实测 ~16 tok/s，4096 下长生成场景拖到超时）。
+- **评测脚本对推理模型的适配**：`msg.content` 为空时回退 `reasoning_content`（推理模型正文可能在 thinking，text 类判定读不到 content）；输出上限用 `EVAL_MAX_TOKENS` 可配——推理模型显式留 thinking 空间（deepseek-*-flash 4096，**deepseek-v4-pro-0813 等长 reasoning 模型实测须 16384**，否则 thinking 截断致 content 与 tool_calls 双双为空、工具场景被误判「未调用」），**慢速弱模型默认 2048**（本地 qwen3.6 实测 ~16 tok/s，4096 下长生成场景拖到超时）；16k token 长输出的 reqdoc 渲染场景须提 `EVAL_TIMEOUT_MS` 至 300000，并给 run.ts 加 per-scenario 容错防单场景超时中断整轮。
 - **评测请求须带超时 + 重试**：`client.ts` 用 `EVAL_TIMEOUT_MS`（默认 180s）+ 网络/超时错误重试 3 次（HTTP 4xx/5xx 不重试），否则偶发超时中断整轮评测（曾丢 25 分钟全量结果）。
 - **新增场景的 userTurn 须与规则前提一致**：先满足规则触发条件再期望动作——s20 曾用未指明文件的发言却期望模型杜撰 `file` 调 `open_ide`（规则要求「先询问」），两模型均失败；明确文件后通过。
 - **判定口径适配模型能力**：`exactCount`（恰 N 次）对单轮单发 tool_call 的推理模型过苛，可放宽为「≥1 次 confirm 且 `distinctArg` 不重复」，反映能力基线而非单次抖动。

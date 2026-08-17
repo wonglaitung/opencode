@@ -4,13 +4,13 @@
  * 改前跑 baseline(冻结快照)、改后跑 new(新注入格式),对比通过率。
  *
  * 用法:
- *   bun run scripts/eval-rules/run.ts --variant baseline|new [--repeat 3] [--dry]
+ *   bun run scripts/eval-rules/run.ts --variant baseline|new [--repeat 3] [--dry] [--workflow sdlc|reqdoc] [--name 场景名子串]
  * 环境变量:
  *   EVAL_BASE_URL  OpenAI 兼容端点(默认 http://localhost:8086/v1,本地 vLLM)
  *   EVAL_API_KEY   可选
  *   EVAL_MODEL     评测模型(默认 /models/qwen3,本地 vLLM 的模型 id)
- *   EVAL_MAX_TOKENS 输出上限(默认 2048;推理模型如 deepseek-*-flash 显式 4096 留 thinking 空间)
- *   EVAL_TIMEOUT_MS  单请求超时(默认 180000)
+ *   EVAL_MAX_TOKENS 输出上限(默认 2048;推理模型如 deepseek-*-flash 显式 4096 留 thinking 空间,长 reasoning 模型如 deepseek-v4-pro-0813 须 16384)
+ *   EVAL_TIMEOUT_MS  单请求超时(默认 180000;16k token 长输出渲染场景须提至 300000)
  * --dry:只打印各场景注入片段与判定期望,不调模型(验证渲染用)。
  * 输出:控制台 per-scenario 表 + 聚合通过率,落 scripts/eval-rules/results/{variant}.json
  */
@@ -22,7 +22,7 @@ import { renderBaseline } from "./src/render-baseline"
 import { renderNew } from "./src/render-new"
 import { REQDOC_SCORE_DIMS, type ReqdocScoreDimKey } from "sm-shared"
 import type { PrdScore } from "./src/score"
-import type { EvalReport, GroupSummary, ScenarioResult, ScoreDimAvg, ScoreSummary } from "./src/types"
+import type { EvalReport, GroupSummary, ModelOutput, ScenarioResult, ScoreDimAvg, ScoreSummary } from "./src/types"
 
 function argValue(name: string): string | undefined {
   const i = process.argv.indexOf(name)
@@ -46,7 +46,10 @@ async function renderSystem(state: Parameters<typeof renderNew>[0]): Promise<str
 
 console.log(`评测模型: ${modelId()} | variant: ${variant} | repeat: ${repeat}${dry ? " | dry(不调模型)" : ""}\n`)
 
-const scenarios = workflow ? SCENARIOS.filter((s) => s.workflowType === workflow) : SCENARIOS
+const nameFilter = argValue("--name")
+const scenarios = (workflow ? SCENARIOS.filter((s) => s.workflowType === workflow) : SCENARIOS).filter((s) =>
+  nameFilter ? s.name.includes(nameFilter) : true,
+)
 const results: ScenarioResult[] = []
 for (const sc of scenarios) {
   const system = await renderSystem(sc.state)
@@ -72,7 +75,15 @@ for (const sc of scenarios) {
   const scoreDims: Partial<Record<ReqdocScoreDimKey, number>> = {}
   const scores: PrdScore[] = []
   for (let i = 0; i < repeat; i++) {
-    const out = await chatComplete(system, sc.userTurn, EVAL_TOOLS)
+    let out: ModelOutput
+    try {
+      out = await chatComplete(system, sc.userTurn, EVAL_TOOLS)
+    } catch (err) {
+      // 单次请求彻底失败（重试耗尽）不中断整轮评测：记为失败并继续下一场景
+      console.error(`   └ 第 ${i + 1} 次请求失败(重试耗尽):${err instanceof Error ? err.message.slice(0, 120) : String(err)}`)
+      lastDetail = `请求失败:${err instanceof Error ? err.message.slice(0, 120) : String(err)}`
+      continue
+    }
     const r = judgeScenario(sc.judge, out)
     if (r.pass) pass++
     lastDetail = r.detail
