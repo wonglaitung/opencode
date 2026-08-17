@@ -1450,6 +1450,19 @@ bun run scripts/eval-rules/run.ts --variant new              # 改造后 → res
 
 **迭代闭环**：改规则前跑 `--variant baseline` 冻结基线 → 改规则/脚本 → 跑 `--variant new` 对比 → 通过率不降才保留；失败场景逐个归因（规则措辞 / 判定口径 / 场景二义性），优先调脚本与判定口径而非膨胀规则。reqdoc 侧质量飞轮轮次（打分卡补齐 39 / P0 41 / P1 44 / P2 46）见 workflow-reqdoc.md 10 章。
 
+```mermaid
+flowchart TD
+    A(["迭代起点"]) --> B["冻结 baseline<br/>（仅首次搭评测 / 换模型 / 换端点时）"]
+    B --> C["改动<br/>规则 / 探针 / 打分卡 / 模板<br/>或评测脚本 / 判定口径"]
+    C --> D["跑 --variant new<br/>自动对比 baseline"]
+    D --> E{"通过率 / 五维分数<br/>有回退？"}
+    E -->|"是 · 回退"| F["失败场景逐个归因<br/>规则措辞 / 判定口径 / 场景二义性"]
+    F --> G["优先调脚本与判定口径<br/>而非膨胀规则"]
+    G --> C
+    E -->|"否 · 全过或持平"| H["保留改动 · 沉淀资产<br/>新场景 / 探针 / 规则进 fixture"]
+    H --> I(["合入"])
+```
+
 **实测结果一**（2026-08-12，deepseek-v4-flash，repeat 3，按运行次数）：整体 **76% → 93%**（reqdoc 61% → 100%，sdlc 88% 持平）。驱动改进的三处迭代：状态条列出**待确认项 id**（让模型知道要 confirm 什么）、规则显式排除模糊表态（「你看着办」不算确认）、review_submit 规则补「前序须全部 approved」。基线快照冻结于 `fixtures/baseline/`，`results/{baseline,new}.json` 入库作参照，任何模型/时刻可重跑对比。
 
 **实测结果二**（2026-08-14，29 场景，repeat 1）：本地 qwen3.6（vLLM 8086）整体 **28/29（97%）**，唯一失败 `r1 渐进引导 ≤2 问`（问句 17 个超上限 2）；远端 deepseek-v4-flash（zen/go）整体 **28/29（97%）**，唯一失败 `r10 要点拒绝后重写`（userTurn「边界这块」存在二义——edge 阶段名 vs 要点 id，模型偶发改走 `workflow_revisit`）。

@@ -55,5 +55,5 @@ docs/                # 设计文档族：session-management.md（通用机制/�
 
 - 设计文档、注释、commit message 用**中文**；conventional commit 格式（本仓库历史可参照）。
 - **任何文档与注释都不要用 `§` 符号**引用章节，一律用纯文字（「第 3 章」「3.4 节」或裸编号「见 3.4」）。
-- 设计文档任何行为变更须同步更新对应 mermaid 流程图（三个设计文档合计 19 个：session-management.md 15 个、workflow-reqdoc.md 4 个、workflow-sdlc.md 0 个；新增图块须整体搬入对应文档族文件，总数只减不增），改链路必改图。
+- 设计文档任何行为变更须同步更新对应 mermaid 流程图（三个设计文档合计 20 个：session-management.md 16 个、workflow-reqdoc.md 4 个、workflow-sdlc.md 0 个；新增图块须整体搬入对应文档族文件，总数只减不增），改链路必改图。
 - 发布前 TODO 见 `README.md`（npm scope、插件发布形态、收集服务镜像）。
