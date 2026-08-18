@@ -522,10 +522,12 @@ export const SCENARIOS: Scenario[] = [
     judge: {
       kind: "text",
       type: "categoryKeywords",
+      // reqdoc-r2 要求业务语言（禁止「高并发/幂等/API」等技术词），判定关键词必须用业务说法：
+      // 权限隔离→谁能看/谁能办/谁能改；异常→提交失败/连点/断网/重试/冲正；审计合规→留痕/复核/记录/审批
       categories: [
-        ["权限", "隔离", "岗位可见", "数据权限"],
-        ["异常", "超时", "驳回", "失败", "补单"],
-        ["审计", "合规", "留痕", "二次授权"],
+        ["权限", "谁能", "谁可以", "隔离", "岗位", "谁看", "谁能看", "谁能办", "谁能改"],
+        ["异常", "超时", "提交失败", "连点", "重复", "断网", "重试", "冲正", "失败", "补单", "出岔子", "出错"],
+        ["审计", "合规", "留痕", "复核", "记录", "审批", "二次确认", "双人"],
       ],
       minCategories: 2,
       note: "判定口径脆弱,需人工复核",
@@ -822,7 +824,7 @@ export const SCENARIOS: Scenario[] = [
       const s = newReqdoc()
       approve(s, "goal")
       approve(s, "rules")
-      enter(s, "edge")
+      approve(s, "edge")
       // 探针全覆盖（无缺口）+ 打分 90 已确认 → 一致，放行进 prd
       s.probes = {
         asked: ["main_flow", "flow_trigger", "exception", "reverse", "desensitize", "audit", "authority"],
@@ -834,7 +836,8 @@ export const SCENARIOS: Scenario[] = [
       return finish(s)
     })(),
     userTurn: "缺口都补齐了、打分也确认了，进入渲染吧",
-    // 打分 + 探针覆盖双达标（r21/r22 正向路径）：放行 workflow_advance(enter prd)
+    // 打分 + 探针覆盖双达标（r21/r22 正向路径）：edge 已 approved，模型应直接 workflow_advance(enter prd)
+    //（edge 若 in_progress，模型会先 approve(edge) 再 enter(prd)，单轮评测无法模拟两阶段，判定会误判）
     judge: { kind: "tool", expectTool: "workflow_advance", args: { stage: "prd", action: "enter" } },
   },
   // ---- 渲染可测化（质量飞轮 P2，judge.kind="render"）：模板结构 schema + 渲染 diff 判定 ----
