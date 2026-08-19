@@ -50,6 +50,7 @@ docs/                # 设计文档族：session-management.md（通用机制/�
 
 - **用户手写 JSON 配置含文件路径时，单反斜杠是陷阱**（三工程通用约定）：JSON 里 `\` 是转义符——`\P` 等非法转义导致解析失败（回退默认但用户不明所以）；更隐蔽的是 `\b`/`\n`/`\t` 是**合法**转义，`"C:\bin\..."` 会被静默转成控制字符，路径错但 JSON 解析"成功"。凡工程引入用户可编辑的 JSON 配置且可能含文件路径，文档必须明确要求**用正斜杠 `/`（Windows 原生接受）或双反斜杠 `\\`**；代码侧解析失败时 warning 要直接点出这个诱因。本工程现状：`identity.json`（账号/组/组织/服务地址）不含文件路径，`deploy/opencode.json.example` 的 plugin 路径为相对/正斜杠写法；插件 `config.json`（源出已合并的 open-ide）含用户可编辑的 `tools` binary 路径，须按本约定落实（见 `packages/plugin/src/open-ide/config.ts`）。
 - **配置文档示例须显式标注字段语义**（覆盖 / 新增 / 缺省用默认），避免用户误以为所有项都要写全才生效。本工程现状：插件 `config.json` 的 `tools` 示例标注「cursor=新增、idea=覆盖」（源出已合并的 open-ide）。
+- **插件依赖浏览器 API 的库须动态 import，绝不可顶层静态 import**：`pdfjs-dist` 的 pdf.mjs 初始化会执行 `new DOMMatrix()`，而 opencode 插件运行时无该全局对象（其 canvas polyfill 依赖 `@napi-rs/canvas` 原生绑定，打包环境缺失）→ 抛 `ReferenceError` → 整个插件加载失败、不建表不写库（曾致 1.18.18 下 DB 全无）。修复：静态 import 改为使用点内 `await import()`，插件加载不再被拖垮；pdf.mjs 顶层 `const SCALE_MATRIX = new DOMMatrix()` 加 `typeof DOMMatrix !== "undefined"` 守卫后，纯文本提取（`getTextContent`）完全不依赖 canvas。凡新增依赖第三方工具库时，先确认其顶层初始化是否触碰浏览器 API，碰则一律动态 import。注：node_modules 内的守卫补丁不入 git，重装依赖会丢失，须手动重打（见 `packages/plugin/src/tools/reqdoc-scan.ts`）。
 
 ## 文档与语言
 
