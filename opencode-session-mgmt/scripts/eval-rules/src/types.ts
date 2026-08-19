@@ -76,6 +76,11 @@ export type Judge =
       anyDefault?: boolean
       /** 模糊匹配章节标题（includes 而非精确相等），弱模型可能用不同标题格式 */
       fuzzy?: boolean
+      /** 拆级降权（质量飞轮 A3/D7）：true 时 sourceAll/anyDefault 降为**观察项**——
+       *  仍解析、仍记录进 detail，但不计通过率。硬门禁只保留结构骨架（章节齐全/顺序/功能点块数），
+       *  来源标注是当前模型能力外的软指标，作数据反哺（哪字段漏标最多 → 规则示例/模板），
+       *  不阻塞整体通过率（r23/r24 已定「接受现状」）。 */
+      soft?: boolean
     }
 
 export interface Scenario {
@@ -114,6 +119,9 @@ export interface ScenarioResult {
   }
   /** 评分场景：多次运行的 PrdScore 明细（本机留痕，汇报仅带上行 summary.score） */
   scores?: PrdScore[]
+  /** 渲染/评分场景（质量飞轮）：各次运行的模型输出原文（A4 归因用——只看判定 detail
+   *  无法区分「纯文本渲染」「错层级标题」「tool_call 占位」，须留原文；本机留痕，汇报不上行） */
+  outputs?: string[]
 }
 
 export interface GroupSummary {

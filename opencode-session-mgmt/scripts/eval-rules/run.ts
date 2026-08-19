@@ -68,8 +68,12 @@ for (const sc of scenarios) {
 
   let pass = 0
   let lastDetail = ""
+  // 渲染/评分场景（质量飞轮 A4 归因）：留各次运行的模型输出原文——只看判定 detail 无法区分
+  // 「纯文本渲染」「错层级标题」「tool_call 占位」，须落原文才能归因（本机留痕，汇报不上行）
+  const outputs: string[] = []
   // 评分场景（质量飞轮 P0，judge.kind==="score"）：累计各运行的五维实得分，汇总成该场景平均分
   const isScore = sc.judge.kind === "score"
+  const captureOutput = sc.judge.kind === "render" || sc.judge.kind === "score"
   let scoreRuns = 0
   let scoreTotal = 0
   const scoreDims: Partial<Record<ReqdocScoreDimKey, number>> = {}
@@ -84,6 +88,7 @@ for (const sc of scenarios) {
       lastDetail = `请求失败:${err instanceof Error ? err.message.slice(0, 120) : String(err)}`
       continue
     }
+    if (captureOutput) outputs.push(out.text)
     const r = judgeScenario(sc.judge, out)
     if (r.pass) pass++
     lastDetail = r.detail
@@ -117,6 +122,7 @@ for (const sc of scenarios) {
     result.scoreAvg = { total: Math.round((scoreTotal / scoreRuns) * 10) / 10, dims, maxDims }
     result.scores = scores
   }
+  if (outputs.length > 0) result.outputs = outputs
   results.push(result)
   console.log(`${allPass ? "✅" : "❌"} ${sc.name.padEnd(18)} ${sc.workflowType.padEnd(5)} ${pass}/${repeat}  ${detail}`)
 }

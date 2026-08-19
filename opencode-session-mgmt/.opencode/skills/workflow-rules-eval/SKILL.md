@@ -83,7 +83,7 @@ EVAL_BASE_URL=http://localhost:8086/v1 EVAL_MODEL=/models/qwen3 EVAL_MAX_TOKENS=
 
 ### 迭代循环（每次改行为面，三级验证）
 
-行为面改动 = 规则文本 / 探针清单 / 打分卡 / 模板 / 工具描述 / 注入格式 / 评测脚本自身；机制面（工具逻辑 / 门禁 / 状态机 / DB / CLI / collector / 纯注释文档）走 `bun test` + typecheck，不进评测门。③是合入前唯一不可省的重闸：
+行为面改动 = 规则文本 / 探针清单 / 打分卡 / 模板 / 工具描述 / 注入格式（**评测脚本不属于行为面**——它是量尺/对照物，改判定口径是「换尺子」，同样要过评测门但判据变了结果不可直接对比）；机制面（工具逻辑 / 门禁 / 状态机 / DB / CLI / collector / 纯注释文档）走 `bun test` + typecheck，不进评测门。③是合入前唯一不可省的重闸：
 
 1. **① 干跑**（每次改完必做，秒级）：`--variant new --dry`。
 2. **② mock 冒烟**（只改评测脚本 / 判定口径时）：临时起 mock OpenAI 端点返回罐装 tool_calls，`EVAL_BASE_URL` 指过去非 dry 跑一遍，确认判定 / 聚合 / 对比路径不炸；跑完删 mock、还原 `results/*.json`。
@@ -96,7 +96,7 @@ EVAL_BASE_URL=http://localhost:8086/v1 EVAL_MODEL=/models/qwen3 EVAL_MAX_TOKENS=
      bun run scripts/eval-rules/run.ts --variant new --repeat 3
    ```
 
-**读输出（三块）**：per-scenario ✅/❌ 表（reqdoc 段 r1-r24，r18-r24 是质量飞轮加的评分 / 探针 / 渲染场景）→ 聚合通过率（整体 / sdlc / reqdoc）→ `=== 对比(baseline → new) ===` 五维 delta（仅 reqdoc）。**合入门槛**：五维任何一维回退（负号）就不合入，回滚改动；全过或持平才沉淀资产（新场景进 `scenarios.ts`、新探针进清单、新规则进 fixture）。
+**读输出（三块）**：per-scenario ✅/❌ 表（reqdoc 段 r1-r24，r18-r24 是质量飞轮加的评分 / 探针 / 渲染场景）→ 聚合通过率（整体 / sdlc / reqdoc）→ `=== 对比(baseline → new) ===` 五维 delta（仅 reqdoc）。**合入门槛**：五维任何一维回退（负号）就不合入，回滚改动；全过或持平才沉淀资产（新场景进 `scenarios.ts`、新探针进清单、新规则进 fixture）。r23/r24 渲染结构场景带 `;观察项(不计通过率):...` 前缀——来源标注明细不判通过但要看，归因依据是 `results/*.json` 的 `outputs` 字段（模型输出原文，A4）。
 
 ### 归因地图（哪维掉 → 改哪根支柱）
 
@@ -104,13 +104,13 @@ EVAL_BASE_URL=http://localhost:8086/v1 EVAL_MODEL=/models/qwen3 EVAL_MAX_TOKENS=
 |---|---|---|
 | flowClosure / edgeControl（流程闭环、异常边界） | 追问探针 | `REQDOC_PROBES`（`main_flow`/`flow_trigger`/`exception`/`reverse`）round 前移 |
 | compliance / authority（合规脱敏、权限隔离） | 追问探针 + 打分卡 | 探针 `desensitize`/`audit`/`authority` + 扣分标准 `REQDOC_SCORE_DIMS` |
-| 渲染结构（r23/r24 不过） | 模板 | `REQDOC_TEMPLATE_CHAPTERS`/`REQDOC_TEMPLATE_FIELDS` schema |
+| 渲染结构（r23/r24 不过） | 模板 | `REQDOC_TEMPLATE_CHAPTERS`/`REQDOC_TEMPLATE_FIELDS` schema；**已 soft 拆级降权（A3/D7）**——r23/r24 来源标注是观察项不计通过率，硬门禁只剩章节/顺序/块数骨架，漏标明细（观察项）与模型输出原文（`outputs` 字段，A4）才是归因依据 |
 
 失败场景逐个归因按「规则措辞 / 判定口径 / 场景二义性」三类——**优先调脚本与判定口径**，规则文本保持简洁（弱模型对复杂措辞极敏感，为单模型把规则写细实测伤害弱模型）。弱模型是主要回归面，多模型验证防过拟合。
 
 **两条高频归因（近两轮实测沉淀）**：
 - **判定关键词须与规则要求的语言自洽**——reqdoc-r2 禁止技术词、要求业务语言，r6 判定却查「超时/驳回/失败/补单」等技术词，模型按规则用业务说法（「连点提交/断网」）就匹配不上；判定词表须用规则同侧语言。
-- **单轮评测无法模拟多阶段状态机动作**——前置阶段若 in_progress，模型按状态机先 `approve` 再 `enter`，judge 期望单轮直接 enter 会误判；场景前提把前置阶段设 approved，让期望动作成为单轮可达一步。渲染场景（r23/r24）同理：模型「先 scan/确认再渲染」属多轮思维，单轮评测呈高方差，这类已按用户决策「接受现状」。
+- **单轮评测无法模拟多阶段状态机动作**——前置阶段若 in_progress，模型按状态机先 `approve` 再 `enter`，judge 期望单轮直接 enter 会误判；场景前提把前置阶段设 approved，让期望动作成为单轮可达一步。渲染场景（r23/r24）同理：模型「先 scan/确认再渲染」属多轮思维，单轮评测呈高方差——已按用户决策「接受现状」并 **soft 拆级降权（A3/D7）**（来源标注=观察项不计通过率，硬门禁只剩结构骨架），归因看 `outputs` 原文与观察项明细（A4）。
 
 ### 收敛判据
 
