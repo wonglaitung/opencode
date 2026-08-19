@@ -9,7 +9,6 @@ import { readdir } from "node:fs/promises"
 import { basename, extname, join } from "node:path"
 import { tool, type ToolDefinition } from "@opencode-ai/plugin"
 import JSZip from "jszip"
-import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs"
 import ExcelJS from "exceljs"
 
 const z = tool.schema
@@ -44,6 +43,10 @@ async function readDocx(file: string): Promise<string> {
 }
 
 async function readPdf(file: string): Promise<string> {
+  // pdfjs-dist 的 pdf.mjs 初始化会执行 new DOMMatrix()，而 opencode 插件运行时
+  // 可能没有 DOMMatrix（canvas polyfill 依赖 @napi-rs/canvas 原生绑定），
+  // 静态 import 会导致整个插件加载失败。故改为动态 import，仅扫 PDF 时才加载。
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs")
   const data = new Uint8Array(await Bun.file(file).arrayBuffer())
   const pdf = await pdfjs.getDocument({ data }).promise
   let text = ""
