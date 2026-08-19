@@ -1,7 +1,7 @@
 # OpenCode 插件开发规范
 
-版本: 1.6.2
-最后更新: 2026-08-16
+版本: 1.6.3
+最后更新: 2026-08-20
 来源: opencode-session-mgmt 实践（参见 `opencode-session-mgmt/packages/plugin` 与 `opencode-session-mgmt/packages/shared`）
 
 说明
@@ -170,6 +170,7 @@ export default MyPlugin
 - 外部进程调用静默化：若需 spawn 外部命令（例如定位浏览器、taskkill 等），一律使用 `spawn`/`spawnSync` 并把 stdio 设为 `"ignore"` 或显式捕获 stderr；所有外部调用应显式捕获并记录可能的错误，但不得把 stderr 泄露到上游或上传日志中。
 - **跨平台二进制定位，win32 的 `where` 会返回多行**：同名命令常同时有无后缀的 POSIX sh 脚本（如 VS Code 的 `...\bin\code`，供 WSL/linux）与真正的 Windows shim（`code.cmd`/`code.exe`）。`where` 返回的**第一行可能是 sh 脚本**——cmd.exe 无法执行，`spawn` 加 `shell: true` 时静默失败（stdio ignore + unref 吞错误，表现为「工具返回成功但程序没起来」）。**必须跳过无后缀行**：按扩展名优先级 `.exe` → `.cmd` → `.bat` 挑选，全部无后缀才兜底第一行（不破坏仅有无后缀可执行程序的场景）。抽取为纯函数便于单测（先例 open-ide 的 `pickWindowsExecutable`，`src/ide.ts`）。
 - **win32 用 `shell: true` 时，binary 与参数都须加引号**：`spawn(binary, args, { shell: true })` 下 node 经 cmd.exe 执行**整条命令**，若只转义 args、漏掉 binary，含空格的 binary 路径（如 `...\Microsoft VS Code\bin\code.cmd`）会被拆词（'Microsoft' is not recognized）而静默失败。**凡是 shell 拼接出的每条目都要转义，包括命令本身**；把「binary + args 统一加引号」抽成纯函数（先例 open-ide 的 `buildSpawnCommand`）。
+- **依赖浏览器 API 的第三方库必须动态 import，绝不可顶层静态 import**：浏览器库（如 `pdfjs-dist`）顶层初始化会执行 `new DOMMatrix()` 等浏览器 API，而 opencode 插件运行时无该全局对象（其 canvas polyfill 依赖 `@napi-rs/canvas` 原生绑定，打包环境缺失）→ 抛 `ReferenceError` → 整个插件加载失败、不建表不写库（曾致 opencode 1.18.18 下 session-mgmt 插件 DB 全无）。修复：静态 import 改为使用点内 `await import()`，插件加载不被拖垮；仅缺浏览器 API 时，能靠守卫降级为可用能力（pdf.mjs 顶层 `const SCALE_MATRIX = new DOMMatrix()` 加 `typeof DOMMatrix !== "undefined"` 守卫后，纯文本提取 `getTextContent` 完全不依赖 canvas）。**凡新增第三方工具库依赖，先确认其顶层初始化是否触碰浏览器 API，碰则一律动态 import**；打包环境无 `@napi-rs/canvas` 时 pdfjs 的 require 失败只打 warn 不抛错，文本提取路径无依赖缺口。注：node_modules 内的守卫补丁不入 git，重装依赖会丢失，须手动重打（先例 `opencode-session-mgmt/packages/plugin/src/tools/reqdoc-scan.ts`）。
 
 ---
 
