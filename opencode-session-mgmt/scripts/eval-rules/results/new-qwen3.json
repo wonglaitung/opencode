@@ -2,7 +2,7 @@
   "variant": "new",
   "model": "/models/qwen3",
   "dry": false,
-  "runAt": "2026-08-17T10:17:17.420Z",
+  "runAt": "2026-08-19T04:48:25.353Z",
   "results": [
     {
       "name": "r1 渐进引导 2-3 问带选项与默认推荐",
@@ -95,10 +95,10 @@
     {
       "name": "r12 功能点拆解确认（prd 核心环节）",
       "workflowType": "reqdoc",
-      "pass": false,
-      "passCount": 0,
+      "pass": true,
+      "passCount": 1,
       "runCount": 1,
-      "detail": "通过 0/1;末次:未调用 reqdoc_confirm_features(实际:无工具调用)"
+      "detail": "✓ reqdoc_confirm_features {}"
     },
     {
       "name": "r13 功能点未确认不得直接渲染定稿",
@@ -111,10 +111,10 @@
     {
       "name": "r14 进 prd 前先打分",
       "workflowType": "reqdoc",
-      "pass": false,
-      "passCount": 0,
+      "pass": true,
+      "passCount": 1,
       "runCount": 1,
-      "detail": "通过 0/1;末次:未调用 reqdoc_score(实际:无工具调用)"
+      "detail": "✓ reqdoc_score {\"business_confirmed\":true}"
     },
     {
       "name": "r15 低于 85 分不定稿",
@@ -295,23 +295,199 @@
       "passCount": 1,
       "runCount": 1,
       "detail": "✓ 渲染结构达标（章节 5/5，功能点块 1，映射字段全标来源，含 [缺省]）"
+    },
+    {
+      "name": "s1 进需求问基线",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ workflow_baseline {\"estimated_hours\":8,\"developer_confirmed\":true}"
+    },
+    {
+      "name": "s2 确认后才 approve",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ workflow_advance {\"stage\":\"requirements\",\"action\":\"approve\",\"developer_confirmed\":true}"
+    },
+    {
+      "name": "s3 无明确确认不 approve",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ 未调用 workflow_advance"
+    },
+    {
+      "name": "s4 回到设计→revisit",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ workflow_revisit {\"stage\":\"design\"}"
+    },
+    {
+      "name": "s5 审查逐段不批量",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ comprehension_confirm {}"
+    },
+    {
+      "name": "s6 前序未完成不 submit",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ 未调用 review_submit"
+    },
+    {
+      "name": "s7 提交前查门禁",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ commit_gate_check {}"
+    },
+    {
+      "name": "s8 基线已录不重复问",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ 未调用 workflow_baseline"
+    },
+    {
+      "name": "s9 完成后提示 /new",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ 回复包含「/new」"
+    },
+    {
+      "name": "s10 完成后开新需求不重启",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ 未调用 workflow_advance、workflow_revisit"
+    },
+    {
+      "name": "s11 空档态继续进入下一阶段",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ workflow_advance {\"stage\":\"design\",\"action\":\"enter\"}"
+    },
+    {
+      "name": "s12 审查正向提交",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ review_submit {}"
+    },
+    {
+      "name": "s13 片段未定论不 submit",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ 未调用 review_submit"
+    },
+    {
+      "name": "s14 拒绝片段必带反馈",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ comprehension_reject {\"codeSegmentId\":\"auth/service.ts:1-40\"}"
+    },
+    {
+      "name": "s15 拒绝后重写",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ comprehension_rewrite {\"codeSegmentId\":\"auth/service.ts:1-40\"}"
+    },
+    {
+      "name": "s16 拒绝后人工自处理",
+      "workflowType": "sdlc",
+      "pass": false,
+      "passCount": 0,
+      "runCount": 1,
+      "detail": "通过 0/1;末次:未调用 comprehension_manual(实际:无工具调用)"
+    },
+    {
+      "name": "s17 追问登记问答",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ comprehension_ask {\"codeSegmentId\":\"auth/service.ts:1-40\"}"
+    },
+    {
+      "name": "s18 审查不可 advance approve",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ 未调用 workflow_advance"
+    },
+    {
+      "name": "s19 拒绝复议后接受",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ comprehension_confirm {\"codeSegmentId\":\"auth/service.ts:1-40\"}"
+    },
+    {
+      "name": "s20 手工修改走 open_ide 锁定",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ open_ide {\"file\":\"auth/service.ts\"}"
+    },
+    {
+      "name": "s21 手工改完经确认解锁",
+      "workflowType": "sdlc",
+      "pass": true,
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ unlock_file {\"file\":\"auth/service.ts\",\"developer_confirmed\":true}"
+    },
+    {
+      "name": "s22 完结后提示解锁",
+      "workflowType": "sdlc",
+      "pass": false,
+      "passCount": 0,
+      "runCount": 1,
+      "detail": "通过 0/1;末次:回复未包含「unlock_file」;全文:用户表示\"审查通过，工作流结束了\"。\n\n根据工作流规则：\n1. 当前阶段是审查(review)，状态是 not_started\n2. 用户说\"审查通过\"，这表示审查阶段已完成\n3. 我需要先调用 workflow_advance(stage=review, action=enter) 进入审查阶段\n4. 然后调用 workflow_advance(stage=review, action=appr"
     }
   ],
   "summary": {
     "overall": {
-      "pass": 16,
-      "total": 24,
-      "rate": 67
+      "pass": 38,
+      "total": 46,
+      "rate": 83
     },
     "sdlc": {
-      "pass": 0,
-      "total": 0,
-      "rate": 0
+      "pass": 20,
+      "total": 22,
+      "rate": 91
     },
     "reqdoc": {
-      "pass": 16,
+      "pass": 18,
       "total": 24,
-      "rate": 67
+      "rate": 75
     },
     "score": {
       "scenarios": [
