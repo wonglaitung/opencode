@@ -277,6 +277,8 @@ describe("WorkflowDefinition 注册表（3.2）", () => {
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r21" && r.stage === "edge" && r.text.includes("reqdoc_score"))).toBe(true)
     // 实施方案 01~06 产出：03→数据字典与库表设计（r10），04→RBAC 矩阵与审批流（r12），落盘进 r14/r20
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r10" && r.text.includes("数据字典") && r.text.includes("库表设计") && r.text.includes("纯文本步骤") && r.text.includes("flowchart TD"))).toBe(true)
+    // 追问 3 轮上限须逐条列出未澄清探针（质量飞轮 P1：缺口可见）
+    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r11" && r.text.includes("3 轮上限") && r.text.includes("未澄清探针") && r.text.includes("将扣分数"))).toBe(true)
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r12" && r.text.includes("RBAC 权限控制矩阵") && r.text.includes("审批流控制逻辑"))).toBe(true)
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r14" && r.text.includes("数据字典与库表设计") && r.text.includes("RBAC 权限控制矩阵"))).toBe(true)
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r14" && r.text.includes("reqdoc_export") && r.text.includes("Word"))).toBe(true)
