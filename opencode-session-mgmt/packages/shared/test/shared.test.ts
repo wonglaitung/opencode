@@ -256,9 +256,9 @@ describe("WorkflowDefinition 注册表（3.2）", () => {
     // 双通道：文档扫描工具 + 功能点拆解确认工具（重构核心）
     expect(REQDOC.rules.some((r) => r.text.includes("reqdoc_scan"))).toBe(true)
     expect(REQDOC.rules.some((r) => r.text.includes("reqdoc_confirm_features"))).toBe(true)
-    // 打分卡（实施方案第三节）：追问约束（r2 2-3 问带 A/B/C 与默认推荐、最长 3 轮）、
+    // 打分卡（实施方案第三节）：追问约束（r2 最多 5 问带 A/B/C 与默认推荐、最长 3 轮）、
     // 打分时机与门禁（r21，edge）、渲染铁律 + 字段映射（r20，prd）
-    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r2" && r.text.includes("2-3 个问题") && r.text.includes("默认推荐"))).toBe(true)
+    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r2" && r.text.includes("最多 5 个问题") && r.text.includes("默认推荐"))).toBe(true)
     // 追问原则：严禁纯技术词汇（业务语言转述，实施方案「追问原则」）
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r2" && r.text.includes("严禁") && r.text.includes("纯技术词汇") && r.text.includes("幂等"))).toBe(true)
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r6" && r.text.includes("默认推荐"))).toBe(true)

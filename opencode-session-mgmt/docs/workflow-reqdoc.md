@@ -10,7 +10,7 @@ reqdoc 是**需求分析师**的工作流，核心目标**尽量通过 AI 与流
 
 reqdoc 的价值链是「**引导追问（喂入）→ 打分卡（门禁）→ 模板渲染（交付）**」，三根支柱缺一不可：
 
-1. **引导追问（输入质量）**：业务口述 + 材料投放后，靠渐进式探针补齐材料缺失（goal→rules→edge，每次 2-3 问、带 A/B/C 选项与默认推荐，同一需求追问最长 3 轮）。它是「材料不全 → 打分上不去」的第一道闸，决定后两级是否有料可打、有料可填。
+1. **引导追问（输入质量）**：业务口述 + 材料投放后，靠渐进式探针补齐材料缺失（goal→rules→edge，每次最多 5 问、带 A/B/C 选项与默认推荐，同一需求追问最长 3 轮）。它是「材料不全 → 打分上不去」的第一道闸，决定后两级是否有料可打、有料可填。
 2. **打分卡（质量门禁）**：5 维 100 分 ≥85 硬门禁；判定规则 + 逐条扣分标准为单一事实源（`REQDOC_SCORE_DIMS`/`REQDOC_SCORE_PASS`，经 `reqdocScoreRubric()` 同时注入 reqdoc-r21 规则文本与 `reqdoc_score` 工具描述），total 服务端计算、`business_confirmed` 强制、两处硬拦截。扣分项同时是追问探针的地图——三档分级直接规定该补哪类信息。
 3. **模板渲染（交付形态）**：与行方的交付契约，`docs/模版.docx` 权威源（改动须同步重渲染 md），r20 渲染铁律 + 字段映射 + 模板送达保证「严格逐字」；**P2 渲染可测化已落地**——模板抽象为结构 schema（`REQDOC_TEMPLATE_CHAPTERS`/`REQDOC_TEMPLATE_FIELDS`），`parseRenderStructure` 对照 schema 做渲染 diff 校验，`reqdoc_check` 工具 + 定稿复核门禁把「渲染严格逐字」从纯规则文本升级为可解析校验。
 
@@ -18,7 +18,7 @@ reqdoc 的价值链是「**引导追问（喂入）→ 打分卡（门禁）→ 
 
 ```mermaid
 flowchart TD
-    I["业务口述 + 材料投放"] --> A["① 引导追问（喂入）<br/>渐进探针补齐缺口（goal→rules→edge）<br/>2-3 问 A/B/C、最长 3 轮"]
+    I["业务口述 + 材料投放"] --> A["① 引导追问（喂入）<br/>渐进探针补齐缺口（goal→rules→edge）<br/>最多 5 问 A/B/C、最长 3 轮"]
     A --> B["② 打分卡（门禁）<br/>5 维 100 分 ≥85 硬拦截<br/>total 服务端算、business_confirmed 强制"]
     B --> C["③ 模板渲染（交付）<br/>模版.docx 权威源 + r20 渲染铁律<br/>字段映射 + 模板送达"]
     C --> O["PRD 交付件（md + Word）"]
@@ -175,7 +175,7 @@ flowchart TD
 | id | stage | 注入文本 |
 |----|-------|----------|
 | reqdoc-r1 | global | 会话开始时，调用 workflow_advance(stage=goal, action=enter) 初始化工作流。 |
-| reqdoc-r2 | global | 采用渐进式分段引导，不要一次性抛出所有问题；单次提问 2-3 个问题，每个问题必须附 A/B/C 选项并标注【默认推荐项】（业务回复「同意默认」即按推荐确认）；同一需求追问最长 3 轮，3 轮后仍未澄清项标 [缺省] 进入下一环节，避免业务有被「质问」的挫败感。提问一律用业务语言，严禁出现「高并发、幂等性、API」等纯技术词汇——同一含义必须转述为业务说法（如并发重复提交→「同一笔交易被重复点了几次怎么处理」）。 |
+| reqdoc-r2 | global | 采用渐进式分段引导，不要一次性抛出所有问题；单次提问最多 5 个问题，每个问题必须附 A/B/C 选项并标注【默认推荐项】（业务回复「同意默认」即按推荐确认）；同一需求追问最长 3 轮，3 轮后仍未澄清项标 [缺省] 进入下一环节，避免业务有被「质问」的挫败感。提问一律用业务语言，严禁出现「高并发、幂等性、API」等纯技术词汇——同一含义必须转述为业务说法（如并发重复提交→「同一笔交易被重复点了几次怎么处理」）。 |
 | reqdoc-r3 | global | 阶段可能完成时，先输出摘要并询问确认；仅业务明确表示「确认/可以」才算确认——模糊表态不算，不得自行 approve。确认后调用 workflow_advance(action=approve, developer_confirmed=true)。 |
 | reqdoc-r4 | global | 业务说「回到XX」时，立即调用 workflow_revisit(stage=XX)。绝不自行判断阶段已完成。 |
 | reqdoc-r5 | global | 业务确认完成（review_submit 通过）后，建议执行 /new 开始下一个需求，保持统计隔离。 |
@@ -184,7 +184,7 @@ flowchart TD
 | reqdoc-r8 | goal | 目录就绪检查：项目根约定 01~06 需求资料目录（01_背景与目标、02_制度与合规、03_流程与数据、04_角色与权限，此四目录业务投放材料；05_功能点、06_需求规格产出为 AI 工作区）。尚无时主动调用 reqdoc_init 搭建骨架（幂等，绝不重建或覆盖业务已放材料），并向业务展示各材料目录的绝对路径、明确说明「把资料放进 01~04 对应目录，有多少投多少，未投放的目录我们口述补全，无需一次备齐」；业务说资料已放好、或会话中途补充了材料，则调用 reqdoc_scan(directory=01_背景与目标) 扫描提取作引导输入（可重复扫描，不必等下一轮）。init 之后、进入追问前，必须显式向业务提出「投放材料 / 直接口述」的二选一（或问清已投了哪些目录），未得到明确选择不擅自推进追问；业务选直接口述时，先回一句知情确认「那全程来源会是 [问答]，定稿时你需确认『无书面材料』」再继续，部分投放则仅对投放目录扫描、状态条自然显示 [文档]/[问答] 混合、无需该确认。 |
 | reqdoc-r9 | rules | 引导补全主流程：用户输入哪些信息、系统处理后给什么结果；将自然语言转化为字段定义（数据项 / 是否必填 / 校验规则）。 |
 | reqdoc-r10 | rules | 自动推演主流程后，在对话里用**可读的纯文本步骤（编号列表 ①→②→③ 或箭头串）**向业务展示确认——CLI/终端不渲染 Mermaid，对话内不得只给 Mermaid 图、也不要裸写 flowchart TD；如需保留可视化图，把 Mermaid（须用 ```mermaid 围栏包裹）写入 06_需求规格产出/附_流程图/ 供在支持渲染的查看器中打开。业务说资料已放好则调用 reqdoc_scan(directory=03_流程与数据) 扫描提取字段与流程作输入；综合扫描材料与问答生成数据字典与库表设计（数据实体/字段/主外键关系/校验规则），向业务展示确认。 |
-| reqdoc-r11 | edge | 按探针清单推进追问（清单 `REQDOC_PROBES`，与 reqdoc_probe 工具描述同源；7 条探针每维映射打分卡扣分项：main_flow/flow_trigger→flowClosure，exception/reverse→edgeControl，desensitize/audit→compliance，authority→authority，见 6 章/3 章）：逐轮追问 2-3 问（见 r2，带 A/B/C 与【默认推荐项】），每轮结束调用 reqdoc_probe(asked=本轮新问探针, gaps=仍缺口探针, round=轮次) 记录覆盖；追问最多 3 轮，3 轮后仍未澄清项标 [缺省] 停止追问；到 3 轮上限时，先把未澄清探针逐条列出（附对应打分卡维度与将扣分数），并说明业务的可选项——补充材料/口述补全这些项（我据此扫描或追问补漏）、确认接受 [缺省] 留白（对应维度将扣分）、或开新会话继续；无需一次补全，定稿前随时可补——再进下一环节。 |
+| reqdoc-r11 | edge | 按探针清单推进追问（清单 `REQDOC_PROBES`，与 reqdoc_probe 工具描述同源；7 条探针每维映射打分卡扣分项：main_flow/flow_trigger→flowClosure，exception/reverse→edgeControl，desensitize/audit→compliance，authority→authority，见 6 章/3 章）：逐轮追问最多 5 问（见 r2，带 A/B/C 与【默认推荐项】），每轮结束调用 reqdoc_probe(asked=本轮新问探针, gaps=仍缺口探针, round=轮次) 记录覆盖；追问最多 3 轮，3 轮后仍未澄清项标 [缺省] 停止追问；到 3 轮上限时，先把未澄清探针逐条列出（附对应打分卡维度与将扣分数），并说明业务的可选项——补充材料/口述补全这些项（我据此扫描或追问补漏）、确认接受 [缺省] 留白（对应维度将扣分）、或开新会话继续；无需一次补全，定稿前随时可补——再进下一环节。 |
 | reqdoc-r12 | edge | 按已投放材料反问缺口（如已有制度但缺权限，追问「不同岗位的权限如何隔离」）；业务说资料已放好则调用 reqdoc_scan(directory=02_制度与合规) 与 reqdoc_scan(directory=04_角色与权限) 扫描提取作输入；综合岗位角色矩阵、机构隔离、审批授权与双人复核材料生成 RBAC 权限控制矩阵与审批流控制逻辑，向业务展示确认。 |
 | reqdoc-r21 | edge | 打分时机与门禁（实施方案打分卡）：边界与异常收集完成、准备进入 prd 前，基于已扫描材料 + 问答对照打分卡逐维打分（满分 100；评分标准经 `reqdocScoreRubric()` 注入——判定规则 + 逐条扣分标准，见 5 章表格）。调用 reqdoc_score 输出各维得分与扣分明细（附证据引用），向业务展示并请其确认；business_confirmed=true 且 total≥85 后才可 workflow_advance(stage=prd, action=enter)。未达标按三档引导重打：<60 分（不合格）优先继续提问主流程与异常边界，补齐流程闭环与异常覆盖；60-84 分（良好）引导补充脱敏规则、权限与机构隔离、逆向撤销/驳回流程；≥85 分（达标）输出扣分明细、业务确认通过后即停止追问、不再重复盘问。展示得分时必须附质量得分进度条（如 [▓▓▓▓▓░░░░░ 50%]，进度直观反映达标）。严禁未展示扣分明细即自报达标。 |
 | reqdoc-r22 | edge | 探针覆盖度（柔性门禁）：进入 prd 前，若已调用 reqdoc_probe 记录过探针，服务端校验缺口与打分一致——缺口探针对应打分卡维度不得打满分（缺口+满分=自评不诚实，workflow_advance 进 prd 与 review_submit 会被拒绝，见 6 章）；建议每轮追问结束调用 reqdoc_probe 记录（覆盖度在状态条可见，帮助自评一致）；材料已全覆盖无追问时可记录一次（asked/gaps 可为空），不记录不强求。 |
@@ -304,7 +304,7 @@ reqdoc 会话不产出代码，sdlc 专属指标——AI 代码行数（业务/�
 
 **场景明细（r1-r24）**
 
-- reqdoc 渐进引导 2-3 问带 A/B/C 选项与【默认推荐项】（r1，`text.optionsABC`，问句 ≤3 + 含「默认」+ ≥2 个选项标记）/ 业务确认单要点 / edge 探针
+ - reqdoc 渐进引导最多 5 问带 A/B/C 选项与【默认推荐项】（r1，`text.optionsABC`，问句 ≤5 + 含「默认」+ ≥2 个选项标记）/ 业务确认单要点 / edge 探针
 - **reqdoc 双通道与功能点拆解**（重构新增 r11-r13）：资料已放好应 `reqdoc_scan` 扫描分析而非空问（r11）、prd 功能点拆解经 `reqdoc_confirm_features` 确认（r12）、功能点未确认不得直接渲染定稿（r13，no_tool 禁 workflow_advance/reqdoc_confirm_features）
 - **打分卡门禁**（实施方案新增 r14-r17）：进 prd 前先 `reqdoc_score` 打分（r14）、低于 85 分不定稿（r15，no_tool 禁 review_submit）、高分未业务确认不定稿（r16）、达标且业务确认后定稿（r17，正向 review_submit）；r8/r9 正向/未定论定稿场景夹具同步补打分卡（保持与真实门禁一致）
 - **评分模式**（质量飞轮 P0，`judge.kind="score"`，新增 r18-r19）：prd-render 场景对渲染产出的 PRD 文本做五维确定性评分——材料齐全渲染应高分（r18，dimMin 下限）、缺异常材料渲染应低分不杜撰（r19，dimMax 上限），构造产出度量区分度，供 baseline→new 逐维对比
@@ -405,7 +405,7 @@ flowchart LR
 
 规则遵循度评测的**迭代闭环与历史结果**（含 sdlc 侧 s1-s22 的混合里程碑）见 session-management.md 13.4。reqdoc 侧质量飞轮轮次：
 
-**本轮（打分卡补齐）场景集扩至 39 个（r1 改为 optionsABC 断言 2-3 问带选项与默认推荐；新增 r14-r17 打分卡门禁）**：需对端点重新跑 `--variant baseline` → `--variant new` 对比（见 session-management.md 13.1），确认 sdlc 零回归、reqdoc 打分门禁场景通过后再入库。
+**本轮（打分卡补齐）场景集扩至 39 个（r1 改为 optionsABC 断言最多 5 问带选项与默认推荐；新增 r14-r17 打分卡门禁）**：需对端点重新跑 `--variant baseline` → `--variant new` 对比（见 session-management.md 13.1），确认 sdlc 零回归、reqdoc 打分门禁场景通过后再入库。
 
 **本轮（质量飞轮 P0）场景集扩至 41 个（新增 r18-r19 评分模式，`judge.kind="score"`）**：`score.ts` 确定性评分器 + prd-render 场景 + run.ts 五维聚合与 baseline→new 逐维对比 + prd 模板送达注入（render-new）。代码与脚本已落地并过 typecheck / bun test（302 全绿）/ 双 variant dry；**真实模型端点的五维基线待跑**（`--variant baseline` → `--variant new`，见「落地节奏与优先级」P0）。
 

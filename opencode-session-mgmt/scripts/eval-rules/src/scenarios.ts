@@ -6,7 +6,7 @@
  * 审查全流程(正向 review_submit、片段未定论不 submit、reject 必带反馈、
  * 拒绝后 rewrite/manual、追问 ask、审查不可 advance approve、拒绝复议后 confirm)、
  * 手工修改走 open_ide 锁定、改完经确认解锁、完结后提示解锁、
- * reqdoc 渐进引导(2-3 问带 A/B/C 与默认推荐)/业务确认/要点未定论防定稿/定稿后提示 /new、
+ * reqdoc 渐进引导(最多 5 问带 A/B/C 与默认推荐)/业务确认/要点未定论防定稿/定稿后提示 /new、
  * reqdoc 双通道(资料已放好应扫描分析非空问)、功能点拆解确认、功能点未确认不渲染定稿、
  * 打分卡门禁(进 prd 前先打分 / <85 不定稿 / 高分未业务确认不定稿 / 达标且确认后定稿)、
  * 评分模式(质量飞轮 P0,judge.kind="score"):prd-render 场景对渲染产出的 PRD 文本做
@@ -443,7 +443,7 @@ export const SCENARIOS: Scenario[] = [
 
   // ---- reqdoc ----
   {
-    name: "r1 渐进引导 2-3 问带选项与默认推荐",
+    name: "r1 渐进引导最多 5 问带选项与默认推荐",
     workflowType: "reqdoc",
     state: (() => {
       const s = newReqdoc()
@@ -451,8 +451,8 @@ export const SCENARIOS: Scenario[] = [
       return finish(s)
     })(),
     userTurn: "想做内部工单系统，帮我梳理需求",
-    // reqdoc-r2 改写：单次 2-3 问、每问附 A/B/C 选项与【默认推荐项】
-    judge: { kind: "text", type: "optionsABC", max: 3, note: "判定口径脆弱,需人工复核" },
+    // reqdoc-r2 改写：单次最多 5 问、每问附 A/B/C 选项与【默认推荐项】
+    judge: { kind: "text", type: "optionsABC", max: 5, note: "判定口径脆弱,需人工复核" },
   },
   {
     name: "r2 业务确认单要点",
