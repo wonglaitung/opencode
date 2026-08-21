@@ -165,6 +165,16 @@ describe("parseRenderStructure", () => {
     expect(s.covered["2.3"]).toBe(2)
   })
 
+  test("块内子项层级不拘（三级标题亦可识别，修复弱模型多级排版失败）", () => {
+    // 模板规范用 ####/#####；弱模型常用 ### 起头。把主小节与子小节全降为三级，应仍识别为完整块且来源覆盖。
+    const md = fullPrd().replace(/#### /g, "### ").replace(/##### /g, "### ")
+    const s = parseRenderStructure(md)
+    expect(s.featureCount).toBe(2)
+    expect(s.featureOk).toBe(true)
+    expect(s.missingFeatureSections).toEqual([])
+    for (const f of REQDOC_TEMPLATE_FIELDS) expect(s.covered[f.key]).toBe(2)
+  })
+
   test("空白差异不影响标题匹配（全角空格/多余空格）", () => {
     const md = fullPrd().replace("## 第三章 需求功能详述", "## 第三章 需求功能详述  ")
     const s = parseRenderStructure(md)
