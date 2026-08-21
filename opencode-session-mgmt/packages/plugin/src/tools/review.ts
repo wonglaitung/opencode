@@ -10,7 +10,6 @@
  * comprehension_ask     —— 追问，问答追加到 explanation
  * review_submit         —— 提交审查清单：所有片段处于终态(accepted/manual)，通过时自动计算 firstPassRate
  */
-import { join } from "node:path"
 import { tool, type ToolDefinition } from "@opencode-ai/plugin"
 import {
   REQDOC_SCORE_PASS,
@@ -27,6 +26,7 @@ import {
 } from "sm-shared"
 import type { Store } from "../db"
 import { WorkflowOpError, applyTransition, recomputeCommit } from "../workflow-ops"
+import { projectRoot, resolveWithinWorktree } from "../fs-safe"
 
 const z = tool.schema
 
@@ -242,7 +242,7 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
       let liveRender: ReqdocRender | undefined
       if (preRender) {
         try {
-          const md = await Bun.file(join(context.worktree, preRender.source)).text()
+          const md = await Bun.file(resolveWithinWorktree(projectRoot(context), preRender.source)).text()
           const live = parseRenderStructure(md)
           liveRender = {
             ...live,

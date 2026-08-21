@@ -715,4 +715,27 @@ describe("reqdoc 渲染定稿复核门禁（质量飞轮 P2）", () => {
     ).rejects.toThrow(/渲染定稿复核未通过.*不可读或已删除/)
     store.close()
   })
+
+  test("非 git 项目 context.directory ≠ worktree 时定稿复核按 directory 读源（regression: 源文件不可读）", async () => {
+    // 复现真实卡死：Windows 非 git 项目 context.worktree 被解析到守护进程启动目录，
+    // 而 01~06 骨架落在 context.directory（项目根）。reqdoc_check/export 经 projectRoot 用
+    // directory 读；review_submit 旧代码用 worktree 拼接 → 源文件不可读。修复后统一 projectRoot。
+    const store = Store.memory(() => "reqdoc" as const)
+    store.mutateWorkflow("r1", (w) => {
+      for (const name of ["goal", "rules", "edge", "prd"]) w.stages[name].status = "approved"
+      w.features = [{ no: 1, name: "公告发布", priority: "medium", confirmedAt: 1000 }]
+    })
+    setReqdocScore(store, "r1")
+    const directory = tempDir() // 项目根：文件落在此
+    const worktree = tempDir() // 守护进程启动目录：与 directory 不同，且为空
+    const rel = "06_需求规格产出/1_公告发布/需求规格书.md"
+    writeMd(directory, rel, goodMd())
+    const ctx = { sessionID: "r1", directory, worktree } as never
+    const checkTools = createReqdocCheckTools(store)
+    await checkTools.reqdoc_check!.execute({ source: rel } as never, ctx)
+    const out = String(await createReviewTools(store).review_submit!.execute(reviewArgs, ctx))
+    expect(out).toContain("审查阶段通过")
+    expect(reviewRecord(store.get("r1")!.workflow!).status).toBe("approved")
+    store.close()
+  })
 })
