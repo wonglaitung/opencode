@@ -156,4 +156,5 @@ REQDOC_SCORE_DIMS        ← 单一事实源（packages/shared/src/workflow.ts�
 - 结果 JSON 为对比依据，改动规则文本后应更新对应的 results 快照并提交。
 - **改了 `sm-shared` 后**：`rm -rf node_modules/sm-shared && bun install`（hoisted 拷贝残留，`bun test` 全绿但评测读到旧规则文本）。
 - **打分卡门禁与评测同源**：打分卡判据经 `reqdocScoreRubric()` 单点注入工具描述与规则文本，改打分卡后两侧同步生效，勿只在一边改。
+- **必须从仓库根 `opencode-session-mgmt/` 跑 `bun run scripts/eval-rules/run.ts`，勿 cd 进 `scripts/eval-rules/` 后跑 `bun run run.ts`**：脚本写结果/读 baseline 用相对路径 `scripts/eval-rules/results/...`，从 eval-rules 内跑会把结果写进嵌套的 `scripts/eval-rules/scripts/eval-rules/results/`（Bun.write 自动建目录），而 `cp results/new.json ...` 读到的仍是旧文件——本轮曾因此差点把 pro-0813 结果覆盖丢失（2026-08-21 教训）。后台跑评测也一样从仓库根发起。
 - 改动分级决策图（何时跑评测门 / ①②③ 各口径）见 `docs/session-management.md` 13.6；reqdoc 实测轮次见 `docs/workflow-reqdoc.md` 10 章。
