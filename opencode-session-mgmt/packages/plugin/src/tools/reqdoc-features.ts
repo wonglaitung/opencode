@@ -10,6 +10,7 @@ import { tool, type ToolDefinition } from "@opencode-ai/plugin"
 import { getDefinition, type ReqdocFeature } from "sm-shared"
 import type { Store } from "../db"
 import { WorkflowOpError } from "../workflow-ops"
+import { sanitizeDirName } from "./reqdoc-dirs"
 
 const z = tool.schema
 
@@ -50,13 +51,13 @@ export function createReqdocFeatureTools(store: Store): Record<string, ToolDefin
       // （模板外成果落盘位：附_流程图/、测试用例/、界面草图/ 与最终 PRD，见 reqdoc-r20 归档要求）。
       let created = 0
       for (const f of saved.features ?? []) {
-        const dir = join(context.worktree, "05_功能点", `${f.no}_${f.name}`)
+        const dir = join(context.worktree, "05_功能点", `${f.no}_${sanitizeDirName(f.name)}`)
         await mkdir(dir, { recursive: true })
         await writeFile(
           join(dir, "来源摘录.md"),
           `# 功能点 ${f.no}：${f.name}\n\n- 优先级：${f.priority}\n- 业务确认时间：${new Date(f.confirmedAt).toISOString()}\n\n渲染时从本目录来源摘录 + 问答补全填充模版第三章（逐字段标 [文档]/[问答]/[缺省]）。\n`,
         )
-        await mkdir(join(context.worktree, "06_需求规格产出", `${f.no}_${f.name}`), { recursive: true })
+        await mkdir(join(context.worktree, "06_需求规格产出", `${f.no}_${sanitizeDirName(f.name)}`), { recursive: true })
         created++
       }
       const list = (saved.features ?? [])

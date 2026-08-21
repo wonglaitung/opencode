@@ -7,6 +7,7 @@ import { describe, expect, test } from "bun:test"
 import {
   REQDOC_TEMPLATE_CHAPTERS,
   REQDOC_TEMPLATE_FIELDS,
+  noDocumentSupportViolation,
   parseRenderStructure,
   renderGapViolations,
   renderStructureViolations,
@@ -58,6 +59,9 @@ function renderOf(partial: Partial<ReqdocRender>): ReqdocRender {
     missingFeatureSections: [],
     covered: Object.fromEntries(REQDOC_TEMPLATE_FIELDS.map((f) => [f.key, 1])),
     defaults: Object.fromEntries(REQDOC_TEMPLATE_FIELDS.map((f) => [f.key, 0])),
+    docBlocks: 1,
+    docCount: REQDOC_TEMPLATE_FIELDS.length,
+    qaCount: 0,
     ...partial,
   }
 }
@@ -113,6 +117,16 @@ describe("parseRenderStructure", () => {
     expect(s.featureCount).toBe(2)
   })
 
+  test("功能点标题带名称也能识别（r13/r14 渲染编号/名称，模型常写名称进标题）", () => {
+    const md = fullPrd()
+      .replace("### 功能点 1", "### 功能点 1：名单排查")
+      .replace("### 功能点 2", "### 功能点 2 额度管控")
+    const s = parseRenderStructure(md)
+    expect(s.featureCount).toBe(2)
+    expect(s.featureOk).toBe(true)
+    expect(s.missingFeatureSections).toEqual([])
+  })
+
   test("来源标注在标题下内容里也能提取（模板规范写法）", () => {
     const md = fullPrd()
       .replace("##### 2.1 输入要素的检查 [文档]\n", "##### 2.1 输入要素的检查\n\n校验卡号与余额 [文档]\n")
@@ -133,6 +147,39 @@ describe("parseRenderStructure", () => {
     const md = fullPrd().replace("## 第三章 需求功能详述", "## 第三章 需求功能详述  ")
     const s = parseRenderStructure(md)
     expect(s.missing).toEqual([])
+  })
+
+  test("docBlocks/docCount/qaCount：字段均标 [文档] 时 docBlocks 全满、docCount 正确", () => {
+    const s = parseRenderStructure(fullPrd())
+    expect(s.docBlocks).toBe(2)
+    expect(s.docCount).toBeGreaterThan(0)
+    expect(s.qaCount).toBe(0)
+  })
+
+  test("docBlocks：字段全标 [问答] 时 docBlocks=0、qaCount>0", () => {
+    const md = fullPrd().split("[文档]").join("[问答]")
+    const s = parseRenderStructure(md)
+    expect(s.docBlocks).toBe(0)
+    expect(s.qaCount).toBeGreaterThan(0)
+    expect(s.docCount).toBe(0)
+  })
+})
+
+describe("noDocumentSupportViolation", () => {
+  test("有 [文档] 支撑 → 无违规", () => {
+    const r = renderOf({ docBlocks: 1 })
+    expect(noDocumentSupportViolation(r)).toEqual([])
+  })
+
+  test("全 [问答] 无 [文档] 支撑 → 违规", () => {
+    const r = renderOf({ docBlocks: 0 })
+    const v = noDocumentSupportViolation(r)
+    expect(v.length).toBe(1)
+    expect(v[0]).toContain("无任何 [文档] 支撑")
+  })
+
+  test("无 render → 空（柔性放行）", () => {
+    expect(noDocumentSupportViolation(undefined)).toEqual([])
   })
 })
 

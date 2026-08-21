@@ -225,6 +225,9 @@ describe("buildStateBar 渲染校验行（质量飞轮 P2）", () => {
     missingFeatureSections: [],
     covered: { "1.2": 1, "2.1": 1, "2.3": 1, "2.6": 1, "2.7": 1, "2.8": 1, "2.9": 1 },
     defaults: { "1.2": 0, "2.1": 0, "2.3": 0, "2.6": 0, "2.7": 0, "2.8": 0, "2.9": 0 },
+    docBlocks: 1,
+    docCount: 7,
+    qaCount: 0,
   })
 
   test("reqdoc 记录过且结构合规 → ✓ 结构合规（N 功能点）", () => {

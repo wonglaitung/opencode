@@ -10,6 +10,7 @@ import { basename, extname, join } from "node:path"
 import { tool, type ToolDefinition } from "@opencode-ai/plugin"
 import JSZip from "jszip"
 import ExcelJS from "exceljs"
+import { resolveWithinWorktree } from "../fs-safe"
 
 const z = tool.schema
 
@@ -104,16 +105,16 @@ export function createReqdocScanTool(): Record<string, ToolDefinition> {
         ),
     },
     async execute(args, context) {
-      const dir = join(context.worktree, args.directory)
+      const dir = resolveWithinWorktree(context.worktree, args.directory)
       let names: string[]
       try {
         names = await readdir(dir)
       } catch {
-        throw new Error(`目录 ${args.directory} 不存在或不可读，请先确认业务已创建该目录（reqdoc-r8 目录就绪检查）`)
+        throw new Error(`目录 ${args.directory} 不存在或不可读，请先确认业务已创建该目录（可调用 reqdoc_init 搭建 01~06 骨架，见 reqdoc-r8 目录就绪检查）`)
       }
       const files = names.filter((n) => !n.startsWith(".")).sort()
       if (files.length === 0) {
-        return `目录 ${args.directory} 为空，未扫描到任何资料。可引导业务补充材料，或直接通过对话收集。`
+        return `目录 ${args.directory} 为空，未扫描到任何资料。可引导业务补充材料（放入 01~04 对应目录）后重新调用 reqdoc_scan 扫描，或直接通过对话收集。`
       }
       const parts: string[] = [`📂 ${args.directory}（${files.length} 个文件）`]
       let total = 0

@@ -6,7 +6,6 @@
  * 校验结果写入 workflow.render；review_submit 定稿时重读源 md 复核（柔性：不调用则放行）。
  * 仅 reqdoc 工作流有效。
  */
-import { join } from "node:path"
 import { tool, type ToolDefinition } from "@opencode-ai/plugin"
 import {
   REQDOC_TEMPLATE_CHAPTERS,
@@ -19,6 +18,7 @@ import {
 } from "sm-shared"
 import type { Store } from "../db"
 import { WorkflowOpError } from "../workflow-ops"
+import { resolveWithinWorktree } from "../fs-safe"
 
 const z = tool.schema
 
@@ -41,7 +41,7 @@ export function createReqdocCheckTools(store: Store): Record<string, ToolDefinit
         }
         expectedFeatures = workflow.features?.length ?? 0
       })
-      const mdPath = join(context.worktree, args.source)
+      const mdPath = resolveWithinWorktree(context.worktree, args.source)
       let md: string
       try {
         md = await Bun.file(mdPath).text()

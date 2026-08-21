@@ -151,6 +151,15 @@ export function buildStateBar(workflow: WorkflowState, stage: string | null): st
         ? `渲染校验：✓ 结构合规（${workflow.render.featureCount} 功能点）`
         : `渲染校验：✗ ${rv[0]}${rv.length > 1 ? ` 等 ${rv.length} 项` : ""}；功能点 ${workflow.render.featureCount}/${workflow.render.expectedFeatures}`,
     )
+    // 来源覆盖（X 软提示）：展示 [文档]/[问答] 标注占比，提醒全 [问答] 缺书面依据
+    const doc = workflow.render.docBlocks
+    const total = workflow.render.featureCount || 1
+    const docPct = Math.round((doc / total) * 100)
+    lines.push(
+      `来源覆盖：文档支撑 ${doc}/${workflow.render.featureCount} 功能点（${docPct}%）` +
+        `、标注 [文档] ${workflow.render.docCount} 处 / [问答] ${workflow.render.qaCount} 处` +
+        (doc === 0 ? `；⚠ 全 [问答] 无 [文档] 支撑，定稿需先补材料或业务确认无书面材料` : ""),
+    )
   } else if (getDefinition(workflow.type).type === "reqdoc") {
     lines.push(`渲染校验：未执行 reqdoc_check（定稿不复核，需评分卡 ≥${REQDOC_SCORE_PASS} 兜底）`)
   }

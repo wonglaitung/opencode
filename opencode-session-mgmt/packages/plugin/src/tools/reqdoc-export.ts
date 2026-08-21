@@ -8,7 +8,7 @@
  * 引用（>）、代码块（```）与行内加粗（**…**）/反引号（`…`）。PRD 为文字件，
  * 图片/图表不走模板正文（模板外成果按 reqdoc-r20 单独落盘），故不解析二进制。
  */
-import { basename, dirname, extname, join } from "node:path"
+import { basename, dirname, extname } from "node:path"
 import { tool, type ToolDefinition } from "@opencode-ai/plugin"
 import {
   Document,
@@ -22,6 +22,7 @@ import {
   TextRun,
   WidthType,
 } from "docx"
+import { resolveWithinWorktree } from "../fs-safe"
 
 const z = tool.schema
 
@@ -178,7 +179,7 @@ export function createReqdocExportTool(): Record<string, ToolDefinition> {
       if (extname(args.source).toLowerCase() !== ".md") {
         throw new Error("source 必须指向 .md 文件（reqdoc_export 只转换 Markdown 渲染的 PRD）")
       }
-      const mdPath = join(context.worktree, args.source)
+      const mdPath = resolveWithinWorktree(context.worktree, args.source)
       let md: string
       try {
         md = await Bun.file(mdPath).text()

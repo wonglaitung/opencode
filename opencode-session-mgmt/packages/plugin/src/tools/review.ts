@@ -16,6 +16,7 @@ import {
   REQDOC_SCORE_PASS,
   WORKFLOW_DEFINITIONS,
   getDefinition,
+  noDocumentSupportViolation,
   parseRenderStructure,
   probeGapViolations,
   renderGapViolations,
@@ -223,18 +224,27 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
       "提交审查清单。仅当清单各项均为 true，且所有已登记片段" +
       "处于终态（accepted/manual，不允许 pending/rejected 悬空）时，审查阶段才会 approve；" +
       "通过时自动计算一次通过率 firstPassRate 写入质量指标。具名参数由当前工作流类型的审查清单生成。",
-    args: reviewChecklistArgs,
+    args: {
+      ...reviewChecklistArgs,
+      no_document_confirmed: z
+        .boolean()
+        .optional()
+        .describe(
+          "仅当 PRD 全部字段来自 [问答]、无任何 [文档] 支撑时使用：须业务在对话中明确确认「无书面材料可引用」后才可为 true，否则定稿会被来源支撑门禁拦截",
+        ),
+    },
     async execute(args, context) {
       // 渲染定稿复核（质量飞轮 P2）：reqdoc_check 记录过 render 才复核——重读源 md 重新解析，
       // 防记录快照与磁盘不一致（reqdoc_check 后改动渲染文件会被再拦）；未记录则柔性放行。
       // 文件读取必须在 mutateWorkflow 同步回调外 await，违规值闭包传入回调内抛错。
       const preRender = store.ensure(context.sessionID).workflow?.render
       let renderErrors: string[] = []
+      let liveRender: ReqdocRender | undefined
       if (preRender) {
         try {
           const md = await Bun.file(join(context.worktree, preRender.source)).text()
           const live = parseRenderStructure(md)
-          const liveRender: ReqdocRender = {
+          liveRender = {
             ...live,
             source: preRender.source,
             checkedAt: preRender.checkedAt,
@@ -291,6 +301,15 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
             throw new WorkflowOpError(
               `渲染定稿复核未通过：${renderErrors.join("；")}。` +
                 `结构问题请回 prd 修正渲染后重调 reqdoc_check 复查；[缺省]↔满分矛盾请回 edge 补缺后重打 reqdoc_score 如实扣分，或把渲染 [缺省] 改为 [文档]/[问答]`,
+            )
+          }
+          // 来源支撑门禁（X+Z 组合）：记录了 render 且全部字段来自 [问答]、无 [文档] 支撑时拦截，
+          // 除非业务已明确确认「无书面材料可引用」（no_document_confirmed=true）。柔性：未记录 render 则放行。
+          if (workflow.render && liveRender && liveRender.docBlocks === 0 && !args.no_document_confirmed) {
+            const v = noDocumentSupportViolation(liveRender)
+            throw new WorkflowOpError(
+              `来源支撑门禁未通过：${v.join("；")}。` +
+                `如确无书面材料可引用，请业务明确确认后重试 review_submit(no_document_confirmed=true)。`,
             )
           }
         }

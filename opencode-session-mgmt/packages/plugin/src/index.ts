@@ -23,6 +23,7 @@ import { createIterationCounter } from "./tools/quality"
 import { createReviewTools } from "./tools/review"
 import { createWorkflowTools } from "./tools/workflow"
 import { createReqdocScanTool } from "./tools/reqdoc-scan"
+import { createReqdocInitTool } from "./tools/reqdoc-dirs"
 import { createReqdocFeatureTools } from "./tools/reqdoc-features"
 import { createReqdocScoreTools } from "./tools/reqdoc-score"
 import { createReqdocProbeTools } from "./tools/reqdoc-probe"
@@ -124,6 +125,7 @@ const SessionMgmtPlugin: Plugin = async (input) => {
       ...createWorkflowTools(store),
       ...createReviewTools(store),
       ...createReqdocScanTool(),
+      ...createReqdocInitTool(),
       ...createReqdocFeatureTools(store),
       ...createReqdocScoreTools(store),
       ...createReqdocProbeTools(store),

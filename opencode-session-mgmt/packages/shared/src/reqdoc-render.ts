@@ -118,6 +118,11 @@ export interface RenderStructure {
   covered: Record<string, number>
   /** 映射字段 → 标 [缺省] 的功能点块数（渲染留白 = 该字段内容尚未获得） */
   defaults: Record<string, number>
+  /** 带来源标注 [文档] 的功能点块数（至少一处标 [文档] 即计；用于"全 [问答] 无文档支撑"定稿门禁 Z） */
+  docBlocks: number
+  /** 映射字段来源标注出现总次数（[文档]/[问答]，供状态条展示覆盖度，软提示 X） */
+  docCount: number
+  qaCount: number
 }
 
 /** reqdoc 渲染校验记录（reqdoc_check 工具写入 WorkflowState.render；Review 时重读源复核）。 */
@@ -192,8 +197,10 @@ export function parseRenderStructure(md: string): RenderStructure {
     }
   }
 
-  // 3) 功能点块切分（### 功能点 N 起，到下一个该行或 EOF 止）
-  const featureHeadingRe = /^###\s+功能点\s*(\d+)\s*$/
+   // 3) 功能点块切分（### 功能点 N 起，到下一个该行或 EOF 止）。
+   // 标题允许在编号后带功能点名称（如「### 功能点 1：名单排查」「### 功能点 1 名单排查」，
+   // r13/r14 要求渲染编号/名称/优先级，模型常把名称写进标题），故编号后容忍可选分隔符+文字。
+   const featureHeadingRe = /^###\s+功能点\s*(\d+)(?:[：:\s].*)?$/
   const blocks: string[][] = []
   let cur: string[] | null = null
   for (const raw of lines) {
@@ -206,51 +213,58 @@ export function parseRenderStructure(md: string): RenderStructure {
   }
   if (cur) blocks.push(cur)
 
-  // 4) 每块骨架 + 映射字段来源提取
-  const covered: Record<string, number> = {}
-  const defaults: Record<string, number> = {}
-  for (const f of REQDOC_TEMPLATE_FIELDS) {
-    covered[f.key] = 0
-    defaults[f.key] = 0
-  }
-  let featureOk = true
-  const missingFeatureSections: string[] = []
-  blocks.forEach((blockLines, bi) => {
-    const label = `功能点 ${bi + 1}`
-    const isHeading = (l: string, level: number, text: string) => {
-      const h = headingAt(l)
-      // 标题行可能带来源标注（「##### 2.1 输入要素的检查 [文档]」），匹配时剥掉，弱模型渲染更稳
-      return !!h && h.level === level && norm(h.text.replace(SOURCE_TAG_RE, "")) === norm(text)
-    }
-    if (!blockLines.some((l) => isHeading(l, 4, "1. 功能点输入要素"))) {
-      featureOk = false
-      missingFeatureSections.push(`${label} 缺「1. 功能点输入要素」`)
-    }
-    if (!blockLines.some((l) => isHeading(l, 4, "2. 功能点处理要求"))) {
-      featureOk = false
-      missingFeatureSections.push(`${label} 缺「2. 功能点处理要求」`)
-    }
-    for (const s of FEATURE_SUB_SECTIONS) {
-      if (!blockLines.some((l) => isHeading(l, 5, `${s.key} ${s.title}`))) {
-        featureOk = false
-        missingFeatureSections.push(`${label} 缺 ${s.key} ${s.title}`)
-      }
-    }
-    for (const f of REQDOC_TEMPLATE_FIELDS) {
-      const fi = blockLines.findIndex((l) => isHeading(l, 5, `${f.key} ${f.title}`))
-      if (fi < 0) continue // 结构缺失已在上报
-      // 来源标注可能在标题行上（「##### 2.1 … [文档]」）或标题下内容里，两者都算；到下一级 ≤5 标题止
-      let body = blockLines[fi] + "\n"
-      for (let j = fi + 1; j < blockLines.length; j++) {
-        const h = headingAt(blockLines[j])
-        if (h && h.level <= 5) break
-        body += blockLines[j] + "\n"
-      }
-      const tags: string[] = body.match(SOURCE_TAG_RE) ?? []
-      if (tags.length > 0) covered[f.key] += 1
-      if (tags.includes("[缺省]")) defaults[f.key] += 1
-    }
-  })
+   // 4) 每块骨架 + 映射字段来源提取
+   const covered: Record<string, number> = {}
+   const defaults: Record<string, number> = {}
+   for (const f of REQDOC_TEMPLATE_FIELDS) {
+     covered[f.key] = 0
+     defaults[f.key] = 0
+   }
+   let featureOk = true
+   const missingFeatureSections: string[] = []
+   let docBlocks = 0
+   let docCount = 0
+   let qaCount = 0
+   blocks.forEach((blockLines, bi) => {
+     const label = `功能点 ${bi + 1}`
+     const isHeading = (l: string, level: number, text: string) => {
+       const h = headingAt(l)
+       // 标题行可能带来源标注（「##### 2.1 输入要素的检查 [文档]」），匹配时剥掉，弱模型渲染更稳
+       return !!h && h.level === level && norm(h.text.replace(SOURCE_TAG_RE, "")) === norm(text)
+     }
+     if (!blockLines.some((l) => isHeading(l, 4, "1. 功能点输入要素"))) {
+       featureOk = false
+       missingFeatureSections.push(`${label} 缺「1. 功能点输入要素」`)
+     }
+     if (!blockLines.some((l) => isHeading(l, 4, "2. 功能点处理要求"))) {
+       featureOk = false
+       missingFeatureSections.push(`${label} 缺「2. 功能点处理要求」`)
+     }
+     for (const s of FEATURE_SUB_SECTIONS) {
+       if (!blockLines.some((l) => isHeading(l, 5, `${s.key} ${s.title}`))) {
+         featureOk = false
+         missingFeatureSections.push(`${label} 缺 ${s.key} ${s.title}`)
+       }
+     }
+     // 块内任何位置出现 [文档] 即视为本块有文档支撑（用于定稿门禁 Z）；标题或内容里的都算
+     if (blockLines.join("\n").includes("[文档]")) docBlocks += 1
+     for (const f of REQDOC_TEMPLATE_FIELDS) {
+       const fi = blockLines.findIndex((l) => isHeading(l, 5, `${f.key} ${f.title}`))
+       if (fi < 0) continue // 结构缺失已在上报
+       // 来源标注可能在标题行上（「##### 2.1 … [文档]」）或标题下内容里，两者都算；到下一级 ≤5 标题止
+       let body = blockLines[fi] + "\n"
+       for (let j = fi + 1; j < blockLines.length; j++) {
+         const h = headingAt(blockLines[j])
+         if (h && h.level <= 5) break
+         body += blockLines[j] + "\n"
+       }
+       const tags: string[] = body.match(SOURCE_TAG_RE) ?? []
+       if (tags.length > 0) covered[f.key] += 1
+       if (tags.includes("[缺省]")) defaults[f.key] += 1
+       if (tags.includes("[文档]")) docCount += 1
+       if (tags.includes("[问答]")) qaCount += 1
+     }
+   })
 
   return {
     // 全骨架（用户定）：缺章节/缺小节/乱序/功能点块骨架任一不满足都算结构不达标
@@ -268,6 +282,9 @@ export function parseRenderStructure(md: string): RenderStructure {
     missingFeatureSections,
     covered,
     defaults,
+    docBlocks,
+    docCount,
+    qaCount,
   }
 }
 
@@ -316,6 +333,20 @@ export function renderGapViolations(
     }
   }
   return v
+}
+
+/**
+ * 来源支撑门禁（X+Z 组合）：PRD 全部字段来自 [问答]、无任何 [文档] 支撑时（docBlocks=0），
+ * 视为缺乏书面材料依据，返回违规。需业务补充 01~04 材料并重扫、或明确确认「无书面材料可引用」。
+ * 无 render 返回空（柔性：未记录 render 则不放行此门禁，与 P2 复核一致）。
+ */
+export function noDocumentSupportViolation(render: ReqdocRender | undefined): string[] {
+  if (!render) return []
+  if (render.docBlocks > 0) return []
+  return [
+    "PRD 全部字段均来自 [问答]，无任何 [文档] 支撑（来源标注里 [文档] 出现 0 次）。" +
+      "请业务向 01~04 目录补充书面材料后重扫 reqdoc_scan 提取，或经业务明确确认「无书面材料可引用」后再定稿。",
+  ]
 }
 
 /**
