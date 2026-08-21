@@ -22,7 +22,7 @@ import {
   TextRun,
   WidthType,
 } from "docx"
-import { resolveWithinWorktree } from "../fs-safe"
+import { resolveWithinWorktree, projectRoot } from "../fs-safe"
 
 const z = tool.schema
 
@@ -179,7 +179,7 @@ export function createReqdocExportTool(): Record<string, ToolDefinition> {
       if (extname(args.source).toLowerCase() !== ".md") {
         throw new Error("source 必须指向 .md 文件（reqdoc_export 只转换 Markdown 渲染的 PRD）")
       }
-      const mdPath = resolveWithinWorktree(context.worktree, args.source)
+      const mdPath = resolveWithinWorktree(projectRoot(context), args.source)
       let md: string
       try {
         md = await Bun.file(mdPath).text()

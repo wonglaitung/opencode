@@ -18,7 +18,7 @@ import {
 } from "sm-shared"
 import type { Store } from "../db"
 import { WorkflowOpError } from "../workflow-ops"
-import { resolveWithinWorktree } from "../fs-safe"
+import { resolveWithinWorktree, projectRoot } from "../fs-safe"
 
 const z = tool.schema
 
@@ -41,7 +41,7 @@ export function createReqdocCheckTools(store: Store): Record<string, ToolDefinit
         }
         expectedFeatures = workflow.features?.length ?? 0
       })
-      const mdPath = resolveWithinWorktree(context.worktree, args.source)
+      const mdPath = resolveWithinWorktree(projectRoot(context), args.source)
       let md: string
       try {
         md = await Bun.file(mdPath).text()

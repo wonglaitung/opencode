@@ -2,7 +2,7 @@
  * 安全路径收敛测试（防越界，设计文档 workflow-reqdoc.md 8 章 reqdoc_scan/check/export）。
  */
 import { describe, expect, test } from "bun:test"
-import { resolveWithinWorktree } from "../src/fs-safe"
+import { projectRoot, resolveWithinWorktree } from "../src/fs-safe"
 
 describe("resolveWithinWorktree", () => {
   const wt = "/project/req"
@@ -29,5 +29,15 @@ describe("resolveWithinWorktree", () => {
 
   test("恰好是工作区根本身放行", () => {
     expect(resolveWithinWorktree(wt, ".")).toBe("/project/req")
+  })
+})
+
+describe("projectRoot", () => {
+  test("优先用 context.directory（非 git 项目 worktree 可能错位）", () => {
+    expect(projectRoot({ directory: "/proj/req", worktree: "/home/user" })).toBe("/proj/req")
+  })
+
+  test("directory 缺失时回退 worktree", () => {
+    expect(projectRoot({ worktree: "/home/user" })).toBe("/home/user")
   })
 })

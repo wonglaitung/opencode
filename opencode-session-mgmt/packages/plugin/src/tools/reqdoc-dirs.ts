@@ -9,6 +9,7 @@
 import { mkdir } from "node:fs/promises"
 import { join } from "node:path"
 import { tool, type ToolDefinition } from "@opencode-ai/plugin"
+import { projectRoot } from "../fs-safe"
 
 const z = tool.schema
 
@@ -58,14 +59,16 @@ export function createReqdocInitTool(): Record<string, ToolDefinition> {
     async execute(_args, context) {
       const created: string[] = []
       const existed: string[] = []
+      const root = projectRoot(context)
       for (const dir of REQDOC_DIRS) {
-        const full = join(context.worktree, dir)
+        const full = join(root, dir)
         // recursive 保证父级存在即可建；已存在不报错、不改动内容
         await mkdir(full, { recursive: true })
         created.push(dir)
       }
       const skeleton = REQDOC_DIRS.map((d) => `  ${d}/\n    ↳ ${REQDOC_DIR_USAGE[d]}`).join("\n")
       return (
+        `📂 资料根目录：${root}\n\n` +
         `✅ 已就绪需求资料目录骨架（${created.length} 个，幂等不覆盖）。请业务把以下基础材料放进对应目录：\n\n` +
         skeleton +
         `\n\n📌 投放后请告知 AI，AI 将调用 reqdoc_scan 逐目录扫描提取（建议顺序：01 → 03 → 02 → 04）；会话中途补充了材料，也可随时再次调用 reqdoc_scan 重扫，不必等下一轮。` +

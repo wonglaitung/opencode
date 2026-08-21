@@ -10,7 +10,7 @@ import { basename, extname, join } from "node:path"
 import { tool, type ToolDefinition } from "@opencode-ai/plugin"
 import JSZip from "jszip"
 import ExcelJS from "exceljs"
-import { resolveWithinWorktree } from "../fs-safe"
+import { resolveWithinWorktree, projectRoot } from "../fs-safe"
 
 const z = tool.schema
 
@@ -105,7 +105,7 @@ export function createReqdocScanTool(): Record<string, ToolDefinition> {
         ),
     },
     async execute(args, context) {
-      const dir = resolveWithinWorktree(context.worktree, args.directory)
+      const dir = resolveWithinWorktree(projectRoot(context), args.directory)
       let names: string[]
       try {
         names = await readdir(dir)
