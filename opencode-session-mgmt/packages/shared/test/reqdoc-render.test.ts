@@ -127,6 +127,28 @@ describe("parseRenderStructure", () => {
     expect(s.missingFeatureSections).toEqual([])
   })
 
+  test("功能点标题用 N_名称 目录约定也能识别（与 reqdoc_confirm_features 建档名一致）", () => {
+    const md = fullPrd()
+      .replace("### 功能点 1", "### 1_故障应急智能检索（双入口）")
+      .replace("### 功能点 2", "### 2_额度管控与熔断")
+    const s = parseRenderStructure(md)
+    expect(s.featureCount).toBe(2)
+    expect(s.featureOk).toBe(true)
+    expect(s.missingFeatureSections).toEqual([])
+  })
+
+  test("功能点标题带序号和点号（### 1. 名称）也能识别", () => {
+    const md = fullPrd().replace("### 功能点 1", "### 1. 故障应急智能检索")
+    const s = parseRenderStructure(md)
+    expect(s.featureCount).toBe(2)
+  })
+
+  test("非三级标题或非 N_/功能点 前缀不识别为块", () => {
+    const md = fullPrd().replace("### 功能点 1", "## 功能点 1").replace("### 功能点 2", "#### 2_额度管控")
+    const s = parseRenderStructure(md)
+    expect(s.featureCount).toBe(0)
+  })
+
   test("来源标注在标题下内容里也能提取（模板规范写法）", () => {
     const md = fullPrd()
       .replace("##### 2.1 输入要素的检查 [文档]\n", "##### 2.1 输入要素的检查\n\n校验卡号与余额 [文档]\n")
