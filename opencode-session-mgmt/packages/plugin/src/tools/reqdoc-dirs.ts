@@ -76,7 +76,8 @@ export function createReqdocInitTool(): Record<string, ToolDefinition> {
       "reqdoc 目录骨架初始化：在需求资料根（项目根）幂等创建 01~06 六个约定目录" +
       "（01_背景与目标 / 02_制度与合规 / 03_流程与数据 / 04_角色与权限为业务投放材料区；" +
       "05_功能点 / 06_需求规格产出为 AI 工作区）。已存在则跳过，绝不重建或覆盖业务已放材料。" +
-      "goal 阶段目录就绪检查时，确认业务要搭建骨架后调用本工具；业务说资料已放好可用 reqdoc_scan 扫描。仅 reqdoc 工作流有效。",
+      "goal 阶段目录就绪检查时，确认业务要搭建骨架后调用本工具；业务说资料已放好可用 reqdoc_scan 扫描。仅 reqdoc 工作流有效。" +
+      "调用本工具后，必须把返回的目录绝对路径与「① 投放材料 / ② 直接口述」二选一原样转述给业务并停下等待其明确选择，不得直接进入追问或先问其它问题。",
     args: {},
     async execute(_args, context) {
       const created: string[] = []

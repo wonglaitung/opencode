@@ -264,6 +264,8 @@ describe("WorkflowDefinition 注册表（3.2）", () => {
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r6" && r.text.includes("默认推荐"))).toBe(true)
     // 阶段可见性（质量飞轮）：reqdoc-r25 通用规则，驱动模型每轮开头展示阶段 + 点名确认
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r25" && r.text.includes("第 N/Y 步") && r.text.includes("点名阶段"))).toBe(true)
+    // 投放/口述 决定阶段无关（质量飞轮）：reqdoc-r26 通用规则，目标阶段被跳过时仍须每轮提出二选一并停下，不得直接追问
+    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r26" && r.stage === "global" && r.text.includes("二选一") && r.text.includes("停下等待") && r.text.includes("不得自行浓缩"))).toBe(true)
     expect(SDLC.rules.some((r) => r.id === "sdlc-r13" && r.text.includes("第 N/Y 步") && r.text.includes("点名阶段"))).toBe(true)
     // stagePurpose（阶段一句话目的，数据驱动、可扩展）
     expect(REQDOC.stagePurpose).toBeDefined()
