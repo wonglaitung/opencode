@@ -255,4 +255,38 @@ describe("buildStateBar 渲染校验行（质量飞轮 P2）", () => {
     applyTransition(s, "implementation", "enter", 1)
     expect(buildStateBar(s, "implementation")).not.toContain("渲染校验")
   })
+
+  describe("阶段可见性表头（阶段指示，用户可见前提）", () => {
+    test("reqdoc edge 进行中 → 表头含 第 3/5 步 + 阶段名 + 目的", () => {
+      const s = createWorkflowState("reqdoc")
+      applyTransition(s, "edge", "enter", 1)
+      const bar = buildStateBar(s, "edge")
+      expect(bar).toContain("当前阶段：边界与异常（第 3/5 步），状态 进行中")
+      expect(bar).toContain("目的：补全异常、逆向与权限合规")
+    })
+
+    test("sdlc implementation 进行中 → 表头含 第 3/5 步 + 阶段名 + 目的", () => {
+      const s = createWorkflowState("sdlc")
+      applyTransition(s, "implementation", "enter", 1)
+      const bar = buildStateBar(s, "implementation")
+      expect(bar).toContain("当前阶段：编码（第 3/5 步），状态 进行中")
+      expect(bar).toContain("目的：编码实现")
+    })
+
+    test("全未开始（stage=null）→ 表头含 未开始 + 第 1/5 步 + 首阶段", () => {
+      const s = createWorkflowState("reqdoc")
+      const bar = buildStateBar(s, null)
+      expect(bar).toContain("当前阶段：未开始（第 1/5 步），请从「目标与场景」开始")
+    })
+
+    test("空档态（部分 approved 无进行中）→ 表头含 空档 + 下一步", () => {
+      const s = createWorkflowState("reqdoc")
+      applyTransition(s, "goal", "enter", 1)
+      applyTransition(s, "goal", "approve", 1)
+      applyTransition(s, "rules", "enter", 1)
+      applyTransition(s, "rules", "approve", 1)
+      const bar = buildStateBar(s, null)
+      expect(bar).toContain("当前阶段：空档（已 approved：目标与场景、流程与规则），下一步：「边界与异常」")
+    })
+  })
 })

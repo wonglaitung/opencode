@@ -260,6 +260,15 @@ describe("WorkflowDefinition 注册表（3.2）", () => {
     // 追问原则：严禁纯技术词汇（业务语言转述，实施方案「追问原则」）
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r2" && r.text.includes("严禁") && r.text.includes("纯技术词汇") && r.text.includes("幂等"))).toBe(true)
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r6" && r.text.includes("默认推荐"))).toBe(true)
+    // 阶段可见性（质量飞轮）：reqdoc-r25 通用规则，驱动模型每轮开头展示阶段 + 点名确认
+    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r25" && r.text.includes("第 N/Y 步") && r.text.includes("点名阶段"))).toBe(true)
+    expect(SDLC.rules.some((r) => r.id === "sdlc-r13" && r.text.includes("第 N/Y 步") && r.text.includes("点名阶段"))).toBe(true)
+    // stagePurpose（阶段一句话目的，数据驱动、可扩展）
+    expect(REQDOC.stagePurpose).toBeDefined()
+    expect(REQDOC.stagePurpose?.goal).toBe("明确谁在用、解决什么痛点")
+    expect(REQDOC.stagePurpose?.review).toBe("业务逐条确认 PRD 要点")
+    expect(SDLC.stagePurpose?.implementation).toBe("编码实现")
+    expect(SDLC.stagePurpose?.review).toBe("开发者理解确认代码")
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r20" && r.text.includes("渲染铁律") && r.text.includes("字段映射"))).toBe(true)
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r21" && r.stage === "edge" && r.text.includes("reqdoc_score"))).toBe(true)
     // 实施方案 01~06 产出：03→数据字典与库表设计（r10），04→RBAC 矩阵与审批流（r12），落盘进 r14/r20

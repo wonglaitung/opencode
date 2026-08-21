@@ -101,13 +101,41 @@ export function buildSystemFragment(
   return parts.join("\n")
 }
 
+/** 阶段状态中文（buildStateBar 表头用） */
+function statusZh(status: string): string {
+  return status === "in_progress" ? "进行中" : status === "approved" ? "已通过" : "未开始"
+}
+
 /** 将工作流状态压缩为一行阶段条 + 关键状态（替代原冗长 JSON，弱模型更易读，7.1/7.3）。 */
 export function buildStateBar(workflow: WorkflowState, stage: string | null): string {
   const def = getDefinition(workflow.type)
+  const total = def.stages.length
+  const idx = stage ? def.stages.indexOf(stage) : -1
+  let header: string
+  if (stage) {
+    const st = workflow.stages[stage]
+    const purpose = def.stagePurpose?.[stage]
+    header =
+      `当前阶段：${def.labels[stage] ?? stage}（第 ${idx + 1}/${total} 步），状态 ${statusZh(st.status)}` +
+      (purpose ? ` ｜ 目的：${purpose}` : "")
+  } else {
+    // stage===null：全未开始（起步）或空档（部分 approved 无进行中）
+    const notStarted = def.stages.filter((n) => workflow.stages[n].status === "not_started")
+    if (notStarted.length === total) {
+      const first = def.stages[0]
+      header = `当前阶段：未开始（第 1/${total} 步），请从「${def.labels[first] ?? first}」开始`
+    } else {
+      const done = def.stages
+        .filter((n) => workflow.stages[n].status === "approved")
+        .map((n) => def.labels[n] ?? n)
+      const next = def.stages.find((n) => workflow.stages[n].status === "not_started") ?? def.stages[0]
+      header = `当前阶段：空档（已 approved：${done.join("、")}），下一步：「${def.labels[next] ?? next}」`
+    }
+  }
   const bar = def.stages
     .map((name) => `${def.labels[name] ?? name}(${name})[${workflow.stages[name].status}]`)
     .join(" → ")
-  const lines = ["## 当前工作流", bar]
+  const lines = ["## 当前工作流", header, bar]
 
   // 审查进行中才输出审查进度（含清单各项 + 待确认项 id，让模型知道要 confirm 什么）
   if (stage === def.reviewStage) {

@@ -6,7 +6,8 @@
  * 跨平台安全：目录名一律经 sanitizeDirName 过滤，规避 Windows 保留字符
  * （< > : " / \ | ? * 与尾随 . 空格、CON/PRN 等设备名）导致 mkdir 失败。
  */
-import { mkdir } from "node:fs/promises"
+import { existsSync } from "node:fs"
+import { mkdir, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { tool, type ToolDefinition } from "@opencode-ai/plugin"
 import { projectRoot } from "../fs-safe"
@@ -32,6 +33,27 @@ const REQDOC_DIR_USAGE: Record<(typeof REQDOC_DIRS)[number], string> = {
   "05_功能点": "AI 工作区（功能点拆解后自动建子目录，业务一般不需手动投放）",
   "06_需求规格产出": "AI 工作区（PRD 与各模板外成果自动落盘，业务一般不需手动投放）",
 }
+
+/** 单个目录的 README 说明（脚手架元数据，幂等写入、已存在则跳过，绝不覆盖业务补充）。 */
+function dirReadme(dir: string, usage: string): string {
+  const isMaterial = Number(dir.slice(0, 2)) <= 4
+  const hint = isMaterial
+    ? "请把对应材料（Word/PDF/Excel/Markdown/纯文本均可）放进本目录，投放后告知 AI 调用 reqdoc_scan 扫描提取。"
+    : "本目录为 AI 工作区，由工具自动落盘（功能点拆解 / PRD 渲染），业务一般不需手动投放。"
+  return `# ${dir}\n\n${usage}\n\n${hint}\n\n> 本说明由 reqdoc 目录骨架初始化自动生成；你可在此基础上补充更具体的投放指引，不会被覆盖。\n`
+}
+
+/** 资料根目录总览 README（独立文件名，避免覆盖业务自有 README.md）。 */
+const ROOT_README = `# 需求资料目录说明（reqdoc 骨架）
+
+本目录为 reqdoc 需求资料工作区根。请按以下约定投放材料：
+
+${REQDOC_DIRS.map((d) => `- **${d}**：${REQDOC_DIR_USAGE[d]}`).join("\n")}
+
+- 01~04 为业务投放材料区；05_功能点、06_需求规格产出 为 AI 工作区。
+- 投放后告知 AI，AI 调用 reqdoc_scan 逐目录扫描提取（建议顺序 01 → 03 → 02 → 04）；也可全程口述，AI 按阶段追问补全。
+- 各目录内已附 README.md 说明，可直接打开查看。
+`
 
 /**
  * 跨平台目录名净化：过滤 Windows/文件系统非法字符（< > : " / \ | ? *）、
@@ -62,18 +84,30 @@ export function createReqdocInitTool(): Record<string, ToolDefinition> {
       const root = projectRoot(context)
       for (const dir of REQDOC_DIRS) {
         const full = join(root, dir)
+        const dirExisted = existsSync(full)
         // recursive 保证父级存在即可建；已存在不报错、不改动内容
         await mkdir(full, { recursive: true })
-        created.push(dir)
+        if (dirExisted) existed.push(dir)
+        else created.push(dir)
+        // 幂等写入目录说明：仅当 README 不存在时写，绝不覆盖业务已补充的内容
+        const readmePath = join(full, "README.md")
+        if (!existsSync(readmePath)) {
+          await writeFile(readmePath, dirReadme(dir, REQDOC_DIR_USAGE[dir]), "utf8")
+        }
       }
-      const skeleton = REQDOC_DIRS.map((d) => `  ${d}/\n    ↳ ${REQDOC_DIR_USAGE[d]}`).join("\n")
+      // 根目录总览（独立文件名，避免覆盖业务自有 README.md）
+      const rootReadmePath = join(root, "需求资料目录说明.md")
+      if (!existsSync(rootReadmePath)) {
+        await writeFile(rootReadmePath, ROOT_README, "utf8")
+      }
+      const skeleton = REQDOC_DIRS.map((d) => `  ${d}/  （含 README.md 说明）\n    ↳ ${REQDOC_DIR_USAGE[d]}`).join("\n")
       return (
         `📂 资料根目录：${root}\n\n` +
-        `✅ 已就绪需求资料目录骨架（${created.length} 个，幂等不覆盖）。请业务把以下基础材料放进对应目录：\n\n` +
+        `✅ 已就绪需求资料目录骨架（${created.length} 个，幂等不覆盖），并已为每个目录写入 README.md 使用说明（根目录另附「需求资料目录说明.md」总览）。请业务把以下基础材料放进对应目录：\n\n` +
         skeleton +
         `\n\n📌 投放后请告知 AI，AI 将调用 reqdoc_scan 逐目录扫描提取（建议顺序：01 → 03 → 02 → 04）；会话中途补充了材料，也可随时再次调用 reqdoc_scan 重扫，不必等下一轮。` +
         `\n没有现成文档时也可直接口述，AI 会按阶段追问补全，不必强求每个目录都填。` +
-        (existed.length ? `\n（其中 ${existed.length} 个目录原本已存在，已保留其内部材料，未覆盖。）` : "")
+        (existed.length ? `\n（其中 ${existed.length} 个目录原本已存在，已保留其内部材料与 README.md，未覆盖。）` : "")
       )
     },
   })

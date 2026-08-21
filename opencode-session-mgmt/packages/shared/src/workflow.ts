@@ -376,6 +376,9 @@ export interface WorkflowDefinition {
   stages: string[]
   /** 阶段中文名（渲染/注入用） */
   labels: Record<string, string>
+  /** 每阶段一句话目的（阶段可见性Indicator 用，prompt.ts buildStateBar 渲染、规则驱动模型复述给用户）。
+   *  可选：未填则不展示目的行；新增工作流只需填此映射，通用阶段可见性规则无需改写。 */
+  stagePurpose?: Record<string, string>
   /** 哪个阶段是审查阶段（可无）；审查清单/理解确认仅在该阶段存在时使用 */
   reviewStage: string | null
   /** 审查清单项（仅 reviewStage 存在时用） */
@@ -406,13 +409,21 @@ export const SDLC: WorkflowDefinition = {
     testing: "测试",
     review: "审查",
   },
+  stagePurpose: {
+    requirements: "厘清需求与边界",
+    design: "方案设计",
+    implementation: "编码实现",
+    testing: "测试验证",
+    review: "开发者理解确认代码",
+  },
   reviewStage: "review",
   checklist: SDLC_CHECKLIST,
   hasCommitGate: true,
   rules: [
     // ---- global：所有阶段通用 ----
     { id: "sdlc-r1", stage: "global", text: "会话开始时，调用 workflow_advance(stage=requirements, action=enter) 初始化工作流。" },
-    { id: "sdlc-r2", stage: "global", text: "阶段可能完成时，先输出摘要并询问确认；仅开发者明确表示「确认/通过/可以」才算确认——「你看着办」「差不多」等模糊表态不算，不得自行 approve。确认后调用 workflow_advance(action=approve, developer_confirmed=true)。" },
+    { id: "sdlc-r2", stage: "global", text: "阶段可能完成时，先输出摘要并询问确认；仅开发者明确表示「确认/通过/可以」才算确认——「你看着办」「差不多」等模糊表态不算，不得自行 approve。确认后调用 workflow_advance(action=approve, developer_confirmed=true)。询问确认时须显式点明所确认的阶段名（如「【编码 阶段】以上编码是否确认？」），不得用笼统的「以上流程与规则是否确认」。" },
+    { id: "sdlc-r13", stage: "global", text: stageVisibilityRule("开发者") },
     { id: "sdlc-r3", stage: "global", text: "开发者说「回到XX」时，立即调用 workflow_revisit(stage=XX)。绝不自行判断阶段已完成。" },
     { id: "sdlc-r4", stage: "global", text: "要求提交时，先调用 commit_gate_check；全部五阶段（含审查）approved 后才可 git commit。" },
     { id: "sdlc-r5", stage: "global", text: "提交门禁放行且 git commit 成功后，提醒开发者执行 /new 开始下一个需求，保持统计隔离。" },
@@ -444,6 +455,23 @@ const REQDOC_CHECKLIST: ChecklistItem[] = [
  * 定稿无 git 门禁（hasCommitGate=false）。结构化规则（global + 阶段归属），
  * 需求资料目录契约（7.5）落在 goal 阶段规则与各阶段扫描映射。
  */
+
+/**
+ * 阶段可见性规则文本（质量飞轮：阶段可见性）。reqdoc/sdlc 共用同一段、仅受众措辞不同，
+ * 阶段名与一句话目的均取自各工作流定义的 labels / stagePurpose（数据驱动，不在此硬编码枚举），
+ * 故未来新增工作流只需挂本规则 + 填自己的 stagePurpose，无需改写本文本。
+ * 作用：驱动模型在每条回复开头向用户复述当前阶段与全部阶段进展，并令确认/approve 点名阶段。
+ */
+function stageVisibilityRule(who: string): string {
+  return (
+    `阶段可见性（通用）：你每条回复的开头，必须用一行向${who}展示当前所处阶段与全部阶段进展，格式——` +
+    `📍 阶段：<当前阶段中文名>（第 N/Y 步）｜ 目的：<本阶段一句话目的> ｜ 已完成：<已 approved 阶段名>✓ ｜ 下一步：<下一阶段名>。` +
+    `处于「未开始/空档」态时，说明「尚未开始，请从<首阶段>开始」或「空档，下一步：<阶段名>」。` +
+    `向${who}询问确认/approve 时，必须显式点明所确认的**阶段名**（如「【边界与异常 阶段】以上边界与异常是否确认？」），` +
+    `不得用笼统的「以上流程与规则是否确认」之类不点名阶段的问法。`
+  )
+}
+
 export const REQDOC: WorkflowDefinition = {
   type: "reqdoc",
   stages: ["goal", "rules", "edge", "prd", "review"],
@@ -454,6 +482,13 @@ export const REQDOC: WorkflowDefinition = {
     prd: "需求规格书",
     review: "业务确认",
   },
+  stagePurpose: {
+    goal: "明确谁在用、解决什么痛点",
+    rules: "理清主流程、字段与数据字典",
+    edge: "补全异常、逆向与权限合规",
+    prd: "按模板渲染需求规格书",
+    review: "业务逐条确认 PRD 要点",
+  },
   reviewStage: "review",
   checklist: REQDOC_CHECKLIST,
   hasCommitGate: false,
@@ -461,7 +496,8 @@ export const REQDOC: WorkflowDefinition = {
     // ---- global：所有阶段通用 ----
     { id: "reqdoc-r1", stage: "global", text: "会话开始时，调用 workflow_advance(stage=goal, action=enter) 初始化工作流。" },
     { id: "reqdoc-r2", stage: "global", text: "采用渐进式分段引导，不要一次性抛出所有问题；单次提问 2-3 个问题，每个问题必须附 A/B/C 选项并标注【默认推荐项】（业务回复「同意默认」即按推荐确认）；同一需求追问最长 3 轮，3 轮后仍未澄清项标 [缺省] 进入下一环节，避免业务有被「质问」的挫败感。提问一律用业务语言，严禁出现「高并发、幂等性、API」等纯技术词汇——同一含义必须转述为业务说法（如并发重复提交→「同一笔交易被重复点了几次怎么处理」）。" },
-    { id: "reqdoc-r3", stage: "global", text: "阶段可能完成时，先输出摘要并询问确认；仅业务明确表示「确认/可以」才算确认——模糊表态不算，不得自行 approve。确认后调用 workflow_advance(action=approve, developer_confirmed=true)。" },
+    { id: "reqdoc-r3", stage: "global", text: "阶段可能完成时，先输出摘要并询问确认；仅业务明确表示「确认/可以」才算确认——模糊表态不算，不得自行 approve。确认后调用 workflow_advance(action=approve, developer_confirmed=true)。询问确认时须显式点明所确认的阶段名（如「【边界与异常 阶段】以上边界与异常是否确认？」），不得用笼统的「以上流程与规则是否确认」。" },
+    { id: "reqdoc-r25", stage: "global", text: stageVisibilityRule("业务") },
     { id: "reqdoc-r4", stage: "global", text: "业务说「回到XX」时，立即调用 workflow_revisit(stage=XX)。绝不自行判断阶段已完成。" },
     { id: "reqdoc-r5", stage: "global", text: "业务确认完成（review_submit 通过）后，建议执行 /new 开始下一个需求，保持统计隔离。" },
     // ---- goal 目标与场景 ----
