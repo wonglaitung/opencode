@@ -51,6 +51,19 @@ describe("reqdoc_init 目录骨架 + README", () => {
     expect(existsSync(join(root, "需求资料目录说明.md"))).toBe(true)
   })
 
+  test("init 输出展示材料目录绝对路径 + 部分投放引导，逼出业务选择", async () => {
+    const root = mkdtempSync(join(tmpdir(), "reqdoc-init-"))
+    const tools = createReqdocInitTool()
+    const out = String(await tools.reqdoc_init!.execute({} as never, { directory: root, sessionID: "s1" } as never))
+    // 各材料目录绝对路径可见（业务能直接打开投放）
+    expect(out).toContain(join(root, "01_背景与目标"))
+    expect(out).toContain(join(root, "04_角色与权限"))
+    // 部分友好：不强制一次备齐，且显式二选一逼出回应
+    expect(out).toContain("有多少投多少")
+    expect(out).toContain("直接口述")
+    expect(out).toContain("你手头有哪些材料")
+  })
+
   test("幂等：重复调用不覆盖业务已编辑的 README", async () => {
     const root = mkdtempSync(join(tmpdir(), "reqdoc-init-"))
     const tools = createReqdocInitTool()

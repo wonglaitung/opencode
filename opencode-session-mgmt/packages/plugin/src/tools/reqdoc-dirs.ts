@@ -100,13 +100,21 @@ export function createReqdocInitTool(): Record<string, ToolDefinition> {
       if (!existsSync(rootReadmePath)) {
         await writeFile(rootReadmePath, ROOT_README, "utf8")
       }
-      const skeleton = REQDOC_DIRS.map((d) => `  ${d}/  （含 README.md 说明）\n    ↳ ${REQDOC_DIR_USAGE[d]}`).join("\n")
+      const materialDirs = REQDOC_DIRS.filter((d) => Number(d.slice(0, 2)) <= 4)
+      const list = materialDirs
+        .map((d) => `  📁 ${join(root, d)}\n      ↳ ${REQDOC_DIR_USAGE[d]}`)
+        .join("\n")
+      const nextStep =
+        `\n\n👉 下一步（投放多少算多少，不强制一次备齐）：\n` +
+        `  ① 投放材料：把你能提供的文件放进上方 01~04 对应目录（已附 README 说明），有多少投多少；放好后告诉我，我对这些目录调 reqdoc_scan 逐目录扫描提取（建议顺序 01 → 03 → 02 → 04），没投放的目录我们口述补全。\n` +
+        `  ② 先口述：说「直接口述」，我从痛点聊起按阶段追问补全（全程 [问答] 来源，定稿时需你确认「无书面材料」）。`
       return (
         `📂 资料根目录：${root}\n\n` +
-        `✅ 已就绪需求资料目录骨架（${created.length} 个，幂等不覆盖），并已为每个目录写入 README.md 使用说明（根目录另附「需求资料目录说明.md」总览）。请业务把以下基础材料放进对应目录：\n\n` +
-        skeleton +
-        `\n\n📌 投放后请告知 AI，AI 将调用 reqdoc_scan 逐目录扫描提取（建议顺序：01 → 03 → 02 → 04）；会话中途补充了材料，也可随时再次调用 reqdoc_scan 重扫，不必等下一轮。` +
-        `\n没有现成文档时也可直接口述，AI 会按阶段追问补全，不必强求每个目录都填。` +
+        `✅ 已就绪需求资料目录骨架（${created.length} 个，幂等不覆盖），并已为每个目录写入 README.md 使用说明（根目录另附「需求资料目录说明.md」总览）。\n\n` +
+        `请把以下基础材料放进对应目录（绝对路径如下，直接打开即可投放；05_功能点 / 06_需求规格产出 为 AI 工作区，业务一般不需手动放）：\n\n` +
+        list +
+        nextStep +
+        `\n\n你手头有哪些材料？放进对应目录后告诉我（我扫描提取），或说「先口述」我们从痛点聊起？` +
         (existed.length ? `\n（其中 ${existed.length} 个目录原本已存在，已保留其内部材料与 README.md，未覆盖。）` : "")
       )
     },

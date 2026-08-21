@@ -251,6 +251,8 @@ describe("WorkflowDefinition 注册表（3.2）", () => {
     // 需求资料目录契约（7.5 重构：材料区 01~04 + AI 工作区 05/06）
     expect(REQDOC.rules.some((r) => r.text.includes("01_背景与目标"))).toBe(true)
     expect(REQDOC.rules.some((r) => r.text.includes("06_需求规格产出"))).toBe(true)
+    // 投放引导（partial 友好）：r8 须展示绝对路径、接受部分投放、并显式二选一逼出选择
+    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r8" && r.text.includes("绝对路径") && r.text.includes("有多少投多少") && r.text.includes("直接口述"))).toBe(true)
     // 双通道：文档扫描工具 + 功能点拆解确认工具（重构核心）
     expect(REQDOC.rules.some((r) => r.text.includes("reqdoc_scan"))).toBe(true)
     expect(REQDOC.rules.some((r) => r.text.includes("reqdoc_confirm_features"))).toBe(true)
