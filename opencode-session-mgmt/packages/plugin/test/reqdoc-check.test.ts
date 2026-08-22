@@ -125,4 +125,64 @@ describe("reqdoc_check", () => {
     expect(store.get("r1")?.workflow?.render).toBeUndefined()
     store.close()
   })
+
+  test("P3.7 增量诊断：feature=1 齐全 → 期望 vs 实际无缺失", async () => {
+    const { store, worktree } = setupReqdoc(1)
+    const rel = "06_需求规格产出/1_测试/需求规格书.md"
+    writeMd(worktree, rel, goodMd())
+    const tools = createReqdocCheckTools(store)
+    const out = String(
+      await tools.reqdoc_check!.execute({ source: rel, feature: "1" } as never, { sessionID: "r1", worktree } as never),
+    )
+    expect(out).toContain("🔍 增量诊断（功能点 1 期望 vs 实际）")
+    expect(out).toContain("✗ 缺失：（无）")
+    store.close()
+  })
+
+  test("P3.7 增量诊断：feature=1 缺 2.3 → 列出缺失子小节", async () => {
+    const { store, worktree } = setupReqdoc(1)
+    const rel = "06_需求规格产出/1_测试/需求规格书.md"
+    writeMd(worktree, rel, goodMd().replace("##### 2.3 异常处理要求 [文档]\n", ""))
+    const tools = createReqdocCheckTools(store)
+    const out = String(
+      await tools.reqdoc_check!.execute({ source: rel, feature: "功能点 1" } as never, { sessionID: "r1", worktree } as never),
+    )
+    expect(out).toContain("✗ 缺失：2.3 异常处理要求")
+    store.close()
+  })
+
+  test("P3.9 连续失败计数：两次违规累加，合规后清零", async () => {
+    const { store, worktree } = setupReqdoc(1)
+    const rel = "06_需求规格产出/1_测试/需求规格书.md"
+    const bad = goodMd().replace(/## 第四章[\s\S]*$/, "")
+    const tools = createReqdocCheckTools(store)
+    const ctx = { sessionID: "r1", worktree } as never
+    writeMd(worktree, rel, goodMd()) // 首次合规 → 0
+    await tools.reqdoc_check!.execute({ source: rel } as never, ctx)
+    expect(store.get("r1")!.workflow!.renderCheckFails).toBe(0)
+    writeMd(worktree, rel, bad) // 缺 第四章/第五章
+    await tools.reqdoc_check!.execute({ source: rel } as never, ctx)
+    await tools.reqdoc_check!.execute({ source: rel } as never, ctx)
+    expect(store.get("r1")!.workflow!.renderCheckFails).toBe(2)
+    writeMd(worktree, rel, goodMd())
+    await tools.reqdoc_check!.execute({ source: rel } as never, ctx)
+    expect(store.get("r1")!.workflow!.renderCheckFails).toBe(0)
+    store.close()
+  })
+
+  test("P3.9 连续失败≥3 → 卡片提示人工介入与格式诊断", async () => {
+    const { store, worktree } = setupReqdoc(1)
+    const rel = "06_需求规格产出/1_测试/需求规格书.md"
+    const bad = goodMd().replace(/## 第四章[\s\S]*$/, "")
+    const tools = createReqdocCheckTools(store)
+    const ctx = { sessionID: "r1", worktree } as never
+    let out = ""
+    for (let i = 0; i < 3; i++) {
+      writeMd(worktree, rel, bad)
+      out = String(await tools.reqdoc_check!.execute({ source: rel } as never, ctx))
+    }
+    expect(out).toContain("已连续 3 次校验不通过")
+    expect(out).toContain("人工介入")
+    store.close()
+  })
 })

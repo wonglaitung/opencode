@@ -533,6 +533,29 @@ describe("reqdoc 工作流（业务确认 PRD 要点）", () => {
     store.close()
   })
 
+  test("P3.10 确认溯源：reqdoc 要点确认但未回填来源 → 定稿被拦截", async () => {
+    const store = Store.memory(() => "reqdoc" as const)
+    const tools = createReviewTools(store)
+    const ctx = { sessionID: "r1" } as never
+    store.mutateWorkflow("r1", (w) => {
+      for (const name of ["goal", "rules", "edge", "prd"]) w.stages[name].status = "approved"
+    })
+    setReqdocScore(store, "r1")
+    await tools.comprehension_add!.execute(
+      { codeSegmentId: "目标与场景", explanation: "面向一线柜员，缩短开户录入时间" } as never,
+      ctx,
+    )
+    // 确认但不传来源证据（P3.10 要求回填）
+    await tools.comprehension_confirm!.execute({ codeSegmentId: "目标与场景" } as never, ctx)
+    await expect(
+      tools.review_submit!.execute(
+        { completeness: true, clarity: true, edgeCoverage: true, resolution: true } as never,
+        ctx,
+      ),
+    ).rejects.toThrow(/确认溯源缺失/)
+    store.close()
+  })
+
   test("reqdoc 要点无代码位置信息（id 即要点，file/lines undefined）", async () => {
     const store = Store.memory(() => "reqdoc" as const)
     const tools = createReviewTools(store)
