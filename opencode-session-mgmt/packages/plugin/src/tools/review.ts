@@ -88,6 +88,14 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
       "pending 与 rejected（开发者复议后接受）均可确认；已 manual 终态的不可再 confirm。",
     args: {
       codeSegmentId: z.string().describe("要确认的单个片段/要点标识"),
+      sourceLabel: z
+        .string()
+        .optional()
+        .describe("确认来源标签（溯源，P3.10）：如「文档 3.2 章」「对话第 4 轮业务原话」「要点 2.3」；reqdoc 要点确认时建议填写以便定稿溯源"),
+      sourceQuote: z
+        .string()
+        .optional()
+        .describe("确认来源引用原文/编号（溯源，P3.10）：粘贴被确认要点的出处片段或编号；reqdoc 要点确认时建议填写"),
     },
     async execute(args, context) {
       let confirmedNow = false
@@ -106,6 +114,9 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
           record.developerConfirmed = true
           record.confirmedAt = Date.now()
           confirmedNow = true
+        }
+        if (args.sourceLabel || args.sourceQuote) {
+          record.confirmSource = { label: args.sourceLabel ?? "", quote: args.sourceQuote ?? "" }
         }
       })
       const review = reviewRecord(store.ensure(context.sessionID).workflow!)
@@ -321,6 +332,18 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
                   `如确无书面材料可引用，请业务明确确认后重试 review_submit(no_document_confirmed=true)。`,
               )
             }
+          }
+        }
+        // 确认溯源门禁（P3.10）：reqdoc 已接受要点须回填来源证据，否则定稿视为凭空认可
+        if (def.type === "reqdoc") {
+          const noSource = review.comprehension.filter(
+            (c) => c.decision === "accepted" && !c.confirmSource,
+          )
+          if (noSource.length > 0) {
+            throw new WorkflowOpError(
+              `确认溯源缺失：${noSource.map((c) => c.id).join("、")} 已确认但未回填来源证据（comprehension_confirm 的 sourceLabel/sourceQuote）。` +
+                `请对每处确认补充来源标签与引用原文后再定稿。`,
+            )
           }
         }
         const total = review.comprehension.length

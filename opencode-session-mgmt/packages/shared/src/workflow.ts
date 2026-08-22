@@ -60,6 +60,12 @@ export interface ComprehensionRecord {
   rewrites: number
   /** manual 终态时开发者自处理的结果说明。 */
   resolution: string | null
+  /**
+   * 确认来源溯源（质量飞轮 P3.10，comprehension_confirm 写入；reqdoc 定稿强制）：
+   * 确认某要点时必须回填其来源证据——标签 + 引用原文/编号，证明该要点确有出处（不是凭空认可）。
+   * sdlc 不强制（代码段本身即出处）；reqdoc 缺少此字段则 review_submit 定稿被拦截。
+   */
+  confirmSource?: { label: string; quote: string }
 }
 
 export interface ReviewStageRecord extends StageRecord {
@@ -384,6 +390,35 @@ export interface WorkflowState {
    * review_submit 定稿时重读 source 复核（防快照被篡改）；未记录则柔性放行。
    */
   render?: ReqdocRender
+  /**
+   * reqdoc 字段定义（质量飞轮 P2.5，reqdoc_field_dict 工具写入）：进 prd 前逐字段与业务确认
+   * 名称/类型/长度/必填/取值/来源系统，生成数据字典后再渲染。
+   * 可选字段：未调用 reqdoc_field_dict 前缺省；sdlc 恒缺省。随汇报上行。
+   */
+  fieldDict?: ReqdocFieldDef[]
+  /**
+   * reqdoc 渲染结构校验连续失败计数（质量飞轮 P3.9）：reqdoc_check 连续返回违规累加，
+   * 一旦 success=true 清零；≥3 时 review_submit 提示人工介入 + 格式诊断。sdlc 恒缺省。
+   */
+  renderCheckFails?: number
+}
+
+/** reqdoc 字段定义（P2.5 数据字典一项）：逐功能点输入字段的元数据。 */
+export interface ReqdocFieldDef {
+  /** 所属功能点（与已确认功能点名称对应） */
+  feature: string
+  /** 字段名 */
+  name: string
+  /** 类型（如 字符串/数值/日期/枚举） */
+  type: string
+  /** 长度/精度（可选） */
+  length?: string
+  /** 是否必填 */
+  required: boolean
+  /** 取值域/约束（可选，如枚举值、格式） */
+  values?: string
+  /** 来源系统/接口（可选，用于 material 维度证据） */
+  sourceSystem?: string
 }
 
 /** 工作流阶段键（Record 泛化，3.2）。 */
@@ -565,6 +600,7 @@ export const REQDOC: WorkflowDefinition = {
     { id: "reqdoc-r20", stage: "prd", text: "渲染铁律 + 字段映射（模板权威约束）：模板全文已由插件注入对话（见系统提示「模板全文」段，无需自行读文件），以注入的模板全文为唯一依据，渲染严格逐字遵循、不调整章节顺序/标题/字段名；如发现模板结构问题如实上报、不擅自修正（归行方模板主管部门）。打分卡扣分项按以下映射落位到模板既有字段：脱敏规则（手机号/身份证遮罩）→功能点 2.8 交易安全性/2.9 数据存贮和清理；资金或高危变更留痕与双人复核→1.2 控制要求/2.8 交易安全性；总/分/支行数据边界与岗位权限→1.2 控制要求/2.1 输入要素的检查；异常边界（网络超时/操作失败/并发重复提交/逆向撤销驳回）→2.3 异常处理要求/2.6 清算处理/2.7 差错处理；模板确无对应字段的补充内容→2.2 系统处理过程或功能点描述，来源标注注明「补」。模板外成果（Mermaid 流程图、UAT 验收测试用例、低保真界面说明、数据字典与库表设计、RBAC 权限控制矩阵与审批流控制逻辑）不插入模板正文，用 write 写入 06_需求规格产出 下子目录（附_流程图/、测试用例/、界面草图/、数据字典与库表设计/、权限矩阵与审批流/），并在对应功能点「2.10 附件」列出清单与相对路径。" },
     { id: "reqdoc-r23", stage: "prd", text: `渲染结构校验：渲染完成并写入 06_需求规格产出 后，调用 reqdoc_check(source=PRD md 相对项目根路径) 对照模板结构 schema 做渲染 diff 校验（章节齐全/顺序/功能点块数/必填字段来源标注）：\n${renderCheckRubric()}\n校验有违规（缺章节/乱序/功能点块数不符/映射字段漏标来源）须修正后重调 reqdoc_check 复查；结构合规后再 review_submit 定稿。` },
     { id: "reqdoc-r24", stage: "prd", text: "渲染门禁（柔性 + 定稿复核）：reqdoc_check 不强制调用（未记录则 review_submit 放行，靠打分卡 ≥85 与产出度量兜底）；一旦调用即记录，review_submit 定稿时会重读源 md 复核——结构违规（缺章节/乱序/功能点块数不符/映射字段漏标来源）与 [缺省] 字段对应打分卡维度打满分都会被拒绝。此外，全部字段来自 [问答]、无任何 [文档] 支撑（docBlocks=0）时定稿也会被来源支撑门禁拦截，除非业务在对话中明确确认「无书面材料可引用」后 review_submit(no_document_confirmed=true)。建议渲染后都调用 reqdoc_check 自查（来源覆盖与校验结果在状态条可见），缺料字段如实标 [缺省] 并在 reqdoc_score 中对应维度扣分。" },
+    { id: "reqdoc-r31", stage: "prd", text: "字段定义环节（数据字典，进 prd 渲染前置）：渲染前对每个功能点的输入字段逐一定义——字段名、类型、长度/精度、是否必填、取值域/约束、来源系统/接口——并调用 reqdoc_field_dict(fields=[...]) 记录，写入 06_需求规格产出/数据字典与库表设计/数据字典.md。逐字段与业务确认（名称/类型/长度/必填/取值/来源系统），业务确认后才落库；字段定义是 material 维度（真实字段/接口证据）的直接来源，缺失则对应维度扣分。已确认功能点较多时可分批提交 reqdoc_field_dict，服务端按 feature 合并。" },
     // ---- review 业务确认（核心）----
     { id: "reqdoc-r15", stage: "review", text: "review 是唯一不可由 AI 自行推进的阶段（必须经 review_submit），确保业务真正理解并确认 PRD 要点。" },
     { id: "reqdoc-r16", stage: "review", text: "将 PRD 拆分为可确认要点（业务目标 / 核心字段 / 异常规则 / 合规要求），comprehension_add 逐段复述输出。" },
