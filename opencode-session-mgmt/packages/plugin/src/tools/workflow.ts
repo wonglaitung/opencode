@@ -6,7 +6,7 @@
  * commit_gate_check  —— 提交门禁检查，返回未完成阶段列表
  */
 import { tool, type ToolDefinition } from "@opencode-ai/plugin"
-import { REQDOC_SCORE_PASS, getDefinition, probeGapViolations, type WorkflowState } from "sm-shared"
+import { REQDOC_SCORE_PASS, getDefinition, probeGapViolations, scoreDimZeroViolations, type WorkflowState } from "sm-shared"
 import type { Store } from "../db"
 import { WorkflowOpError, applyTransition, recomputeCommit } from "../workflow-ops"
 
@@ -59,6 +59,11 @@ export function createWorkflowTools(store: Store): Record<string, ToolDefinition
             throw new WorkflowOpError(
               `追问缺口与打分自相矛盾：${violations.join("；")}。请回 edge 补齐缺口后重打 reqdoc_score 如实扣分，或去掉缺口记录（reqdoc_probe）`,
             )
+          }
+          // 可实施性门禁（P1：material/nfr/acceptability 三维度任一 0 分 = 不可照着做）。
+          const zeroV = scoreDimZeroViolations(score)
+          if (zeroV.length > 0) {
+            throw new WorkflowOpError(`可实施性不足：${zeroV.join("；")}。`)
           }
         }
         if (args.action === "approve") {

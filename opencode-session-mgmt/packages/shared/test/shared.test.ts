@@ -7,6 +7,7 @@ import {
   REQDOC_SCORE_DIMS,
   REQDOC_SCORE_PASS,
   SDLC,
+  scoreDimZeroViolations,
   WORKFLOW_DEFINITIONS,
   createWorkflowState,
   currentInProgressStage,
@@ -291,16 +292,29 @@ describe("WorkflowDefinition 注册表（3.2）", () => {
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r30" && r.stage === "global" && r.text.includes("≥30%") && r.text.includes("至少 2 个功能点") && r.text.includes("no_document_confirmed"))).toBe(true)
   })
 
-  test("打分卡契约：五维权重满分 100、达标线 85", () => {
+  test("打分卡契约：八维权重满分 100、达标线 85", () => {
     expect(REQDOC_SCORE_DIMS.map((d) => d.key)).toEqual([
       "businessValue",
       "flowClosure",
       "edgeControl",
       "compliance",
       "authority",
+      "material",
+      "nfr",
+      "acceptability",
     ])
     expect(REQDOC_SCORE_DIMS.reduce((sum, d) => sum + d.max, 0)).toBe(100)
     expect(REQDOC_SCORE_PASS).toBe(85)
+  })
+
+  test("可实施性门禁（P1）：任一维度 0 分 → 违规、拦截进 prd/定稿", () => {
+    const ok = { businessValue: { score: 12, max: 12 }, flowClosure: { score: 20, max: 20 }, edgeControl: { score: 22, max: 22 }, compliance: { score: 16, max: 16 }, authority: { score: 8, max: 8 }, material: { score: 8, max: 8 }, nfr: { score: 7, max: 7 }, acceptability: { score: 7, max: 7 } }
+    expect(scoreDimZeroViolations({ dims: ok, deductions: [], total: 100, confirmed: true, confirmedAt: 1, updatedAt: 1 })).toEqual([])
+    const zero = { ...ok, material: { score: 0, max: 8 } }
+    const v = scoreDimZeroViolations({ dims: zero, deductions: [], total: 92, confirmed: true, confirmedAt: 1, updatedAt: 1 })
+    expect(v.length).toBe(1)
+    expect(v[0]).toContain("material")
+    expect(v[0]).toContain("不可实施")
   })
 
   test("打分卡评分标准：每维含判定规则与扣分标准，逐条未超满分（实施方案判定规则列）", () => {
@@ -316,13 +330,13 @@ describe("WorkflowDefinition 注册表（3.2）", () => {
     const rubric = reqdocScoreRubric()
     expect(rubric).toContain("扣10分：缺失使用角色")
     expect(rubric).toContain("扣15分：流程有头无尾")
-    expect(rubric).toContain("扣25分：未提及任何异常")
+    expect(rubric).toContain("扣22分：未提及任何异常")
     expect(rubric).toContain("扣10分：未定义脱敏")
-    expect(rubric).toContain("扣10分：描述为「所有人均可使用」")
+    expect(rubric).toContain("扣8分：描述为「所有人均可使用」")
     // r21 规则文本已嵌入完整评分标准（edge 阶段注入提示，模型打分可见）
     const r21 = REQDOC.rules.find((r) => r.id === "reqdoc-r21")!
     expect(r21.text).toContain("网络超时")
-    expect(r21.text).toContain("扣25分")
+    expect(r21.text).toContain("扣22分")
     expect(r21.text).toContain("reqdoc_score")
     // 三档分级引导（实施方案「<60 不合格 / 60-84 良好 / ≥85 达标」）
     expect(r21.text).toContain("<60 分（不合格）")

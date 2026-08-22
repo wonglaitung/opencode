@@ -1,7 +1,6 @@
 /**
- * reqdoc_score 打分卡工具测试（实施方案第三节）。
- * 覆盖：服务端算总分、越界/缺维度拒绝、business_confirmed=false 拒绝、
- * 写 WorkflowState、重打覆盖、仅 reqdoc 可用、返回达标/未达标提示。
+ * reqdoc 打分卡工具测试（实施方案第三节，P1 可实施性三维度）。
+ * 覆盖：服务端算分、评分标准同源、扣分明细、越界/缺维/未确认拦截、达标/未达标、重打覆盖、仅 reqdoc。
  */
 import { describe, expect, test } from "bun:test"
 import { Store } from "../src/db"
@@ -9,14 +8,17 @@ import { createReqdocScoreTools } from "../src/tools/reqdoc-score"
 
 const ctx = { sessionID: "s1" } as never
 
-/** 五维达标参数（总分 90）。 */
+/** 八维达标参数（总分 90，含 material/nfr/acceptability 可实施性三维度）。 */
 function passingDims() {
   return [
-    { key: "businessValue", score: 15 },
-    { key: "flowClosure", score: 25 },
-    { key: "edgeControl", score: 30 },
-    { key: "compliance", score: 10 },
-    { key: "authority", score: 10 },
+    { key: "businessValue", score: 12 },
+    { key: "flowClosure", score: 20 },
+    { key: "edgeControl", score: 22 },
+    { key: "compliance", score: 16 },
+    { key: "authority", score: 8 },
+    { key: "material", score: 8 },
+    { key: "nfr", score: 2 },
+    { key: "acceptability", score: 2 },
   ]
 }
 
@@ -25,7 +27,6 @@ describe("reqdoc_score", () => {
     const store = Store.memory(() => "reqdoc")
     const tools = createReqdocScoreTools(store)
     const dims = passingDims()
-    // 其中 edgeControl 扣 5 分带证据
     const out = await tools.reqdoc_score!.execute(
       {
         dims,
@@ -42,8 +43,8 @@ describe("reqdoc_score", () => {
     expect(score.confirmed).toBe(true)
     expect(typeof score.confirmedAt).toBe("number")
     expect(typeof score.updatedAt).toBe("number")
-    expect(score.dims.businessValue).toEqual({ score: 15, max: 15 })
-    expect(score.dims.edgeControl).toEqual({ score: 30, max: 30 })
+    expect(score.dims.businessValue).toEqual({ score: 12, max: 12 })
+    expect(score.dims.edgeControl).toEqual({ score: 22, max: 22 })
     store.close()
   })
 
@@ -52,7 +53,7 @@ describe("reqdoc_score", () => {
     const tools = createReqdocScoreTools(store)
     const description = tools.reqdoc_score!.description
     expect(description).toContain("评分标准（满分 100）")
-    expect(description).toContain("扣25分：未提及任何异常")
+    expect(description).toContain("扣22分：未提及任何异常")
     expect(description).toContain("网络超时")
     expect(description).toContain("扣10分：缺失使用角色")
     store.close()
@@ -65,8 +66,11 @@ describe("reqdoc_score", () => {
       {
         dims: [
           ...passingDims().slice(0, 3),
-          { key: "compliance", score: 10, deductions: [{ reason: "缺审计留痕", points: 5, evidence: "03_流程与数据/清分.md:12" }] },
-          { key: "authority", score: 10 },
+          { key: "compliance", score: 16, deductions: [{ reason: "缺审计留痕", points: 5, evidence: "03_流程与数据/清分.md:12" }] },
+          { key: "authority", score: 8 },
+          { key: "material", score: 8 },
+          { key: "nfr", score: 2 },
+          { key: "acceptability", score: 2 },
         ],
         business_confirmed: true,
       } as never,
@@ -128,11 +132,14 @@ describe("reqdoc_score", () => {
     const out = await tools.reqdoc_score!.execute(
       {
         dims: [
-          { key: "businessValue", score: 15 },
-          { key: "flowClosure", score: 20 },
-          { key: "edgeControl", score: 25 },
-          { key: "compliance", score: 5 },
-          { key: "authority", score: 10 },
+          { key: "businessValue", score: 10 },
+          { key: "flowClosure", score: 16 },
+          { key: "edgeControl", score: 18 },
+          { key: "compliance", score: 12 },
+          { key: "authority", score: 6 },
+          { key: "material", score: 6 },
+          { key: "nfr", score: 3 },
+          { key: "acceptability", score: 4 },
         ],
         business_confirmed: true,
       } as never,
@@ -150,11 +157,14 @@ describe("reqdoc_score", () => {
     await tools.reqdoc_score!.execute(
       {
         dims: [
-          { key: "businessValue", score: 15 },
-          { key: "flowClosure", score: 20 },
-          { key: "edgeControl", score: 25 },
-          { key: "compliance", score: 5 },
-          { key: "authority", score: 10 },
+          { key: "businessValue", score: 10 },
+          { key: "flowClosure", score: 16 },
+          { key: "edgeControl", score: 18 },
+          { key: "compliance", score: 12 },
+          { key: "authority", score: 6 },
+          { key: "material", score: 6 },
+          { key: "nfr", score: 3 },
+          { key: "acceptability", score: 4 },
         ],
         business_confirmed: true,
       } as never,

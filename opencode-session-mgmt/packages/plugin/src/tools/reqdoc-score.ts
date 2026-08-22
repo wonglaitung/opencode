@@ -30,10 +30,10 @@ export function createReqdocScoreTools(store: Store): Record<string, ToolDefinit
       "**prd 门禁：workflow_advance(stage=prd, action=enter) 之前必须先调用本工具并获业务确认（business_confirmed=true），total≥85 才可推进**。" +
       "仅 reqdoc 工作流有效；<85 分可按扣分明细回 edge 追问补缺后重打覆盖。",
     args: {
-      dims: z
+       dims: z
         .array(
           z.object({
-            key: z.enum(dimKeys).describe("维度键（五个维度之一）"),
+            key: z.enum(dimKeys).describe("维度键（各维度之一）"),
             score: z.number().int().min(0).describe("该维度实得分（0~该维度满分）"),
             deductions: z
               .array(
@@ -50,9 +50,9 @@ export function createReqdocScoreTools(store: Store): Record<string, ToolDefinit
               .describe("该维度扣分明细（无扣分可省略）"),
           }),
         )
-        .min(5)
-        .max(5)
-        .describe("五个维度实得分，须全部给出"),
+        .min(8)
+        .max(8)
+        .describe("各维度实得分，须全部给出（含 material/nfr/acceptability 可实施性三维度）"),
       business_confirmed: z
         .boolean()
         .describe("业务是否已明确认可本打分结果与扣分明细；仅业务在对话中明确认可后才能为 true，防止 AI 自评自批"),
@@ -73,7 +73,7 @@ export function createReqdocScoreTools(store: Store): Record<string, ToolDefinit
         for (const dim of REQDOC_SCORE_DIMS) {
           const input = args.dims.find((d) => d.key === dim.key)
           if (!input) {
-            throw new WorkflowOpError(`打分卡缺少维度 ${dim.key}（${dim.label}），五个维度须全部打分`)
+            throw new WorkflowOpError(`打分卡缺少维度 ${dim.key}（${dim.label}），各维度须全部打分`)
           }
           if (input.score > dim.max) {
             throw new WorkflowOpError(`维度 ${dim.key}（${dim.label}）得分 ${input.score} 超出满分 ${dim.max}`)
@@ -116,11 +116,12 @@ function formatScoreCard(score: ReqdocScore): string {
   const passed = score.total >= REQDOC_SCORE_PASS
   // 质量得分进度条（实施方案第四节：如 [▓▓▓▓▓░░░░░ 50%]；10 格，进度直观反映达标）
   const barLen = 10
-  const filled = Math.round((score.total / 100) * barLen)
+  const totalMax = REQDOC_SCORE_DIMS.reduce((s, d) => s + d.max, 0)
+  const filled = Math.round((score.total / totalMax) * barLen)
   const bar = "▓".repeat(filled) + "░".repeat(barLen - filled)
   return (
     `📊 已记录 PRD 质量打分（业务已确认，total 由服务端计算）：\n${dimLines}\n` +
-    `扣分明细：\n${deductionLines}\n质量得分进度：[${bar}] ${score.total}%（${score.total}/100）\n` +
+    `扣分明细：\n${deductionLines}\n质量得分进度：[${bar}] ${Math.round((score.total / totalMax) * 100)}%（${score.total}/${totalMax}）\n` +
     `→ ${passed ? `达标（≥${REQDOC_SCORE_PASS}）✓，可 workflow_advance(stage=prd, action=enter) 进入渲染。` : `未达标（<${REQDOC_SCORE_PASS}）✗，请按扣分明细回 edge 追问补缺后重打 reqdoc_score。`}`
   )
 }

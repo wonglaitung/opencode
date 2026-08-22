@@ -280,11 +280,14 @@ describe("renderStructureViolations", () => {
 describe("renderGapViolations", () => {
   const score = (edgeControl: number): ReqdocScore => ({
     dims: {
-      businessValue: { score: 15, max: 15 },
-      flowClosure: { score: 25, max: 25 },
-      edgeControl: { score: edgeControl, max: 30 },
-      compliance: { score: 10, max: 20 },
-      authority: { score: 10, max: 10 },
+      businessValue: { score: 12, max: 12 },
+      flowClosure: { score: 20, max: 20 },
+      edgeControl: { score: edgeControl, max: 22 },
+      compliance: { score: 16, max: 16 },
+      authority: { score: 8, max: 8 },
+      material: { score: 8, max: 8 },
+      nfr: { score: 7, max: 7 },
+      acceptability: { score: 7, max: 7 },
     },
     deductions: [],
     total: 85,
@@ -294,16 +297,16 @@ describe("renderGapViolations", () => {
   })
 
   test("[缺省] 字段对应维度打满分 → 违规（自评矛盾）", () => {
-    // 2.3 异常处理要求 → edgeControl；标 [缺省] 但 edgeControl 打满分 30/30
+    // 2.3 异常处理要求 → edgeControl；标 [缺省] 但 edgeControl 打满分 22/22
     const r = renderOf({ defaults: { ...renderOf({}).defaults, "2.3": 1 } })
-    const v = renderGapViolations(r, score(30))
+    const v = renderGapViolations(r, score(22))
     expect(v.some((x) => x.includes("字段 2.3 异常处理要求"))).toBe(true)
     expect(v.some((x) => x.includes("edgeControl"))).toBe(true)
   })
 
   test("[缺省] 字段对应维度未打满分 → 放行", () => {
     const r = renderOf({ defaults: { ...renderOf({}).defaults, "2.3": 1 } })
-    expect(renderGapViolations(r, score(25))).toEqual([])
+    expect(renderGapViolations(r, score(16))).toEqual([])
   })
 
   test("无 [缺省] → 无违规（即使有满分维度）", () => {

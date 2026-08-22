@@ -115,7 +115,7 @@ export const REQDOC_SCORE_DIMS = [
   {
     key: "businessValue",
     label: "业务目标与价值",
-    max: 15,
+    max: 12,
     rule: "必须明确使用角色与解决的痛点",
     deductionRules: [
       { points: 10, condition: "缺失使用角色" },
@@ -125,7 +125,7 @@ export const REQDOC_SCORE_DIMS = [
   {
     key: "flowClosure",
     label: "主流程逻辑闭环",
-    max: 25,
+    max: 20,
     rule: "输入、处理、输出必须闭环",
     deductionRules: [
       { points: 15, condition: "流程有头无尾" },
@@ -135,23 +135,47 @@ export const REQDOC_SCORE_DIMS = [
   {
     key: "edgeControl",
     label: "异常与边界控制",
-    max: 30,
+    max: 22,
     rule: "必须覆盖网络超时、扣款/提交失败、并发重复提交、逆向撤销/驳回流程",
-    deductionRules: [{ points: 25, condition: "未提及任何异常" }],
+    deductionRules: [{ points: 22, condition: "未提及任何异常" }],
   },
   {
     key: "compliance",
     label: "合规与数据安全",
-    max: 20,
+    max: 16,
     rule: "敏感字段（手机号/身份证）必须明确遮罩脱敏规则；资金或高危变更操作必须声明留痕与复核机制",
     deductionRules: [{ points: 10, condition: "未定义脱敏" }],
   },
   {
     key: "authority",
     label: "权限与机构隔离",
-    max: 10,
+    max: 8,
     rule: "必须明确总/分/支行数据查看边界及岗位权限",
-    deductionRules: [{ points: 10, condition: "描述为「所有人均可使用」" }],
+    deductionRules: [{ points: 8, condition: "描述为「所有人均可使用」" }],
+  },
+  {
+    key: "material",
+    label: "素材真实性",
+    max: 8,
+    rule: "须含真实案例/字段/接口证据（非纯 AI 揣测）：业务提供过真实办理实例、字段级定义或系统接口依据",
+    deductionRules: [
+      { points: 8, condition: "无任何真实案例/字段/接口证据，纯问答兜底" },
+      { points: 4, condition: "仅有零散实例，缺字段级或接口级证据" },
+    ],
+  },
+  {
+    key: "nfr",
+    label: "非功能覆盖",
+    max: 7,
+    rule: "须覆盖性能/并发/可用性/灾备/数据主权/信创等非功能需求",
+    deductionRules: [{ points: 7, condition: "未提及任何非功能需求" }],
+  },
+  {
+    key: "acceptability",
+    label: "可验收性",
+    max: 7,
+    rule: "每功能点须有量化验收指标（如 MTTR、吞吐、准确率、具体可测条件）",
+    deductionRules: [{ points: 7, condition: "无量化验收指标，无法判定是否做对" }],
   },
 ] as const
 
@@ -279,6 +303,23 @@ export function probeGapViolations(
     }
   }
   return violations
+}
+
+/**
+ * 可实施性门禁（P1：material/nfr/acceptability 三维度）：任一维度得 0 分即视为「不可照着做」，
+ * 拦截进入 prd / 定稿。缺维度（未打分）不拦（服务端 reqdoc_score 已强制八维齐全）；
+ * 仅当显式 0 分才报违规。workflow_advance 进 prd 与 review_submit 两处共用。
+ */
+export function scoreDimZeroViolations(score: ReqdocScore | undefined): string[] {
+  if (!score) return []
+  const v: string[] = []
+  for (const dim of REQDOC_SCORE_DIMS) {
+    const ds = score.dims[dim.key]
+    if (ds && ds.score <= 0) {
+      v.push(`维度 ${dim.key}（${dim.label}）得 0 分，需求不可实施（缺真实素材/非功能/验收指标），须回 edge 补缺后重打 reqdoc_score`)
+    }
+  }
+  return v
 }
 
 export interface QualityMetrics {
@@ -517,7 +558,7 @@ export const REQDOC: WorkflowDefinition = {
     { id: "reqdoc-r11", stage: "edge", text: `按探针清单推进追问（清单与 reqdoc_probe 工具描述同源，每维映射打分卡扣分项）：\n${reqdocProbeRubric()}\nmain_flow/exception 探针须「先要真实案例再答题」——业务给不出实例则明示缺真实素材、卡住提示投放 01~04，不往下走。逐轮追问最多 5 问（见 r2，带 A/B/C 与【默认推荐项】），每轮结束调用 reqdoc_probe(asked=本轮新问探针, gaps=仍缺口探针, round=轮次, business_default=本轮是否全选默认) 记录覆盖；追问最多 3 轮，3 轮后仍未澄清项标 [缺省] 停止追问；到 3 轮上限时，先把未澄清探针逐条列出（附对应打分卡维度与将扣分数），并说明业务的可选项——补充材料/口述补全这些项（我据此扫描或追问补漏）、确认接受 [缺省] 留白（对应维度将扣分）、或开新会话继续；无需一次补全，定稿前随时可补——再进下一环节。` },
     { id: "reqdoc-r12", stage: "edge", text: "按已投放材料反问缺口（如已有制度但缺权限，追问「不同岗位的权限如何隔离」）；业务说资料已放好则调用 reqdoc_scan(directory=02_制度与合规) 与 reqdoc_scan(directory=04_角色与权限) 扫描提取作输入；综合岗位角色矩阵、机构隔离、审批授权与双人复核材料生成 RBAC 权限控制矩阵与审批流控制逻辑，向业务展示确认。" },
     { id: "reqdoc-r22", stage: "edge", text: "探针覆盖度（柔性门禁）：进入 prd 前，若已调用 reqdoc_probe 记录过探针，服务端校验缺口与打分一致——缺口探针对应打分卡维度不得打满分（缺口+满分=自评不诚实，workflow_advance 进 prd 与 review_submit 会被拒绝）；建议每轮追问结束调用 reqdoc_probe 记录（覆盖度在状态条可见，帮助自评一致）；材料已全覆盖无追问时可记录一次（asked/gaps 可为空），不记录不强求。" },
-    { id: "reqdoc-r21", stage: "edge", text: `打分时机与门禁（实施方案打分卡）：边界与异常收集完成、准备进入 prd 前，基于已扫描材料 + 问答对照打分卡逐维打分（满分 100）：\n${reqdocScoreRubric()}\n调用 reqdoc_score 输出各维得分与扣分明细（附证据引用），向业务展示并请其确认；business_confirmed=true 且 total≥85 后才可 workflow_advance(stage=prd, action=enter)。未达标按三档引导重打：<60 分（不合格）优先继续提问主流程与异常边界，补齐流程闭环与异常覆盖；60-84 分（良好）引导补充脱敏规则、权限与机构隔离、逆向撤销/驳回流程；≥85 分（达标）输出扣分明细、业务确认通过后即停止追问、不再重复盘问。展示得分时必须附质量得分进度条（如 [▓▓▓▓▓░░░░░ 50%]，进度直观反映达标进度）。严禁未展示扣分明细即自报达标。` },
+    { id: "reqdoc-r21", stage: "edge", text: `打分时机与门禁（实施方案打分卡）：边界与异常收集完成、准备进入 prd 前，基于已扫描材料 + 问答对照打分卡逐维打分（满分 100，含 material/nfr/acceptability 可实施性三维度）：\n${reqdocScoreRubric()}\n任一维度 0 分即视为需求不可实施（缺真实素材/非功能/验收指标），进入 prd 与定稿都会被拦截，须回 edge 补缺后重打。调用 reqdoc_score 输出各维得分与扣分明细（附证据引用），向业务展示并请其确认；business_confirmed=true 且 total≥85 后才可 workflow_advance(stage=prd, action=enter)。未达标按三档引导重打：<60 分（不合格）优先继续提问主流程与异常边界，补齐流程闭环与异常覆盖；60-84 分（良好）引导补充脱敏规则、权限与机构隔离、逆向撤销/驳回流程；≥85 分（达标）输出扣分明细、业务确认通过后即停止追问、不再重复盘问。展示得分时必须附质量得分进度条（如 [▓▓▓▓▓░░░░░ 50%]，进度直观反映达标进度）。严禁未展示扣分明细即自报达标。` },
     // ---- prd 需求规格书 ----
     { id: "reqdoc-r13", stage: "prd", text: "功能点拆解（核心）：综合前面 goal/rules/edge 收集的信息（材料提取 + 问答），把需求拆成功能点清单（编号/名称/优先级），先向业务展示清单确认；业务确认后调用 reqdoc_confirm_features(features=[{name,priority}]...) 记录，并为每个功能点在 05_功能点 下建子目录写入来源摘录（标注 [文档]/[问答] 来源）。业务说资料已放好则先调用 reqdoc_scan(directory=06_需求规格产出) 检查已有产出。" },
     { id: "reqdoc-r14", stage: "prd", text: "按《业务需求说明书》模板渲染最终 PRD（模板：docs/reqdoc-prd-template.md；模板全文由插件在 prd 阶段自动注入系统提示，见「模板全文」段；以注入的模板全文为唯一依据，渲染须严格逐字遵循，见 reqdoc-r20；仅当插件找不到模板文件时才按内联骨架渲染）：封面（项目信息表、文档变更过程表）→ 第一章 需求概述（需求类型：新增/更改、流程优化/跨部门/总行开发、希望完成时间、提出原因及功能概述）→ 第二章 术语定义与业务规则（术语定义、业务规则）→ 第三章 需求功能详述（按已确认功能点：编号/名称/优先级，输入要素：简要概述/控制要求，处理要求：输入要素检查/系统处理过程/异常处理/提示信息/其他要求/清算处理/差错处理/交易安全性/数据存贮和清理/附件）。每功能点内容从 05_功能点/N_名称/ 子目录的来源摘录 + 问答补全，逐字段标来源：文档提取标 [文档]、问答补全标 [问答]、尚未获得的信息留白并标 [缺省]，绝不杜撰事实；[问答] 来源的口语须提炼整理为规范的需求书面语（去除闲聊、口头禅与不完整表述、保留业务原意），不得原话照搬对话文字，但不得为填满字段而虚构业务未确认的内容；未涉及项在 ○/● 中选「不涉及/不适用」并留白正文；项目信息表与文档变更过程属项目元数据，不主动问业务，渲染时留空占位。产出归档：需求澄清记录、自动提取的 Mermaid 流程图、数据字典与库表设计、RBAC 权限控制矩阵与审批流控制逻辑、最终 PRD 一律写入 06_需求规格产出 目录；PRD 定稿后调用 reqdoc_export(source=PRD 路径) 生成 Word 版（.docx）交付件，与 md 同目录归档。" },
