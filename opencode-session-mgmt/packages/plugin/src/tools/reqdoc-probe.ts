@@ -38,6 +38,10 @@ export function createReqdocProbeTools(store: Store): Record<string, ToolDefinit
         .default([])
         .describe("问过后仍缺口的探针 id（可空；进入 prd 前如仍缺口须在 reqdoc_score 中如实扣分）"),
       round: z.number().int().min(1).max(3).optional().describe("当前追问轮次（1-3；缺省自动取上一轮 +1）"),
+      businessDefault: z
+        .boolean()
+        .optional()
+        .describe("本轮业务是否全部选择默认推荐（惰性确认）；为 true 时累计 defaultRounds，用于 review 阶段软提示需求真实性（reqdoc-r27）"),
     },
     async execute(args, context) {
       const saved = store.mutateWorkflow(context.sessionID, (workflow) => {
@@ -49,10 +53,12 @@ export function createReqdocProbeTools(store: Store): Record<string, ToolDefinit
         const asked = [...new Set([...(prev?.asked ?? []), ...args.asked])]
         const gaps = [...new Set(args.gaps)]
         const round = Math.min(args.round ?? (prev?.round ?? 0) + 1, 3)
+        const defaultRounds = (prev?.defaultRounds ?? 0) + (args.businessDefault ? 1 : 0)
         workflow.probes = {
           asked,
           gaps,
           round,
+          defaultRounds,
           updatedAt: Date.now(),
         }
       })

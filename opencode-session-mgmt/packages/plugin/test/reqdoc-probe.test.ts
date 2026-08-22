@@ -100,4 +100,15 @@ describe("reqdoc_probe", () => {
     expect(store.get("s1")?.workflow?.probes).toBeUndefined()
     store.close()
   })
+
+  test("business_default 累计 defaultRounds（惰性确认检测，reqdoc-r27）", async () => {
+    const store = Store.memory(() => "reqdoc")
+    const tools = createReqdocProbeTools(store)
+    await tools.reqdoc_probe!.execute({ asked: ["main_flow"], gaps: ["exception"], businessDefault: true } as never, ctx)
+    await tools.reqdoc_probe!.execute({ asked: ["exception"], gaps: [], businessDefault: true } as never, ctx)
+    await tools.reqdoc_probe!.execute({ asked: ["reverse"], gaps: [], businessDefault: false } as never, ctx)
+    const probes = store.get("s1")!.workflow!.probes!
+    expect(probes.defaultRounds).toBe(2)
+    store.close()
+  })
 })

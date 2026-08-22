@@ -303,14 +303,16 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
                 `结构问题请回 prd 修正渲染后重调 reqdoc_check 复查；[缺省]↔满分矛盾请回 edge 补缺后重打 reqdoc_score 如实扣分，或把渲染 [缺省] 改为 [文档]/[问答]`,
             )
           }
-          // 来源支撑门禁（X+Z 组合）：记录了 render 且全部字段来自 [问答]、无 [文档] 支撑时拦截，
+          // 来源真实性门禁（reqdoc-r30，防全[问答]兜底）：记录了 render 且书面材料支撑不足时拦截，
           // 除非业务已明确确认「无书面材料可引用」（no_document_confirmed=true）。柔性：未记录 render 则放行。
-          if (workflow.render && liveRender && liveRender.docBlocks === 0 && !args.no_document_confirmed) {
+          if (workflow.render && liveRender && !args.no_document_confirmed) {
             const v = noDocumentSupportViolation(liveRender)
-            throw new WorkflowOpError(
-              `来源支撑门禁未通过：${v.join("；")}。` +
-                `如确无书面材料可引用，请业务明确确认后重试 review_submit(no_document_confirmed=true)。`,
-            )
+            if (v.length > 0) {
+              throw new WorkflowOpError(
+                `来源真实性门禁未通过：${v.join("；")}。` +
+                  `如确无书面材料可引用，请业务明确确认后重试 review_submit(no_document_confirmed=true)。`,
+              )
+            }
           }
         }
         const total = review.comprehension.length
@@ -361,6 +363,11 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
       const total = review.comprehension.length
       const rate = saved.quality.firstPassRate
       const def = getDefinition(saved.type)
+      // 惰性确认软提示（reqdoc-r27）：业务连续默认轮次偏高时，定稿通过仍提醒补材料/实例
+      const lazyNote =
+        (saved.probes?.defaultRounds ?? 0) >= 2
+          ? `\n⚠ 业务全程选默认轮次 ${saved.probes!.defaultRounds} 轮（需求真实性偏低）：建议补充 01~04 书面材料或真实实例，重跑 edge 追问提升可实施性。`
+          : ""
       // 审查是最后阶段：通过即全部阶段 approved → 完成。此时在工具返回直接带出 /new 提醒
       // （弱模型未必等到下一轮注入片段才行动，完成瞬间的工具结果是最稳的触发点）。
       const locked = store.listLocks(context.sessionID)
@@ -376,7 +383,7 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
         (saved.commit.blocked_by.length ? `（未完成：${saved.commit.blocked_by.join("、")}）` : "") +
         (saved.commit.status === "allowed"
           ? `\n⚑ 工作流已完成，请提醒开发者执行 /new 开始下一个需求（保持统计隔离）。${lockedNote}`
-          : "")
+          : "") + lazyNote
       )
     },
   })

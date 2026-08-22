@@ -337,16 +337,23 @@ export function renderGapViolations(
 }
 
 /**
- * 来源支撑门禁（X+Z 组合）：PRD 全部字段来自 [问答]、无任何 [文档] 支撑时（docBlocks=0），
- * 视为缺乏书面材料依据，返回违规。需业务补充 01~04 材料并重扫、或明确确认「无书面材料可引用」。
+ * 来源真实性门禁（防全[问答]兜底，reqdoc-r30）：PRD 定稿须有一定书面材料支撑。
+ * 放行条件（两者较松即放行）：[文档] 来源占比 ≥30%，或至少 2 个功能点含 ≥1 处 [文档] 支撑。
+ * 均不满足则视为书面材料依据不足，返回违规——须业务补充 01~04 材料重扫，或明确确认「无书面材料可引用」。
  * 无 render 返回空（柔性：未记录 render 则不放行此门禁，与 P2 复核一致）。
  */
 export function noDocumentSupportViolation(render: ReqdocRender | undefined): string[] {
   if (!render) return []
-  if (render.docBlocks > 0) return []
+  // 较松条件一：≥2 个功能点有真实素材
+  if (render.docBlocks >= 2) return []
+  // 较松条件二：[文档] 占比 ≥30%
+  const total = render.docCount + render.qaCount
+  const ratio = total > 0 ? render.docCount / total : 0
+  if (ratio >= 0.3) return []
+  const pct = total > 0 ? Math.round(ratio * 100) : 0
   return [
-    "PRD 全部字段均来自 [问答]，无任何 [文档] 支撑（来源标注里 [文档] 出现 0 次）。" +
-      "请业务向 01~04 目录补充书面材料后重扫 reqdoc_scan 提取，或经业务明确确认「无书面材料可引用」后再定稿。",
+    `PRD 书面材料支撑不足：[文档] 来源占比 ${pct}%（<30%），且仅有 ${render.docBlocks} 个功能点含 [文档] 支撑（需 ≥2）。` +
+      "请业务向 01~04 目录补充书面材料后重扫 reqdoc_scan 提取，或经业务明确确认「无书面材料可引用」(no_document_confirmed=true) 后再定稿。",
   ]
 }
 

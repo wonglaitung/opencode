@@ -221,17 +221,29 @@ describe("parseRenderStructure", () => {
   })
 })
 
-describe("noDocumentSupportViolation", () => {
+describe("noDocumentSupportViolation（来源真实性门禁，reqdoc-r30）", () => {
   test("有 [文档] 支撑 → 无违规", () => {
-    const r = renderOf({ docBlocks: 1 })
-    expect(noDocumentSupportViolation(r)).toEqual([])
+    expect(noDocumentSupportViolation(renderOf({ docBlocks: 1, docCount: 7, qaCount: 0 }))).toEqual([])
+  })
+
+  test("≥2 功能点有真实素材 → 无违规（较松条件一，即便占比低）", () => {
+    expect(noDocumentSupportViolation(renderOf({ docBlocks: 2, docCount: 2, qaCount: 20 }))).toEqual([])
+  })
+
+  test("[文档] 占比 ≥30% → 无违规（较松条件二）", () => {
+    expect(noDocumentSupportViolation(renderOf({ docBlocks: 1, docCount: 5, qaCount: 10 }))).toEqual([])
   })
 
   test("全 [问答] 无 [文档] 支撑 → 违规", () => {
-    const r = renderOf({ docBlocks: 0 })
-    const v = noDocumentSupportViolation(r)
+    const v = noDocumentSupportViolation(renderOf({ docBlocks: 0, docCount: 0, qaCount: 7 }))
     expect(v.length).toBe(1)
-    expect(v[0]).toContain("无任何 [文档] 支撑")
+    expect(v[0]).toContain("书面材料支撑不足")
+  })
+
+  test("仅 1 功能点有素材且占比<30% → 违规", () => {
+    const v = noDocumentSupportViolation(renderOf({ docBlocks: 1, docCount: 1, qaCount: 10 }))
+    expect(v.length).toBe(1)
+    expect(v[0]).toContain("书面材料支撑不足")
   })
 
   test("无 render → 空（柔性放行）", () => {

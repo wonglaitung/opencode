@@ -194,9 +194,9 @@ export interface ReqdocProbe {
 }
 
 export const REQDOC_PROBES: readonly ReqdocProbe[] = [
-  { id: "main_flow", label: "主流程闭环", dim: "flowClosure", round: 1, question: "这项业务从发起到最后完成，要经过哪些步骤？" },
-  { id: "flow_trigger", label: "流程触发条件", dim: "flowClosure", round: 1, question: "什么情况下会开始这笔业务？" },
-  { id: "exception", label: "异常处理", dim: "edgeControl", round: 1, question: "同一笔交易被重复点了几次、网络中断或提交失败，怎么处理？" },
+  { id: "main_flow", label: "主流程闭环", dim: "flowClosure", round: 1, question: "请举一个最近发生的真实办理案例，描述它从发起到完成的具体步骤（不要泛泛讲流程，先给实例）；给不出实例请先向 01~04 投放材料或确认口述补全。" },
+  { id: "flow_trigger", label: "流程触发条件", dim: "flowClosure", round: 1, question: "什么情况下会开始这笔业务？请结合上面的真实案例说明触发场景。" },
+  { id: "exception", label: "异常处理", dim: "edgeControl", round: 1, question: "请举一个真实发生的异常案例（如某笔交易被重复提交、网络中断或提交失败），说明当时怎么处置的；无真实案例则先投放材料或确认口述补全，不要凭空假设。" },
   { id: "reverse", label: "逆向撤销/驳回", dim: "edgeControl", round: 2, question: "办错了想撤销、或提交后被驳回，怎么处理？" },
   { id: "desensitize", label: "敏感字段脱敏", dim: "compliance", round: 2, question: "手机号、身份证这些敏感信息，界面上怎么展示？" },
   { id: "audit", label: "留痕与复核", dim: "compliance", round: 2, question: "资金或重要操作，要不要留痕、双人复核？" },
@@ -253,6 +253,8 @@ export interface ReqdocProbes {
   gaps: string[]
   /** 当前追问轮次（1-3；规则上限「最长 3 轮」） */
   round: number
+  /** 业务全程选默认（惰性确认）的轮次累计：每轮 reqdoc_probe(business_default=true) 累加，用于 review 软提示需求真实性 */
+  defaultRounds?: number
   /** 最近一次记录时间戳（覆盖更新） */
   updatedAt: number
 }
@@ -499,8 +501,9 @@ export const REQDOC: WorkflowDefinition = {
     { id: "reqdoc-r3", stage: "global", text: "阶段可能完成时，先输出摘要并询问确认；仅业务明确表示「确认/可以」才算确认——模糊表态不算。确认后进入下一阶段即自动确认（approve）本阶段（工具强制，无需单独调 workflow_advance(action=approve)）；如需返工回到本需求用 workflow_revisit，不要用「进入下一阶段」绕过。询问确认时须显式点明所确认的阶段名（如「【边界与异常 阶段】以上边界与异常是否确认？」），不得用笼统的「以上流程与规则是否确认」。" },
     { id: "reqdoc-r25", stage: "global", text: stageVisibilityRule("业务") },
     { id: "reqdoc-r26", stage: "global", text: "投放/口述 决定未完成前不得推进：需求资料目录（01~04）已建、但业务尚未明确选择「投放材料」还是「直接口述」时，每轮开场都须显式向业务提出二选一（或问清已投放了哪些目录），并停下等待业务明确选择；未获得明确选择不得进入追问、不得先抛其它问题。调用 reqdoc_init 后，必须把工具返回的目录绝对路径**逐行粘贴到你的回复正文里**（不要只写「见工具返回/见上方」——业务可能看不到工具记录），再附「① 投放材料 / ② 直接口述」二选一，不得自行浓缩成「方便您后续放材料」之类不触发动作的话术后直接追问。业务选直接口述时先回知情确认（见 reqdoc-r8），部分投放则仅扫描已投目录。" },
-    { id: "reqdoc-r27", stage: "global", text: "关键确认防浅背书：若业务连续 2 次选择「默认推荐 / 同意默认」，须在当轮显式要求业务对 3 项关键内容给出自主意见——量化目标（如 MTTR 基线/目标具体数字，补满 100 分）、功能范围、权限边界——不得继续走默认；量化目标缺失时直接追问具体数字。目的在防止「AI 揣测 + 业务走流程」式假确认。此处不做硬拦截，靠 reqdoc-r21 打分门禁兜底。" },
+    { id: "reqdoc-r27", stage: "global", text: "关键确认防浅背书：若业务连续 2 轮选择「默认推荐 / 同意默认」，则放弃 A/B/C 默认推荐、当轮改为开放式追问，强制业务对 3 项关键内容给出具体意见——量化目标（如 MTTR 基线/目标具体数字，补满 100 分）、功能范围、权限边界——要求给数字、给真实举例，不得继续走默认；量化目标缺失时直接追问具体数字。插件累计「自主意见占比」，连续默认轮次 ≥2 时 review 阶段会提示补充材料/实例以提升需求真实性。目的在防止「AI 揣测 + 业务走流程」式假确认。此处不做硬拦截，靠 reqdoc-r21 打分门禁兜底。" },
     { id: "reqdoc-r28", stage: "edge", text: "先补料再追问：进入边界与异常（edge）追问前，若 01_背景与目标 / 02_制度与合规 / 04_角色与权限 仍全空且业务未选「直接口述」，须先促业务投放其中至少 2 个目录（或确认口述），避免全程 [问答] 兜底导致需求说服力与可追溯性弱；同时提示调用 workflow_baseline(developer_confirmed=true) 录入预估工时与 MTTR 基线，形成 AI 提效对比。已扫描材料充足时可跳过。" },
+    { id: "reqdoc-r30", stage: "global", text: "来源真实性门禁（防全[问答]兜底）：PRD 定稿须有一定书面材料支撑——[文档] 来源占比 ≥30%，或至少 2 个功能点含 ≥1 处 [文档] 支撑，二者满足其一即可；均不满足则 review_submit 被拦截，须业务向 01~04 补充书面材料后重扫 reqdoc_scan，或由业务明确确认「无书面材料可引用」(no_document_confirmed=true) 后定稿。" },
     { id: "reqdoc-r4", stage: "global", text: "业务说「回到XX」时，立即调用 workflow_revisit(stage=XX)。绝不自行判断阶段已完成。" },
     { id: "reqdoc-r5", stage: "global", text: "业务确认完成（review_submit 通过）后，建议执行 /new 开始下一个需求，保持统计隔离。" },
     // ---- goal 目标与场景 ----
@@ -511,7 +514,7 @@ export const REQDOC: WorkflowDefinition = {
     { id: "reqdoc-r9", stage: "rules", text: "引导补全主流程：用户输入哪些信息、系统处理后给什么结果；将自然语言转化为字段定义（数据项 / 是否必填 / 校验规则）。" },
     { id: "reqdoc-r10", stage: "rules", text: "自动推演主流程后，在对话里用**可读的纯文本步骤（编号列表 ①→②→③ 或箭头串）**向业务展示确认——CLI/终端不渲染 Mermaid，对话内不得只给 Mermaid 图、也不要裸写 flowchart TD；如需保留可视化图，把 Mermaid（须用 ```mermaid 围栏包裹）写入 06_需求规格产出/附_流程图/ 供在支持渲染的查看器中打开。业务说资料已放好则调用 reqdoc_scan(directory=03_流程与数据) 扫描提取字段与流程作输入；综合扫描材料与问答生成数据字典与库表设计（数据实体/字段/主外键关系/校验规则），向业务展示确认。" },
     // ---- edge 边界与异常（最关键）----
-    { id: "reqdoc-r11", stage: "edge", text: `按探针清单推进追问（清单与 reqdoc_probe 工具描述同源，每维映射打分卡扣分项）：\n${reqdocProbeRubric()}\n逐轮追问最多 5 问（见 r2，带 A/B/C 与【默认推荐项】），每轮结束调用 reqdoc_probe(asked=本轮新问探针, gaps=仍缺口探针, round=轮次) 记录覆盖；追问最多 3 轮，3 轮后仍未澄清项标 [缺省] 停止追问；到 3 轮上限时，先把未澄清探针逐条列出（附对应打分卡维度与将扣分数），并说明业务的可选项——补充材料/口述补全这些项（我据此扫描或追问补漏）、确认接受 [缺省] 留白（对应维度将扣分）、或开新会话继续；无需一次补全，定稿前随时可补——再进下一环节。` },
+    { id: "reqdoc-r11", stage: "edge", text: `按探针清单推进追问（清单与 reqdoc_probe 工具描述同源，每维映射打分卡扣分项）：\n${reqdocProbeRubric()}\nmain_flow/exception 探针须「先要真实案例再答题」——业务给不出实例则明示缺真实素材、卡住提示投放 01~04，不往下走。逐轮追问最多 5 问（见 r2，带 A/B/C 与【默认推荐项】），每轮结束调用 reqdoc_probe(asked=本轮新问探针, gaps=仍缺口探针, round=轮次, business_default=本轮是否全选默认) 记录覆盖；追问最多 3 轮，3 轮后仍未澄清项标 [缺省] 停止追问；到 3 轮上限时，先把未澄清探针逐条列出（附对应打分卡维度与将扣分数），并说明业务的可选项——补充材料/口述补全这些项（我据此扫描或追问补漏）、确认接受 [缺省] 留白（对应维度将扣分）、或开新会话继续；无需一次补全，定稿前随时可补——再进下一环节。` },
     { id: "reqdoc-r12", stage: "edge", text: "按已投放材料反问缺口（如已有制度但缺权限，追问「不同岗位的权限如何隔离」）；业务说资料已放好则调用 reqdoc_scan(directory=02_制度与合规) 与 reqdoc_scan(directory=04_角色与权限) 扫描提取作输入；综合岗位角色矩阵、机构隔离、审批授权与双人复核材料生成 RBAC 权限控制矩阵与审批流控制逻辑，向业务展示确认。" },
     { id: "reqdoc-r22", stage: "edge", text: "探针覆盖度（柔性门禁）：进入 prd 前，若已调用 reqdoc_probe 记录过探针，服务端校验缺口与打分一致——缺口探针对应打分卡维度不得打满分（缺口+满分=自评不诚实，workflow_advance 进 prd 与 review_submit 会被拒绝）；建议每轮追问结束调用 reqdoc_probe 记录（覆盖度在状态条可见，帮助自评一致）；材料已全覆盖无追问时可记录一次（asked/gaps 可为空），不记录不强求。" },
     { id: "reqdoc-r21", stage: "edge", text: `打分时机与门禁（实施方案打分卡）：边界与异常收集完成、准备进入 prd 前，基于已扫描材料 + 问答对照打分卡逐维打分（满分 100）：\n${reqdocScoreRubric()}\n调用 reqdoc_score 输出各维得分与扣分明细（附证据引用），向业务展示并请其确认；business_confirmed=true 且 total≥85 后才可 workflow_advance(stage=prd, action=enter)。未达标按三档引导重打：<60 分（不合格）优先继续提问主流程与异常边界，补齐流程闭环与异常覆盖；60-84 分（良好）引导补充脱敏规则、权限与机构隔离、逆向撤销/驳回流程；≥85 分（达标）输出扣分明细、业务确认通过后即停止追问、不再重复盘问。展示得分时必须附质量得分进度条（如 [▓▓▓▓▓░░░░░ 50%]，进度直观反映达标进度）。严禁未展示扣分明细即自报达标。` },

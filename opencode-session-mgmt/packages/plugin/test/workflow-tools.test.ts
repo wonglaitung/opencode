@@ -3,8 +3,12 @@
  * workflow_baseline 基线预估工时录入（6.3）。
  */
 import { describe, expect, test } from "bun:test"
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs"
+import { dirname, join } from "node:path"
+import { tmpdir } from "node:os"
 import { Store } from "../src/db"
 import { createWorkflowTools } from "../src/tools/workflow"
+import { createReviewTools } from "../src/tools/review"
 
 const ctx = { sessionID: "s1" } as never
 
@@ -197,6 +201,102 @@ describe("reqdoc 打分卡门禁（进入 prd 阶段前）", () => {
     const tools = createWorkflowTools(store)
     const out = await tools.workflow_advance!.execute({ stage: "design", action: "enter", developer_confirmed: false } as never, ctx)
     expect(String(out)).toContain("设计")
+    store.close()
+  })
+})
+
+describe("reqdoc review_submit 来源真实性门禁（reqdoc-r30）", () => {
+  function fullMd(tag: string, blocks: number): string {
+    let body = `## 一、项目信息\n## 二、文档变更过程\n`
+    body += `## 第一章 需求概述\n### 1.1 需求类型\n### 1.2 属于流程优化项目\n### 1.3 涉及跨部门项目\n### 1.4 涉及总行开发\n### 1.5 希望完成时间\n### 1.6 需求提出原因及功能概述\n`
+    body += `## 第二章 术语定义与业务规则\n### 2.1 术语定义\n### 2.2 业务规则\n`
+    body += `## 第三章 需求功能详述\n`
+    for (let i = 1; i <= blocks; i++) {
+      body += `### 功能点 ${i}\n`
+      for (const sub of ["1.1 简要概述", "1.2 控制要求", "2.1 输入要素的检查", "2.2 系统处理过程", "2.3 异常处理要求", "2.4 提示信息", "2.5 其他要求", "2.6 清算处理", "2.7 差错处理", "2.8 交易安全性", "2.9 数据存贮和清理", "2.10 附件"]) {
+        body += `##### ${sub} ${tag}\n`
+      }
+    }
+    return body
+  }
+  function approveAll(store: Store, source: string, features: number, docBlocks: number, docCount: number, qaCount: number) {
+    store.mutateWorkflow("s1", (w) => {
+      for (const st of ["goal", "rules", "edge", "prd", "review"]) w.stages[st].status = "approved"
+      w.score = {
+        dims: {
+          businessValue: { score: 15, max: 15 },
+          flowClosure: { score: 25, max: 25 },
+          edgeControl: { score: 30, max: 30 },
+          compliance: { score: 20, max: 20 },
+          authority: { score: 10, max: 10 },
+        },
+        deductions: [],
+        total: 100,
+        confirmed: true,
+        confirmedAt: 1,
+        updatedAt: 1,
+      }
+      w.probes = { asked: ["main_flow"], gaps: [], round: 1, updatedAt: 1 }
+      w.render = {
+        ok: true,
+        chaptersPresent: [],
+        missing: [],
+        outOfOrder: [],
+        missingSections: [],
+        featureCount: features,
+        featureOk: true,
+        missingFeatureSections: [],
+        covered: {},
+        defaults: {},
+        docBlocks,
+        docCount,
+        qaCount,
+        source,
+        checkedAt: 1,
+        expectedFeatures: features,
+      }
+    })
+  }
+  function writePrd(source: string, tag: string, blocks: number): string {
+    const d = mkdtempSync(join(tmpdir(), "sm-revgate-"))
+    const abs = join(d, source)
+    mkdirSync(dirname(abs), { recursive: true })
+    writeFileSync(abs, fullMd(tag, blocks), "utf8")
+    return d
+  }
+  const checklist = { completeness: true, clarity: true, edgeCoverage: true, resolution: true }
+
+  test("全 [问答] 无 [文档] 且未确认口述 → 拦截", async () => {
+    const store = Store.memory(() => "reqdoc")
+    const source = "06_需求规格产出/PRD.md"
+    const worktree = writePrd(source, "[问答]", 1)
+    approveAll(store, source, 1, 0, 0, 12)
+    const tools = createReviewTools(store)
+    await expect(
+      tools.review_submit!.execute({ ...checklist, no_document_confirmed: false } as never, { sessionID: "s1", worktree } as never),
+    ).rejects.toThrow(/来源真实性门禁/)
+    store.close()
+  })
+
+  test("未确认口述但 no_document_confirmed=true → 放行", async () => {
+    const store = Store.memory(() => "reqdoc")
+    const source = "06_需求规格产出/PRD.md"
+    const worktree = writePrd(source, "[问答]", 1)
+    approveAll(store, source, 1, 0, 0, 12)
+    const tools = createReviewTools(store)
+    const out = await tools.review_submit!.execute({ ...checklist, no_document_confirmed: true } as never, { sessionID: "s1", worktree } as never)
+    expect(String(out)).toContain("审查阶段通过")
+    store.close()
+  })
+
+  test("≥2 功能点有 [文档] 支撑 → 放行", async () => {
+    const store = Store.memory(() => "reqdoc")
+    const source = "06_需求规格产出/PRD.md"
+    const worktree = writePrd(source, "[文档]", 2)
+    approveAll(store, source, 2, 2, 24, 0)
+    const tools = createReviewTools(store)
+    const out = await tools.review_submit!.execute({ ...checklist, no_document_confirmed: false } as never, { sessionID: "s1", worktree } as never)
+    expect(String(out)).toContain("审查阶段通过")
     store.close()
   })
 })
