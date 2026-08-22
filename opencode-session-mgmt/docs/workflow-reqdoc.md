@@ -243,6 +243,16 @@ flowchart TD
 
 **docx 与 md 的维护约定**：`docs/模版.docx` 为权威源，`docs/reqdoc-prd-template.md` 为运行时载体（插件注入的是 md，模型只以注入的 md 为唯一依据——r14/r20 规则文本不引用 docx，避免双权威歧义）。**改 docx 必须同步重渲染 md**，否则「严格逐字遵循」名不副实。
 
+### 7.1 质量飞轮 P3（工程化打磨，本次新增）
+
+P3 不新增规则维度，而是在 P0~P2 之上做工程化加固，让校验器与门禁更"可被业务/开发者理解并自纠"：
+
+- **P3.7 渲染增量诊断**：`reqdoc_check` 新增可选 `feature` 参数（填功能点序号如 `1` 或 `功能点 1`），仅聚焦该功能点输出「期望子小节 vs 实际缺失」逐项差异（`focusFeatureDiff`），便于定位单个功能点的渲染缺口，而非整篇长清单。
+- **P3.8 门禁前置暴露**：`workflow_advance` 进入/完成某阶段后，显式列出下一阶段的**前置条件清单**（`REQDOC_STAGE_PREREQS`，同源 r13/r14/r21/r23/r30），让业务在动手前看到"进下一阶段前必须满足什么"，避免中途才发现缺料返工。
+- **P3.9 迭代上限提示**：`reqdoc_check` 累计连续失败次数（`WorkflowState.renderCheckFails`，合规即清零）；连续 ≥3 次校验不通过时，校验卡片提示人工介入与格式诊断（章节标题层级、功能点块须 ### 起头带序号等），避免模型在错误结构上反复打磨。
+- **P3.10 确认溯源**：`comprehension_confirm` 新增可选 `sourceLabel`/`sourceQuote`（来源标签 + 引用原文/编号）；reqdoc 定稿时，已接受要点若未回填来源证据则 `review_submit` 被拦截（防"凭空认可"），确认记录可回溯到出处。
+- **P2.5 字段定义环节（数据字典）**：进 prd 渲染前置新增 `reqdoc_field_dict(fields)` 工具（规则 reqdoc-r31），逐字段与业务确认名称/类型/长度/必填/取值/来源系统，记录进 `WorkflowState.fieldDict` 并写入 `06_需求规格产出/数据字典与库表设计/数据字典.md`；字段定义是 material 维度（真实字段/接口证据）的直接来源。
+
 ## 8. 专属工具
 
 reqdoc 无 git 提交门禁（`hasCommitGate=false`），`commit_gate_*` 工具不启用。reqdoc 专属工具（通用工具 workflow_advance/revisit/baseline/comprehension_*/review_submit 见 session-management.md 4.1）：
@@ -254,6 +264,7 @@ reqdoc 无 git 提交门禁（`hasCommitGate=false`），`commit_gate_*` 工具�
 | `reqdoc_score` | reqdoc 打分卡：对照打分卡逐维打分，附扣分明细与证据引用，业务确认后记录（实施方案第三节） | 仅 reqdoc；`business_confirmed` 必须为 true（防 AI 自评）；八维齐全、`0 ≤ 得分 ≤ 该维度满分`；`total` 由服务端 = Σ 各维计算（不信任模型自报）；可多次重打覆盖 |
 | `reqdoc_check` | reqdoc 渲染结构校验（质量飞轮 P2）：PRD 渲染写盘后对照模板结构 schema 做渲染 diff 校验（章节骨架/功能点块数/映射字段来源标注），结果写入 `WorkflowState.render`（返回校验卡片） | 仅 reqdoc；`source` 为 PRD md 相对项目根路径；不强制调用（柔性，未记录则定稿放行）；一旦记录，review_submit 定稿时重读源 md 复核——结构违规与「[缺省]↔满分」矛盾拦截 |
 | `reqdoc_export` | reqdoc PRD 导出：定稿 PRD 从 md 转 Word（.docx）交付件，与源 md 同目录归档 | 仅 reqdoc；`source` 为 PRD md 相对项目根路径；仅转换 .md 文件（源不可读报错提示先完成渲染） |
+| `reqdoc_field_dict` | reqdoc 字段定义（数据字典，P2.5）：进 prd 渲染前逐字段定义名称/类型/长度/必填/取值/来源系统，记录进 `WorkflowState.fieldDict` 并写入 `06_需求规格产出/数据字典与库表设计/数据字典.md` | 仅 reqdoc；`fields` 可分批提交，服务端按 feature+name 合并 |
 
 ## 9. 实际效果：业务确认（场景五）
 
