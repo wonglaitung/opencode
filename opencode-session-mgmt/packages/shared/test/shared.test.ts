@@ -283,6 +283,10 @@ describe("WorkflowDefinition 注册表（3.2）", () => {
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r14" && r.text.includes("数据字典与库表设计") && r.text.includes("RBAC 权限控制矩阵"))).toBe(true)
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r14" && r.text.includes("reqdoc_export") && r.text.includes("Word"))).toBe(true)
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r20" && r.text.includes("数据字典与库表设计/") && r.text.includes("权限矩阵与审批流/"))).toBe(true)
+    // 关键确认防浅背书（质量飞轮 #5）：reqdoc-r27 通用规则，连续 2 次默认须逼自主意见
+    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r27" && r.stage === "global" && r.text.includes("连续 2 次") && r.text.includes("量化目标") && r.text.includes("打分门禁兜底"))).toBe(true)
+    // 先补料再追问（质量飞轮 #6）：reqdoc-r28 edge 规则，进 edge 前促投放≥2 目录
+    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r28" && r.stage === "edge" && r.text.includes("先补料再追问") && r.text.includes("至少 2 个目录") && r.text.includes("workflow_baseline"))).toBe(true)
   })
 
   test("打分卡契约：五维权重满分 100、达标线 85", () => {

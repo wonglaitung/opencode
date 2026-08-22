@@ -177,6 +177,21 @@ describe("reqdoc 打分卡门禁（进入 prd 阶段前）", () => {
     store.close()
   })
 
+  test("进入 prd 时自动 approve 处于 in_progress 的前序 edge 阶段（报告#7）", async () => {
+    const { store, tools } = setupReqdocAtEdge()
+    store.mutateWorkflow("s1", (w) => {
+      w.stages.goal.status = "approved"
+      w.stages.rules.status = "approved"
+      w.stages.edge.status = "in_progress"
+      w.score = setScore(90)
+    })
+    await tools.workflow_advance!.execute({ stage: "prd", action: "enter", developer_confirmed: false } as never, ctx)
+    const wf = store.get("s1")!.workflow!
+    expect(wf.stages.edge.status).toBe("approved")
+    expect(wf.stages.prd.status).toBe("in_progress")
+    store.close()
+  })
+
   test("sdlc 进入阶段不受打分卡门禁影响", async () => {
     const store = Store.memory() // 缺省 sdlc
     const tools = createWorkflowTools(store)

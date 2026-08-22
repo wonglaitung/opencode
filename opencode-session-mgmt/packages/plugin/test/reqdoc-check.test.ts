@@ -71,6 +71,7 @@ describe("reqdoc_check", () => {
     expect(out).toContain("功能点块：1/1")
     expect(out).toContain("覆盖进度")
     expect(out).toContain("✓ 结构合规，可 review_submit 定稿")
+    expect(out).toContain("期望骨架")
     const render = store.get("r1")!.workflow!.render!
     expect(render.source).toBe(rel)
     expect(render.expectedFeatures).toBe(1)

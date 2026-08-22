@@ -175,6 +175,30 @@ describe("parseRenderStructure", () => {
     for (const f of REQDOC_TEMPLATE_FIELDS) expect(s.covered[f.key]).toBe(2)
   })
 
+  test("来源标签包全角括号（### 2.1 输入要素的检查（[问答]））也能识别——修复 0/42 主因", () => {
+    // 弱模型常把 [文档]/[问答] 用全角括号包裹；归一化须剥 【】 才能命中小节标题。
+    const md = fullPrd()
+      .replace("##### 2.1 输入要素的检查 [文档]", "##### 2.1 输入要素的检查（[文档]）")
+      .replace("##### 1.2 控制要求 [文档]", "##### 1.2 控制要求（[问答]）")
+      .replace("##### 2.3 异常处理要求 [文档]", "##### 2.3 异常处理要求（[文档]+[问答]）")
+    const s = parseRenderStructure(md)
+    expect(s.featureOk).toBe(true)
+    expect(s.covered["2.1"]).toBe(2)
+    expect(s.covered["1.2"]).toBe(2)
+    expect(s.covered["2.3"]).toBe(2)
+  })
+
+  test("主分组标题为纯文本（无 #）亦可——修复弱模型写为普通文字", () => {
+    // 弱模型把「1. 功能点输入要素」「2. 功能点处理要求」写成普通文字而非标题；主分组为可选分组标签。
+    const md = fullPrd()
+      .replace("#### 1. 功能点输入要素", "1. 功能点输入要素")
+      .replace("#### 2. 功能点处理要求", "2. 功能点处理要求")
+    const s = parseRenderStructure(md)
+    expect(s.featureOk).toBe(true)
+    expect(s.missingFeatureSections).toEqual([])
+    for (const f of REQDOC_TEMPLATE_FIELDS) expect(s.covered[f.key]).toBe(2)
+  })
+
   test("空白差异不影响标题匹配（全角空格/多余空格）", () => {
     const md = fullPrd().replace("## 第三章 需求功能详述", "## 第三章 需求功能详述  ")
     const s = parseRenderStructure(md)

@@ -78,7 +78,7 @@ export const REQDOC_TEMPLATE_FIELDS: readonly ReqdocTemplateField[] = [
 ]
 
 /** 功能点块内子小节（模板「功能点 N」的固定骨架：输入要素 1.1/1.2 + 处理要求 2.1-2.10）。 */
-const FEATURE_SUB_SECTIONS: readonly { key: string; title: string }[] = [
+export const FEATURE_SUB_SECTIONS: readonly { key: string; title: string }[] = [
   { key: "1.1", title: "简要概述" },
   { key: "1.2", title: "控制要求" },
   { key: "2.1", title: "输入要素的检查" },
@@ -232,19 +232,15 @@ export function parseRenderStructure(md: string): RenderStructure {
    blocks.forEach((blockLines, bi) => {
       const label = `功能点 ${bi + 1}`
       // 块内小节层级不拘：弱模型渲染常用三级/四级/五级标题皆可，故按 maxLevel 匹配（不强制四级/五级）。
-      // 标题行可能带来源标注（「##### 2.1 输入要素的检查 [文档]」），匹配时剥掉，弱模型渲染更稳。
+      // 标题归一化：剥来源标签 [文档]/[问答]/[缺省]/「补」与全角括号包裹（弱模型常写「### 2.1 …（[问答]）」），
+      // 并清掉标签间的连接符（+、、，），否则「2.1 输入要素的检查（[文档]+[问答]）」≠「2.1 输入要素的检查」导致子项 0 命中。
+      const clean = (s: string) => norm(s.replace(SOURCE_TAG_RE, "").replace(/[（）+、，]/g, ""))
       const matchHeading = (l: string, maxLevel: number, text: string) => {
         const h = headingAt(l)
-        return !!h && h.level <= maxLevel && norm(h.text.replace(SOURCE_TAG_RE, "")) === norm(text)
+        return !!h && h.level <= maxLevel && clean(h.text) === clean(text)
       }
-      if (!blockLines.some((l) => matchHeading(l, 5, "1. 功能点输入要素"))) {
-        featureOk = false
-        missingFeatureSections.push(`${label} 缺「1. 功能点输入要素」`)
-      }
-      if (!blockLines.some((l) => matchHeading(l, 5, "2. 功能点处理要求"))) {
-        featureOk = false
-        missingFeatureSections.push(`${label} 缺「2. 功能点处理要求」`)
-      }
+      // 主分组标题「1. 功能点输入要素」/「2. 功能点处理要求」为可选分组标签（模型常写为纯文本或省略），
+      // 其下子项（1.1/1.2 与 2.1~2.10）齐全即视为结构完整，故不再硬要求。
       for (const s of FEATURE_SUB_SECTIONS) {
         if (!blockLines.some((l) => matchHeading(l, 5, `${s.key} ${s.title}`))) {
           featureOk = false
@@ -364,7 +360,7 @@ export function renderCheckRubric(): string {
     `章节骨架（须齐全、顺序正确）：一、项目信息；二、文档变更过程；第一章 需求概述（1.1 需求类型~1.6 需求提出原因及功能概述）；` +
     `第二章 术语定义与业务规则（2.1 术语定义/2.2 业务规则）；第三章 需求功能详述（每功能点：输入要素 1.1/1.2，` +
     `处理要求 2.1 输入要素的检查~2.10 附件，编号连续）。\n功能点块标题：每个功能点须用三级标题（###）起头、带序号，形如「### 功能点 N」或「### N_功能点名称」（例：「### 1_故障应急智能检索」）；校验器按此类标题计数功能点块数，缺序号或非三级标题（##/####）不被识别为块。\n` +
-    `块内固定小节（标题编号+名称须齐全，层级不拘——三级/四级/五级标题均可，不强制四级或五级）：两级主小节「1. 功能点输入要素」（含 1.1 简要概述、1.2 控制要求）与「2. 功能点处理要求」（含 2.1 输入要素的检查、2.2 系统处理过程、2.3 异常处理要求、2.4 提示信息、2.5 其他要求、2.6 清算处理、2.7 差错处理、2.8 交易安全性、2.9 数据存贮和清理、2.10 附件）；小节标题须含编号与名称（如「2.1 输入要素的检查」）。\n` +
+    `块内固定小节（标题编号+名称须齐全，层级不拘——三级/四级/五级标题均可，不强制四级或五级）：主分组标题「1. 功能点输入要素」（含 1.1 简要概述、1.2 控制要求）与「2. 功能点处理要求」（含 2.1~2.10）为可选分组标签，模型常写为纯文本或省略，其下子项齐全即视为完整；小节标题须含编号与名称（如「2.1 输入要素的检查」），来源标签可包全角括号（如「2.1 输入要素的检查（[问答]）」）。\n` +
     `映射字段须逐功能点标来源 [文档]/[问答]/[缺省]（标在标题行或该小节正文内均可）：1.2 控制要求、2.1 输入要素的检查、2.3 异常处理要求、2.6 清算处理、2.7 差错处理、2.8 交易安全性、2.9 数据存贮和清理。\n必填字段（逐功能点须标来源 [文档]/[问答]/[缺省]，同 reqdoc-r14/r20）：${fields}。\n` +
     `[缺省] 字段对应打分卡维度打满分 = 渲染缺口与自评矛盾，review_submit 定稿会被拦。`
   )

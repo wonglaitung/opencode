@@ -69,6 +69,17 @@ export function createWorkflowTools(store: Store): Record<string, ToolDefinition
             throw new WorkflowOpError("approve 需开发者明确确认：developer_confirmed 必须为 true")
           }
         }
+        // 进入下一阶段即自动确认（approve）上一阶段（工具强制，防"进入即进行中、确认未落库"缝隙，
+        // 见报告#7）：仅把处于 in_progress 的前序阶段补 approve，已 approved 跳过、not_started 不动。
+        if (args.action === "enter") {
+          const idx = def.stages.indexOf(args.stage)
+          for (let i = idx - 1; i >= 0; i--) {
+            const pred = def.stages[i]!
+            if (workflow.stages[pred].status === "in_progress") {
+              applyTransition(workflow, pred, "approve", Date.now(), "进入下一阶段自动确认上一阶段")
+            }
+          }
+        }
         applyTransition(workflow, args.stage, args.action, Date.now(), args.note)
       })
       const def = getDefinition(saved.type)

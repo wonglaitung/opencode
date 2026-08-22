@@ -10,6 +10,7 @@ import { tool, type ToolDefinition } from "@opencode-ai/plugin"
 import {
   REQDOC_TEMPLATE_CHAPTERS,
   REQDOC_TEMPLATE_FIELDS,
+  FEATURE_SUB_SECTIONS,
   getDefinition,
   parseRenderStructure,
   renderCheckRubric,
@@ -66,6 +67,16 @@ export function createReqdocCheckTools(store: Store): Record<string, ToolDefinit
   return { reqdoc_check }
 }
 
+/** 期望功能点块骨架（同源 renderCheckRubric，避免漂移），供 check 卡片展示"期望 vs 实际"。 */
+function expectedSkeleton(): string {
+  const subs = FEATURE_SUB_SECTIONS.map((s) => `${s.key} ${s.title}`).join("、")
+  const fields = REQDOC_TEMPLATE_FIELDS.map((f) => `${f.key} ${f.title}`).join("、")
+  return (
+    `期望每功能点块：${subs}；主分组标题「1. 功能点输入要素」「2. 功能点处理要求」为可选分组标签（可纯文本/省略），` +
+    `小节层级 3~5 均可，标题须含编号+名称；映射字段须逐功能点标来源 [文档]/[问答]/[缺省]（可包全角括号，如「2.1 输入要素的检查（[问答]）」）：${fields}。`
+  )
+}
+
 /** 把渲染校验记录格式化为工具返回文本：章节/功能点骨架、必填字段来源覆盖、10 格进度条（弱模型直接可见）。 */
 function formatRenderCard(render: ReqdocRender, violations: string[]): string {
   const chapterOk = render.missing.length === 0 && render.outOfOrder.length === 0
@@ -83,6 +94,7 @@ function formatRenderCard(render: ReqdocRender, violations: string[]): string {
     `${chapterLine}\n` +
     `功能点块：${render.featureCount}/${render.expectedFeatures}（已确认功能点数）${featureOk ? " ✓" : " ✗ 骨架不完整"}\n` +
     `必填字段来源覆盖：${coveredCount}/${totalFields} 处\n` +
+    `期望骨架：${expectedSkeleton()}\n` +
     `覆盖进度：[${bar}] ${totalFields > 0 ? Math.round((coveredCount / totalFields) * 100) : 100}%\n` +
     (violations.length > 0
       ? `⚠ 渲染违规 ${violations.length} 项：\n  - ${violations.join("\n  - ")}\n→ 请修正后重调 reqdoc_check 复查；[缺省] 字段须在 reqdoc_score 对应维度如实扣分。`
