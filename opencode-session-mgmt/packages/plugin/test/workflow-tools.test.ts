@@ -147,16 +147,16 @@ describe("reqdoc 打分卡门禁（进入 prd 阶段前）", () => {
     store.close()
   })
 
-  test("缺口探针对应维度满分进入 prd 被拒（缺口+满分自相矛盾）", async () => {
+  test("缺口探针（核心流程/异常未获真实实例）进入 prd 被拒（P0.1 卡在入口）", async () => {
     const { store, tools } = setupReqdocAtEdge()
     store.mutateWorkflow("s1", (w) => {
-      // exception 缺口映射 edgeControl，但该维打了满分 30/30 —— 自评不诚实
-      w.score = setScore(90) // edgeControl 30 满分
+      // exception 缺口 = 业务未提供真实异常实例，无论打分是否满分都卡在 prd 入口
+      w.score = setScore(90)
       w.probes = { asked: ["main_flow", "exception"], gaps: ["exception"], round: 1, updatedAt: 1000 }
     })
     await expect(
       tools.workflow_advance!.execute({ stage: "prd", action: "enter", developer_confirmed: false } as never, ctx),
-    ).rejects.toThrow(/自相矛盾/)
+    ).rejects.toThrow(/核心流程\/异常缺真实实例/)
     expect(store.get("s1")!.workflow!.stages.prd.status).toBe("not_started")
     store.close()
   })
@@ -181,6 +181,33 @@ describe("reqdoc 打分卡门禁（进入 prd 阶段前）", () => {
     })
     const out = await tools.workflow_advance!.execute({ stage: "prd", action: "enter", developer_confirmed: false } as never, ctx)
     expect(String(out)).toContain("需求规格书")
+    store.close()
+  })
+
+  test("P3.8 门禁前置暴露：进入 prd 后返回 review 阶段前置条件清单", async () => {
+    const { store, tools } = setupReqdocAtEdge()
+    store.mutateWorkflow("s1", (w) => {
+      w.score = setScore(90)
+      w.probes = { asked: ["main_flow", "exception"], gaps: [], round: 2, updatedAt: 1000 }
+    })
+    const out = String(await tools.workflow_advance!.execute({ stage: "prd", action: "enter", developer_confirmed: false } as never, ctx))
+    expect(out).toContain("下一阶段")
+    expect(out).toContain("前置条件")
+    // 来自 REQDOC_STAGE_PREREQS.review：应含来源真实性/确认溯源等条目
+    expect(out).toContain("来源真实性")
+    store.close()
+  })
+
+  test("P3.8 门禁前置暴露：进入 edge 后返回 prd 阶段前置条件（含打分卡≥85）", async () => {
+    const store = Store.memory(() => "reqdoc")
+    const tools = createWorkflowTools(store)
+    store.mutateWorkflow("s1", (w) => {
+      for (const n of ["goal", "rules"]) w.stages[n].status = "approved"
+    })
+    const out = String(await tools.workflow_advance!.execute({ stage: "edge", action: "enter", developer_confirmed: false } as never, ctx))
+    expect(out).toContain("下一阶段")
+    expect(out).toContain("前置条件")
+    expect(out).toContain("打分卡")
     store.close()
   })
 

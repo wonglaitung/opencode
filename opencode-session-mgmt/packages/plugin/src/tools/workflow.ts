@@ -74,6 +74,17 @@ export function createWorkflowTools(store: Store): Record<string, ToolDefinition
           if (!score.confirmed) {
             throw new WorkflowOpError("PRD 打分结果未获业务确认：请向业务展示并确认扣分明细后重调 reqdoc_score(business_confirmed=true)")
           }
+          // P0.1 实例探针硬约束：main_flow/exception 探针仍记录缺口 = 业务未提供真实案例（无实例空转）。
+          // 卡在 prd 入口，须业务投放 01~04 或提供真实实例后重调 reqdoc_probe 澄清，方可进入渲染（不往下走）。
+          if (
+            workflow.probes &&
+            (workflow.probes.gaps.includes("main_flow") || workflow.probes.gaps.includes("exception"))
+          ) {
+            throw new WorkflowOpError(
+              "核心流程/异常缺真实实例（P0.1）：main_flow 或 exception 探针仍记录缺口，说明业务未提供真实案例。" +
+                "请业务向 01~04 补充书面材料后重扫 reqdoc_scan，或由业务提供真实实例后重调 reqdoc_probe 澄清，方可进入 prd 渲染。",
+            )
+          }
           // 柔性一致校验（质量飞轮 P1）：缺口探针对应维度不得打满分（报缺口却打满分 = 自评不诚实）。
           const violations = probeGapViolations(workflow.probes, score)
           if (violations.length > 0) {
