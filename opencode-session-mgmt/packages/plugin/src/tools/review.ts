@@ -119,6 +119,15 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
           record.confirmSource = { label: args.sourceLabel ?? "", quote: args.sourceQuote ?? "" }
         }
       })
+      // P3.10 溯源回填：reqdoc 要点确认并给出来源证据时，将引用写回 PRD 交付件（确认溯源章节），
+      // 使交付物本身可追溯（不止停留在 record）。best-effort：写盘失败不阻断确认。
+      if (args.sourceLabel || args.sourceQuote) {
+        const wf = store.ensure(context.sessionID).workflow
+        const src = { label: args.sourceLabel ?? "", quote: args.sourceQuote ?? "" }
+        if (wf && getDefinition(wf.type).type === "reqdoc" && wf.render?.source) {
+          await appendConfirmSourceToPrd(projectRoot(context), wf.render.source, args.codeSegmentId, src)
+        }
+      }
       const review = reviewRecord(store.ensure(context.sessionID).workflow!)
       const done = review.comprehension.filter((c) => c.decision === "accepted").length
       return (
@@ -244,6 +253,12 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
         .describe(
           "仅当 PRD 全部字段来自 [问答]、无任何 [文档] 支撑时使用：须业务在对话中明确确认「无书面材料可引用」后才可为 true，否则定稿会被来源支撑门禁拦截",
         ),
+      skip_field_dict: z
+        .boolean()
+        .optional()
+        .describe(
+          "仅当需求确无结构化输入字段（无需字段定义）时使用：默认 false；为 true 时跳过「进 prd 前须生成数据字典(reqdoc_field_dict)」门禁。一般需求应在 prd 渲染前完成字段定义。",
+        ),
     },
     async execute(args, context) {
       // 渲染定稿复核（质量飞轮 P2）：reqdoc_check 记录过 render 才复核——重读源 md 重新解析，
@@ -346,6 +361,16 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
             )
           }
         }
+        // 字段定义门禁（P2.5）：进 prd 前须逐字段确认并生成数据字典（reqdoc_field_dict）；
+        // 缺字段定义则定稿视为未做字段级梳理，除非需求确无结构化字段(skip_field_dict=true)。
+        if (def.type === "reqdoc" && !args.skip_field_dict) {
+          if (!workflow.fieldDict || workflow.fieldDict.length === 0) {
+            throw new WorkflowOpError(
+              "字段定义缺失：进 prd 渲染前须逐字段与业务确认（名称/类型/长度/必填/取值/来源系统）并调用 reqdoc_field_dict 生成数据字典。" +
+                "如本需求确无结构化输入字段，可 review_submit(skip_field_dict=true) 跳过此门禁。",
+            )
+          }
+        }
         const total = review.comprehension.length
         const hadCodeEdits = (workflow.quality.iterationCount ?? 0) > 0
         // 有 AI 代码编辑就必须登记理解确认片段；纯讨论会话（无代码）可无片段通过
@@ -418,6 +443,28 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
       )
     },
   })
+
+  /** P3.10 溯源回填：把要点的来源证据追加写入 PRD 交付件末尾的「确认溯源」章节（best-effort）。 */
+  async function appendConfirmSourceToPrd(
+    root: string,
+    rel: string,
+    id: string,
+    src: { label: string; quote: string },
+  ): Promise<void> {
+    try {
+      const abs = resolveWithinWorktree(root, rel)
+      const md = await Bun.file(abs).text()
+      const header = "## 确认溯源"
+      const line = `- 要点「${id}」来源：${src.label || "—"} —— ${src.quote.replace(/\r?\n/g, " ").slice(0, 200)}`
+      if (md.includes(line)) return // 去重：同一条引用已写入
+      const out = md.includes(header)
+        ? `${md.trimEnd()}\n${line}\n`
+        : `${md.trimEnd()}\n\n${header}\n${line}\n`
+      await Bun.write(abs, out)
+    } catch {
+      // 写盘失败不影响确认本身（溯源仍存在于 record）
+    }
+  }
 
   return {
     comprehension_add,

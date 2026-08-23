@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import { afterEach } from "bun:test"
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
-import { reviewRecord } from "sm-shared"
+import { reviewRecord, type ReqdocRender } from "sm-shared"
 import { Store } from "../src/db"
 import { createReqdocCheckTools } from "../src/tools/reqdoc-check"
 import { createReviewTools } from "../src/tools/review"
@@ -350,6 +350,7 @@ describe("review_submit 门禁", () => {
     const tools = createReviewTools(store)
     store.mutateWorkflow("r1", (w) => {
       for (const name of ["goal", "rules", "edge", "prd"]) w.stages[name].status = "approved"
+      w.fieldDict = [{ feature: "功能点 1", name: "客户号", type: "字符串", required: true }]
     })
     setReqdocScore(store, "r1")
     store.lockFile("r1", "/home/dev/project/src/A.java")
@@ -449,6 +450,7 @@ describe("review_submit 门禁", () => {
     const tools = createReviewTools(store)
     store.mutateWorkflow("r1", (w) => {
       for (const name of ["goal", "rules", "edge", "prd"]) w.stages[name].status = "approved"
+      w.fieldDict = [{ feature: "功能点 1", name: "客户号", type: "字符串", required: true }]
       w.probes = { asked: ["main_flow", "exception"], gaps: [], round: 2, updatedAt: 1000 }
     })
     setReqdocScore(store, "r1")
@@ -465,6 +467,7 @@ describe("review_submit 门禁", () => {
     const tools = createReviewTools(store)
     store.mutateWorkflow("r1", (w) => {
       for (const name of ["goal", "rules", "edge", "prd"]) w.stages[name].status = "approved"
+      w.fieldDict = [{ feature: "功能点 1", name: "客户号", type: "字符串", required: true }]
       // 无 probes：柔性门禁不强制记录，放行
     })
     setReqdocScore(store, "r1")
@@ -498,6 +501,7 @@ describe("reqdoc 工作流（业务确认 PRD 要点）", () => {
     // 审查是最后一关：先推进前序阶段（goal/rules/edge/prd approved）+ 打分达标（门禁前置）
     store.mutateWorkflow("r1", (w) => {
       for (const name of ["goal", "rules", "edge", "prd"]) w.stages[name].status = "approved"
+      w.fieldDict = [{ feature: "公告发布", name: "客户号", type: "字符串", required: true }]
     })
     setReqdocScore(store, "r1")
     // reqdoc 要点：不填 file/lineStart/lineEnd
@@ -671,6 +675,7 @@ describe("reqdoc 渲染定稿复核门禁（质量飞轮 P2）", () => {
     store.mutateWorkflow("r1", (w) => {
       for (const name of ["goal", "rules", "edge", "prd"]) w.stages[name].status = "approved"
       w.features = [{ no: 1, name: "公告发布", priority: "medium", confirmedAt: 1000 }]
+      w.fieldDict = [{ feature: "公告发布", name: "客户号", type: "字符串", required: true }]
     })
     setReqdocScore(store, "r1")
     const worktree = tempDir()
@@ -757,6 +762,7 @@ describe("reqdoc 渲染定稿复核门禁（质量飞轮 P2）", () => {
     store.mutateWorkflow("r1", (w) => {
       for (const name of ["goal", "rules", "edge", "prd"]) w.stages[name].status = "approved"
       w.features = [{ no: 1, name: "公告发布", priority: "medium", confirmedAt: 1000 }]
+      w.fieldDict = [{ feature: "公告发布", name: "客户号", type: "字符串", required: true }]
     })
     setReqdocScore(store, "r1")
     const directory = tempDir() // 项目根：文件落在此
@@ -769,6 +775,79 @@ describe("reqdoc 渲染定稿复核门禁（质量飞轮 P2）", () => {
     const out = String(await createReviewTools(store).review_submit!.execute(reviewArgs, ctx))
     expect(out).toContain("审查阶段通过")
     expect(reviewRecord(store.get("r1")!.workflow!).status).toBe("approved")
+    store.close()
+  })
+})
+
+describe("P2.5 字段定义门禁 / P3.10 溯源写回", () => {
+  const setupReqdoc = (withFieldDict: boolean) => {
+    const store = Store.memory(() => "reqdoc" as const)
+    const tools = createReviewTools(store)
+    const ctx = { sessionID: "r1" } as never
+    store.mutateWorkflow("r1", (w) => {
+      for (const n of ["goal", "rules", "edge", "prd"]) w.stages[n].status = "approved"
+      if (withFieldDict) w.fieldDict = [{ feature: "功能点 1", name: "客户号", type: "字符串", required: true }]
+    })
+    setReqdocScore(store, "r1")
+    return { store, tools, ctx }
+  }
+  const confirm = async (tools: ReturnType<typeof createReviewTools>, ctx: never) => {
+    await tools.comprehension_add!.execute({ codeSegmentId: "目标与场景", explanation: "缩短开户录入" } as never, ctx)
+    await tools.comprehension_confirm!.execute(
+      { codeSegmentId: "目标与场景", sourceLabel: "对话第1轮", sourceQuote: "开户现在要手工录三遍" } as never,
+      ctx,
+    )
+  }
+  const args = { completeness: true, clarity: true, edgeCoverage: true, resolution: true } as never
+
+  test("P2.5 缺字段定义 → 定稿被拦截", async () => {
+    const { tools, ctx } = setupReqdoc(false)
+    await confirm(tools, ctx)
+    await expect(tools.review_submit!.execute(args, ctx)).rejects.toThrow(/字段定义缺失/)
+  })
+
+  test("P2.5 skip_field_dict=true 可跳过门禁", async () => {
+    const { tools, ctx } = setupReqdoc(false)
+    await confirm(tools, ctx)
+    const out = String(
+      await tools.review_submit!.execute(
+        { completeness: true, clarity: true, edgeCoverage: true, resolution: true, skip_field_dict: true } as never,
+        ctx,
+      ),
+    )
+    expect(out).toContain("审查阶段通过")
+  })
+
+  test("P2.5 已生成数据字典 → 定稿通过", async () => {
+    const { tools, ctx } = setupReqdoc(true)
+    await confirm(tools, ctx)
+    const out = String(await tools.review_submit!.execute(args, ctx))
+    expect(out).toContain("审查阶段通过")
+  })
+
+  test("P3.10 确认溯源写回 PRD md（确认溯源章节）", async () => {
+    const store = Store.memory(() => "reqdoc" as const)
+    const tools = createReviewTools(store)
+    const worktree = mkdtempSync(join(tmpdir(), "sm-srcback-"))
+    const rel = "06_需求规格产出/1_测试/需求规格书.md"
+    mkdirSync(dirname(join(worktree, rel)), { recursive: true })
+    const md0 = "## 第一章 需求概述\n### 1.1 需求类型\n"
+    writeFileSync(join(worktree, rel), md0, "utf8")
+    const ctx = { sessionID: "r1", worktree } as never
+    const render: ReqdocRender = {
+      source: rel, checkedAt: 1, expectedFeatures: 1, ok: true, chaptersPresent: [], missing: [],
+      outOfOrder: [], missingSections: [], featureCount: 1, featureOk: true, missingFeatureSections: [],
+      covered: {}, defaults: {}, docBlocks: 1, docCount: 1, qaCount: 0,
+    }
+    store.mutateWorkflow("r1", (w) => { w.render = render })
+    await tools.comprehension_add!.execute({ codeSegmentId: "目标与场景", explanation: "缩短开户录入" } as never, ctx)
+    await tools.comprehension_confirm!.execute(
+      { codeSegmentId: "目标与场景", sourceLabel: "对话第1轮", sourceQuote: "开户现在要手工录三遍" } as never,
+      ctx,
+    )
+    const md = readFileSync(join(worktree, rel), "utf8")
+    expect(md).toContain("## 确认溯源")
+    expect(md).toContain("要点「目标与场景」来源：对话第1轮 —— 开户现在要手工录三遍")
     store.close()
   })
 })

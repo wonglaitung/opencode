@@ -250,8 +250,8 @@ P3 不新增规则维度，而是在 P0~P2 之上做工程化加固，让校验�
 - **P3.7 渲染增量诊断**：`reqdoc_check` 新增可选 `feature` 参数（填功能点序号如 `1` 或 `功能点 1`），仅聚焦该功能点输出「期望子小节 vs 实际缺失」逐项差异（`focusFeatureDiff`），便于定位单个功能点的渲染缺口，而非整篇长清单。
 - **P3.8 门禁前置暴露**：`workflow_advance` 进入/完成某阶段后，显式列出下一阶段的**前置条件清单**（`REQDOC_STAGE_PREREQS`，同源 r13/r14/r21/r23/r30），让业务在动手前看到"进下一阶段前必须满足什么"，避免中途才发现缺料返工。
 - **P3.9 迭代上限提示**：`reqdoc_check` 累计连续失败次数（`WorkflowState.renderCheckFails`，合规即清零）；连续 ≥3 次校验不通过时，校验卡片提示人工介入与格式诊断（章节标题层级、功能点块须 ### 起头带序号等），避免模型在错误结构上反复打磨。
-- **P3.10 确认溯源**：`comprehension_confirm` 新增可选 `sourceLabel`/`sourceQuote`（来源标签 + 引用原文/编号）；reqdoc 定稿时，已接受要点若未回填来源证据则 `review_submit` 被拦截（防"凭空认可"），确认记录可回溯到出处。
-- **P2.5 字段定义环节（数据字典）**：进 prd 渲染前置新增 `reqdoc_field_dict(fields)` 工具（规则 reqdoc-r31），逐字段与业务确认名称/类型/长度/必填/取值/来源系统，记录进 `WorkflowState.fieldDict` 并写入 `06_需求规格产出/数据字典与库表设计/数据字典.md`；字段定义是 material 维度（真实字段/接口证据）的直接来源。
+- **P3.10 确认溯源**：`comprehension_confirm` 新增可选 `sourceLabel`/`sourceQuote`（来源标签 + 引用原文/编号）；reqdoc 定稿时，已接受要点若未回填来源证据则 `review_submit` 被拦截（防"凭空认可"），确认记录可回溯到出处；溯源同时**写回 PRD 交付件末尾「确认溯源」章节**（best-effort，使交付物本身可追溯）。
+- **P2.5 字段定义环节（数据字典）**：进 prd 渲染前置新增 `reqdoc_field_dict(fields)` 工具（规则 reqdoc-r31），逐字段与业务确认名称/类型/长度/必填/取值/来源系统，记录进 `WorkflowState.fieldDict` 并写入 `06_需求规格产出/数据字典与库表设计/数据字典.md`；字段定义是 material 维度（真实字段/接口证据）的直接来源。**`review_submit` 现强制要求 `fieldDict` 非空**（缺字段定义视为未做字段级梳理被拦截，需求确无结构化字段可 `skip_field_dict=true` 豁免）。
 
 ## 8. 专属工具
 

@@ -227,6 +227,7 @@ describe("reqdoc review_submit 来源真实性门禁（reqdoc-r30）", () => {
   function approveAll(store: Store, source: string, features: number, docBlocks: number, docCount: number, qaCount: number) {
     store.mutateWorkflow("s1", (w) => {
       for (const st of ["goal", "rules", "edge", "prd", "review"]) w.stages[st].status = "approved"
+      w.fieldDict = [{ feature: "功能点 1", name: "客户号", type: "字符串", required: true }]
       w.score = {
         dims: {
           businessValue: { score: 15, max: 15 },
