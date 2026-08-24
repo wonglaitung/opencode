@@ -140,6 +140,8 @@ describe("reqdoc 打分卡门禁（进入 prd 阶段前）", () => {
     const { store, tools } = setupReqdocAtEdge()
     store.mutateWorkflow("s1", (w) => {
       w.score = setScore(90)
+      w.probes = { asked: ["main_flow", "exception"], gaps: [], round: 2, updatedAt: 1000 }
+      w.fieldDict = [{ feature: "功能点 1", name: "客户号", type: "字符串", required: true }]
     })
     const out = await tools.workflow_advance!.execute({ stage: "prd", action: "enter", developer_confirmed: false } as never, ctx)
     expect(String(out)).toContain("需求规格书")
@@ -166,6 +168,7 @@ describe("reqdoc 打分卡门禁（进入 prd 阶段前）", () => {
     store.mutateWorkflow("s1", (w) => {
       w.score = setScore(90)
       w.probes = { asked: ["main_flow", "exception"], gaps: [], round: 2, updatedAt: 1000 }
+      w.fieldDict = [{ feature: "功能点 1", name: "客户号", type: "字符串", required: true }]
     })
     const out = await tools.workflow_advance!.execute({ stage: "prd", action: "enter", developer_confirmed: false } as never, ctx)
     expect(String(out)).toContain("需求规格书")
@@ -173,14 +176,47 @@ describe("reqdoc 打分卡门禁（进入 prd 阶段前）", () => {
     store.close()
   })
 
-  test("未记录探针（柔性）达标可进入 prd", async () => {
+  test("未记录探针进入 prd 被拒（P0.1 强制前置）", async () => {
     const { store, tools } = setupReqdocAtEdge()
     store.mutateWorkflow("s1", (w) => {
       w.score = setScore(90)
-      // 无 probes：柔性门禁不强制记录，放行
+      // 无 probes：P0.1 强制前置拦截，不再柔性放行
+      w.fieldDict = [{ feature: "功能点 1", name: "客户号", type: "字符串", required: true }]
     })
-    const out = await tools.workflow_advance!.execute({ stage: "prd", action: "enter", developer_confirmed: false } as never, ctx)
+    await expect(
+      tools.workflow_advance!.execute({ stage: "prd", action: "enter", developer_confirmed: false } as never, ctx),
+    ).rejects.toThrow(/reqdoc_probe/)
+    expect(store.get("s1")!.workflow!.stages.prd.status).toBe("not_started")
+    store.close()
+  })
+
+  test("已记录探针但未生成字段定义进入 prd 被拒（P2.5）", async () => {
+    const { store, tools } = setupReqdocAtEdge()
+    store.mutateWorkflow("s1", (w) => {
+      w.score = setScore(90)
+      w.probes = { asked: ["main_flow", "exception"], gaps: [], round: 2, updatedAt: 1000 }
+      // 无 fieldDict
+    })
+    await expect(
+      tools.workflow_advance!.execute({ stage: "prd", action: "enter", developer_confirmed: false } as never, ctx),
+    ).rejects.toThrow(/字段定义缺失/)
+    expect(store.get("s1")!.workflow!.stages.prd.status).toBe("not_started")
+    store.close()
+  })
+
+  test("skip_field_dict=true 豁免字段定义门禁可进入 prd", async () => {
+    const { store, tools } = setupReqdocAtEdge()
+    store.mutateWorkflow("s1", (w) => {
+      w.score = setScore(90)
+      w.probes = { asked: ["main_flow", "exception"], gaps: [], round: 2, updatedAt: 1000 }
+      // 无 fieldDict，但显式声明确无结构化字段
+    })
+    const out = await tools.workflow_advance!.execute(
+      { stage: "prd", action: "enter", developer_confirmed: false, skip_field_dict: true } as never,
+      ctx,
+    )
     expect(String(out)).toContain("需求规格书")
+    expect(store.get("s1")!.workflow!.stages.prd.status).toBe("in_progress")
     store.close()
   })
 
@@ -189,6 +225,7 @@ describe("reqdoc 打分卡门禁（进入 prd 阶段前）", () => {
     store.mutateWorkflow("s1", (w) => {
       w.score = setScore(90)
       w.probes = { asked: ["main_flow", "exception"], gaps: [], round: 2, updatedAt: 1000 }
+      w.fieldDict = [{ feature: "功能点 1", name: "客户号", type: "字符串", required: true }]
     })
     const out = String(await tools.workflow_advance!.execute({ stage: "prd", action: "enter", developer_confirmed: false } as never, ctx))
     expect(out).toContain("下一阶段")
@@ -218,6 +255,8 @@ describe("reqdoc 打分卡门禁（进入 prd 阶段前）", () => {
       w.stages.rules.status = "approved"
       w.stages.edge.status = "in_progress"
       w.score = setScore(90)
+      w.probes = { asked: ["main_flow", "exception"], gaps: [], round: 2, updatedAt: 1000 }
+      w.fieldDict = [{ feature: "功能点 1", name: "客户号", type: "字符串", required: true }]
     })
     await tools.workflow_advance!.execute({ stage: "prd", action: "enter", developer_confirmed: false } as never, ctx)
     const wf = store.get("s1")!.workflow!

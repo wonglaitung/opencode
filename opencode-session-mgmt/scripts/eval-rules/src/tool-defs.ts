@@ -42,6 +42,7 @@ export const EVAL_TOOLS: OpenAITool[] = [
           action: { type: "string", enum: ["enter", "approve"], description: "enter=开始该阶段；approve=确认完成" },
           developer_confirmed: bool("approve 时必须为 true，表示开发者已在对话中明确确认；否则调用将被拒绝"),
           note: str("本次转换的备注"),
+          skip_field_dict: bool("仅 reqdoc 进入 prd 且需求确无结构化输入字段(无需字段定义)时使用：为 true 时跳过「进 prd 前须生成数据字典(reqdoc_field_dict)」门禁"),
         },
         required: ["stage", "action", "developer_confirmed"],
       },
@@ -340,7 +341,7 @@ export const EVAL_TOOLS: OpenAITool[] = [
       description:
         `reqdoc 追问探针：每轮追问结束后调用，记录本轮问过与仍缺口的探针（探针清单，同源 r11）：\n${reqdocProbeRubric()}\n` +
         "asked = 本轮新问的探针 id；gaps = 问过后仍缺口的探针 id；round = 本轮次(1-3)。" +
-        "材料已全覆盖、无追问时可调用一次(asked/gaps 可为空)；不调用不强求。仅 reqdoc 工作流有效。",
+        "材料已全覆盖、无追问时可调用一次(asked/gaps 可为空)；**进入 prd 前必须已调用本工具记录探针(P0.1 强制前置，workflow_advance(enter prd) 未记录即拦截)**。仅 reqdoc 工作流有效。",
       parameters: {
         type: "object",
         properties: {

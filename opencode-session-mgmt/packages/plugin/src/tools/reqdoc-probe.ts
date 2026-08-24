@@ -26,7 +26,7 @@ export function createReqdocProbeTools(store: Store): Record<string, ToolDefinit
       `reqdoc 追问探针：每轮追问结束后调用，记录本轮问过与仍缺口的探针（探针清单，同源 r11）：\n${reqdocProbeRubric()}\n` +
       "asked = 本轮新问的探针 id（服务端按轮追加去重，含历史轮次）；gaps = 问过后仍缺口的探针 id（未问或未得全）。" +
       "round = 本轮次（1-3，缺省自动取上一轮 +1）。" +
-      "材料已全覆盖、无追问时可调用一次（asked/gaps 可为空）标记覆盖完成；不调用不强求。" +
+      "材料已全覆盖、无追问时可调用一次（asked/gaps 可为空）标记覆盖完成；**进入 prd 前必须已调用本工具记录探针（P0.1 强制前置，workflow_advance(enter prd) 未记录即拦截）**。" +
       "仅 reqdoc 工作流有效。",
     args: {
       asked: z

@@ -20,9 +20,10 @@ const REQDOC_STAGE_PREREQS: Record<string, string[]> = {
   rules: ["需求资料目录（01~04）已建", "业务已选择投放材料或确认直接口述", "已扫描提取已投放材料"],
   edge: ["已明确投放/口述方式", "02_制度与合规 / 04_角色与权限 已投且扫描（或确认口述）", "基线工时已录入（workflow_baseline）"],
   prd: [
+    "已调用 reqdoc_probe 记录追问探针（P0.1 前置，未记录即拦截）",
     "功能点清单已拆分并经业务确认（reqdoc_confirm_features）",
     "打分卡 ≥85 且业务确认（reqdoc_score，business_confirmed=true）",
-    "字段定义已落库（reqdoc_field_dict 数据字典）",
+    "字段定义已落库（reqdoc_field_dict 数据字典，确无结构化字段可 skip_field_dict=true 豁免）",
     "追问缺口已如实扣分，无缺口+满分矛盾",
   ],
   review: [
@@ -53,6 +54,12 @@ export function createWorkflowTools(store: Store): Record<string, ToolDefinition
         .boolean()
         .describe("approve 时必须为 true，表示开发者已在对话中明确确认；否则调用将被拒绝"),
       note: z.string().optional().describe("本次转换的备注"),
+      skip_field_dict: z
+        .boolean()
+        .optional()
+        .describe(
+          "仅 reqdoc 进入 prd 且需求确无结构化输入字段（无需字段定义）时使用：默认 false；为 true 时跳过「进 prd 前须生成数据字典(reqdoc_field_dict)」门禁。一般需求应在 prd 渲染前完成字段定义。",
+        ),
     },
     async execute(args, context) {
       const saved = store.mutateWorkflow(context.sessionID, (workflow) => {
@@ -73,6 +80,14 @@ export function createWorkflowTools(store: Store): Record<string, ToolDefinition
           }
           if (!score.confirmed) {
             throw new WorkflowOpError("PRD 打分结果未获业务确认：请向业务展示并确认扣分明细后重调 reqdoc_score(business_confirmed=true)")
+          }
+          // P0.1 探针记录强制前置：edge 阶段必须已调用 reqdoc_probe 记录探针覆盖，
+          // 堵住「跳追问/跳探针记录直接进渲染」——未记录即视为未做实例探询。
+          if (!workflow.probes) {
+            throw new WorkflowOpError(
+              "进入 prd 前须先调用 reqdoc_probe 记录追问探针（P0.1 前置）：核心流程/异常须以真实案例或书面材料为据。" +
+                "请完成 edge 阶段追问并调用 reqdoc_probe(asked=本轮新问探针, gaps=仍缺口探针) 记录覆盖（材料已全覆盖无追问时可记录一次，asked/gaps 可为空），再进入渲染。",
+            )
           }
           // P0.1 实例探针硬约束：main_flow/exception 探针仍记录缺口 = 业务未提供真实案例（无实例空转）。
           // 卡在 prd 入口，须业务投放 01~04 或提供真实实例后重调 reqdoc_probe 澄清，方可进入渲染（不往下走）。
@@ -96,6 +111,14 @@ export function createWorkflowTools(store: Store): Record<string, ToolDefinition
           const zeroV = scoreDimZeroViolations(score)
           if (zeroV.length > 0) {
             throw new WorkflowOpError(`可实施性不足：${zeroV.join("；")}。`)
+          }
+          // 字段定义门禁（P2.5）：进 prd 渲染前须逐字段确认并生成数据字典（reqdoc_field_dict）；
+          // 缺字段定义则进 prd 视为未做字段级梳理，除非需求确无结构化字段(skip_field_dict=true)。
+          if (!args.skip_field_dict && (!workflow.fieldDict || workflow.fieldDict.length === 0)) {
+            throw new WorkflowOpError(
+              "字段定义缺失：进 prd 渲染前须逐字段与业务确认（名称/类型/长度/必填/取值/来源系统）并调用 reqdoc_field_dict 生成数据字典。" +
+                "如本需求确无结构化输入字段，可 workflow_advance(stage=prd, action=enter, skip_field_dict=true) 跳过此门禁。",
+            )
           }
         }
         if (args.action === "approve") {

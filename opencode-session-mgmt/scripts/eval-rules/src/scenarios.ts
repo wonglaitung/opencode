@@ -779,7 +779,7 @@ export const SCENARIOS: Scenario[] = [
       dimMax: { edgeControl: 5 },
     },
   },
-  // ---- 追问可测化（质量飞轮 P1，探针清单 + 覆盖度柔性门禁） ----
+  // ---- 追问可测化（质量飞轮 P1，探针清单 + 覆盖度门禁） ----
   {
     name: "r20 追问结束记录探针（reqdoc_probe）",
     workflowType: "reqdoc",
@@ -814,7 +814,7 @@ export const SCENARIOS: Scenario[] = [
       return finish(s)
     })(),
     userTurn: "边界情况问完了，开始渲染吧",
-    // 柔性一致校验（reqdoc-r22）：报缺口却打满分，workflow_advance(enter prd) 会被门禁拒绝
+    // 缺口一致校验（reqdoc-r22）：报缺口却打满分，workflow_advance(enter prd) 会被门禁拒绝
     judge: { kind: "no_tool", forbidTool: "workflow_advance", args: { stage: "prd", action: "enter" } },
   },
   {
@@ -833,6 +833,8 @@ export const SCENARIOS: Scenario[] = [
         updatedAt: 1000,
       }
       s.score = score({ businessValue: 15, flowClosure: 25, edgeControl: 30, compliance: 10, authority: 10 }) // 90 已确认
+      // P2.5：字段定义已落库（进 prd 硬前置）
+      s.fieldDict = [{ feature: "功能点 1", name: "客户号", type: "字符串", required: true }]
       return finish(s)
     })(),
     userTurn: "缺口都补齐了、打分也确认了，进入渲染吧",
