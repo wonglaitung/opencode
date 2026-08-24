@@ -178,6 +178,22 @@ OpenCode 读取 `opencode.json` 配置。可放两处：
 
 > **Windows 绝对路径注意**：JSON 里反斜杠 `\` 是转义字符，`C:\Users\...` 会因 `\U`、`\n` 等非法转义把配置读坏。两种正确写法——**反斜杠翻倍**：`"C:\\Users\\...\\packages\\plugin"`；或更省事，**改用正斜杠**（Windows 同样识别，且无需转义）：`"C:/Users/.../packages/plugin"`。路径里的空格（如 `My Tools`）是普通字符，不用处理。
 
+### 3.2.1 编写规约（conventions/，可选）
+
+插件按**工作流类型 + 当前阶段**自动加载「绑定规约」并注入系统提示（只注入、无门禁、阶段门控，设计见 `workflow-sdlc.md` 9 章 / `workflow-reqdoc.md` 11 章）。每个规约 `.md` 文件头部用 frontmatter 声明所属阶段：
+
+```markdown
+---
+stage: global   # 常驻全程；或某个阶段键（如 implementation / prd），仅在该阶段注入
+---
+```
+
+- **基线**：随插件打包在 `packages/plugin/conventions/<类型>/*.md`（`sdlc`、`reqdoc` 各一套）。
+- **机构覆盖**：放在项目根 `<你的项目>/conventions/<类型>/*.md`，插件自动读取并追加到基线之后（按 `workflow.type` 隔离、按 `stage` 阶段门控，不跨工作流泄漏）。
+- **通用/常驻规则**：写进项目/全局的 `AGENTS.md`（OpenCode 原生合并，适合跨工作流的机构约定），不放进 `conventions/` 目录。
+
+无需在 `opencode.json` 加任何额外条目——规约送达由插件完成；新增/修改规约 = 往对应目录丢/改一个带 `stage:` 的 `.md`，零代码。
+
 ### 3.3 验证插件已加载
 
 ```bash

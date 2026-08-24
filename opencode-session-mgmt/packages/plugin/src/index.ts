@@ -101,7 +101,7 @@ const SessionMgmtPlugin: Plugin = async (input) => {
   const registry = createLockRegistry(input.directory, store)
   const lockGate = createLockGate(registry, input.directory)
   const lockHint = createLockHintTransform(registry)
-  const systemTransform = createSystemTransform(store, isSubagent)
+  const systemTransform = createSystemTransform(store, isSubagent, input.directory)
   const commitGate = createCommitGate(store)
 
   // 启动后台任务延后执行（错开 TUI 首屏 / daemon 启动竞态，启动慢根因之一）：

@@ -177,3 +177,20 @@ sdlc 的审查清单（`ReviewChecklist`）由 `WorkflowDefinition.checklist` �
 - **SDLC 完结 → 提示解锁**（合并新增，插件硬能力）：完成态注入与 `review_submit` 返回均直接读锁表，有锁时提示开发者确认后逐个 `unlock_file`；仅 sdlc（`hasCommitGate` 门控），reqdoc 完成态不提示
 
 > sdlc 改动走**共享评测门**（session-management.md 13.6 改动分级决策图，baseline→new 对比）验证零回退，只看**通过率**不降；sdlc **不跑** reqdoc 的质量飞轮（打分卡 0-100 五维度量是 reqdoc 专属，见 workflow-reqdoc.md 10 章）。reqdoc 侧 r7/r8-r10 同口径场景见 workflow-reqdoc.md 10 章。
+
+## 9. 编写规约（conventions/sdlc，只注入 + 阶段门控）
+
+**绑定规约**是按工作流类型组织的机构约定（编码规范、提交信息、安全等），由插件在 **sdlc 会话**自动送达系统提示（见 session-management.md 7.1 注入通道），**只注入、无门禁**（不参与打分/评测、不进 `WorkflowDefinition.rules`）。**阶段门控**与规则一致（`rulesForStage` 的「global + 当前阶段」哲学，降低弱模型上下文负担）：每个 `.md` 文件头部可用 frontmatter 声明阶段：
+
+```markdown
+---
+stage: global        # 或 implementation / review / …（当前 in_progress 阶段键）
+---
+```
+
+`stage: global`（或省略）为**常驻规约**、全程注入；否则仅在对应阶段注入；无 in_progress（未开始/空档/完成态，stage===null）只注入 global。两层来源、插件合并：
+
+- **基线（插件打包）**：`packages/plugin/conventions/sdlc/*.md`。当前：`01-提交信息规约` 为 global（`[AI]` 标记，提交发生在完成态、故须常驻），`00-编码规约`/`02-安全规约`/`03-日志与可观测性`/`04-并发·资源·幂等` 为 implementation。
+- **机构覆盖（项目内）**：`<项目根>/conventions/sdlc/*.md`，机构自定义，插件读取后追加到基线之后（类型隔离，不跨工作流泄漏）。
+
+通用/常驻的机构规则（跨工作流适用）写机构自己的 `AGENTS.md`（OpenCode 原生合并），不放本目录。新增 sdlc 规约 = 往该目录丢一个带 `stage:` frontmatter 的 `.md`，零代码。加载/过滤/拼接见 `packages/plugin/src/conventions.ts`（`loadWorkflowConventions(type, stage, projectRoot)`）。

@@ -16,6 +16,7 @@ import {
 } from "sm-shared"
 import type { Store } from "./db"
 import { isComplete } from "./stats"
+import { loadWorkflowConventions } from "./conventions"
 import { getStuckFiles } from "./tools/quality"
 import { loadReqdocTemplate } from "./template"
 
@@ -25,10 +26,13 @@ export function buildSystemFragment(
   stuck: Record<string, number> = {},
   lockedFiles: string[] = [],
   templateText: string | null = null,
+  projectRoot: string = process.cwd(),
 ): string {
   const def = getDefinition(workflow.type)
   const stage = currentInProgressStage(workflow)
   const parts: string[] = []
+  // 绑定规约送达（阶段化：global 常驻 + 当前阶段专属，见 conventions.ts）。stage===null 时只有 global。
+  const conventions = loadWorkflowConventions(def.type, stage, projectRoot)
 
   // 完成态（全部阶段 approved，stage===null）：不注入常规规则——全局规则里的 r1「初始化工作流」
   // 等在完成态会与「已全部完成」自相矛盾，误导弱模型重启流程；改为给全完成态的三条可行动作：
@@ -49,6 +53,9 @@ export function buildSystemFragment(
       "⚑ 开始下一个需求：提醒开发者执行 /new 保持统计隔离（勿在本会话复用，否则统计混入已完成需求）。",
       "修改本需求：调用 workflow_revisit 回退到对应阶段。",
     )
+    if (conventions) {
+      parts.push("", `# 《${def.type} 编写规约》自遵循清单（插件按工作流阶段自动送达）`, "", conventions)
+    }
     parts.push("", buildStateBar(workflow, stage))
     return parts.join("\n")
   }
@@ -59,6 +66,11 @@ export function buildSystemFragment(
     ? `# Workflow 规则（通用 + 当前阶段 ${def.labels[stage] ?? stage}）`
     : "# Workflow 规则（通用）"
   parts.push(header, "", rules.map((r, i) => `${i + 1}. ${r.text}`).join("\n"))
+
+  if (conventions) {
+    parts.push("", `# 《${def.type} 编写规约》自遵循清单（插件按工作流阶段自动送达）`, "", conventions)
+  }
+
   if (stage === null) {
     // stage===null 三态：全 not_started（起步）/ 部分 approved 无进行中（空档）/ 全部 approved（完成态，已在开头返回）。
     // 空档态若仍提示「尚未开始」会让模型尝试 enter 已 approved 阶段（报错）或误判流程未启动。
@@ -206,7 +218,11 @@ export function buildStateBar(workflow: WorkflowState, stage: string | null): st
 }
 
 /** 生成 experimental.chat.system.transform 处理器（闭包持有 store）。isSubagent 为子代理识别器，缺省不识别。 */
-export function createSystemTransform(store: Store, isSubagent: (sessionID: string) => Promise<boolean> = async () => false) {
+export function createSystemTransform(
+  store: Store,
+  isSubagent: (sessionID: string) => Promise<boolean> = async () => false,
+  directory: string = process.cwd(),
+) {
   return async (
     input: { sessionID?: string },
     output: { system: string[] },
@@ -223,6 +239,7 @@ export function createSystemTransform(store: Store, isSubagent: (sessionID: stri
         getStuckFiles(input.sessionID),
         store.listLocks(input.sessionID),
         loadReqdocTemplate(),
+        directory,
       ),
     )
   }

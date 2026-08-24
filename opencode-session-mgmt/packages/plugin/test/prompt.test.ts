@@ -213,6 +213,36 @@ describe("buildSystemFragment", () => {
       expect(buildSystemFragment(s, {}, [], loadReqdocTemplate())).not.toContain("插件自动送达")
     })
   })
+
+  describe("绑定规约送达（按工作流类型 + 阶段门控，只注入）", () => {
+    // 传一个不存在的 projectRoot，避免项目覆盖层干扰基线（基线来自插件包）。
+    const NO_OVERLAY = "/tmp/opencode-sm-conv-not-exist"
+
+    test("reqdoc goal 阶段 → 注入 goal 规约，不含 rules 阶段规约", () => {
+      const s = createWorkflowState("reqdoc")
+      applyTransition(s, "goal", "enter", 1)
+      const text = buildSystemFragment(s, {}, [], null, NO_OVERLAY)
+      expect(text).toContain("《reqdoc 编写规约》自遵循清单")
+      expect(text).toContain("显式 in scope") // goal 阶段：范围与边界
+      expect(text).not.toContain("术语须引用原文") // rules 阶段：不注入
+    })
+
+    test("sdlc implementation 阶段 → 注入 global + implementation，不含 reqdoc 规约", () => {
+      const s = createWorkflowState("sdlc")
+      applyTransition(s, "implementation", "enter", 1)
+      const text = buildSystemFragment(s, {}, [], null, NO_OVERLAY)
+      expect(text).toContain("《sdlc 编写规约》自遵循清单")
+      expect(text).toContain("凭证与密钥") // implementation
+      expect(text).toContain("AI 编写代码须带 [AI] 标记") // global
+      expect(text).not.toContain("术语须引用原文") // reqdoc 隔离
+    })
+
+    test("sdlc 完成态 → 仅注入 global 提交信息规约，不含 implementation", () => {
+      const text = buildSystemFragment(completeSdlc(), {}, [], null, NO_OVERLAY)
+      expect(text).toContain("AI 编写代码须带 [AI] 标记") // global 提交信息规约（提交发生在完成态）
+      expect(text).not.toContain("凭证与密钥") // implementation 阶段规约不注入
+    })
+  })
 })
 
 describe("buildStateBar 渲染校验行（质量飞轮 P2）", () => {
