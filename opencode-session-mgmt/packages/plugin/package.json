@@ -14,7 +14,7 @@
     "sm-shared": "workspace:*"
   },
   "devDependencies": {
-    "@opencode-ai/plugin": "^1.18.10",
-    "@opencode-ai/sdk": "^1.18.10"
+    "@opencode-ai/plugin": "^1.18.23",
+    "@opencode-ai/sdk": "^1.18.23"
   }
 }

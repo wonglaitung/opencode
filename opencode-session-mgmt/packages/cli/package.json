@@ -8,6 +8,6 @@
   "dependencies": {
     "sm-plugin": "workspace:*",
     "sm-shared": "workspace:*",
-    "@opencode-ai/sdk": "^1.18.10"
+    "@opencode-ai/sdk": "^1.18.23"
   }
 }

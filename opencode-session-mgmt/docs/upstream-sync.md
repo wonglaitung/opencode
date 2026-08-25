@@ -70,3 +70,9 @@ git push origin dev         # 推到自己仓库
 | 日期 | 上游提交 | 结果 |
 |------|----------|------|
 | 2026-08-01 | 4 个（`f67e80c275` 等，39 文件，均为 i18n/文档） | 零重叠零冲突，ort 策略自动合并（`f77a51ea08`） |
+| 2026-08-25 | 重建至 `upstream/dev` 最新 `a7444bf944`（合并基点实为 2025-04-21 `3a6a26981a`，落后上游 15470 / 领先 15379 提交） | **非增量合并，而是重建**：`git reset --hard upstream/dev` 后仅叠加 3 个定制目录（`opencode-session-mgmt` / `opencode-edge-debug` / `plugin-guide`，共 187 文件）为新提交 `b3bc7533a6`；旧 dev 全量历史保留于 `dev-backup-20260825` 分支 |
+
+> **重要事实更正（2026-08-25 发现）**：本仓库 `dev` 与 `upstream/dev` 的**最近共同祖先只有一个 2025-04-21 的提交**（"init command"），并非「紧跟上游、只差少量提交」。说明 `wonglaitung/opencode` 实际是一条**独立演进**的开发线，过去一年半在 15379 个本地提交里改动了约 6467 个共享文件（`.github/`、`.opencode/`、`packages/*`、README、i18n 等）。因此本文「零冲突、只动两个目录」的前提**不成立**——直接 `git merge upstream/dev` 会触发大量冲突。后续同步建议二选一：
+> 1. **保留 dev 作为独立项目**：只 `git cherry-pick` 或局部合并上游的具体特性/修复，不做整体同步；
+> 2. **重建 dev**：`git reset --hard upstream/dev` 后仅叠加本仓库三个定制目录（丢弃全部共享文件改动，旧历史进 `dev-backup-*` 分支保全）。
+> 切勿假设「日常 `git pull` 即同步上游」——本文铁律「默认不同步 anomalyco」仍有效。
