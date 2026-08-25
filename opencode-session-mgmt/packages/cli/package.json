@@ -1,0 +1,13 @@
+{
+  "name": "opencode-sm",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "opencode-sm": "src/index.ts"
+  },
+  "dependencies": {
+    "sm-plugin": "workspace:*",
+    "sm-shared": "workspace:*",
+    "@opencode-ai/sdk": "^1.18.10"
+  }
+}

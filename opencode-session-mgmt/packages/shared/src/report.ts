@@ -1,0 +1,119 @@
+/**
+ * 汇报与 CI 回写的 payload schema（设计文档 session-management.md 4.3、10 章）。
+ * 插件 → 收集服务（POST /api/report）；CI → 收集服务（POST /api/ci-quality）。
+ * 仅流程摘要，不含代码内容（12 安全与隐私）。
+ */
+import { sumLinesByCategory, type LinesCategory } from "./loc"
+import {
+  getDefinition,
+  type BaselineEstimate,
+  type CommitGate,
+  type QualityMetrics,
+  type ReviewStageRecord,
+  type StageRecord,
+  type Transition,
+  type WorkflowState,
+  type WorkflowType,
+} from "./workflow"
+
+/** 单个阶段的摘要投影：状态、迭代次数与时间戳序列（分析数据源，6.1）。 */
+export interface StageSummary {
+  status: string
+  revision: number
+  transitions: Transition[]
+}
+
+/** 审查阶段的摘要投影：在阶段摘要之上保留清单与理解确认计数（不含 explanation 正文）。 */
+export interface ReviewStageSummary extends StageSummary {
+  checklist: Record<string, boolean>
+  /** 理解确认片段总数与已确认数（不携带片段正文，12） */
+  comprehension: {
+    total: number
+    confirmed: number
+  }
+}
+
+/**
+ * 质量指标的汇报投影：剔除 iterationByFile 与 linesByFile（键为文件路径，12 不外传代码相关标识），
+ * 行数改以业务/测试/配置三分类聚合上行（3.2）。
+ */
+export type QualitySummary = Omit<QualityMetrics, "iterationByFile" | "linesByFile"> & {
+  /** AI 净增行数三分类聚合；无 AI 代码编辑（无 linesByFile）时为 null */
+  lines: LinesCategory | null
+}
+
+/**
+ * WorkflowState 的汇报投影：剔除代码相关内容（comprehension.explanation、file/lines，
+ * 以及 quality.iterationByFile 的文件路径），只保留流程时间戳、迭代、审查结论与质量指标。
+ */
+export interface WorkflowSummary {
+  /** 工作流类型（分区管道依据，6.4） */
+  type: WorkflowType
+  /** 泛化阶段投影：键随定义 stages；审查阶段为 ReviewStageSummary */
+  stages: Record<string, StageSummary | ReviewStageSummary>
+  commit: CommitGate
+  quality: QualitySummary
+  /** 基线对比（6.3）：预估人工工时；未录入为 null（纯数字，无隐私剥离需求） */
+  baseline: BaselineEstimate | null
+}
+
+function summarizeStage(stage: StageRecord): StageSummary {
+  return { status: stage.status, revision: stage.revision, transitions: stage.transitions }
+}
+
+/** 将完整 WorkflowState 投影为汇报摘要（剥离代码相关内容；3.2 经定义驱动）。 */
+export function summarizeWorkflow(workflow: WorkflowState): WorkflowSummary {
+  const def = getDefinition(workflow.type)
+  const stages: Record<string, StageSummary | ReviewStageSummary> = {}
+  for (const key of def.stages) {
+    const stage = workflow.stages[key]
+    if (def.reviewStage !== null && def.reviewStage === key) {
+      const rv = stage as ReviewStageRecord
+      const rvConfirmed = rv.comprehension.filter((c) => c.developerConfirmed).length
+      stages[key] = {
+        ...summarizeStage(rv),
+        checklist: rv.checklist,
+        comprehension: { total: rv.comprehension.length, confirmed: rvConfirmed },
+      }
+    } else {
+      stages[key] = summarizeStage(stage)
+    }
+  }
+  return {
+    type: workflow.type,
+    stages,
+    commit: workflow.commit,
+    // 显式投影：不外传 iterationByFile/linesByFile（其键为文件路径，12）；行数只上行三分类聚合。
+    quality: {
+      firstPassRate: workflow.quality.firstPassRate,
+      iterationCount: workflow.quality.iterationCount,
+      reworkRate: workflow.quality.reworkRate,
+      testCoverage: workflow.quality.testCoverage,
+      lines: workflow.quality.linesByFile ? sumLinesByCategory(workflow.quality.linesByFile) : null,
+    },
+    // 基线为纯数字 + 时间戳（预估工时），无路径/代码，直接随摘要上行（12）。
+    baseline: workflow.baseline ?? null,
+  }
+}
+
+export interface SessionReport {
+  sessionID: string
+  /** 以下为 init 身份快照（3.1 快照语义） */
+  account: string
+  group: string
+  org: string
+  /** 工作流摘要：阶段时间戳、revision、审查结果（不含代码内容） */
+  workflow: WorkflowSummary
+  cost: number | null
+  tokensInput: number | null
+  tokensOutput: number | null
+  reportedAt: number
+}
+
+export interface CiQualityReport {
+  sessionID: string
+  quality: {
+    reworkRate?: number
+    testCoverage?: number
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["."],
+  "references": {
+    "edge-debug-docs": {
+      "path": "./docs",
+      "description": "Edge 调试插件设计文档与部署手册（决策记录 D1-D3、CDP 架构、mermaid 架构图）"
+    },
+    "plugin-dev-guide": {
+      "path": "../plugin-guide",
+      "description": "跨插件通用开发规范 plugin-dev-guide.md（Hook/工具/存储/健壮性/打包，第 12 章验证清单；位于仓库根 plugin-guide/ 独立目录）"
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "sm-plugin",
+  "version": "0.0.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "peerDependencies": {
+    "@opencode-ai/plugin": "*"
+  },
+  "dependencies": {
+    "docx": "^9.7.1",
+    "exceljs": "^4.4.0",
+    "jszip": "^3.10.1",
+    "pdfjs-dist": "^6.2.108",
+    "sm-shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "^1.18.10",
+    "@opencode-ai/sdk": "^1.18.10"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "opencode-session-mgmt",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc -p packages/shared && tsc -p packages/plugin && tsc -p packages/cli && tsc -p packages/collector",
+    "build:plugin": "bun build packages/plugin/src/index.ts --outdir dist/plugin --target bun",
+    "build:cli": "bun build packages/cli/src/index.ts --compile --outfile dist/opencode-sm",
+    "build:collector": "bun build packages/collector/src/index.ts --outdir dist/collector --target bun",
+    "pack:cli": "bash scripts/pack-cli.sh",
+    "pack:bundle": "bash scripts/pack-bundle.sh"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.0",
+    "typescript": "^5.7.0"
+  }
+}

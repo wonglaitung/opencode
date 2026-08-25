@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.opencode/edge-debug/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm

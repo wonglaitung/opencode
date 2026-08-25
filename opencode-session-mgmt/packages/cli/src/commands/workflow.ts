@@ -1,0 +1,112 @@
+/**
+ * opencode-sm workflow <sessionID> [checklist|comprehension|stats]
+ * 工作流状态外部查看（设计文档 session-management.md 5.1）。只读本机插件库。
+ */
+import { REQDOC_SCORE_DIMS, REQDOC_SCORE_PASS, efficiencyRatio, getDefinition, reviewRecord, sumLinesByCategory } from "sm-shared"
+import { workflowDurationMs } from "sm-plugin/src/stats"
+import { openPluginStore } from "../api"
+import type { ParsedArgs } from "../index"
+import { fmtBaselineLine, fmtLinesCategory } from "./stats"
+
+export async function runWorkflow(args: ParsedArgs): Promise<void> {
+  const sessionID = args.positionals[0]
+  const sub = args.positionals[1]
+  if (!sessionID) {
+    process.stderr.write("用法: opencode-sm workflow <sessionID> [checklist|comprehension|score|stats]\n")
+    process.exitCode = 1
+    return
+  }
+  const store = openPluginStore(process.cwd())
+  try {
+    const row = store.get(sessionID)
+    if (!row || !row.workflow) {
+      process.stdout.write(`会话 ${sessionID} 无工作流数据（可能未被插件追踪）。\n`)
+      return
+    }
+    const workflow = row.workflow
+    const def = getDefinition(workflow.type)
+    const review = reviewRecord(workflow)
+    if (sub === "checklist") {
+      const c = review.checklist
+      const lines = def.checklist.map((item) => `${item.key.padEnd(20)} ${mark(c[item.key] ?? item.auto === true)}`)
+      process.stdout.write(`审查清单（${sessionID}）\n${lines.join("\n")}\n`)
+      return
+    }
+    if (sub === "comprehension") {
+      let records = review.comprehension
+      if (args.flags.unconfirmed) records = records.filter((r) => !r.developerConfirmed)
+      if (records.length === 0) {
+        process.stdout.write("无理解确认记录。\n")
+        return
+      }
+      for (const r of records) {
+        const loc = r.file && r.lines ? `（${r.file}:${r.lines[0]}-${r.lines[1]}）` : ""
+        process.stdout.write(`${r.developerConfirmed ? "✅" : "⬜"} ${r.id}${loc}\n`)
+      }
+      return
+    }
+    if (sub === "score") {
+      const score = workflow.score
+      if (!score) {
+        process.stdout.write("该会话尚未打分（reqdoc 未调用 reqdoc_score，或本会话不是 reqdoc）。\n")
+        return
+      }
+      const dimLines = REQDOC_SCORE_DIMS.map((d) => {
+        const dim = score.dims[d.key] ?? { score: 0, max: d.max }
+        return `  ${d.label.padEnd(10, " ")} ${dim.score}/${dim.max}${dim.score < d.max ? `（扣 ${d.max - dim.score}）` : ""}`
+      })
+      const dedLines = score.deductions.length
+        ? score.deductions.map((dd) => `  - ${dd.key}: -${dd.points} ${dd.reason}${dd.evidence ? `（证据: ${dd.evidence}）` : ""}`)
+        : "  （无扣分明细）"
+      const passed = score.total >= REQDOC_SCORE_PASS
+      process.stdout.write(
+        `PRD 质量打分卡（${sessionID}）\n` +
+          `${dimLines.join("\n")}\n` +
+          `扣分明细:\n${dedLines}\n` +
+          `总分: ${score.total}/100  ${passed ? `✓ 达标（≥${REQDOC_SCORE_PASS}）` : `✗ 未达标（<${REQDOC_SCORE_PASS}）`}\n` +
+          `业务确认: ${score.confirmed ? `已（${new Date(score.confirmedAt ?? 0).toLocaleString()}）` : "未"}\n`,
+      )
+      return
+    }
+    if (sub === "stats") {
+      const q = workflow.quality
+      const confirmed = review.comprehension.filter((c) => c.developerConfirmed).length
+      const durationMs = workflowDurationMs(workflow)
+      const efficiency = efficiencyRatio(workflow.baseline?.estimatedHours, durationMs)
+      process.stdout.write(
+        `质量指标（${sessionID}）\n` +
+          `  一次通过率: ${fmtPct(q.firstPassRate)}  迭代轮次: ${q.iterationCount ?? "N/A"}/3\n` +
+          `  ${fmtLinesCategory(q.linesByFile ? sumLinesByCategory(q.linesByFile) : null)}\n` +
+          `  ${fmtBaselineLine(workflow.baseline?.estimatedHours ?? null, durationMs, efficiency)}\n` +
+          `  返工率: ${fmtPct(q.reworkRate)}  测试覆盖率: ${fmtPct(q.testCoverage)}\n` +
+          `  理解确认: ${confirmed}/${review.comprehension.length}\n`,
+      )
+      return
+    }
+    // 默认：阶段进度总览
+    const lines = def.stages.map((name) => {
+      const stage = workflow.stages[name]!
+      return `  ${(def.labels[name] ?? name).padEnd(6, " ")} ${stage.status.padEnd(12)} revision=${stage.revision}`
+    })
+    const force = workflow.commit.force
+    const forceLine = force
+      ? `\n强制提交授权: ${force.used ? "已使用" : "待使用"}（原因: ${force.reason}）`
+      : ""
+    process.stdout.write(
+      `工作流（${sessionID}）\n${lines.join("\n")}\n提交门禁: ${workflow.commit.status}` +
+        (workflow.commit.blocked_by.length ? `（未完成: ${workflow.commit.blocked_by.join("、")}）` : "") +
+        forceLine +
+        "\n",
+    )
+  } finally {
+    store.close()
+  }
+}
+
+function mark(ok: boolean): string {
+  return ok ? "✓" : "✗"
+}
+
+function fmtPct(v: number | null): string {
+  return v === null ? "N/A" : `${v}%`
+}
