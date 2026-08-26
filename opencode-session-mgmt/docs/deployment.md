@@ -586,6 +586,12 @@ setup.cmd seed D:\你的项目  # 每个要用插件的项目各跑一次：种�
 
 > 若内网有**私服 npm 镜像**（如 Verdaccio/Nexus），第 2 步也可跳过打包：内网机器把 registry 指向私服后直接 `bun install`。但本方案（`seed/` + `setup.cmd`）**完全不需要镜像**——种子在打包机一次生成、随包分发，内网机零网络。
 
+> **配置层兜底（无需预填种子也能压住卡顿）**：若内网机没跑 `setup.cmd seed`、各 config 目录缺 `node_modules`，opencode 启动仍会对每个 config 目录发起 `@opencode-ai/plugin` 的 Arborist 安装（`packages/core/src/npm.ts` 的 `install` 仅在 `node_modules` 缺失或声明包未进 `package-lock.json` 时才真正联网 `reify`，见 `npm.ts:147`）。此时可在**用户级**放一份 `.npmrc` 让安装失败即停、不再等 registry 超时：
+> ```
+> echo offline=true > "%USERPROFILE%\.npmrc"
+> ```
+> `@npmcli/config` 会把 npm userconfig（`%USERPROFILE%\.npmrc`）合并进每次 Arborist 调用，故**只建这一份即可覆盖所有 config 目录**（`~/.config/opencode` 与各项目 `.opencode`），无需逐目录放。装依赖缺失时 `reify` 直接报错秒回（日志出现 `background dependency install failed` 警告，不影响启动）；若已用 `setup.cmd` 预填，`install` 在 `npm.ts:147` 短路、`.npmrc` 根本不被读到。唯一例外：某 config 目录内单独存在 `.npmrc` 且写了 `offline=false` 才会被它覆盖。需要联网但只压超时（而非彻底离线）时，改用 `fetch-retries=0` + `fetch-timeout=5000` 把最坏等待从 1-2 分钟压到约 5 秒。
+
 ### 9.3 大模型：指向内网自建网关
 
 完全隔离的环境通常有**内部模型服务**（vLLM / Ollama / _one-api_ 等 OpenAI 兼容网关）。让 OpenCode 指向它，而非公网 Anthropic/OpenAI。在 `opencode.json` 里配置一个自定义 provider，形如（`plugin` 指向 9.2 节第 2 步的解压目录；建议配在全局 `~/.config/opencode/opencode.json`）：
