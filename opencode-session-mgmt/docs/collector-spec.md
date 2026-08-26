@@ -2,12 +2,12 @@
 
 | | |
 |---|---|
-| 版本 | v1.2.2 |
-| 日期 | 2026-08-25 |
+| 版本 | v1.3 |
+| 日期 | 2026-08-26 |
 | 读者 | 后端收集服务开发团队、网关集成团队 |
 | 状态 | 生效 |
 
-> **v1.2.2（2026-08-25）**：放宽 7.4「成员行保持最小集」约束——必含字段仍为 10 项，允许实现方在成员行附加可选下钻字段（如个人级 `avgEfficiency`/`linesTotal`/`tokensInput` 等），客户端忽略未知字段。原因：实际收集服务（`llm-gateway`）在成员行提供个人级提效/行数下钻，属有益超集；放宽后文档与实现一致，且不破坏仅依赖 10 必含字段的 CLI 消费方。5.3 同步说明响应为「最小集超集」。
+> **v1.3（2026-08-26）**：7.4「成员行」收紧为固定 10 项最小集，移除 v1.2.2 引入的可选扩展字段（个人级 `avgEfficiency`/`linesTotal`/`tokensInput` 等下钻）。成员行不再附加任何可选字段（含 `ext.*` 对象），仅整组/整组织聚合层保留 `linesTotal`/`avgEfficiency`/`trends.*` 等聚合指标；CLI 无需容忍成员行未知字段。
 
 > **v1.2.1（2026-08-10）**：文档校准（契约行为无变化）——5.1 字段表泛化为 sdlc/reqdoc 双工作流表述；修正 7.1 分区口径：`firstPassRate`/`iterationCount` 为通用指标（两类型均计算），sdlc 专属指标为行数三分类/返工率/覆盖率；5.3 `workflowType` 参数取值补全为 `sdlc | reqdoc`。
 
@@ -462,13 +462,6 @@ CREATE INDEX idx_reports_type ON reports(workflow_type);
 
 **必含字段（契约最小集，10 项）**：`apiKey`、`sessions`、`completed`、`completionRate`、`cost`、`avgFirstPassRate`、`avgTestCoverage`、`avgDurationMs`、`lowFirstPassCount`、`highIterationCount`——口径均以该成员名下会话计（`cost` 为该成员 Σ cost；归属（组/部门）由收集端据 apiKey 哈希解析，不在契约字段内）。**成员行不包含顶层聚合指标**：`linesTotal`、`hasLinesData`、`avgEfficiency`、`baselineSessions`、`trends.*` 仅存在于整组/整组织聚合，不加入成员行（契约保持最小）。
 
-**可选扩展字段（下钻展示用，客户端须容忍并忽略未知字段）**：实现方可按需附加成员级下钻指标，量纲与顶层同名指标一致，例如：
-- `tokensInput` / `tokensOutput`：该成员 Σ Token（汇报侧）；
-- `linesTotal` / `hasLinesData`：仅 sdlc 行数三分类累加 / 该成员是否存在 sdlc 行数数据；
-- `avgEfficiency` / `baselineSessions` / `avgEstimatedHours` / `avgEffDurationMs`：成员级 AI 提效（口径同 7.2，仅该成员名下会话计）。
-
-实际收集服务 `llm-gateway` 即在成员行附带上述扩展字段，供管理后台下钻；仅依赖 10 必含字段的 CLI 消费方不受影响。**契约演进建议**：新增可选字段优先置于 `ext` 对象内（如 `ext.avgEfficiency`），避免与必含字段命名冲突；既有扁平扩展字段维持兼容、不强制迁移。
-
 ### 7.5 汇总层级差异
 
 - 会话级 `firstPassRate` 等明细来自各本机插件库，**不经收集服务**。
@@ -531,7 +524,7 @@ BASE=https://<gateway>/api
 
 后台收集服务的参考实现作为**外部独立项目**维护：[`performance_dashboard`](https://github.com/karsonto/performance_dashboard)（Go/Netty 后端，组织内网部署）。其行为即为本规格书的可执行解释，是契约测试基准；实现方可直接使用，也可完全重写（任何语言/框架），只要对外契约、聚合公式与 upsert 语义一致。`opencode-session-mgmt` 本仓库**不再包含收集服务代码**（已退役 `packages/collector`），仅保留插件、CLI 与契约层。涉及的全部本仓库代码见 11.2 清单。
 
-外部收集服务 `llm-gateway`（见 1 章链接）是另一份完整实现（Java），其端点、upsert 合并与聚合口径与本文一致；其成员行按 7.4「可选扩展字段」附带个人级提效/行数下钻，是本规格书 v1.2.2 放宽约束的现实依据。
+外部收集服务 `llm-gateway`（见 1 章链接）是另一份完整实现（Java），其端点、upsert 合并与聚合口径与本文一致。
 
 ### 11.2 涉及的本地代码清单
 
