@@ -53,7 +53,6 @@ ws_packages=(
   "shared:sm-shared"
   "plugin:sm-plugin"
   "cli:opencode-sm"
-  "collector:opencode-sm-collector"
 )
 
 echo "Repo  : $REPO"

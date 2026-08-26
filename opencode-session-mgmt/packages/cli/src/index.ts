@@ -1,14 +1,11 @@
 #!/usr/bin/env bun
 /**
  * opencode-sm —— OpenCode Session Management CLI（设计文档 session-management.md 5 章）。
- * 独立安装，与上游零耦合。命令：init / tag / workflow / stats / list。
+ * 独立安装，与上游零耦合。命令：init / list / stats。
  */
 import { runInit } from "./commands/init"
 import { runList } from "./commands/list"
 import { runStats } from "./commands/stats"
-import { runTag } from "./commands/tag"
-import { runWorkflow } from "./commands/workflow"
-import { runWorkflowType } from "./commands/workflow-type"
 
 export interface ParsedArgs {
   /** 位置参数（不含命令名） */
@@ -63,17 +60,15 @@ export function asStringArray(value: string | boolean | string[] | undefined): s
 const USAGE = `opencode-sm —— OpenCode 会话管理 CLI
 
 用法:
-  opencode-sm init                              每台机器一次：五问写入 identity.json
-  opencode-sm tag <sessionID> [--add ...] [--remove ...] [--list]
-  opencode-sm workflow-type set <sdlc|reqdoc>  查看/修改主要工作流类型（角色变化时轻量改身份）
-  opencode-sm workflow-type get
-  opencode-sm workflow <sessionID> [checklist|comprehension|stats] [--unconfirmed]
-  opencode-sm stats [<sessionID>] [--project <name>] [--group "组名"] [--org] [--period <nd>] [--workflow <type>] [--json]
+  opencode-sm init                              每台机器一次：写入 api_key 与收集服务地址
   opencode-sm list [--status <s>] [--tag <t>] [--json]
+  opencode-sm stats [<sessionID>] [--project <name>] [--period <nd>] [--workflow <type>] [--json]
 
 说明:
   --project   本地插件库按项目目录存放：缺省按当前工作目录聚合；可传项目目录
-              路径以查看他处项目；传名称（非目录）时退化为 CWD 并仅作展示标签。
+             路径以查看他处项目；传名称（非目录）时退化为 CWD 并仅作展示标签。
+  --period    近 N 天过滤（如 7d）。
+  --workflow  按工作流类型过滤（sdlc / reqdoc）。
 
 环境变量:
   OPENCODE_SM_SERVER   上游 daemon 地址（未设置时 cost/tokens/会话列表不可用，退化为本机数据）
@@ -85,15 +80,6 @@ async function main(): Promise<void> {
   switch (command) {
     case "init":
       await runInit(args)
-      break
-    case "tag":
-      await runTag(args)
-      break
-    case "workflow":
-      await runWorkflow(args)
-      break
-    case "workflow-type":
-      await runWorkflowType(args)
       break
     case "stats":
       await runStats(args)

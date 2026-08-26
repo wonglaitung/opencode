@@ -75,7 +75,7 @@ graph LR
 
 **Project（项目）是自动关联的**：OpenCode 根据工作目录自动创建 Project（`ProjectTable`，含 `worktree` 路径、`name`、`icon` 等）。开发者在某个目录下启动 OpenCode 时，自动关联该目录对应的 Project。Session 创建时自动继承当前 Project 的 `project_id`。**开发者不需要手动设定或管理 Project**。
 
-> **例**：Alice 在 `~/work/user-service` 下执行 `opencode`，OpenCode 自动创建 Project（`worktree=/home/alice/work/user-service`，`name=user-service`，`id=proj_a1b2c3`）；她在 TUI 里创建的会话自动继承 `project_id=proj_a1b2c3`。第二天她在 `~/work/frontend` 启动 OpenCode，会话自动归属另一个 Project。全程无任何配置操作。因此统计时 `opencode-sm stats --period 7d` 省略 `--project` 即按 CWD 自动聚合本项目数据；只有人为划定的组/组织层级（开发者 init 时自报的身份数据，无法从 CWD 推断）才需要显式传 `--group`/`--org`。
+> **例**：Alice 在 `~/work/user-service` 下执行 `opencode`，OpenCode 自动创建 Project（`worktree=/home/alice/work/user-service`，`name=user-service`，`id=proj_a1b2c3`）；她在 TUI 里创建的会话自动继承 `project_id=proj_a1b2c3`。第二天她在 `~/work/frontend` 启动 OpenCode，会话自动归属另一个 Project。全程无任何配置操作。因此统计时 `opencode-sm stats --period 7d` 省略 `--project` 即按 CWD 自动聚合本项目数据；组/组织层级聚合由外部收集服务 `performance_dashboard` 的看板提供，CLI 仅做本机会话/项目级聚合（见 3.1、5.2）。
 
 **上游未覆盖的能力**由定制三件套补齐——**插件 + 独立 CLI `opencode-sm` + org 收集服务**（见 2.4，全部不修改上游代码）：
 
@@ -249,14 +249,14 @@ graph TB
 |------|----------|---------------|------|
 | 会话级 | 单会话 | `opencode-sm stats <id>` | 开发者自检 |
 | 项目级 | 按项目+时段 | `opencode-sm stats --project "用户系统"`（或省略，自动检测 CWD） | 项目经理跟踪 |
-| 组级 | 按组聚合 | `opencode-sm stats --group "前端组"` | 组长管理、月度汇报 |
-| 组织级（org） | 按组织聚合 | `opencode-sm stats --org` | 领导汇报、预算决策 |
+| 组级 | 按组聚合 | 外部收集服务 `performance_dashboard` 看板（CLI 仅本机统计，组/组织聚合由收集服务据 api_key 哈希解析） | 组长管理、月度汇报 |
+| 组织级（org） | 按组织聚合 | 外部收集服务 `performance_dashboard` 看板 | 领导汇报、预算决策 |
 
 组级统计是核心汇报层级——回应"各组 AI 使用程度和依赖程度"的需求。组级视图展示：成员排行、一次通过率分布、返工率对比、高迭代会话数、AI 净增行数（业务/测试/配置）。
 
 **数据来源决策**：零额外采集。工作流状态变更的时间戳即为分析数据源。
 
-**身份关联决策**：account → group → org 三级身份层级，另加 **workflowType（工作流类型）** 维度。身份不写上游数据库、不读上游账号体系——由开发者 `opencode-sm init` 五问自报（账号邮箱、组名、组织名、收集服务地址、主要工作流类型），存全局 `identity.json`；组是名称字符串，子组用命名约定；跨机聚合在每 org 一个的收集服务侧完成（见 2.4、3.1）。workflowType 决定本用户新会话走哪套工作流（开发者 `sdlc` 开发 / 需求分析师 `reqdoc` 需求书），不同角色 = 不同用户（见 3.1、3.2）。
+**身份关联决策**：身份以 `api_key` 标识，本地明文存储、上送前转 SHA-256 哈希（网络不传明文）；组/部门/组织等归属由后台收集服务（`performance_dashboard`）据 `api_key` 哈希解析，客户端不再填写 account/group/org。另加 **workflowType（工作流类型）** 维度，由开发者 `opencode-sm init` 填写（api_key / 收集服务地址 / 可选工作流类型），存全局 `identity.json`。workflowType 决定本用户新会话走哪套工作流（开发者 `sdlc` 开发 / 需求分析师 `reqdoc` 需求书），不同角色 = 不同用户（见 3.1、3.2）。跨机聚合在收集服务侧完成（见 2.4、3.1）。
 
 ### 2.4 部署架构选择：插件 + 独立 CLI（上游零修改）
 
@@ -291,12 +291,12 @@ flowchart LR
     subgraph Local["每位开发者机器（定制，我们拥有）"]
         Plugin["session-mgmt 插件<br/>config.plugin 加载"]
         PluginDB["插件 SQLite<br/>workflow_session"]
-        ID["全局 identity.json<br/>account / group / org /<br/>collector 地址 /<br/>workflowType"]
+        ID["全局 identity.json<br/>api_key（明文本机）/ collector 地址 /<br/>workflowType（可选）"]
         SM["opencode-sm<br/>独立 CLI"]
     end
 
-    subgraph OrgSvc["每组织（org）部署一个（定制）"]
-        Collector["收集服务<br/>内网 HTTP<br/>汇报 + 查询两端点"]
+    subgraph OrgSvc["外部收集服务（performance_dashboard）"]
+        Collector["收集服务<br/>内网 HTTP<br/>汇报端点 + 组/组织聚合"]
         AggDB["聚合库"]
     end
 
@@ -306,10 +306,10 @@ flowchart LR
     Plugin --> PluginDB
     Plugin -->|"定期汇报会话摘要<br/>（不含代码）"| Collector
     Collector --> AggDB
-    SM -->|"本地统计：只读"| PluginDB
-    SM -->|"会话数据：REST API"| Daemon
-    SM -->|"组/组织统计：查询"| Collector
-    CI["CI 流水线"] -->|"按 sessionID 回写<br/>reworkRate/testCoverage"| Collector
+     SM -->|"本地统计：只读"| PluginDB
+     SM -->|"会话数据：REST API"| Daemon
+     %% CLI 不再直查收集服务；组/组织聚合由收集服务对外提供（外部看板使用）
+     CI["CI 流水线"] -->|"按 sessionID 回写<br/>reworkRate/testCoverage"| Collector
 ```
 
 #### 设计点映射
@@ -318,17 +318,17 @@ flowchart LR
 |------|----------------|
 | WorkflowState 每轮注入 system prompt | 插件 `experimental.chat.system.transform`，从插件 DB 读最新状态追加 |
 | 会话 tags、status、workflow 扩展属性 | 存插件自有 SQLite，以核心 sessionID 为主键关联，不动 SessionTable |
-| account / group / org 身份 + workflowType | 开发者首次使用 `opencode-sm init` 五问自报（账号/组/组织/收集服务地址/工作流类型），存全局 `identity.json`；组结构由各人汇报在 org 聚合库自然形成，组即名称字符串；workflowType 决定新会话走哪套工作流（见 3.1） |
+| api_key 身份 + workflowType | 开发者 `opencode-sm init` 填写（api_key / 收集服务地址 / 可选工作流类型），存全局 `identity.json`，api_key 本机明文、上送前转 SHA-256 哈希；组/部门/组织由收集服务据哈希解析；workflowType 决定新会话走哪套工作流（见 3.1） |
 | 阶段推进 / 审查 / 理解确认 | 插件注册工具（`workflow_advance`、`comprehension_confirm`、`review_submit`），Agent 在 TUI 对话中调用，校验逻辑在工具 handler 内——天然服务端强制 |
 | 重复编辑模式检测与提交门禁 | `tool.execute.after` 计数每文件代码编辑（统计用）+ 内存短记忆检测连续重复/高频编辑模式；`tool.execute.before` 对未过审查的 `git commit` 抛错阻断；system prompt 注入 stuck 警告 |
 | QualityMetrics 采集 | 会话内指标（firstPassRate/iterationCount/linesByFile）由插件记录于本机插件库；合并后指标（reworkRate/testCoverage）由 CI 按 sessionID 回写 org 收集服务 |
-| 外部管理（tag/workflow/stats） | 独立 CLI `opencode-sm`：本地统计读插件库 + 上游 REST API；组/组织统计查 org 收集服务；通用会话操作（list/delete/stats）直接用上游已有命令 |
+| 外部管理（list/stats） | 独立 CLI `opencode-sm`：本地统计读插件库 + 上游 REST API；组/组织统计由外部收集服务 `performance_dashboard` 看板提供，CLI 不再直查 |
 
 #### 风险与取舍
 
 - **experimental hook 稳定性**：`experimental.chat.system.transform` 带 experimental 前缀，上游可能调整签名。缓解：插件是唯一受影响面，上游升级后只需改插件代码并回归测试，成本远低于核心合并冲突。插件内以适配层封装 hook，集中变更点。
 - **rename（重命名会话）**：上游无会话标题更新 API（标题自动生成）。本方案不提供 rename；如将来必须支持，它是全部定制中唯一值得引入的小核心补丁，单独评估。
-- **身份变更是快照语义**：汇报携带当时的 account/group/org 快照。开发者调组后重跑 `opencode-sm init`，只影响此后的汇报，历史统计归属不追溯变更。
+- **身份变更是快照语义**：汇报携带当时的 `apiKey` 哈希。开发者更换 `api_key` 后重跑 `opencode-sm init`，只影响此后的汇报，历史统计归属不追溯变更。
 - **收集服务不可用**：插件在本地缓冲未送达的汇报（同一会话仅保留最新一条快照，避免堆积），服务恢复后补推；期间单机会话/项目级统计的工作流/质量数据不受影响（直读本地插件库），但 cost/tokens 经上游 daemon 取得，daemon 不可达时统计示 `N/A`（而非误导的 $0）。
 - **插件 DB 孤儿记录**：会话被上游删除后，插件 DB 中对应的扩展数据成为孤儿记录。`opencode-sm` 与插件定期以 `session.list` 比对清理（惰性清理即可，不影响功能）。
 - **子代理会话不计入统计**：上游子代理会话带 `parentID`（指向主会话）。插件据 `session.get` 的 `parentID` 识别子代理会话，对其**不建记录、不打标、不汇报、不注入规则**；启动清理时一并移除存量子代理记录（仅保留主会话），避免子代理会话污染本地统计与收集服务聚合。
@@ -343,7 +343,7 @@ flowchart LR
 
 | 存储 | 位置 | 内容 |
 |------|------|------|
-| 全局身份配置 | `~/.config/opencode/session-mgmt/identity.json` | `opencode-sm init` 五问写入：`{account, group, org, collector_url, workflowType}`（workflowType 可选，缺省 sdlc），每机器一份 |
+| 全局身份配置 | `~/.config/opencode/session-mgmt/identity.json` | `opencode-sm init` 写入：`{apiKey, collector_url, workflowType}`（apiKey 明文本机存储、上送前转 SHA-256 哈希；workflowType 可选，缺省 sdlc），每机器一份 |
 | 插件库 | `<project>/.opencode/session-mgmt.db`（插件自动建表，迁移自管） | 每会话的工作流数据 `workflow_session` |
 | 组织聚合库 | org 收集服务侧（每 org 一个） | 各机器汇报的会话摘要，组/组织结构由此自然形成 |
 
@@ -366,29 +366,25 @@ erDiagram
         text tags "JSON string[]"
         text status "状态标签"
         text workflow "JSON WorkflowState"
-        text account_id "取自 identity.json"
+        text account_id "遗留列（已不再写入，仅兼容）"
     }
 
     IdentityConfig {
-        string account "init 五问 - 账号邮箱"
-        string group "init 五问 - 组名"
-        string org "init 五问 - 组织名"
-        string collector_url "init 五问 - 收集服务地址"
-        string workflowType "init 五问 - 工作流类型（缺省 sdlc）"
+        string apiKey "init 两问 - api_key（明文本机，发送前 SHA-256）"
+        string collector_url "init 两问 - 收集服务地址"
+        string workflowType "init 可选 - 工作流类型（缺省 sdlc）"
     }
 
     ReportsTable {
         text session_id PK "聚合库 - 收集服务侧"
-        text account "汇报快照"
-        text group_name "汇报快照"
-        text org_name "汇报快照"
+        text api_key_hash "汇报身份（api_key 的 SHA-256）"
         text workflow_type "工作流类型（分区管道，6.4）"
         text summary "阶段时间戳+质量指标"
         real cost "经 SDK 取得后随汇报上报"
     }
 
     SessionTable ||--o| WorkflowSessionTable : "session_id（逻辑关联）"
-    IdentityConfig ||--o{ WorkflowSessionTable : "account_id 来源"
+    IdentityConfig ||--o{ WorkflowSessionTable : "身份来源（已不写 account_id）"
     WorkflowSessionTable ||--o| ReportsTable : "插件定期汇报"
 ```
 
@@ -400,30 +396,30 @@ export const WorkflowSessionTable = sqliteTable("workflow_session", {
   tags: text({ mode: "json" }).$type<string[]>().$default(() => []),
   status: text(),   // "todo"|"analysis"|"design"|"coding"|"testing"|"review"|"done"|"archived"|null
   workflow: text({ mode: "json" }).$type<WorkflowState>(),
-  account_id: text(),  // 会话首次活动时从全局 identity.json 写入
+  account_id: text(),  // 遗留列，已不再写入（身份改以 apiKey 哈希标识）
 })
 
 // ~/.config/opencode/session-mgmt/identity.json — 全局身份，opencode-sm init 写入
-// { "account": "alice@example.com", "group": "前端组", "org": "Engineering",
-//   "collector_url": "http://10.0.1.20:8787", "workflowType": "sdlc" }
+// { "apiKey": "<明文本机存储>", "collector_url": "http://10.0.1.20:8787", "workflowType": "sdlc" }
+// 注意：apiKey 仅本机明文；插件上送前转 SHA-256(hex) 哈希，网络不传明文。
 
-// 收集服务侧聚合库（opencode-session-mgmt/packages/collector）：reports 表按 session_id 主键
-// 接收汇报快照（account/group/org + 阶段时间戳 + cost/tokens + 质量指标），不含代码内容
+// 收集服务侧聚合库（外部项目 performance_dashboard）：reports 表按 session_id 主键
+// 接收汇报（apiKey 哈希 + 阶段时间戳 + cost/tokens + 质量指标），不含代码内容
 ```
 
-**组是名称字符串，没有 ID 与嵌套表**：每台机器只有一个身份（init 填写），不存在单机花名册；"前端组有几个人"这件事由众人汇报的快照在聚合库中 `GROUP BY group_name` 自然得出。子组用命名约定表达（`前端组/基础架构组`）。组织级聚合同理：`GROUP BY org_name`。
+**组/部门/组织归属由收集服务解析**：客户端不再填写组名/组织名，身份仅以 `apiKey` 哈希标识；"前端组有几个人"由收集服务据 `apiKey` 哈希映射后在聚合库中自然得出，子组/组织层级是收集端内部实现（本规格书不规定）。
 
-**account / group / org 的关联时机**：
+**api_key 身份的关联时机**：
 
 | 关联 | 写入方 | 时机 | 方式 |
 |------|--------|------|------|
-| identity.json（account/group/org/collector_url/workflowType） | 开发者本人 | 每台机器一次，人员或角色变动时重跑 | `opencode-sm init` 交互式五问，全部手动填写（见 5.1） |
-| `workflow_session.account_id` | 插件 | 会话首次活动（`chat.message` hook） | 从全局 identity.json 读取 account 写入，不读上游数据库 |
-| 聚合库 account/group/org | 插件 | 定期汇报 + 阶段事件触发 | 汇报携带当时的身份快照，收集服务落库 |
+| identity.json（apiKey/collector_url/workflowType） | 开发者本人 | 每台机器一次，人员或角色变动时重跑 | `opencode-sm init` 交互式填写（见 5.1） |
+| `workflow_session.account_id` | 插件 | （已废弃）会话首次活动不再打标；身份改以 apiKey 哈希标识 | 本机 `account_id` 列保留但不再写入，统计显示 N/A |
+| 聚合库 api_key_hash + 归属 | 插件 + 收集服务 | 定期汇报 + 阶段事件触发 | 汇报携带 `apiKey` 哈希；组/部门/组织由收集服务据哈希解析落库 |
 
-**快照语义**：三层关联随汇报固化在聚合库记录里。开发者调组后重跑 `opencode-sm init`，只影响此后的汇报与本机新会话的打标，**历史统计归属不追溯变更**。本机 `workflow_session.account_id` 亦为创建时快照。
+**快照语义**：`apiKey` 哈希随汇报固化在聚合库记录里。开发者更换 `api_key` 后重跑 `opencode-sm init`，只影响此后的汇报，**历史统计归属不追溯变更**。
 
-**workflowType 继承（用户级流程选择）**：工作流类型由**用户角色**决定，而非目录。插件每次创建新会话 `WorkflowState` 时经 `resolveType` 读取 `identity.json.workflowType`（缺省 `sdlc`）写入 `workflow.type`（快照语义，与 account 一致——已存在会话不重读）。不同角色 = 不同用户（开发者走 sdlc 开发流程、需求分析师走 reqdoc 需求书流程），故**无目录配置、无会话内切换工具**；改类型只影响之后的新会话，历史归属不追溯。流程定义与通用机制解耦见 3.2。
+**workflowType 继承（用户级流程选择）**：工作流类型由**用户角色**决定，而非目录。插件每次创建新会话 `WorkflowState` 时经 `resolveType` 读取 `identity.json.workflowType`（缺省 `sdlc`）写入 `workflow.type`（快照语义，与 apiKey 一致——已存在会话不重读）。不同角色 = 不同用户（开发者走 sdlc 开发流程、需求分析师走 reqdoc 需求书流程），故**无目录配置、无会话内切换工具**；改类型只影响之后的新会话，历史归属不追溯。流程定义与通用机制解耦见 3.2。
 
 **孤儿记录清理**：上游删除会话后，`workflow_session` 中对应记录成为孤儿。插件**启动后延后**（约 2 秒，错开 TUI 首屏与 daemon 启动竞态，减少启动耗时，见部署文档 FAQ）以 `session.list` 比对惰性清理（保守策略：上游不可达或返回空列表时不清理，防瞬时不可达误删），不影响功能。清理白名单**仅含主会话**（`parentID` 为空）：子代理会话（`parentID` 非空）与孤儿一并移除，配合 2.4 的「子代理不建记录」，保证统计纯净。
 
@@ -871,9 +867,9 @@ GET  /api/session/:id/history         session.history
 | 统计范围 | 数据来源 |
 |----------|----------|
 | 会话级 / 项目级 | `opencode-sm` 本机组合：插件库（工作流/会话内质量）+ 上游 `session.list`/`session.get`（cost/tokens/project），按 sessionID 关联 |
-| 组级 / 组织级 | `opencode-sm` 查询 **org 收集服务的查询端点**（`GET {collector_url}/api/stats?scope=group&group=前端组`），聚合库已含各人汇报与 CI 回写 |
+| 组级 / 组织级 | 由外部收集服务 `performance_dashboard` 据 api_key 哈希聚合并提供看板（`GET {collector_url}/api/stats?scope=group&group=前端组`），CLI 仅做本机会话/项目级聚合，不再直查组/组织级 |
 
-`--project` 参数不传时，自动从当前工作目录（CWD）聚合本项目数据。**因本地插件库按项目目录存放（`<project>/.opencode/session-mgmt.db`），`--project` 接受项目目录路径**以查看他处项目（如 `opencode-sm stats --project ~/work/user-service`），明确的目录以**只读**方式打开（库不存在则提示、不创建，避免在任意目录留下 `.opencode/`）；传入名称而非已存在目录时，无法据此定位库，退化为按 CWD 聚合并仅用作展示标签。`--group` 接受组名（如 `--group "前端组"`）；`--org` 使用 identity.json 中配置的组织。
+`--project` 参数不传时，自动从当前工作目录（CWD）聚合本项目数据。**因本地插件库按项目目录存放（`<project>/.opencode/session-mgmt.db`），`--project` 接受项目目录路径**以查看他处项目（如 `opencode-sm stats --project ~/work/user-service`），明确的目录以**只读**方式打开（库不存在则提示、不创建，避免在任意目录留下 `.opencode/`）；传入名称而非已存在目录时，无法据此定位库，退化为按 CWD 聚合并仅用作展示标签。组/组织级聚合由外部收集服务看板提供，CLI 不接收 `--group`/`--org`（已移除）。
 
 ---
 
@@ -898,33 +894,27 @@ opencode                                  # 进入 TUI，交互式恢复任意�
 >
 > `opencode session list` 默认以表格输出三列——**Session ID / Title / Updated**：Title 为上游自动生成的会话标题、Updated 为更新时间，凭标题与时间即可辨认目标会话，再取其 ID 传给 `-s`；`--format json` 另含 created、projectId 等字段，`--max-count <n>` 限制条数。
 
-**`opencode-sm` 独立命令（定制，读插件库 + 调上游 API + 查收集服务）**：
+**`opencode-sm` 独立命令（定制，读插件库 + 调上游 API；组/组织聚合由收集服务对外提供）**：
 
 ```
-opencode-sm init          # 每台机器一次：交互式五问（账号/组/组织/收集服务地址/工作流类型），写入全局 identity.json
-opencode-sm workflow-type set <sdlc|reqdoc>   # 轻量改角色（工作流类型），重跑 init 的等价替代
-opencode-sm workflow-type get                # 查看当前工作流类型
-opencode-sm tag          <sessionID> [--add <tag...>] [--remove <tag...>] [--list]
-opencode-sm workflow     <sessionID> [checklist|comprehension|stats]
-opencode-sm stats        [<sessionID>] [--project <dir>] [--group "组名"] [--org] [--workflow <type>] [--period <nd>] [--json]
+opencode-sm init          # 每台机器一次：交互式两问（api_key / 收集服务地址）+ 可选工作流类型，写入全局 identity.json
 opencode-sm list         [--status <s>] [--tag <t>] [--json]     # 在上游 session.list 结果上叠加插件库的 status/tag 过滤
+opencode-sm stats        [<sessionID>] [--project <dir>] [--workflow <type>] [--period <nd>] [--json]   # 本机会话/项目级聚合（含 cost/tokens）
 ```
 
-**init 交互示例**（五问全部由开发者手动填写）：
+> `workflow` / `tag` / `workflow-type` 子命令已退役：工作流推进在 TUI 对话中完成（`workflow_advance` 等工具），状态查看由 `opencode-sm stats <sessionID>` 承担；组/组织级聚合由外部收集服务 `performance_dashboard` 提供，CLI 不再直查。
+
+**init 交互示例**（两问 + 可选工作流类型，全部手动填写）：
 
 ```
 $ opencode-sm init
-? 你的账号（邮箱）: alice@example.com
-? 所在组: 前端组
-? 所属组织: Engineering
+? api_key（明文仅存本机 identity.json；发送前转为 SHA-256 哈希，网络不传明文）: <输入>
 ? 收集服务地址: http://10.0.1.20:8787
-? 主要工作流类型（sdlc 开发 / reqdoc 需求书）: sdlc
+? 主要工作流类型（sdlc 开发 / reqdoc 需求书）[缺省 sdlc]: sdlc
 ✓ 已写入 ~/.config/opencode/session-mgmt/identity.json，本机即时生效
 ```
 
-组名/组织名由组织内口头约定（如"前端组"），子组用命名约定（`前端组/基础架构组`）；收集服务地址由 org 管理员告知。人员变动（调组、换邮箱）或**角色变化（换工作流类型）**时重跑 `init` 即可——只影响此后的统计归属（快照语义，见 3.1）。
-
-**workflow-type 命令**：`set` 与 `get` 用于轻量调整工作流类型（开发者 `sdlc` / 需求分析师 `reqdoc`），与「调组重跑 init」同语义，只是比重跑 init 少填四问。改类型只影响之后的新会话，历史归属不追溯（身份快照语义，见 3.1、3.2）。
+`api_key` 仅本机明文存储，插件上送前转 SHA-256(hex) 哈希；收集服务地址由 org 管理员告知（即 `performance_dashboard` 的内网地址）。**角色变化（换工作流类型）**时重跑 `init` 即可——只影响此后的统计归属（快照语义，见 3.1）。
 
 **说明**：
 
@@ -933,11 +923,11 @@ $ opencode-sm init
 | resume（继续开发） | 主路径是 TUI 内切换会话（上游已有，`<leader>1-9` 快速切换）；一次性发消息用上游 `session.prompt` API 或 `opencode run` |
 | create / get / active / compact / interrupt | 上游 REST API 已完备，TUI 与 `opencode-sm` 直接调用，不包装重复命令 |
 | rename | 不提供。上游无标题更新 API，标题自动生成（见 2.4 取舍） |
-| review | 并入 `opencode-sm workflow <id> checklist\|comprehension\|stats` |
+| review | 并入 `opencode-sm stats <id>`（本机会话级质量指标） |
 
 **workflow 命令说明**：
 
-工作流的推进（进入阶段、确认、回退）通过 **TUI 内自然语言对话**完成（Agent 调用插件工具，见 4.1），不走 CLI。开发者只需在对话中说"需求确认了"、"回到设计阶段"等。`opencode-sm workflow` 仅用于**从外部查看状态**：
+工作流的推进（进入阶段、确认、回退）通过 **TUI 内自然语言对话**完成（Agent 调用插件工具，见 4.1），不走 CLI。开发者只需在对话中说"需求确认了"、"回到设计阶段"等；外部查看状态用 `opencode-sm stats <sessionID>`。
 
 | 子命令 | 行为 |
 |--------|------|
@@ -955,19 +945,14 @@ sequenceDiagram
     participant CLI as opencode-sm
     participant PDB as 本机插件库<br/>session-mgmt.db
     participant Daemon as Daemon REST API<br/>（上游，不修改）
-    participant Collector as org 收集服务<br/>（聚合库）
 
-    alt 会话级 / 项目级统计
-        CLI->>PDB: 读 workflow/tags/会话内质量（只读）
-        PDB-->>CLI: 定制数据
-        CLI->>Daemon: SDK 调 session.list/get（cost/tokens）
-        Daemon-->>CLI: 核心数据
-        CLI->>CLI: 按 sessionID 关联聚合、格式化
-    else 组级 / 组织级统计（--group/--org）
-        CLI->>Collector: GET /api/stats?scope=group&group=前端组
-        Collector-->>CLI: 跨机器聚合结果
-    end
+    CLI->>PDB: 读 workflow/tags/会话内质量（只读）
+    PDB-->>CLI: 定制数据
+    CLI->>Daemon: SDK 调 session.list/get（cost/tokens）
+    Daemon-->>CLI: 核心数据
+    CLI->>CLI: 按 sessionID 关联聚合、格式化
     CLI-->>User: 表格/文本/JSON
+    Note over CLI: 组/组织级聚合由外部收集服务<br/>performance_dashboard 看板提供（CLI 不直查）
 ```
 
 > 会话/项目级明细的**标题**也已由插件在会话活动时经 SDK 同步进插件库（启动后一次性回填 + 每条消息按需补），因此 CLI **离线（daemon 不可达）也能显示标题**；费用/Token 仍须 daemon 实时取。`list` 在上游不可达时同样用插件库标题兜底。
@@ -994,7 +979,7 @@ graph LR
         COST["cost<br/>费用（上游已有）"]
         TOK["tokens_*<br/>Token（上游已有）"]
         DIFF["代码量<br/>（上游已有）"]
-        ACCT["account/组/组织<br/>（init 配置 + 聚合库快照）"]
+        ACCT["api_key 哈希<br/>（身份标识，组/组织由收集服务解析）"]
         QM["workflow.quality<br/>质量指标（插件库）"]
         RV["workflow.stages.review<br/>审查数据（插件库）"]
         BL["workflow.baseline<br/>基线预估工时（插件库）"]
@@ -1027,7 +1012,7 @@ graph LR
 
 ```
 📋 会话 "用户认证模块" (sess_abc123)
-开发者: alice@example.com
+开发者: N/A（身份以 api_key 哈希标识，组/组织由收集服务解析）
 周期: 3.25 天
 
 工作流:
@@ -1065,7 +1050,7 @@ AI 使用: 对话 47轮 | $0.36 | 85K tokens
   高迭代会话(≥5轮): 0
 ```
 
-**组级**：
+**组级**（以下由外部收集服务 `performance_dashboard` 看板提供，CLI 不直查）：
 
 ```
 👥 组 "前端组" - 最近 30 天
@@ -1084,7 +1069,7 @@ AI 使用: 对话 47轮 | $0.36 | 85K tokens
 趋势: 需求迭代 ↓1.5→0.9 | 单行成本 ↓$0.04→$0.02 | 返工率 ↓10%→6% | 提效 ↑55%→68%
 ```
 
-**组织级**：
+**组织级**（以下由外部收集服务 `performance_dashboard` 看板提供）：
 
 ```
 👥 组织 "Engineering" - 最近 30 天
@@ -1236,7 +1221,7 @@ reqdoc 无 `git commit` 门禁，表中「绕过门禁直接提交」风险不�
 | `src/startup.ts` | 启动后台任务：共用一次 `session.list` 完成 孤儿清理 + 标题回填（延后 2 秒，减少启动耗时） |
 | `src/db/schema.ts` | 插件库表定义（仅 `workflow_session` 一张表） |
 | `src/db/index.ts` | 插件 SQLite 初始化与迁移（bun:sqlite，WAL 模式） |
-| `src/identity.ts` | 读全局 `identity.json`，会话首次活动时打标 `account_id` |
+| `src/identity.ts` | 读全局 `identity.json`，解析 `api_key`（上送前转 SHA-256 哈希）；不再打标 account_id |
 | `src/prompt.ts` | system prompt 注入片段：阶段化注入（rulesForStage 取 global + 当前阶段规则）+ buildStateBar 阶段状态块替代冗长 JSON（含阶段表头「当前阶段（第 N/Y 步）+ 目的 + 状态」、来源覆盖 [文档]x/[问答]y、渲染校验、追问覆盖多行）；`stage===null` 三态化：未启动（起步）/ 空档态（部分 approved：继续→进入下一阶段 / 回退→revisit）/ 完成态（专用完成块：「提交 commit_gate_check / 开新需求 /new / 改本需求 workflow_revisit」，不注入常规全局规则；合并 open-ide 后完成态另读锁表提示解锁，仅 sdlc） |
 | `src/tools/workflow.ts` | `workflow_advance`（含 reqdoc 进入 prd 的打分卡门禁）/ `workflow_revisit` / `workflow_baseline` / `commit_gate_check` / `commit_force_unlock` 工具 |
 | `src/tools/review.ts` | `comprehension_add` / `comprehension_confirm` / `comprehension_reject` / `comprehension_rewrite` / `comprehension_manual` / `comprehension_ask` / `review_submit` 工具（含防批量确认校验、终态门禁、reqdoc 定稿打分卡 + P1 探针 + P2 渲染复核兜底校验） |
@@ -1254,22 +1239,15 @@ reqdoc 无 `git commit` 门禁，表中「绕过门禁直接提交」风险不�
 | 文件 | 用途 |
 |------|------|
 | `src/index.ts` | 入口与命令注册 |
-| `src/commands/init.ts` | 交互式五问，写全局 `identity.json` |
-| `src/commands/workflow-type.ts` | 工作流类型查看/修改（`set <sdlc|reqdoc>` / `get`） |
-| `src/commands/tag.ts` | 标签管理（读写插件库） |
-| `src/commands/workflow.ts` | 工作流状态外部查看（含 checklist/comprehension/stats，按 def.labels/def.checklist 渲染） |
-| `src/commands/stats.ts` | 四级统计：会话/项目级组合本机数据；组/组织级查收集服务；`--workflow` 过滤按类型分区 |
+| `src/commands/init.ts` | 交互式两问 + 可选工作流类型，写全局 `identity.json` |
+| `src/commands/stats.ts` | 会话/项目级本机聚合（读插件库 + 上游 SDK 的 cost/tokens）；组/组织级由收集服务对外提供，CLI 不再直查 |
 | `src/commands/list.ts` | 会话列表（上游 list + 插件库 status/tag 过滤） |
-| `src/api.ts` | 上游 opencode SDK 封装 + 收集服务查询客户端 |
+| `src/api.ts` | 上游 opencode SDK 封装（本机聚合用） |
 | `test/*.test.ts` | 格式化与聚合的单元测试 |
 
-### 组织收集服务 `opencode-session-mgmt/packages/collector/`（新建，每 org 部署一个）
+### 后台收集服务（外部项目 `performance_dashboard`）
 
-| 文件 | 用途 |
-|------|------|
-| `src/index.ts` | 内网 HTTP 服务：`POST /api/report`（插件汇报）、`POST /api/ci-quality`（CI 回写）、`GET /api/stats`（opencode-sm 查询，可选 `workflowType` 过滤） |
-| `src/db.ts` | 聚合库（reports 表含 `workflow_type` 列 + 索引，按 session_id 合并汇报与 CI 指标，按 type 分区聚合） |
-| `test/*.test.ts` | 合并语义与查询的单元测试 |
+收集服务作为**外部独立项目**维护：[`performance_dashboard`](https://github.com/karsonto/performance_dashboard)（Go/Netty 后端，org 内网部署），承担汇报接收（`POST /api/report`）、CI 回写（`POST /api/ci-quality`）与组/组织级聚合（`GET /api/stats`）。`opencode-session-mgmt` 本仓库已退役 `packages/collector`，不再包含收集服务代码；其接口契约见 `collector-spec.md`。
 
 ### 部署配置
 
@@ -1281,7 +1259,7 @@ reqdoc 无 `git commit` 门禁，表中「绕过门禁直接提交」风险不�
 
 ### 已交付记录
 
-多流程就绪与 reqdoc 工作流已交付（2026-08-08/09）：契约层多流程化（`WorkflowDefinition` 注册表、`WorkflowState.type`、stages/checklist 泛化、identity 五问）→ 各包消费方 def-driven（插件 / CLI / 收集服务）→ 文档同步与回归，均已落地。
+多流程就绪与 reqdoc 工作流已交付（2026-08-08/09）：契约层多流程化（`WorkflowDefinition` 注册表、`WorkflowState.type`、stages/checklist 泛化、identity 两问）→ 各包消费方 def-driven（插件 / CLI / 收集服务）→ 文档同步与回归，均已落地。
 
 启动耗时优化已交付（2026-08-12）：汇报 `fetch` 加 5 秒超时（`AbortSignal.timeout`，不可达时不再无界挂起）；孤儿清理与标题回填合并为一次 `session.list` 并延后 2 秒执行（错开 TUI 首屏 / daemon 启动竞态），逻辑移入 `src/startup.ts` 便于单测。
 
@@ -1295,15 +1273,14 @@ reqdoc 无 `git commit` 门禁，表中「绕过门禁直接提交」风险不�
 |---|---|---|
 | 插件 `session-mgmt` | 发布到 npm（或内部 registry）；daemon 基于 bun，TS 可直接加载，建议团队侧预编译为 JS 发布以屏蔽 bun 版本差异 | 无——OpenCode 按 `config.plugin` 自动拉取 |
 | `opencode-sm` CLI | npm 包，或 `bun build --compile` 单文件二进制经内部分发 | `npm i -g @yourorg/opencode-sm`（或接收二进制） |
-| `opencode-sm-collector` | 运维在 org 内网服务器部署一次（docker/systemd） | 无——仅在 init 时填写其地址 |
+| 后台收集服务 `performance_dashboard` | 运维在 org 内网服务器部署一次（见外部项目） | 无——仅在 init 时填写其地址 |
 
 ### 9.1 组织管理员（一次性）
 
 ```bash
-# 内网服务器部署收集服务（示例）
-docker run -d --name opencode-sm-collector -p 8787:8787 \
-  -v collector-data:/data @yourorg/opencode-sm-collector
-# 将地址（如 http://10.0.1.20:8787）与组名约定告知全体成员
+# 内网服务器部署收集服务（外部项目 performance_dashboard，详见其仓库）
+# 镜像/编排以 performance_dashboard 仓库为准；部署后将其内网地址
+# （如 http://10.0.1.20:8787）告知全体成员，作为 init 的收集服务地址
 ```
 
 ### 9.2 开发者（一次性，约 2 分钟）
@@ -1312,10 +1289,10 @@ docker run -d --name opencode-sm-collector -p 8787:8787 \
 npm i -g @yourorg/opencode-sm                    # 1. 装独立 CLI
 # 2. opencode 配置启用插件（opencode.json，可由团队标准配置预置）：
 #    { "plugin": ["@yourorg/opencode-session-mgmt"] }
-opencode-sm init                                  # 3. 五问：账号 / 组 / 组织 / 收集服务地址 / 工作流类型
+opencode-sm init                                  # 3. 两问：api_key / 收集服务地址（+ 可选工作流类型）
 ```
 
-此后开发者照常使用 `opencode`（TUI）——工作流规则随 system prompt 自动注入，阶段推进、审查、理解确认全部在对话中完成；外部查看用 `opencode-sm workflow/stats`。
+此后开发者照常使用 `opencode`（TUI）——工作流规则随 system prompt 自动注入，阶段推进、审查、理解确认全部在对话中完成；外部查看用 `opencode-sm stats`。
 
 ### 9.3 升级路径
 
@@ -1340,7 +1317,7 @@ opencode-sm init                                  # 3. 五问：账号 / 组 / �
 - **接口稳定面小**：仅依赖上游插件 Hook 与 session REST API 两类公开接口；**插件不直读上游数据库**，上游内部表结构变化对定制无影响
 - **experimental hook 风险受控**：`experimental.chat.system.transform` 若被上游调整签名，影响面仅插件包 `src/prompt.ts` 一处适配层，升级后回归测试即可，成本远低于核心合并
 - **上游行为不变**：TUI、上游 CLI、上游 API 消费者均不受影响；卸载插件（移除 `config.plugin` 条目）即完全还原
-- **快照语义**：身份（account/group/org）随汇报固化，调整 `identity.json` 不追溯历史统计（见 3.1）
+- **快照语义**：身份（`apiKey` 哈希）随汇报固化，调整 `identity.json` 不追溯历史统计（见 3.1）
 
 ---
 
@@ -1348,9 +1325,9 @@ opencode-sm init                                  # 3. 五问：账号 / 组 / �
 
 - 本机会话数据存储于本地插件 SQLite；跨机汇聚仅传输**流程摘要**（阶段时间戳、cost/tokens、质量指标、身份字段），**不含代码内容**
 - 迭代计数明细 `iterationByFile`、行数明细 `linesByFile`（键均为文件路径）仅存本机插件库，汇报投影（`summarizeWorkflow`）已剥离——与理解确认片段剥离 `file`/`lines`/`explanation` 的口径一致，文件路径不上行；行数仅以业务/测试/配置三类聚合数字上行
-- reqdoc 打分卡 `score`（含 `deductions.evidence` 证据引用的文件路径）整体**不进入汇报投影**（`summarizeWorkflow` 未包含 `score` 字段），仅存本机插件库供 `opencode-sm workflow <id> score` / 状态条展示——比文件路径剥离更保守
+- reqdoc 打分卡 `score`（含 `deductions.evidence` 证据引用的文件路径）整体**不进入汇报投影**（`summarizeWorkflow` 未包含 `score` 字段），仅存本机插件库供状态条展示——比文件路径剥离更保守
 - 强制提交授权 `commit.force`（原因、时间、是否已用）随汇报上行：原因是开发者口述的流程元数据、非代码内容；上行是为让"绕过审查的提交"在组/组织统计中可见，服务于退出风险监控
-- 汇报携带的账号邮箱属个人信息：收集服务应仅内网可达、最小化留存，访问权限限于组/组织管理者
+- 汇报携带的 `apiKey` 哈希为身份标识、不含个人明文信息：收集服务应仅内网可达、最小化留存，访问权限限于组/组织管理者
 - 组织级分析基于收集服务聚合库（各人汇报快照），不读上游账号体系
 - 开发者可关闭汇报（不配置/停用 `collector_url`），退化为本机会话/项目级统计，功能不受影响
 - 上游 Daemon 仅绑定 `127.0.0.1`，opencode-sm 经本机回环访问，不暴露网络端口
@@ -1365,24 +1342,18 @@ opencode-sm init                                  # 3. 五问：账号 / 组 / �
 
 ```bash
 # 首次使用（每台机器一次）
-opencode-sm init    # 五问：账号 / 组 / 组织 / 收集服务地址 / 工作流类型
+opencode-sm init    # 两问：api_key / 收集服务地址（+ 可选工作流类型）
 
 # 上游命令（复用，验证未被定制影响）
 opencode session list
 opencode stats --days 7
 
 # 定制命令（opencode-sm）
-opencode-sm tag <id> --add feature auth
-opencode-sm workflow <id>
-opencode-sm workflow <id> checklist
-opencode-sm workflow <id> comprehension --unconfirmed
-opencode-sm workflow <id> score                   # reqdoc 打分卡明细（五维/扣分/总分/确认状态）
-opencode-sm workflow-type get                    # 查看当前工作流类型
-opencode-sm workflow-type set reqdoc             # 轻量改角色（只影响之后新会话）
-opencode-sm stats <id>
-opencode-sm stats --project "用户系统" --period 7d
-opencode-sm stats --group "前端组" --workflow sdlc --period 30d
-opencode-sm stats --org --period 30d --json
+opencode-sm list                                   # 叠加插件库 status/tag 过滤
+opencode-sm stats <id>                             # 单会话级（含 cost/tokens）
+opencode-sm stats --project "用户系统" --period 7d  # 项目级（本地库 + 上游 SDK 聚合）
+opencode-sm stats <id> --workflow sdlc --period 30d
+opencode-sm stats --project "用户系统" --period 30d --json
 
 # TUI 内对话验证（工作流推进、理解确认、提交门禁按 workflow-sdlc.md 4 章 / workflow-reqdoc.md 9 章场景走通）
 opencode

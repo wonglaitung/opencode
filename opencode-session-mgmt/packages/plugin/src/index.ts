@@ -6,7 +6,7 @@
  *   - tool                                工作流工具集（4.1）+ open_ide 打开/人工文件锁（open-ide 4、5）
  *   - tool.execute.before                 提交门禁硬拦截（7.3）‖ 人工文件锁拦截（open-ide 5.2，先行）
  *   - tool.execute.after                  迭代计数
- *   - chat.message                        会话首次活动打 account_id（3.1）+ 汇报触发
+ *   - chat.message                        会话首次活动汇报触发
  * 启动后台任务（孤儿清理/标题回填/补推汇报）延后触发，见 startup.ts。
  * 合并后 open-ide 源码在 src/open-ide/；锁持久化进 Store（file_lock 表，重启自动恢复）。
  */
@@ -15,7 +15,7 @@ import type { Plugin, PluginInput } from "@opencode-ai/plugin"
 import { readIdentity, resolveWorkflowType } from "sm-shared"
 import { Store, isPlaceholderTitle } from "./db"
 import { createCommitGate } from "./gate"
-import { stampSessionAccount } from "./identity"
+import { resolveIdentity } from "./identity"
 import { createSystemTransform } from "./prompt"
 import { createReporter, type Usage } from "./report"
 import { STARTUP_DELAY_MS, deferredStartup } from "./startup"
@@ -92,7 +92,7 @@ const SessionMgmtPlugin: Plugin = async (input) => {
   // 用户级流程选择（3.1）：新建会话时读 identity.workflowType（缺省 sdlc），身份快照语义。
   const store = Store.open(input.directory, () => resolveWorkflowType(readIdentity()?.workflowType))
   const usageProvider = createUsageProvider(input.client)
-  const reporter = createReporter(store, () => readIdentity(), usageProvider)
+  const reporter = createReporter(store, () => resolveIdentity(), usageProvider)
   // 子代理会话识别器（2.4 统计纯净度）：对子代理跳过建记录/打标/汇报/规则注入
   const isSubagent = makeSubagentChecker(input.client)
 
@@ -146,9 +146,8 @@ const SessionMgmtPlugin: Plugin = async (input) => {
     "tool.execute.after": createIterationCounter(store, isSubagent),
 
     "chat.message": async (hookInput) => {
-      // 子代理会话不追踪：不建记录、不打标、不汇报（2.4 统计纯净度）
+      // 子代理会话不追踪：不建记录、不汇报（2.4 统计纯净度）
       if (await isSubagent(hookInput.sessionID)) return
-      stampSessionAccount(store, hookInput.sessionID)
       await syncSessionTitle(store, input.client, hookInput.sessionID)
       await reporter.enqueueReport(hookInput.sessionID)
     },

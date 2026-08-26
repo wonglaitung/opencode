@@ -29,10 +29,10 @@
                                        │ 定期汇报会话摘要（不含代码）
                                        ▼
 ┌───────────────────────────────  组织内网服务器（每组织一个）  ──────────────────────┐
-│  ④ 收集服务 collector（本项目的 packages/collector）                              │
+│  ④ 后台收集服务 performance_dashboard（外部项目，不随本仓库分发）                  │
 │     - 内网 HTTP 服务，默认端口 8787                                               │
 │     - 三个端点：POST /api/report（汇报）、POST /api/ci-quality（CI 回写）、          │
-│       GET /api/stats（统计查询）；外加 GET /healthz（探活）                         │
+│       GET /api/stats（统计查询，组/组织级聚合看板）；外加 GET /healthz（探活）       │
 └────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -40,12 +40,12 @@
 
 | 角色 | 要做的事 | 对应章节 |
 |------|----------|----------|
-| 组织管理员 / 运维 | 内网服务器上部署 ④ 收集服务；把收集服务地址与组名约定告诉全员 | 第 5、9 章 |
+| 组织管理员 / 运维 | 内网服务器上部署 ④ 收集服务（外部项目 performance_dashboard）；把收集服务地址告诉全员 | 第 5、9 章 |
 | 开发者 | 装 ① OpenCode、启用 ② 插件、装 ③ CLI、跑一次 `opencode-sm init` | 第 1–4、6 章 |
-| 组长 / 领导 | 装 ③ CLI、跑一次 `opencode-sm init`（至少配好收集服务地址），即可用 `opencode-sm stats --group/--org` 查远端聚合统计（无需装 OpenCode/插件） | 4.2、6.3 节 |
+| 组长 / 领导 | 装 ③ CLI、跑一次 `opencode-sm init`（配好收集服务地址），即可用收集服务看板查组/组织级聚合统计（无需装 OpenCode/插件） | 4.2、6.3 节 |
 
 > **依赖互联网的部分只有三处**：① OpenCode 本体的安装、② 插件的 npm 依赖（`bun install`）、③ 大模型。
-> CLI 经 `pack:cli` 打成**自包含压缩包**，目标机安装**不需要任何 npm 依赖**。本项目自己的代码（插件、CLI、收集服务）**完全不需要外网**。内网隔离环境怎么把这三处搬进去，见第 9 章。
+> CLI 经 `pack:cli` 打成**自包含压缩包**，目标机安装**不需要任何 npm 依赖**。本项目自己的代码（插件、CLI）**完全不需要外网**；收集服务为外部项目 `performance_dashboard`。内网隔离环境怎么把这三处搬进去，见第 9 章。
 
 ---
 
@@ -212,7 +212,7 @@ opencode        # 进入 TUI
 
 ### 3.4 桌面版 / IDE 扩展同样适用（插件在服务端，与界面无关）
 
-OpenCode 除 TUI 外还有**桌面版**和 **IDE 扩展**。它们与 TUI 一样，都只是连到同一个本地服务端（Daemon）的客户端外壳；而本插件经 `config.plugin` 加载、**运行在服务端进程内**，所有 Hook（system prompt 注入、工作流工具、`git commit` 门禁、迭代计数、account 打标与汇报）都在服务端触发——**与用哪个界面无关**。因此：
+OpenCode 除 TUI 外还有**桌面版**和 **IDE 扩展**。它们与 TUI 一样，都只是连到同一个本地服务端（Daemon）的客户端外壳；而本插件经 `config.plugin` 加载、**运行在服务端进程内**，所有 Hook（system prompt 注入、工作流工具、`git commit` 门禁、迭代计数、api_key 身份与汇报）都在服务端触发——**与用哪个界面无关**。因此：
 
 - TUI 里能用的一切（五阶段门禁、逐段理解确认、强制提交、统计），在桌面版 / IDE 扩展里**同样生效**，无需额外配置。
 - 官方文档确认 `opencode.json`（含 `plugin`）在 TUI / 桌面 / IDE 之间共享，插件体系是跨界面共用的一套。
@@ -255,23 +255,21 @@ opencode-sm --help                     # 全局可用
 opencode-sm init
 ```
 
-交互式五问，**全部手动填写**（不读取任何上游登录账号）：
+交互式两问 + 可选工作流类型，**全部手工填写**（不读取任何上游登录账号）：
 
 ```
-? 你的账号（邮箱）: alice@example.com
-? 所在组（子组用命名约定，如 前端组/基础架构组）: AMS
-? 所属组织: FTD
+? api_key（明文仅存本机 identity.json；发送前转 SHA-256 哈希，网络不传明文）: <输入>
 ? 收集服务地址（如 http://10.0.1.20:8787）: http://【收集器地址】:8088
-? 主要工作流类型（sdlc 开发 / reqdoc 需求书）: sdlc
+? 主要工作流类型（sdlc 开发 / reqdoc 需求书）[缺省 sdlc]: sdlc
 ✓ 已写入 ~/.config/opencode/session-mgmt/identity.json
 ```
 
 要点：
 
-- 组名/组织名由组织内**口头约定**（如「前端组」），子组用 `前端组/基础架构组` 这种命名约定，没有 ID、没有花名册。
-- 收集服务地址由**管理员告知**（就是第 5 章部署出来的那台机器的内网地址）。暂时没部署收集服务也能填，插件会把汇报先缓存在本地。
+- `api_key` 仅本机明文存储，插件上送前转 SHA-256(hex) 哈希；组/部门/组织等归属由后台收集服务据 `api_key` 哈希解析，客户端不再填写组名/组织名。
+- 收集服务地址由**管理员告知**（即 `performance_dashboard` 的内网地址，见第 5 章）。暂时没部署收集服务也能填，插件会把汇报先缓存在本地。
 - **工作流类型**决定本用户新会话走哪套流程（开发者 `sdlc` / 需求分析师 `reqdoc`），缺省 sdlc；不同角色 = 不同用户，改类型只影响之后的新会话（见 `session-management.md` 3.1）。
-- **人员变动（调组、换邮箱）时重跑 `opencode-sm init` 即可**；身份是「汇报快照」，只影响此后的统计归属，历史不追溯。仅换工作流类型也可用更轻的 `opencode-sm workflow-type set <sdlc|reqdoc>`。
+- **人员变动（换 api_key）时重跑 `opencode-sm init` 即可**；身份是「汇报快照」，只影响此后的统计归属，历史不追溯。
 
 ### 4.3 让 CLI 连上上游 daemon：`OPENCODE_SM_SERVER`（每机器一次）
 
@@ -308,64 +306,32 @@ echo 'export OPENCODE_SM_SERVER=http://127.0.0.1:4096' >> ~/.bashrc && source ~/
 
 ## 5. 第四步：部署 org 收集服务（管理员，每组织一次）
 
-收集服务是一个内网 HTTP 服务，把各开发者机器汇报的会话摘要汇聚成组/组织统计。**只有管理员/运维需要做这一步。**
+收集服务是一个内网 HTTP 服务，把各开发者机器汇报的会话摘要汇聚成组/组织统计。**只有管理员/运维需要做这一步。** 收集服务是**外部独立项目** [`performance_dashboard`](https://github.com/karsonto/performance_dashboard)，不随本仓库分发；其接口契约见 `collector-spec.md`。本仓库已退役 `packages/collector`。
 
-> 收集服务**只在内网可达**——部署后用防火墙把 8787 端口限制为内网可访问，不要暴露到公网（汇报里含账号邮箱，属个人信息）。
+> 收集服务**只在内网可达**——部署后用防火墙把 8787 端口限制为内网可访问，不要暴露到公网（汇报里携带 `api_key` 的 SHA-256 哈希作为身份标识，虽不含明文密钥，仍属内部聚合数据）。
 
-### 5.1 端点一览
+### 5.1 端点一览（performance_dashboard）
 
 | 方法 | 路径 | 谁调用 | 作用 |
 |------|------|--------|------|
-| POST | `/api/report` | 插件 | 接收会话摘要汇报（不含代码） |
+| POST | `/api/report` | 插件 | 接收会话摘要汇报（不含代码，身份以 api_key 哈希标识） |
 | POST | `/api/ci-quality` | CI 流水线 | 按 sessionID 回写 reworkRate/testCoverage |
-| GET | `/api/stats?scope=group&group=前端组` 或 `?scope=org&org=Engineering` | opencode-sm | 组/组织级统计查询 |
+| GET | `/api/stats?scope=group&group=前端组` 或 `?scope=org&org=Engineering` | 收集服务看板 | 组/组织级统计查询（CLI 不直接调用，由看板提供） |
 | GET | `/healthz` | 探活 | 返回 `{ok:true}` |
 
-### 5.2 用 Docker 部署（推荐）
+### 5.2 部署（按外部项目说明）
 
-仓库已备好 [`deploy/docker-compose.collector.yml`](../deploy/docker-compose.collector.yml) 与收集服务的 `Dockerfile`。
-
-```bash
-cd opencode-session-mgmt
-
-# 关键前置：先构建出 dist/collector（Dockerfile 里 COPY 的就是它）
-bun run build:collector
-
-# 构建镜像并后台启动
-docker compose -f deploy/docker-compose.collector.yml up -d --build
-```
-
-数据落在命名卷 `collector-data`（容器内 `/data/collector.db`，Dockerfile 已设 `OPENCODE_SM_COLLECTOR_DB=/data/collector.db`），容器重建不丢数据。
-
-验证：
+参考 [`performance_dashboard`](https://github.com/karsonto/performance_dashboard) 仓库的部署指引（Docker / systemd 均可，默认端口 8787），部署后将其内网地址告知全体成员，作为 `opencode-sm init` 的收集服务地址。验证：
 
 ```bash
 curl http://<服务器内网IP>:8787/healthz
 # 期望输出：{"ok":true}
 ```
 
-### 5.3 不用 Docker，直接用 bun 跑（测试/轻量部署）
+### 5.3 部署完成后，告诉全员
 
-```bash
-bun run build:collector
-# 指定库路径与端口后后台运行（示例用 nohup；生产建议交给 systemd 管理）
-OPENCODE_SM_COLLECTOR_DB=/var/lib/opencode-sm/collector.db PORT=8787 \
-  nohup bun dist/collector/index.js > collector.log 2>&1 &
-```
-
-也可以直接跑源码（免构建，适合临时验证）：`bun packages/collector/src/index.ts`。
-
-**环境变量**：
-
-| 变量 | 默认 | 说明 |
-|------|------|------|
-| `PORT` | `8787` | 监听端口 |
-| `OPENCODE_SM_COLLECTOR_DB` | `./collector.db` | SQLite 库文件路径 |
-
-### 5.4 部署完成后，告诉全员两件事
-
-1. 收集服务地址（如 `http://10.0.1.20:8787`）——填进各自 `opencode-sm init` 的第四问。
-2. 组名/组织名的命名约定——保证大家汇报时写的组名一致，聚合才对得上。
+1. 收集服务地址（如 `http://10.0.1.20:8787`）——填进各自 `opencode-sm init` 的收集服务地址（第二问）。
+2. 组/部门/组织归属由收集服务据 `api_key` 哈希解析，开发者无需也不填写组名；统一由后台配置。
 
 ---
 
@@ -396,12 +362,7 @@ OPENCODE_SM_COLLECTOR_DB=/var/lib/opencode-sm/collector.db PORT=8787 \
 ### 6.2 在 TUI 之外查看（opencode-sm）
 
 ```bash
-opencode-sm workflow <sessionID>                    # 当前工作流状态
-opencode-sm workflow <sessionID> checklist          # 审查清单四项
-opencode-sm workflow <sessionID> comprehension --unconfirmed   # 未确认的理解片段
-opencode-sm workflow <sessionID> stats              # 本会话质量指标
-
-opencode-sm tag <sessionID> --add feature auth      # 打标签
+opencode-sm stats <sessionID>                    # 当前会话工作流状态 + 质量指标 + AI 用量
 opencode-sm list --status review --tag feature      # 按状态/标签过滤会话列表
 ```
 
@@ -412,12 +373,12 @@ opencode-sm list --status review --tag feature      # 按状态/标签过滤会�
 ### 6.3 统计（四级）
 
 ```bash
-opencode-sm stats <sessionID>                 # 会话级：五阶段详情 + 质量指标 + AI 用量
+opencode-sm stats <sessionID>                 # 会话级：五阶段详情 + 质量指标 + AI 用量（含 cost/tokens）
 opencode-sm stats --period 7d                 # 项目级：聚合摘要 + 逐会话明细表（省略 --project 即按当前目录）
 opencode-sm stats --project ~/work/user-service   # 项目级：--project 接【目录路径】（只读打开）
-opencode-sm stats --group "前端组" --period 30d    # 组级：查收集服务
-opencode-sm stats --org --period 30d --json       # 组织级：查收集服务，JSON 输出
 ```
+
+组/组织级聚合由外部收集服务 `performance_dashboard` 看板提供，CLI 不再直查。
 
 数据来源（**按级别分工、多源组合，不是逐级回退**；时序见设计文档 5.2 节）：
 
@@ -425,10 +386,9 @@ opencode-sm stats --org --period 30d --json       # 组织级：查收集服务�
 |------|-----------|-------------|----------|
 | 会话级 `stats <sessionID>` | ✅ 主源：五阶段工作流、质量指标 | ➕ 补 cost/tokens（不可达 → `N/A`） | ❌ 不参与 |
 | 项目级 `stats [--period]` | ✅ 主源（聚合整库） | ➕ 补 cost/tokens（不可达 → `N/A`） | ❌ 不参与 |
-| 组/组织级 `--group` / `--org` | ❌ | ❌ | ✅ 唯一来源：`GET /api/stats` |
+| 组/组织级 | ❌ CLI 不参与 | ❌ | ✅ 由收集服务看板提供（CLI 不直查） |
 
 - 会话级 / 项目级**离线可用**：永远先读本机插件库（第一数据源），daemon 只补费用；daemon 不可达时费用显示 `N/A`（而非误导的 $0）。daemon 地址配置见 4.3 节。
-- 组/组织级只查收集服务，**没有本地回退**：不可达直接报错退出（且需先 `opencode-sm init` 配过身份）。
 
 ---
 
@@ -444,15 +404,14 @@ opencode --version                         # 有版本号
 ls <你的项目>/.opencode/session-mgmt.db
 
 # ③ CLI + 身份
-opencode-sm --help                         # 列出 init/tag/workflow/stats/list
-cat ~/.config/opencode/session-mgmt/identity.json   # 五问结果都在（含 workflowType）
+opencode-sm --help                         # 列出 init/stats/list
+cat ~/.config/opencode/session-mgmt/identity.json   # 两问结果都在（含 workflowType）
 
-# ④ 收集服务（管理员）
+# ④ 收集服务（管理员，外部项目 performance_dashboard）
 curl http://<内网IP>:8787/healthz          # {"ok":true}
 
 # ⑤ 打通汇报链路：在 TUI 里走完一个小会话，稍等（插件启动即推、之后每 5 分钟补推），
-#    然后查组级统计应能看到该会话的账号
-opencode-sm stats --group "前端组" --period 1d
+#    收集服务看板应能看到该会话（按 api_key 哈希归属）
 ```
 
 单元测试（开发/维护者）：
@@ -475,15 +434,15 @@ bun run typecheck    # 四包严格类型检查
 | 统计里费用显示 `N/A` | 上游 daemon 不可达（没在跑 / 未设置 `OPENCODE_SM_SERVER`，见 4.3 节），或该会话没有 usage 数据。工作流/质量数据不受影响，仍读本机库。 |
 | `opencode-sm list` 标题显示「(无标题)」 | 该会话从未在插件运行期间被同步过标题（如旧库、或会话未在本机活动过）。插件在启动后回填与 `chat.message` 时经 SDK 同步标题；用 OpenCode 打开本项目跑一次即可补上，或按 4.3 节配置 `OPENCODE_SM_SERVER` 实时取。daemon 不可达时标题用插件库存量值，不报错。 |
 | TUI 开着时再开 `opencode serve` 会有影响吗 | 没有。端口不冲突（默认 TUI 不监听网络端口），两者共享磁盘上的会话数据与插件库（WAL），插件双份加载但汇报按会话幂等合并，不脏数据；只是多一个常驻进程。注意 serve 要在项目目录里启动（见 4.3 节）。 |
-| 组/组织统计报错，但本机数据都在 | 组/组织级只查收集服务、无本地回退（见 6.3 节数据来源表）。检查收集服务是否在跑、`identity.json` 的 `collector_url` 与组名是否正确。 |
-| 组/组织统计报错或为空 | 收集服务不可达，或 `identity.json` 里 `collector_url` 写错、组名与别人不一致。先 `curl {collector_url}/healthz`。 |
-| 收集端统计不到（会话走完了还是 sessions=0，本机库却正常） | 汇报被**静默跳过**：`readIdentity()` 要求 `identity.json` 四字段（account/group/org/collector_url）全为非空，任一缺失/为空即返回 null，`flushOutbox()` 见 null 直接 `return 0`（不报错、不补推）。**先查 `~/.config/opencode/session-mgmt/identity.json` 四字段是否齐全**——手工编辑漏写 `org` 是最常见根因；补全后重启插件（或等 5 分钟定时 flush），积压汇报自动补推，收集端数据立即补齐。 |
+| 收集服务看板的组/组织统计报错，但本机数据都在 | CLI 不再直查组/组织级；看板数据由收集服务 `performance_dashboard` 据 api_key 哈希解析提供。检查收集服务是否在跑、`identity.json` 的 `collector_url` 是否正确。 |
+| 收集服务看板报错或为空 | 收集服务不可达，或 `identity.json` 里 `collector_url` 写错。先 `curl {collector_url}/healthz`。 |
+| 收集端统计不到（会话走完了还是 sessions=0，本机库却正常） | 汇报被**静默跳过**：`readIdentity()` 要求 `identity.json` 的 `apiKey` 与 `collector_url` 非空，任一缺失/为空即返回 null，`flushOutbox()` 见 null 直接 `return 0`（不报错、不补推）。**先查 `~/.config/opencode/session-mgmt/identity.json` 的两个必填字段 `apiKey` / `collector_url` 是否齐全**——补全后重启插件（或等 5 分钟定时 flush），积压汇报自动补推，收集端数据立即补齐。 |
 | 收集服务挂了会丢数据吗 | 不会。插件在本地缓冲未送达的汇报（同一会话只留最新一条），服务恢复后自动补推。 |
 | 改了 `opencode-sm init` 后历史统计没变 | 正常。身份是**汇报快照**，只影响此后的汇报，历史归属不追溯。 |
-| 先用了插件（已建库/走过会话）才跑 `init` | 不会出错。身份只用于 **account 打标**与**向收集服务汇报**，建库、五阶段门禁、理解确认、会话/项目级统计都与身份无关；无身份时打标静默跳过、不产生汇报。补配 `init` 后：本地数据全在；`account` 会在该会话**下次活动时自动补打**（仅当原为空）；但 `init` 之前已结束、此后再没活动的会话不补汇报、不进组/组织统计。建议次序仍是先 `init` 再用。 |
+| 先用了插件（已建库/走过会话）才跑 `init` | 不会出错。身份只用于 **api_key 标识**与**向收集服务汇报**，建库、五阶段门禁、理解确认、会话/项目级统计都与身份无关；无身份时汇报静默跳过。补配 `init` 后：本地数据全在；`api_key` 哈希会在该会话下次活动时随汇报带出（仅当原为空）；但 `init` 之前已结束、此后再没活动的会话不补汇报、不进组/组织统计。建议次序仍是先 `init` 再用。 |
 | 想彻底还原成原生 OpenCode | 删掉 `opencode.json` 里的 `plugin` 条目即可；本项目数据都在插件自有库与收集服务，不碰上游任何数据。 |
-| 收集服务端口/库路径要改 | 见 5.3 节 环境变量 `PORT` / `OPENCODE_SM_COLLECTOR_DB`。 |
-| 会话能改名吗 | 不能。上游无标题更新 API，标题自动生成；用标签（`opencode-sm tag`）和会话 ID 来辨认。 |
+| 收集服务端口/库路径要改 | 收集服务为外部项目 `performance_dashboard`，端口/库路径配置见其仓库。 |
+| 会话能改名吗 | 不能。上游无标题更新 API，标题自动生成；用会话 ID 来辨认（标签功能已随 CLI 精简移除，状态仍存插件库）。 |
 | 桌面版 / IDE 扩展能用吗 | 能。插件跑在服务端、与界面无关，TUI 能用的都生效；前提是用同一份 `opencode.json` 连到配了插件的服务端。详见 3.4 节。 |
 | Windows 打包/移动目录后插件加载失败（`Cannot find package 'zod'` 等） | bun 默认 `isolated` 模式在 Windows 上使用硬链接引用全局缓存中的包文件，打包（tar/zip）或移动目录后硬链接断裂。**修复**：确保根目录有 `.npmrc`（内容 `node-linker=hoisted`），然后删除旧依赖重装：`rm -rf node_modules packages/*/node_modules && bun install`。之后重新打包即可。**预防**：打包前运行 `bun run pack:bundle`，脚本会自动完成清理→重装→打包（见 9.2 节）。 |
 
@@ -501,8 +460,7 @@ bun run typecheck    # 四包严格类型检查
 1. 装 bun、拉本仓库、bun install
 2. 下载 OpenCode 安装包/二进制  ──────►  拷入并安装到每台开发机
 3. bun run pack:bundle 出整包便携包 ──►  拷入开发机，解压即用（9.2 节）
-4. 构建 dist/opencode-sm、dist/collector
-   及收集服务 docker 镜像        ──────►  拷入：CLI 二进制分发；镜像 docker load 起收集服务
+4. 构建 dist/opencode-sm（CLI 二进制分发）；收集服务为外部项目 performance_dashboard，按其一并搬运部署
 5. 内网自建模型网关（vLLM/Ollama 等）──►  OpenCode 指向它（9.3 节）
 ```
 
@@ -570,7 +528,7 @@ setup.cmd seed D:\你的项目  # 每个要用插件的项目各跑一次：种�
 
 > Windows 注意：JSON 里路径用正斜杠 `/`（上面示例即如此），无需处理反斜杠转义。
 
-最后每台机跑一次 `opencode-sm init` 配身份（五问，见 4.2 节）。
+最后每台机跑一次 `opencode-sm init` 配身份（两问 + 可选工作流类型，见 4.2 节）。
 
 **「解压即用」的四个要点**（少一个就会装上却跑不起来）：
 
@@ -613,17 +571,11 @@ setup.cmd seed D:\你的项目  # 每个要用插件的项目各跑一次：种�
 # CLI 推荐打成 npm 安装包（内网逐机 npm install -g 即可，目标机无需 node/bun）
 bun run pack:cli           # → dist/opencode-sm-<版本>-<平台>.tgz（按内网平台打，多平台见 4.1 节）
 # 或仅出裸二进制：bun run build:cli → dist/opencode-sm（单文件，目标机无需 bun）
-bun run build:collector    # → dist/collector/
-
-# 收集服务做成镜像后离线搬运：
-docker compose -f deploy/docker-compose.collector.yml build
-docker save opencode-sm-collector -o collector-image.tar
-# 内网服务器： docker load -i collector-image.tar
-#             docker compose -f deploy/docker-compose.collector.yml up -d
 ```
 
-> docker 基础镜像 `oven/bun:1` 也需在联网区 `docker pull` 后 `docker save` 一并带入，否则内网 `docker build` 拉不到基础镜像。
-> 不想用 docker：把 `dist/collector/` 和一个 bun 运行时拷进内网服务器，按 5.3 节 直接 `bun dist/collector/index.js` 跑。
+收集服务为外部项目 `performance_dashboard`，按其一并搬运部署到内网服务器（详见其仓库）。
+
+> 不想用 docker：收集服务按 `performance_dashboard` 仓库说明，拷入内网服务器运行。
 
 ### 9.5 内网下的身份与汇报
 
@@ -659,20 +611,18 @@ docker save opencode-sm-collector -o collector-image.tar
    > 模型网关字段名以所用 OpenCode 版本的 provider schema 为准（见 9.3 节）；缺了 provider 配置，OpenCode 启动后找不到可用模型，无法对话。
    > **内网机配好后，务必对每个项目在会话管理 bundle 解压目录跑一次 `setup.cmd seed <项目目录>`**（自动种全局 + 该项目，见 9.2 节第 2 步），否则每次启动会联网装插件 SDK、内网无网卡 1-2 分钟。
 
-3. **每台机配一次身份**：`.\opencode-sm.cmd init`（五问，见 4.2 节）。**「收集服务地址」填组织已部署的内网收集服务地址**（如 `http://【收集器地址】:8088`），**绝不填公网地址**。
-   > ⚠ init 后顺手核对四字段齐全：`C:\Users\<你>\.config\opencode\session-mgmt\identity.json` 须含 account / group / org / collector_url 四个非空值。缺任一（手工编辑漏写 `org` 最常见）汇报会被**静默丢弃**，收集端 sessions 恒为 0（见第 8 章排查项）。例如一个合法的身份文件长这样：
+3. **每台机配一次身份**：`.\opencode-sm.cmd init`（两问 + 可选工作流类型，见 4.2 节）。**「收集服务地址」填组织已部署的内网收集服务地址**（如 `http://【收集器地址】:8088`），**绝不填公网地址**。
+   > ⚠ init 后顺手核对两个必填字段齐全：`C:\Users\<你>\.config\opencode\session-mgmt\identity.json` 须含 `apiKey` / `collector_url` 两个非空值。缺任一汇报会被**静默丢弃**，收集端 sessions 恒为 0（见第 8 章排查项）。例如一个合法的身份文件长这样：
    >
    > ```json
    > {
-   >   "account": "alice@example.com",
-   >   "group": "AMS",
-   >   "org": "FTD",
+   >   "apiKey": "<明文本机存储，发送前转 SHA-256 哈希>",
    >   "collector_url": "http://【收集器地址】:8088",
    >   "workflowType": "sdlc"
    > }
    > ```
    >
-   > 其中 `workflowType` 为第五字段（缺省 sdlc，`init` 五问会写入）；缺失 `org` 时 `readIdentity()` 校验直接判 null、汇报静默丢弃。
+   > 其中 `workflowType` 为可选字段（缺省 sdlc，`init` 会写入）；缺失 `apiKey` 或 `collector_url` 时 `readIdentity()` 校验直接判 null、汇报静默丢弃。
 
 4. **（可选）把工具根目录加入系统 PATH**：`D:\Tools\node-v22.23.2-win-x64` 进 PATH 后，任意目录可直接 `opencode` / `opencode-sm` / `bun` / `npm`，不用敲 `.\xxx.cmd`。
 
@@ -681,11 +631,7 @@ docker save opencode-sm-collector -o collector-image.tar
    cd <你的项目目录>
    D:\Tools\node-v22.23.2-win-x64\opencode
    ```
-   进 TUI 让 AI 报工作流状态，应回显五阶段；走完一个小会话，等插件推送（启动即推 + 每 5 分钟补推）后查组统计：
-   ```powershell
-   .\opencode-sm.cmd stats --group <你的组名> --period 1d
-   ```
-   应看到该会话的账号与统计（收集端视角见 6.3 节数据来源表）。
+    进 TUI 让 AI 报工作流状态，应回显五阶段；走完一个小会话，等插件推送（启动即推 + 每 5 分钟补推）后，在收集服务看板（performance_dashboard）应能看到该会话（按 api_key 哈希归属）。
 
 > ⚠ **qwen3.6-27b 经 vLLM 服务的已知坑**（已实证）：opencode 一提问即报 `System message must be at the beginning`（HTTP 400）。根因两层——① 模型自带 `chat_template` 里有硬抛 `raise_exception('System message must be at the beginning.')`，而 opencode 会发出第二条 system 消息；② vLLM 加载 tokenizer 时**不读**模型目录里被替换过的 `tokenizer_config.json`，只改文件无效。**处理**：用修复版模板（仓库 [`docs/qwen3.6-27b.chat-template.jinja`](qwen3.6-27b.chat-template.jinja)，已去掉两处硬抛），在 vLLM 启动时**显式指定**：
 >
@@ -720,7 +666,6 @@ docker save opencode-sm-collector -o collector-image.tar
 | `bun run build:plugin` | `dist/plugin/`（插件编译为 JS，屏蔽目标机 bun 版本差异） |
 | `bun run build:cli` | `dist/opencode-sm`（单文件二进制） |
 | `bun run pack:cli` | `dist/opencode-sm-<版本>-<平台>.tgz`（可 `npm install -g` 的安装包；`bash scripts/pack-cli.sh <平台>` 交叉编译多平台） |
-| `bun run build:collector` | `dist/collector/`（供 Dockerfile COPY） |
 | `bun run pack:bundle` | `dist/opencode-sm-bundle-<版本>.tgz`（整包便携 tarball，内网/离线分发，见 9.2 节） |
 
 **进一步阅读**：设计原理 [`session-management.md`](session-management.md)；上游同步流程 [`upstream-sync.md`](upstream-sync.md)。

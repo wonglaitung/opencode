@@ -1,13 +1,12 @@
 /**
  * 数据源封装（设计文档 session-management.md 4.2、5.2）。
  * 1. 上游 opencode SDK：session.list/messages（cost/tokens）——连运行中的 daemon
- * 2. 收集服务查询客户端：GET {collector_url}/api/stats（组/组织级统计）
- * 3. 本机插件库访问（复用 sm-plugin 的 Store，bun:sqlite）
+ * 2. 本机插件库访问（复用 sm-plugin 的 Store，bun:sqlite）
  */
 import { createOpencodeClient, type Session } from "@opencode-ai/sdk"
 import { Store } from "sm-plugin/src/db"
 import type { Usage } from "sm-plugin/src/report"
-import { readIdentity, resolveWorkflowType, type Identity } from "sm-shared"
+import { readIdentity, resolveWorkflowType } from "sm-shared"
 
 export type OpencodeClient = ReturnType<typeof createOpencodeClient>
 
@@ -70,32 +69,4 @@ export async function fetchSessions(client: OpencodeClient | null): Promise<Sess
   } catch {
     return []
   }
-}
-
-export interface CollectorStatsQuery {
-  scope: "group" | "org"
-  group?: string
-  org?: string
-  period?: string
-  /** 按工作流类型分区过滤（6 分区管道）；未传则全部类型 */
-  workflowType?: string
-}
-
-/** 查询 org 收集服务的组/组织级统计（5.2 alt 分支二）。 */
-export async function collectorQuery(
-  identity: Identity,
-  query: CollectorStatsQuery,
-): Promise<unknown> {
-  const params = new URLSearchParams()
-  params.set("scope", query.scope)
-  if (query.group) params.set("group", query.group)
-  if (query.org) params.set("org", query.org)
-  if (query.period) params.set("period", query.period)
-  if (query.workflowType) params.set("workflowType", query.workflowType)
-  const base = identity.collector_url.replace(/\/$/, "")
-  const res = await fetch(`${base}/api/stats?${params.toString()}`)
-  if (!res.ok) {
-    throw new Error(`收集服务查询失败：HTTP ${res.status}`)
-  }
-  return (await res.json()) as unknown
 }

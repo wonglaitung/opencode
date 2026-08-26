@@ -15,21 +15,21 @@
 
 > **v1.1（2026-08-07）**：新增**基线预估人工工时与 AI 提效百分比**——汇报侧 `workflow.baseline` 可选字段，查询侧 `avgEfficiency` / `baselineSessions` / `trends.efficiency`。全部为可选字段，旧插件↔新服务、新插件↔旧服务两种组合均须容忍（见 11.2）。
 
-本文档定义「OpenCode 会话管理 — org 收集服务」的**接口契约、数据语义与非功能要求**，供其他团队据此实现后端服务并整合到公司网关。实现方可自由选择技术栈与内部架构，只要对外契约与本规格书一致、统计语义可复现相同结果，即为合格交付。
+本文档定义「OpenCode 会话管理 — 后台收集服务」的**接口契约、数据语义与非功能要求**。后台收集器（collector）现作为**外部独立项目**维护：[`performance_dashboard`](https://github.com/karsonto/performance_dashboard)（即本规格书的参考实现与部署载体），不随 `opencode-session-mgmt` 仓库分发。其他团队据此实现后端服务并整合到公司网关时，对外契约须与本规格书一致、统计语义可复现相同结果，即为合格交付。
 
 ---
 
 ## 1. 背景与定位
 
-OpenCode 会话管理方案以「插件 + 独立 CLI + org 收集服务」三件套形态，为团队提供标准化开发流程（五阶段门禁）、理解保障（代码片段评审）与效能分析（Token ROI、质量指标）。完整方案见同目录 `session-management.md`。
+OpenCode 会话管理方案以「插件 + 独立 CLI + 外部收集服务」三件套形态，为团队提供标准化开发流程（五阶段门禁）、理解保障（代码片段评审）与效能分析（Token ROI、质量指标）。完整方案见同目录 `session-management.md`。
 
-**收集服务是唯一需要跨机器汇聚数据的后端组件**，承担三个职责：
+**收集服务是唯一需要跨机器汇聚数据的后端组件**（外部项目 `performance_dashboard`），承担三个职责：
 
 | 职责 | 方向 | 调用方 |
 |------|------|--------|
 | 接收会话摘要汇报 | 写入 | 各开发者机器上的插件（我们提供，已实现） |
 | 接收 CI 质量回写 | 写入 | CI 流水线（各业务团队接入） |
-| 提供组/组织级统计查询 | 读取 | `opencode-sm` CLI（我们提供，已实现） |
+| 提供组/组织级统计查询 | 读取 | 外部后台看板 / `opencode-sm` CLI（CLI 现仅做本机会话/项目级聚合，组/组织级由收集服务自身提供） |
 
 本规格书从 `session-management.md` 第 2.4、3.1、4.3、9、11 章提炼，是收集服务的**唯一接口契约**。我方三端（插件、CLI）已按此契约实现并通过测试，接收集服务的团队无需接触我方代码即可独立开发与联调。
 
@@ -70,7 +70,7 @@ flowchart LR
 
 - **插件（汇报方）**：每台开发者机器上运行。在会话阶段事件触发 + 定时增量汇报。**收集服务不可用时插件本地缓冲、恢复后按顺序补推**（见 `session-management.md` 2.4「收集服务不可用」）。因此收集服务必须**按 sessionID 幂等 upsert**，对重复投递安全。
 - **CI 流水线（回写方）**：会话代码合并后，CI 按 sessionID 回写 `reworkRate` / `testCoverage`（如 SonarQube 覆盖率、Bug/返工检测）。
-- **opencode-sm CLI（查询方）**：组/组织级统计查收集服务；会话/项目级统计直读本机插件库，不经过收集服务。
+- **opencode-sm CLI（查询方）**：仅做本机会话/项目级聚合（直读本机插件库 + 上游 SDK 的 cost/tokens），**不再直查收集服务的组/组织级接口**；组/组织级聚合由收集服务自身对外提供（外部看板使用）。
 
 ### 2.2 两条质量通道在聚合库合并、互不覆盖
 
@@ -81,13 +81,13 @@ flowchart LR
 
 同一会话的两类指标由收集服务按 `sessionID` 合并。**插件汇报不得覆盖 CI 已写入的 rework/testCoverage，CI 回写也不得覆盖汇报字段**（实现见 6 节 upsert 语义）。
 
-### 2.3 身份语义（自报快照，与网关无关）
+### 2.3 身份语义（api_key 哈希，由收集端解析归属）
 
-- 开发者的 `account`（账号邮箱）/ `group`（组名）/ `org`（组织名）由开发者本机 `opencode-sm init` 五问**手动自报**（另含 `workflowType` 工作流类型，缺省 sdlc），随每条汇报携带为**快照**（见 `session-management.md` 3.1）。
-- 组是**名称字符串**，无 ID、无注册表；子组用命名约定（如 `前端组/基础架构组`）。组织结构由各人汇报在聚合库中 `GROUP BY group_name` / `org_name` 自然形成。
-- 快照语义：开发者调整身份后，只影响此后的汇报，**历史数据归属不追溯变更**。
+- 开发者在本机 `opencode-sm init` 只填写两样：`api_key`（明文仅存本机 `identity.json`）与 `collector_url`（另含可选 `workflowType`，缺省 sdlc）。插件上送前将 `api_key` 经 **SHA-256 转十六进制哈希**，网络链路不出现明文密钥（见 `session-management.md` 3.1、12 章）。
+- 每条汇报携带 `apiKey`（SHA-256 hex）作为身份标识，**不再携带 account/group/org**。组名、部门、组织等归属由**收集服务据 api_key 哈希解析**后落库（外部项目 `performance_dashboard` 负责映射），客户端不知晓、也不自报这些字段。
+- 快照语义保留：开发者更换 `api_key` 后只影响此后的汇报，**历史数据归属不追溯变更**。
 
-> **⚠ 对网关集成团队的关键约束**：`account/group/org` 是客户端自报字段，**网关鉴权得出的身份不得覆盖或改写它们**。不要用网关 SSO 主体替换 `account`，也不要用网关路由前缀推导 `group`/`org`。收集服务必须原样信任汇报 payload 中的身份字段。
+> **⚠ 对收集服务的约束**：`apiKey` 是 SHA-256 哈希，服务端据此做身份解析与去重；网关鉴权与 TLS 在传输层保护汇报，但**不得用网关 SSO 主体替换或改写 `apiKey`**。收集服务必须原样信任 payload 中的 `apiKey` 字段。具体归属映射（api_key → 组/部门/组织）是收集端内部实现，本规格书不规定。
 
 ---
 
@@ -178,9 +178,7 @@ flowchart LR
 ```json
 {
   "sessionID": "sess_abc123",
-  "account": "alice@example.com",
-  "group": "前端组",
-  "org": "Engineering",
+  "apiKey": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
   "workflow": {
     "type": "sdlc",
     "stages": {
@@ -257,9 +255,7 @@ flowchart LR
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `sessionID` | string | 是 | 上游会话 ID，聚合库主键 |
-| `account` | string | 是 | 开发者账号邮箱（init 自报快照） |
-| `group` | string | 是 | 组名（名称字符串，子组用 `前端组/基础架构组` 命名约定） |
-| `org` | string | 是 | 组织名 |
+| `apiKey` | string | 是 | `api_key` 的 SHA-256（hex）哈希；身份标识，网络不传明文密钥（见 2.3） |
 | `workflow.type` | `"sdlc" \| "reqdoc"` | 否 | 工作流类型（sdlc 开发 / reqdoc 需求书）。缺省按 sdlc 处理（旧插件兼容） |
 | `workflow.stages.*.status` | `"not_started" \| "in_progress" \| "approved"` | 是 | 阶段状态。两类型均为五阶段，键随 `workflow.type` 的定义：sdlc 为 `requirements`/`design`/`implementation`/`testing`/`review`，reqdoc 为 `goal`/`rules`/`edge`/`prd`/`review` |
 | `workflow.stages.*.revision` | number | 是 | 阶段回退次数（需求质量信号） |
@@ -279,11 +275,11 @@ flowchart LR
 | `tokensInput` / `tokensOutput` | number \| null | 是 | Token 数 |
 | `reportedAt` | number | 是 | 汇报时间（插件本机时钟，epoch ms） |
 
-**校验规则**：`sessionID`、`account`、`group`、`org` 必须为非空字符串；`workflow` 必须为对象。其余字段缺省容忍（如 `cost: null`、旧版本可能缺 `lines`）。校验不通过返回 `400 {"error": "非法的汇报 payload"}`。
+**校验规则**：`sessionID`、`apiKey` 必须为非空字符串；`workflow` 必须为对象。其余字段缺省容忍（如 `cost: null`、旧版本可能缺 `lines`）。校验不通过返回 `400 {"error": "非法的汇报 payload"}`。
 
 **响应**：`200 {"ok": true}`。
 
-**upsert 语义**（写入时）：以 `sessionID` 为主键，**覆盖快照字段**（account/group/org/workflow/cost/tokens/reportedAt）；**不得触碰该会话已由 CI 写入的 `reworkRate`/`testCoverage`**（见 6 节）。
+**upsert 语义**（写入时）：以 `sessionID` 为主键，**覆盖快照字段**（apiKey/workflow/cost/tokens/reportedAt）；**不得触碰该会话已由 CI 写入的 `reworkRate`/`testCoverage`**（见 6 节）。
 
 ### 5.2 `POST /api/ci-quality` — CI 质量回写
 
@@ -350,7 +346,7 @@ flowchart LR
   },
   "perAccount": [
     {
-      "account": "alice@example.com",
+      "apiKey": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
       "sessions": 12,
       "completed": 11,
       "completionRate": 0.92,
@@ -387,11 +383,9 @@ flowchart LR
 
 ```sql
 CREATE TABLE reports (
-  session_id   TEXT PRIMARY KEY,   -- 上游会话 ID
-  account      TEXT,               -- 身份快照（init 自报）
-  group_name   TEXT,               -- 组名快照
-  org_name     TEXT,               -- 组织名快照
-  workflow_type TEXT,              -- 工作流类型（分区管道，6.4）；NULL=旧汇报按 sdlc
+  session_id    TEXT PRIMARY KEY,   -- 上游会话 ID
+  api_key_hash TEXT,               -- 身份标识：api_key 的 SHA-256 哈希（见 2.3）
+  workflow_type TEXT,               -- 工作流类型（分区管道，6.4）；NULL=旧汇报按 sdlc
   workflow     TEXT,               -- SessionReport.workflow 的 JSON 原样
   cost         REAL,               -- 会话费用；NULL=未知
   tokens_input INTEGER,            -- 输入 Token
@@ -401,14 +395,13 @@ CREATE TABLE reports (
   reported_at  INTEGER             -- 客户端汇报时间戳
 );
 
-CREATE INDEX idx_reports_group ON reports(group_name);
-CREATE INDEX idx_reports_org  ON reports(org_name);
+CREATE INDEX idx_reports_apikey ON reports(api_key_hash);
 CREATE INDEX idx_reports_type ON reports(workflow_type);
 ```
 
 ### 6.1 写入合并语义
 
-- **`upsertReport`**（对应 5.1）：`INSERT ... ON CONFLICT(session_id) DO UPDATE` 更新 `account/group_name/org_name/workflow/cost/tokens_*/reported_at`，**不更新** `rework_rate/test_coverage`（保证 CI 指标不被汇报覆盖）。
+- **`upsertReport`**（对应 5.1）：`INSERT ... ON CONFLICT(session_id) DO UPDATE` 更新 `api_key_hash/workflow/cost/tokens_*/reported_at`，**不更新** `rework_rate/test_coverage`（保证 CI 指标不被汇报覆盖）。
 - **`applyCiQuality`**（对应 5.2）：`INSERT ... ON CONFLICT(session_id) DO UPDATE`，仅 `COALESCE(excluded.rework_rate, reports.rework_rate)`、`COALESCE(excluded.test_coverage, reports.test_coverage)`（部分更新，未提供的字段保留原值；会话不存在时先建占位行）。
 
 ### 6.2 存储建议
@@ -430,7 +423,7 @@ CREATE INDEX idx_reports_type ON reports(workflow_type);
 | 范围 | `scope=group` → `group_name = <group>`；`scope=org` → `org_name = <org>` |
 | workflow_type 过滤 | 指定 `workflowType` 时：`workflow_type = <type>`（旧汇报 `workflow_type` 为 NULL 视为 sdlc）；缺省不过滤。**分区口径**：`firstPassRate`/`iterationCount` 为通用指标，两类型均计算；**sdlc 专属指标（lines 行数三分类/rework 返工率/coverage 覆盖率）仅当 `workflow.type==="sdlc"` 时计算，否则为 null**（分区管道，见 `session-management.md` 6.4） |
 | period 过滤 | 指定 `period=Nd` 时：`since = now − N×86400000`，仅保留 `reported_at IS NULL OR reported_at >= since`；缺省则全部 |
-| members | 范围内**去重 `account`** 数（`account` 为 NULL 计为 `"(unknown)"`） |
+| members | 范围内**去重 `apiKey`（哈希）** 数（哈希为 NULL 计为 1 个，参与统计） |
 | sessions | 范围内汇报行数 |
 
 ### 7.2 顶层指标
@@ -465,9 +458,9 @@ CREATE INDEX idx_reports_type ON reports(workflow_type);
 
 ### 7.4 perAccount（成员行）
 
-按 `account` 分组，**按 `sessions` 降序**返回。
+按 `apiKey`（哈希）分组，**按 `sessions` 降序**返回。
 
-**必含字段（契约最小集，10 项）**：`account`、`sessions`、`completed`、`completionRate`、`cost`、`avgFirstPassRate`、`avgTestCoverage`、`avgDurationMs`、`lowFirstPassCount`、`highIterationCount`——口径均以该成员名下会话计（`cost` 为该成员 Σ cost）。CLI 对成员仅做排行与低一次通过率/覆盖率标注。
+**必含字段（契约最小集，10 项）**：`apiKey`、`sessions`、`completed`、`completionRate`、`cost`、`avgFirstPassRate`、`avgTestCoverage`、`avgDurationMs`、`lowFirstPassCount`、`highIterationCount`——口径均以该成员名下会话计（`cost` 为该成员 Σ cost；归属（组/部门）由收集端据 apiKey 哈希解析，不在契约字段内）。**成员行不包含顶层聚合指标**：`linesTotal`、`hasLinesData`、`avgEfficiency`、`baselineSessions`、`trends.*` 仅存在于整组/整组织聚合，不加入成员行（契约保持最小）。
 
 **可选扩展字段（下钻展示用，客户端须容忍并忽略未知字段）**：实现方可按需附加成员级下钻指标，量纲与顶层同名指标一致，例如：
 - `tokensInput` / `tokensOutput`：该成员 Σ Token（汇报侧）；
@@ -485,9 +478,9 @@ CREATE INDEX idx_reports_type ON reports(workflow_type);
 
 ## 8. 隐私与安全
 
-- **不含代码**：payload 中无任何代码内容、无文件路径、无理解确认正文。插件侧已由 `summarizeWorkflow` 剥离（`session-management.md` 第 11 章）。收集服务**不应在日志中记录请求体**（含账号邮箱等个人信息）；如需排障，仅记录 `sessionID` + 状态码。
-- **账号邮箱属个人信息**：收集服务应仅内网可达（或经网关鉴权），最小化留存，访问权限限于组/组织管理者。
-- **身份信任边界**：身份字段为客户端自报快照，服务端不校验其真实性（防绕过不是目标，统计口径的稳定性优先）；网关不得用自有鉴权身份改写。
+- **不含代码**：payload 中无任何代码内容、无文件路径、无理解确认正文。插件侧已由 `summarizeWorkflow` 剥离（`session-management.md` 第 11 章）。收集服务**不应在日志中记录请求体**（含 `apiKey` 哈希等身份标识）；如需排障，仅记录 `sessionID` + 状态码。
+- **`apiKey` 哈希为身份标识**：收集服务应仅内网可达（或经网关鉴权），最小化留存，访问权限限于组/组织管理者。哈希本身不可逆，但应视同个人信息保护。
+- **身份信任边界**：`apiKey` 为客户端上报的哈希，服务端据其解析归属（组/部门/组织由收集端映射，本规格书不规定）；服务端不校验其真实性（统计口径稳定性优先），网关不得用自有鉴权身份改写。
 - **汇报可关闭**：开发者可不配置 `collector_url`，退化为仅本机统计；收集服务对缺失汇报保持静默，不产生副作用。
 
 ---
@@ -528,7 +521,7 @@ BASE=https://<gateway>/api
 | 10 | 对未鉴权请求访问 `/api/*` | 网关返回 `401/403` |
 | 11 | 模拟上游 5xx（网关临时断开后端）时 `POST /api/report` | 网关不得返回 2xx/4xx 吞掉故障（应 502/504 透传） |
 
-**数值等价性**：用例 4–6 的聚合数值须与我方参考实现 `packages/collector`（见 11 节）对同一批输入的结果一致（误差 ≤ 浮点舍入）。
+**数值等价性**：用例 4–6 的聚合数值须与参考实现 `performance_dashboard`（见 11.1 节）对同一批输入的结果一致（误差 ≤ 浮点舍入）。
 
 ---
 
@@ -536,7 +529,7 @@ BASE=https://<gateway>/api
 
 ### 11.1 参考实现
 
-我方仓库 `opencode-session-mgmt/packages/collector/` 提供一份**最小参考实现**（Bun + `bun:sqlite`，零外部依赖），当前用于我方三端联调。其行为即为本规格书的可执行解释。实现方可将其作为契约测试基准，也可完全重写（任何语言/框架），只要对外契约、聚合公式与 upsert 语义一致。涉及的全部本地代码见 11.2 清单。
+后台收集服务的参考实现作为**外部独立项目**维护：[`performance_dashboard`](https://github.com/karsonto/performance_dashboard)（Go/Netty 后端，组织内网部署）。其行为即为本规格书的可执行解释，是契约测试基准；实现方可直接使用，也可完全重写（任何语言/框架），只要对外契约、聚合公式与 upsert 语义一致。`opencode-session-mgmt` 本仓库**不再包含收集服务代码**（已退役 `packages/collector`），仅保留插件、CLI 与契约层。涉及的全部本仓库代码见 11.2 清单。
 
 外部收集服务 `llm-gateway`（见 1 章链接）是另一份完整实现（Java），其端点、upsert 合并与聚合口径与本文一致；其成员行按 7.4「可选扩展字段」附带个人级提效/行数下钻，是本规格书 v1.2.2 放宽约束的现实依据。
 
@@ -544,14 +537,9 @@ BASE=https://<gateway>/api
 
 与本规格书相关的本仓库代码按角色分组如下，供联调与契约核对时定位。`sm-shared` 契约类型是插件、CLI、收集服务三方的**唯一事实来源**，字段变更须三包同步；对收集服务实现方而言，下列客户端代码均为只读参考，无需改动。
 
-**① 收集服务参考实现**（本规格书标的，`packages/collector/`）：
+**① 收集服务参考实现**（本规格书标的，外部项目 [`performance_dashboard`](https://github.com/karsonto/performance_dashboard)）：
 
-| 文件 | 行数 | 对应契约 |
-|------|------|----------|
-| `packages/collector/src/index.ts` | 95 | HTTP 端点路由、参数解析、payload 校验、状态码纪律（第 3、4、5 章） |
-| `packages/collector/src/db.ts` | 369 | `reports` 表 DDL、`upsertReport`/`applyCiQuality` 合并、`statsGroup`/`statsOrg` 聚合（第 6、7 章；含基线提效聚合 6.3） |
-| `packages/collector/test/db.test.ts` | 266 | upsert 合并与聚合数值测试（10 节数值等价性的可执行基准；含基线提效均值与趋势用例） |
-| `packages/collector/Dockerfile` | 7 | 容器镜像构建（`oven/bun:1` 基底、COPY `dist/collector`，离线搬运见部署手册 9.4 节） |
+> `opencode-session-mgmt` 本仓库**不再包含收集服务代码**（`packages/collector` 已退役）。聚合库 DDL / upsert 合并 / 聚合公式的可执行基准以外部项目为准；本规格书第 6、7 章即其契约依据。
 
 **② 契约层**（三包共用，`packages/shared/`）：
 
@@ -561,33 +549,31 @@ BASE=https://<gateway>/api
 | `packages/shared/src/workflow.ts` | 153 | `WorkflowState` 全量类型及子结构（5.1 `workflow` 字段基础） |
 | `packages/shared/src/loc.ts` | 149 | AI 行数三分类 `LinesCategory` 与分类汇总（5.1 `workflow.quality.lines`、7.2 `linesTotal`） |
 | `packages/shared/src/merge.ts` | 50 | `deepMerge` 增量合并：Agent 指标与 CI 指标互不覆盖（6.1） |
-| `packages/shared/src/identity.ts` | 76 | `identity.json` 类型与读写：`account`/`group`/`org`/`collector_url`/`workflowType`（2.3、3.1） |
+| `packages/shared/src/identity.ts` | 76 | `identity.json` 类型与读写：`apiKey`/`collector_url`/`workflowType`（2.3、3.1）；`hashApiKey` 计算 SHA-256 |
 | `packages/shared/src/index.ts` | 5 | barrel 导出 |
 
 **③ 汇报方：插件**（`POST /api/report` 客户端，`packages/plugin/`）：
 
 | 文件 | 行数 | 对应契约 |
 |------|------|----------|
-| `packages/plugin/src/report.ts` | 93 | 汇报组装 `buildReport` + outbox 补推 `flushOutbox`（3.2 状态码纪律的客户端依据） |
+| `packages/plugin/src/report.ts` | 93 | 汇报组装 `buildReport`（写入 `apiKey` 哈希）+ outbox 补推 `flushOutbox`（3.2 状态码纪律的客户端依据） |
 | `packages/plugin/src/db/schema.ts` | 65 | 插件库表定义（含 `outbox` 汇报缓冲表） |
 | `packages/plugin/src/db/index.ts` | 185 | `Store`：工作流状态读写 + outbox 入队/待发/删除 |
 
-**④ 查询方：CLI**（`GET /api/stats` 客户端，`packages/cli/`）：
+**④ 查询方：CLI**（本机聚合，`packages/cli/`）：
 
-| 文件 | 行数 | 对应契约 |
-|------|------|----------|
-| `packages/cli/src/api.ts` | 97 | `collectorQuery`：拼接 `{collector_url}/api/stats` 查询（5.3） |
-| `packages/cli/src/commands/stats.ts` | 370 | `opencode-sm stats`：会话/项目级直读本机插件库，组/组织级查收集服务 |
-| `packages/cli/src/commands/init.ts` | 37 | 五问写入 `identity.json`（含 `collector_url`、`workflowType`，3.1 路径基址来源） |
+| 文件 | 对应契约 |
+|------|----------|
+| `packages/cli/src/commands/stats.ts` | `opencode-sm stats`：会话级/项目级**直读本机插件库 + 上游 SDK**（cost/tokens），**不再直查收集服务组/组织级**；组/组织聚合由收集服务自身提供（见 5.3） |
+| `packages/cli/src/commands/init.ts` | 两问写入 `identity.json`（`apiKey`、`collector_url`、可选 `workflowType`，3.1 路径基址来源） |
 
 **⑤ 部署与配置示例**（`deploy/`）：
 
 | 文件 | 内容 |
 |------|------|
-| `deploy/docker-compose.collector.yml` | 收集服务部署示例（端口 8787、数据卷、镜像名 `opencode-sm-collector`） |
 | `deploy/opencode.json.example` | 插件启用配置示例 |
 
-> CI 回写方（`POST /api/ci-quality`）由各业务团队的流水线实现，不在本仓库代码内，仅需按 5.2 契约调用。
+> CI 回写方（`POST /api/ci-quality`）由各业务团队的流水线实现，不在本仓库代码内，仅需按 5.2 契约调用。收集服务的部署（含内网地址、端口）由 `performance_dashboard` 外部项目提供。
 
 ### 11.3 演进与兼容
 

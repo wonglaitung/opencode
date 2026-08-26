@@ -55,9 +55,9 @@ fi
 
 echo "==> 补齐 workspace 包到 node_modules"
 # 在 hoisted 模式下，外部依赖已扁平安装至根 node_modules/；
-# 但 workspace 包（sm-shared / sm-plugin / opencode-sm / opencode-sm-collector）
-# 可能因 EINVAL 未被链接。手动以真实文件拷贝替代，确保打包后可跨机器使用。
-for ws_pkg in shared plugin cli collector; do
+#   但 workspace 包（sm-shared / sm-plugin / opencode-sm）
+#   可能因 EINVAL 未被链接。手动以真实文件拷贝替代，确保打包后可跨机器使用。
+for ws_pkg in shared plugin cli; do
   pkg_dir="packages/${ws_pkg}"
   if [ ! -d "$pkg_dir" ]; then
     continue

@@ -1,16 +1,15 @@
 /**
- * opencode-sm stats [<sessionID>] [--project <dir>] [--group "组名"] [--org] [--period <nd>] [--json]
- * 会话级/项目级：本机插件库 + 上游 SDK 组合（5.2 alt 分支一）
- * 组级/组织级：查 org 收集服务（5.2 alt 分支二）
+ * opencode-sm stats [<sessionID>] [--project <dir>] [--period <nd>] [--workflow <type>] [--json]
+ * 会话级/项目级统计：本机插件库 + 上游 SDK 组合（5.2）。
+ * 组/组织级聚合由收集服务（外部项目 performance_dashboard）提供，CLI 不再负责。
  * --project 省略时从 CWD 自动检测（1.4）。
  */
 import { statSync } from "node:fs"
 import { basename, resolve } from "node:path"
-import { readIdentity, resolveWorkflowType } from "sm-shared"
+import { resolveWorkflowType } from "sm-shared"
 import type { WorkflowSessionRow } from "sm-plugin/src/db/schema"
 import { HIGH_ITERATION_THRESHOLD, LOW_FIRST_PASS_THRESHOLD, aggregateProject, sessionStats, type SessionStats } from "sm-plugin/src/stats"
 import {
-  collectorQuery,
   createClient,
   openPluginStore,
   openPluginStoreIfExists,
@@ -82,38 +81,7 @@ export async function runStats(args: ParsedArgs): Promise<void> {
   const period = typeof args.flags.period === "string" ? args.flags.period : undefined
   const workflowType = typeof args.flags.workflow === "string" ? resolveWorkflowType(args.flags.workflow) : undefined
 
-  // 组/组织级：查收集服务（5.2 alt 分支二）
-  if (args.flags.group || args.flags.org) {
-    const identity = readIdentity()
-    if (!identity) {
-      process.stderr.write("组/组织级统计需先 opencode-sm init 配置身份与收集服务地址。\n")
-      process.exitCode = 1
-      return
-    }
-    const scope = args.flags.org ? "org" : "group"
-    let result: unknown
-    try {
-      result = await collectorQuery(identity, {
-        scope,
-        group: typeof args.flags.group === "string" ? args.flags.group : undefined,
-        org: args.flags.org ? identity.org : undefined,
-        period,
-        workflowType,
-      })
-    } catch (err) {
-      process.stderr.write(`组/组织级统计查询失败：${err instanceof Error ? err.message : String(err)}\n`)
-      process.exitCode = 1
-      return
-    }
-    if (json) {
-      process.stdout.write(JSON.stringify(result, null, 2) + "\n")
-    } else {
-      printScopeStats(result, scope)
-    }
-    return
-  }
-
-  // 会话级/项目级：本机插件库 + 上游 SDK（5.2 alt 分支一）
+  // 会话级/项目级：本机插件库 + 上游 SDK（5.2）
   // --project 可给项目目录路径（本地插件库按项目存放，1.4）；缺省按 CWD。
   const projectFlag = typeof args.flags.project === "string" ? args.flags.project : undefined
   const projInfo = resolveProjectInfo(projectFlag)
@@ -262,111 +230,6 @@ function printProjectStats(
   }
 
   process.stdout.write(lines.join("\n") + "\n")
-}
-
-/** 收集服务 GET /api/stats 返回的组/组织聚合视图（collector ScopeStats 的读侧投影）。 */
-interface TrendView {
-  from: number
-  to: number
-  direction: "up" | "down" | "flat"
-}
-interface ScopeAccountView {
-  account: string
-  sessions: number
-  completed: number
-  completionRate: number
-  cost: number
-  avgFirstPassRate: number | null
-  avgTestCoverage: number | null
-  avgDurationMs: number
-  lowFirstPassCount: number
-  highIterationCount: number
-}
-interface ScopeStatsView {
-  scope: "group" | "org"
-  name: string
-  members: number
-  sessions: number
-  completed: number
-  completionRate: number
-  totalCost: number
-  avgFirstPassRate: number | null
-  avgTestCoverage: number | null
-  avgReworkRate: number | null
-  avgDurationMs: number
-  lowFirstPassCount: number
-  highIterationCount: number
-  /** AI 净增行数三分类求和（6.3；旧版收集服务响应可能缺失） */
-  linesTotal?: { business: number; test: number; config: number } | null
-  /** 是否有任何会话上报行数数据（旧版收集服务响应可能缺失）；无数据时示 N/A 而非 0 */
-  hasLinesData?: boolean
-  /** 平均 AI 提效（6.3；旧版收集服务响应可能缺失） */
-  avgEfficiency?: number | null
-  /** 已录入基线工时会话数（旧版收集服务响应可能缺失） */
-  baselineSessions?: number
-  trends: { requirementRevision: TrendView | null; reworkRate: TrendView | null; efficiency?: TrendView | null }
-  perAccount: ScopeAccountView[]
-}
-
-/** 组/组织级统计的人类可读排版（6.2）；数据来自收集服务聚合视图。 */
-function printScopeStats(raw: unknown, scope: string): void {
-  const s = raw as ScopeStatsView
-  const isOrg = scope === "org"
-  const label = isOrg ? "组织" : "组"
-  const lines = (s.perAccount ?? []).map((a) => {
-    const acc =
-      a.avgFirstPassRate === null
-        ? "一次通过率N/A"
-        : `一次通过率${a.avgFirstPassRate.toFixed(0)}%${a.avgFirstPassRate < LOW_FIRST_PASS_THRESHOLD ? " ⚠" : ""}`
-    const dur = `${fmtDuration(a.avgDurationMs ?? 0)}/会话`
-    const cov = a.avgTestCoverage === null ? "覆盖率N/A" : `覆盖率${a.avgTestCoverage.toFixed(0)}%`
-    return `  ${a.account.padEnd(22)} ${String(a.sessions).padStart(3)}会话 ${(a.completionRate * 100)
-      .toFixed(0)
-      .padStart(3)}%完成 $${a.cost.toFixed(4)} ${dur} ${acc} ${cov}`
-  })
-  process.stdout.write(
-    `${isOrg ? "🏢" : "👥"} ${label} "${s.name}"\n` +
-      `成员: ${s.members} | 总会话: ${s.sessions} | 完成率: ${(s.completionRate * 100).toFixed(0)}% | 费用: $${s.totalCost.toFixed(4)} | 平均周期: ${fmtDuration(s.avgDurationMs ?? 0)}\n\n` +
-      (lines.length > 0 ? lines.join("\n") + "\n\n" : "") +
-      `质量:\n` +
-      `  平均一次通过率: ${s.avgFirstPassRate === null ? "N/A" : `${s.avgFirstPassRate.toFixed(0)}%`}  一次通过率过低成员(<${LOW_FIRST_PASS_THRESHOLD}%): ${s.lowFirstPassCount}/${s.members}\n` +
-      `  ${s.hasLinesData && s.linesTotal ? fmtLinesCategory(s.linesTotal) : "AI 净增行数: N/A"}\n` +
-      `  ${
-        s.avgEfficiency === null || s.avgEfficiency === undefined
-          ? "AI 提效: N/A（无基线会话）"
-          : `平均 AI 提效: ${fmtEfficiency(s.avgEfficiency)}（基线会话 ${s.baselineSessions ?? 0}/${s.sessions}）`
-      }\n` +
-      `  平均覆盖率: ${fmtPct(s.avgTestCoverage)}  平均返工率: ${fmtRework(s.avgReworkRate)}\n` +
-      `  高迭代会话(≥${HIGH_ITERATION_THRESHOLD}轮): ${s.highIterationCount}/${s.sessions}\n` +
-      formatTrends(s.trends),
-  )
-}
-
-/** 返工率为 0-1 分数（CI 回写），展示为百分比。 */
-function fmtRework(v: number | null | undefined): string {
-  return v === null || v === undefined ? "N/A" : `${(v * 100).toFixed(0)}%`
-}
-
-function formatTrends(t: ScopeStatsView["trends"] | undefined): string {
-  if (!t) return ""
-  const arrow = (d: TrendView["direction"]): string => (d === "down" ? "↓" : d === "up" ? "↑" : "→")
-  const parts: string[] = []
-  if (t.requirementRevision) {
-    parts.push(
-      `需求迭代 ${arrow(t.requirementRevision.direction)}${t.requirementRevision.from.toFixed(1)}→${t.requirementRevision.to.toFixed(1)}`,
-    )
-  }
-  if (t.reworkRate) {
-    parts.push(
-      `返工率 ${arrow(t.reworkRate.direction)}${(t.reworkRate.from * 100).toFixed(0)}%→${(t.reworkRate.to * 100).toFixed(0)}%`,
-    )
-  }
-  if (t.efficiency) {
-    parts.push(
-      `提效 ${arrow(t.efficiency.direction)}${(t.efficiency.from * 100).toFixed(0)}%→${(t.efficiency.to * 100).toFixed(0)}%`,
-    )
-  }
-  return parts.length > 0 ? `趋势: ${parts.join(" | ")}\n` : ""
 }
 
 function fmtDuration(ms: number): string {

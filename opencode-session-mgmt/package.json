@@ -6,10 +6,9 @@
   ],
   "scripts": {
     "test": "bun test",
-    "typecheck": "tsc -p packages/shared && tsc -p packages/plugin && tsc -p packages/cli && tsc -p packages/collector",
+    "typecheck": "tsc -p packages/shared && tsc -p packages/plugin && tsc -p packages/cli",
     "build:plugin": "bun build packages/plugin/src/index.ts --outdir dist/plugin --target bun",
     "build:cli": "bun build packages/cli/src/index.ts --compile --outfile dist/opencode-sm",
-    "build:collector": "bun build packages/collector/src/index.ts --outdir dist/collector --target bun",
     "pack:cli": "bash scripts/pack-cli.sh",
     "pack:bundle": "bash scripts/pack-bundle.sh"
   },

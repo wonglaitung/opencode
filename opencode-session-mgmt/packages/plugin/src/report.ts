@@ -4,7 +4,7 @@
  * 收集服务不可用时写本地缓冲（插件库 outbox 表），恢复后补推。
  * 仅流程摘要（经 summarizeWorkflow 剥离代码内容），不含代码。
  */
-import { summarizeWorkflow, type Identity, type SessionReport } from "sm-shared"
+import { hashApiKey, summarizeWorkflow, type Identity, type SessionReport } from "sm-shared"
 import type { Store } from "./db"
 import type { WorkflowSessionRow } from "./db/schema"
 
@@ -17,14 +17,12 @@ export interface Usage {
 
 export type UsageProvider = (sessionID: string) => Promise<Usage>
 
-/** 组装一条汇报（身份取当前快照，3.1）。 */
-export function buildReport(row: WorkflowSessionRow, identity: Identity, usage: Usage): SessionReport | null {
+/** 组装一条汇报（apiKeyHash 为 api_key 的 SHA-256，由调用方先行计算，3.1、12）。 */
+export function buildReport(row: WorkflowSessionRow, apiKeyHash: string, usage: Usage): SessionReport | null {
   if (!row.workflow) return null
   return {
     sessionID: row.session_id,
-    account: identity.account,
-    group: identity.group,
-    org: identity.org,
+    apiKey: apiKeyHash,
     workflow: summarizeWorkflow(row.workflow),
     cost: usage.cost,
     tokensInput: usage.tokensInput,
@@ -49,10 +47,11 @@ export function createReporter(
     async enqueueReport(sessionID) {
       const identity = getIdentity()
       if (!identity) return
+      const apiKeyHash = await hashApiKey(identity.apiKey)
       const row = store.get(sessionID)
       if (!row) return
       const usage = await usageProvider(sessionID)
-      const report = buildReport(row, identity, usage)
+      const report = buildReport(row, apiKeyHash, usage)
       if (report) store.enqueueReport(report)
     },
 

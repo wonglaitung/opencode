@@ -11,8 +11,8 @@ describe("parseArgs", () => {
   })
 
   test("--key=value 形式", () => {
-    const parsed = parseArgs(["--group=前端组"])
-    expect(parsed.flags.group).toBe("前端组")
+    const parsed = parseArgs(["--project=某项目"])
+    expect(parsed.flags.project).toBe("某项目")
   })
 })
 

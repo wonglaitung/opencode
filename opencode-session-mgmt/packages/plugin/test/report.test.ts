@@ -5,22 +5,18 @@
  * - 4xx 为永久失败，丢弃以免堵塞队列（防毒消息）。
  */
 import { afterEach, describe, expect, test } from "bun:test"
-import { createWorkflowState, summarizeWorkflow, type Identity, type SessionReport } from "sm-shared"
+import { createWorkflowState, hashApiKey, summarizeWorkflow, type Identity, type SessionReport } from "sm-shared"
 import { Store } from "../src/db"
 import { buildReport, createReporter } from "../src/report"
 
 const identity: Identity = {
-  account: "alice@example.com",
-  group: "前端组",
-  org: "Engineering",
+  apiKey: "sk_test_xxx",
   collector_url: "http://collector.test",
 }
 
 const report: SessionReport = {
   sessionID: "s1",
-  account: identity.account,
-  group: identity.group,
-  org: identity.org,
+  apiKey: "hash",
   workflow: summarizeWorkflow(createWorkflowState("sdlc")),
   cost: null,
   tokensInput: null,
@@ -109,7 +105,7 @@ describe("行数汇报投影（3.2、12）", () => {
     store.mutateWorkflow("s9", (wf) => {
       wf.quality.linesByFile = { "secret/path/a.ts": 10, "secret/path/a.test.ts": -3, "c.json": 2 }
     })
-    const built = buildReport(store.get("s9")!, identity, emptyUsage)!
+    const built = buildReport(store.get("s9")!, "hash", emptyUsage)!
     expect(built.workflow.quality.lines).toEqual({ business: 10, test: 0, config: 2 })
     expect(JSON.stringify(built)).not.toContain("secret/path")
     expect(JSON.stringify(built.workflow.quality)).not.toContain("linesByFile")
@@ -118,7 +114,31 @@ describe("行数汇报投影（3.2、12）", () => {
   test("无 linesByFile 时行数为 null（纯讨论会话）", () => {
     const store = Store.memory()
     store.ensure("s10")
-    const built = buildReport(store.get("s10")!, identity, emptyUsage)!
+    const built = buildReport(store.get("s10")!, "hash", emptyUsage)!
     expect(built.workflow.quality.lines).toBeNull()
+  })
+})
+
+describe("enqueueReport 身份哈希（3.1 / 12 安全）", () => {
+  test("上送 payload 的 apiKey 为 SHA-256 哈希且不含明文", async () => {
+    const store = Store.memory()
+    store.mutateWorkflow("s1", () => {})
+    const identity: Identity = { apiKey: "sk_plaintext_secret", collector_url: "http://collector.test" }
+    const reporter = createReporter(store, () => identity, noUsage)
+    await reporter.enqueueReport("s1")
+
+    const pending = store.pendingReports()
+    expect(pending).toHaveLength(1)
+    const payload = JSON.parse(pending[0]!.payload) as SessionReport
+    expect(payload.apiKey).toBe(await hashApiKey("sk_plaintext_secret"))
+    expect(pending[0]!.payload).not.toContain("sk_plaintext_secret")
+  })
+
+  test("无身份时静默跳过（不入队）", async () => {
+    const store = Store.memory()
+    store.mutateWorkflow("s1", () => {})
+    const reporter = createReporter(store, () => null, noUsage)
+    await reporter.enqueueReport("s1")
+    expect(store.pendingReports()).toHaveLength(0)
   })
 })

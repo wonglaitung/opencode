@@ -1,7 +1,7 @@
 # opencode-session-mgmt
 
 OpenCode 会话管理定制：标准化开发流程（五阶段门禁）、理解保障（复述确认）、效能分析（Token ROI / 返工率）。
-形态为 **插件 + 独立 CLI + org 收集服务**，对 OpenCode 上游**零修改**，以便持续同步上游更新。
+形态为 **插件 + 独立 CLI + 外部收集服务**（后台收集器为独立外部项目，不随本仓库分发），对 OpenCode 上游**零修改**，以便持续同步上游更新。
 
 ## 铁律（破坏则同步上游必冲突）
 
@@ -12,10 +12,10 @@ OpenCode 会话管理定制：标准化开发流程（五阶段门禁）、理�
 
 ## 已定案，勿重议（详见 docs/session-management.md）
 
-- **身份全手填**：`opencode-sm init` 交互四问（账号 / 组 / 组织 / 收集服务地址），写入全局 `~/.config/opencode/session-mgmt/identity.json`，每机器一次。**不读上游登录账号**，**没有 team.yaml**。
-- **插件不读上游数据库**：account 打标取自 identity.json；cost/tokens 经上游 SDK 获取。依赖面仅 Hook + REST API。
-- **group 是名称字符串**，无 ID、无嵌套表；子组用命名约定（`前端组/基础架构组`）。CLI 参数 `--group "组名"`。
-- **收集服务每 org 部署一个**（内网 HTTP），三端点：`POST /api/report`（插件汇报，不含代码）、`POST /api/ci-quality`（CI 回写）、`GET /api/stats`（CLI 查询）。不可用时插件本地缓冲、恢复补推。
+- **身份全手填**：`opencode-sm init` 交互两问（api_key / 收集服务地址）+ 可选主要工作流类型，写入全局 `~/.config/opencode/session-mgmt/identity.json`，每机器一次。`api_key` 仅本机明文存储；插件上送前转为 SHA-256 哈希（网络不传明文）。**不读上游登录账号**，**没有 team.yaml**。组/组织归属由后台收集服务据 api_key 哈希解析，客户端不再填写。
+- **插件不读上游数据库**：身份以 api_key 标识，上送前转 SHA-256 哈希；cost/tokens 经上游 SDK 获取。依赖面仅 Hook + REST API。
+- **组/组织归属由后台收集服务解析**：客户端不再填写组/组织，api_key 哈希即身份标识；组名/部门由收集端据哈希映射。CLI 不再支持组/组织级查询。
+- **后台收集服务为外部独立项目** `https://github.com/karsonto/performance_dashboard`：插件仅经 `POST /api/report` 上送会话摘要（不含代码，身份以 api_key 的 SHA-256 哈希标识），组/组织聚合由该服务解析；CLI 不再直查组/组织级统计，只做本机会话/项目级聚合。收集端不可用时插件本地缓冲、恢复补推。
 - **身份是汇报快照**：改 init 只影响之后的汇报，历史归属不追溯变更。
 - **CLI 命名为 `opencode-sm`**（曾短暂叫 ocsm，已废弃，勿再用）。
 - 会话不能改名：上游 `Session.Service` 无 update 方法，会话标题由上游自动生成，勿设计 rename 功能。
@@ -30,9 +30,9 @@ OpenCode 会话管理定制：标准化开发流程（五阶段门禁）、理�
 ```
 packages/shared/     # 契约包：WorkflowState 类型、汇报 payload、identity、合并语义（三包共用，先完成）
 packages/plugin/     # OpenCode 插件：system prompt 注入、工具注册、提交门禁、汇报
-packages/cli/        # opencode-sm 独立 CLI：init/tag/workflow/stats/list
-packages/collector/  # org 收集服务：三端点 + 聚合库
-deploy/              # 部署示例：收集服务 docker-compose、opencode.json.example
+packages/cli/        # opencode-sm 独立 CLI：init/list/stats（本机会话/项目级聚合）
+（后台收集服务为外部项目 performance_dashboard：https://github.com/karsonto/performance_dashboard）
+deploy/              # 部署示例：opencode.json.example
 docs/                # 设计文档族：session-management.md（通用机制/架构/CLI/统计/部署/评测）+ workflow-sdlc.md（工作流一 sdlc）+ workflow-reqdoc.md（工作流二 reqdoc）；同步方案 upstream-sync.md
 ```
 
@@ -49,7 +49,7 @@ docs/                # 设计文档族：session-management.md（通用机制/�
 
 ## 经验教训（通用约定）
 
-- **用户手写 JSON 配置含文件路径时，单反斜杠是陷阱**（三工程通用约定）：JSON 里 `\` 是转义符——`\P` 等非法转义导致解析失败（回退默认但用户不明所以）；更隐蔽的是 `\b`/`\n`/`\t` 是**合法**转义，`"C:\bin\..."` 会被静默转成控制字符，路径错但 JSON 解析"成功"。凡工程引入用户可编辑的 JSON 配置且可能含文件路径，文档必须明确要求**用正斜杠 `/`（Windows 原生接受）或双反斜杠 `\\`**；代码侧解析失败时 warning 要直接点出这个诱因。本工程现状：`identity.json`（账号/组/组织/服务地址）不含文件路径，`deploy/opencode.json.example` 的 plugin 路径为相对/正斜杠写法；插件 `config.json`（源出已合并的 open-ide）含用户可编辑的 `tools` binary 路径，须按本约定落实（见 `packages/plugin/src/open-ide/config.ts`）。
+- **用户手写 JSON 配置含文件路径时，单反斜杠是陷阱**（三工程通用约定）：JSON 里 `\` 是转义符——`\P` 等非法转义导致解析失败（回退默认但用户不明所以）；更隐蔽的是 `\b`/`\n`/`\t` 是**合法**转义，`"C:\bin\..."` 会被静默转成控制字符，路径错但 JSON 解析"成功"。凡工程引入用户可编辑的 JSON 配置且可能含文件路径，文档必须明确要求**用正斜杠 `/`（Windows 原生接受）或双反斜杠 `\\`**；代码侧解析失败时 warning 要直接点出这个诱因。本工程现状：`identity.json`（api_key 明文 / 收集服务地址；发送前转 SHA-256 哈希，网络不传明文）不含文件路径，`deploy/opencode.json.example` 的 plugin 路径为相对/正斜杠写法；插件 `config.json`（源出已合并的 open-ide）含用户可编辑的 `tools` binary 路径，须按本约定落实（见 `packages/plugin/src/open-ide/config.ts`）。
 - **配置文档示例须显式标注字段语义**（覆盖 / 新增 / 缺省用默认），避免用户误以为所有项都要写全才生效。本工程现状：插件 `config.json` 的 `tools` 示例标注「cursor=新增、idea=覆盖」（源出已合并的 open-ide）。
 - **插件依赖浏览器 API 的库须动态 import，绝不可顶层静态 import**：`pdfjs-dist` 的 pdf.mjs 初始化会执行 `new DOMMatrix()`，而 opencode 插件运行时无该全局对象（其 canvas polyfill 依赖 `@napi-rs/canvas` 原生绑定，打包环境缺失）→ 抛 `ReferenceError` → 整个插件加载失败、不建表不写库（曾致 1.18.18 下 DB 全无）。修复：静态 import 改为使用点内 `await import()`，插件加载不再被拖垮；pdf.mjs 顶层 `const SCALE_MATRIX = new DOMMatrix()` 加 `typeof DOMMatrix !== "undefined"` 守卫后，纯文本提取（`getTextContent`）完全不依赖 canvas。凡新增依赖第三方工具库时，先确认其顶层初始化是否触碰浏览器 API，碰则一律动态 import。注：node_modules 内的守卫补丁不入 git，重装依赖会丢失，须手动重打（见 `packages/plugin/src/tools/reqdoc-scan.ts`）。
 
@@ -58,4 +58,4 @@ docs/                # 设计文档族：session-management.md（通用机制/�
 - 设计文档、注释、commit message 用**中文**；conventional commit 格式（本仓库历史可参照）。
 - **任何文档与注释都不要用 `§` 符号**引用章节，一律用纯文字（「第 3 章」「3.4 节」或裸编号「见 3.4」）。
 - 设计文档任何行为变更须同步更新对应 mermaid 流程图（三个设计文档合计 20 个：session-management.md 16 个、workflow-reqdoc.md 4 个、workflow-sdlc.md 0 个；新增图块须整体搬入对应文档族文件，总数只减不增），改链路必改图。
-- 发布前 TODO 见 `README.md`（npm scope、插件发布形态、收集服务镜像）。
+- 发布前 TODO 见 `README.md`（npm scope、插件发布形态、外部收集服务 performance_dashboard）。

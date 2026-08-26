@@ -12,7 +12,7 @@ export interface WorkflowSessionRow {
   tags: string[]
   status: string | null
   workflow: WorkflowState | null
-  account_id: string | null // 会话首次活动时取自 identity.json
+  account_id: string | null // 遗留列，已不再写入（身份改以 api_key 哈希标识，由收集端解析归属）
 }
 
 export interface OutboxRow {
