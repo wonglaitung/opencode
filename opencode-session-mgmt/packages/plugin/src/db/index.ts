@@ -134,15 +134,6 @@ export class Store {
     return workflow
   }
 
-  /** 幂等打标：仅当 account_id 为空时写入，返回是否本次写入（3.1 快照语义）。 */
-  stampAccount(sessionID: string, account: string): boolean {
-    this.ensure(sessionID)
-    const result = this.db
-      .query("UPDATE workflow_session SET account_id = ? WHERE session_id = ? AND account_id IS NULL")
-      .run(account, sessionID)
-    return result.changes > 0
-  }
-
   /** 写入会话标题（上游自动生成，插件经 SDK 同步）。仅当 title 非空时写入，空字符串不覆盖。 */
   setTitle(sessionID: string, title: string): void {
     if (!title) return

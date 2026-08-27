@@ -98,10 +98,11 @@ export function summarizeWorkflow(workflow: WorkflowState): WorkflowSummary {
 
 export interface SessionReport {
   sessionID: string
-  /** 以下为 init 身份快照（3.1 快照语义） */
-  account: string
-  group: string
-  org: string
+  /**
+   * api_key 的 SHA-256(hex) 哈希（12 安全与隐私）：本地 identity.json 存明文，
+   * 仅上送前转哈希，网络不传明文。收集端据哈希解析 account/group_name/department。
+   */
+  apiKey: string
   /** 工作流摘要：阶段时间戳、revision、审查结果（不含代码内容） */
   workflow: WorkflowSummary
   cost: number | null

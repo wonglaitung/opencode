@@ -24,14 +24,6 @@ describe("Store", () => {
     store.close()
   })
 
-  test("stampAccount 幂等，仅首次写入", () => {
-    const store = Store.memory()
-    expect(store.stampAccount("s1", "a@x.com")).toBe(true)
-    expect(store.stampAccount("s1", "b@x.com")).toBe(false)
-    expect(store.get("s1")!.account_id).toBe("a@x.com")
-    store.close()
-  })
-
   test("tags 去重", () => {
     const store = Store.memory()
     store.setTags("s1", ["a", "b", "a"])
@@ -93,9 +85,7 @@ describe("Store", () => {
     const store = Store.memory()
     store.enqueueReport({
       sessionID: "s1",
-      account: "a",
-      group: "g",
-      org: "o",
+      apiKey: "hash",
       workflow: {} as never,
       cost: null,
       tokensInput: null,

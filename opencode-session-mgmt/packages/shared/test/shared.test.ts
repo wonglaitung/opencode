@@ -15,6 +15,7 @@ import {
   efficiencyRatio,
   getDefinition,
   getStage,
+  hashApiKey,
   readIdentity,
   reqdocScoreRubric,
   resolveWorkflowType,
@@ -56,15 +57,15 @@ describe("deepMerge", () => {
 
 describe("identity", () => {
   test("validateIdentity 拒绝空字段", () => {
-    expect(validateIdentity({ account: "", group: "g", org: "o", collector_url: "u" }).length).toBeGreaterThan(0)
-    expect(validateIdentity({ account: "a", group: "g", org: "o", collector_url: "u" })).toEqual([])
+    expect(validateIdentity({ apiKey: "", collector_url: "u" }).length).toBeGreaterThan(0)
+    expect(validateIdentity({ apiKey: "a", collector_url: "u" })).toEqual([])
   })
 
   test("write 后 read 回环（缺省 workflowType 补 sdlc）", () => {
     const dir = mkdtempSync(join(tmpdir(), "sm-id-"))
     const path = join(dir, "identity.json")
     try {
-      const identity: Identity = { account: "a@x.com", group: "前端组", org: "Eng", collector_url: "http://h:8787" }
+      const identity: Identity = { apiKey: "sk_test_xxx", collector_url: "http://h:8787" }
       writeIdentity(identity, path)
       expect(readIdentity(path)).toEqual({ ...identity, workflowType: "sdlc" })
     } finally {
@@ -76,7 +77,7 @@ describe("identity", () => {
     const dir = mkdtempSync(join(tmpdir(), "sm-id-"))
     const path = join(dir, "identity.json")
     try {
-      const identity: Identity = { account: "a@x.com", group: "前端组", org: "Eng", collector_url: "http://h:8787", workflowType: "sdlc" }
+      const identity: Identity = { apiKey: "sk_test_xxx", collector_url: "http://h:8787", workflowType: "sdlc" }
       writeIdentity(identity, path)
       expect(readIdentity(path)).toEqual(identity)
     } finally {
@@ -400,5 +401,26 @@ describe("efficiencyRatio（AI 提效率，6.3）", () => {
     expect(efficiencyRatio(-1, 3_600_000)).toBeNull()
     expect(efficiencyRatio(8, 0)).toBeNull()
     expect(efficiencyRatio(8, -5)).toBeNull()
+  })
+})
+
+describe("hashApiKey（身份哈希，3.1 / 12 安全）", () => {
+  test("是 SHA-256 hex（已知答案校验）", async () => {
+    // SHA-256("test") 的标准十六进制值
+    expect(await hashApiKey("test")).toBe(
+      "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+    )
+  })
+
+  test("确定性：同输入同输出", async () => {
+    expect(await hashApiKey("sk_x")).toBe(await hashApiKey("sk_x"))
+  })
+
+  test("输出为 64 位小写 hex", async () => {
+    expect(await hashApiKey("anything")).toMatch(/^[0-9a-f]{64}$/)
+  })
+
+  test("不同输入产生不同哈希", async () => {
+    expect(await hashApiKey("a")).not.toBe(await hashApiKey("b"))
   })
 })

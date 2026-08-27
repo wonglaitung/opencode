@@ -1,7 +1,7 @@
 # opencode-session-mgmt
 
 OpenCode 会话管理定制：**标准化开发流程、理解保障与效能分析**。
-以插件 + 独立 CLI + 组织收集服务的形态实现，对 OpenCode 上游**零修改**，便于持续同步上游更新。
+以插件 + 独立 CLI + 外部收集服务的形态实现，对 OpenCode 上游**零修改**，便于持续同步上游更新。后台收集器为独立外部项目 [`performance_dashboard`](https://github.com/karsonto/performance_dashboard)，不随本仓库分发。
 
 ## 文档
 
@@ -16,10 +16,9 @@ OpenCode 会话管理定制：**标准化开发流程、理解保障与效能分
 packages/
 ├── shared/      # 契约包：WorkflowState schema、汇报 payload、identity、合并语义（三包共用）
 ├── plugin/      # OpenCode 插件（config.plugin 加载，运行于 daemon 内）
-├── cli/         # opencode-sm 独立 CLI（init/tag/workflow/stats/list）
-└── collector/   # org 级收集服务（每组织部署一个：汇报 + CI 回写 + 统计查询）
-deploy/          # 部署示例：收集服务 docker-compose、团队预置 opencode.json
-```
+└── cli/         # opencode-sm 独立 CLI（init/list/stats，本机会话/项目级聚合）
+# 后台收集服务为外部项目：https://github.com/karsonto/performance_dashboard
+deploy/          # 部署示例：团队预置 opencode.json
 
 ## 开发者上手（一次性，约 2 分钟）
 
@@ -27,7 +26,7 @@ deploy/          # 部署示例：收集服务 docker-compose、团队预置 ope
 npm i -g opencode-sm                          # 1. 装独立 CLI（发布后；开发期用 bun link）
 # 2. opencode 配置启用插件（opencode.json，可用 deploy/opencode.json.example）
 #    { "plugin": ["./opencode-session-mgmt/packages/plugin"] }
-opencode-sm init                              # 3. 四问：账号 / 组 / 组织 / 收集服务地址
+opencode-sm init                              # 3. 两问：api_key / 收集服务地址（+ 可选主要工作流类型）
 ```
 
 此后照常使用 `opencode`（TUI）：工作流规则随 system prompt 自动注入，
@@ -46,4 +45,4 @@ bun run build:cli    # 构建 opencode-sm 单二进制（bun build --compile）
 
 - [ ] 确定 npm scope（`@yourorg/...`），统一四个包的 `name`
 - [x] 插件发布形态：整包便携使用 `pack:bundle`（`scripts/pack-bundle.sh`），通过 `.npmrc` 的 `node-linker=hoisted` 确保 `node_modules` 可跨机器打包搬运（解决 Windows 硬链接断裂问题）
-- [ ] 收集服务镜像构建与内网部署流程
+- [ ] 外部收集服务 `performance_dashboard` 的镜像构建与内网部署（见 https://github.com/karsonto/performance_dashboard）
