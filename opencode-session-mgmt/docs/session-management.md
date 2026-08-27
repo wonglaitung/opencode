@@ -1031,6 +1031,8 @@ graph LR
 AI 使用: 对话 47轮 | $0.36 | 85K tokens
 ```
 
+> 注：会话级输出首行 `开发者` 恒为 `N/A`。插件库 schema 仍保留旧 `account_id` 列，但身份已改为以 `api_key` 的 SHA-256 哈希标识，该列不再写入；开发者归属由收集服务据哈希解析，故本机 `opencode-sm stats` 不展示具体开发者，仅外部收集服务看板可见（见 3.1、collector-spec.md 2.3）。
+
 **reqdoc 会话级（需求书）**：见 workflow-reqdoc.md 9 章（reqdoc 会话不产出代码，sdlc 专属指标——AI 代码行数三分类 / 覆盖率 / 返工率——为 `null`，显示 N/A）。
 
 **项目级**：
