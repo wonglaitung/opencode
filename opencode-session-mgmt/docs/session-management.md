@@ -120,7 +120,7 @@ AI 编码产出的质量风险可分为四类，缺一便会在某个环节失�
 | 支柱 | 业界概念 | 本工程落地 | 载体 |
 |------|----------|------------|------|
 | ① 制定规约 | Guardrails / Policy-as-Code（Linter、Style Guide、`.cursorrules`/`AGENTS.md`、ADR） | 机构规约按工作流类型放入 `conventions/<type>/*.md`，frontmatter 声明 `stage`，每轮只注入 global + 当前阶段；基线随插件打包，项目根 `conventions/<type>/*.md` 覆盖不跨流泄漏 | `packages/plugin/conventions/` + `src/conventions.ts` |
-| ② 增强知识 | Context Engineering / Repo-level RAG（代码库语义检索、架构文档注入） | 现状仅 `comprehension_ask` 把审查问答沉淀为"可检索知识库"；**架构级/功能级知识层尚未建立**（演进方向见 1.6.4） | `comprehension_*` 工具（部分）；知识层待建 |
+| ② 增强知识 | Context Engineering / Repo-level RAG（代码库语义检索、架构文档注入） | 架构/功能级知识由**需求发起单位技术侧经项目材料目录（`07_系统现状与能力/`）+ 通用 `reqdoc_scan`** 提供，**不进插件、不依赖 AGENTS.md**（业务不会用）；现状仅 `comprehension_ask` 把审查问答沉淀为"可检索知识库"（演进方向见 1.6.4） | `comprehension_*` 工具（部分）；知识层由单位材料目录承载 |
 | ③ 智能协同 | Agentic Workflow + Human-in-the-loop（强制门禁、确认闭环、工具编排） | sdlc / reqdoc 五阶段完成门禁，AI 主动 `workflow_advance`、引导人决策；`comprehension_confirm` / `reqdoc_*` 确认闭环；本插件即此支柱的工程化身 | `packages/plugin` 工作流 + 工具 |
 | ④ 度量反馈 | LLM evals / 回归测试（提示词/规则迭代必带基线） | `scripts/eval-rules` 打分卡八维回归 + `--fail-on-regression`，改规则前跑基线、改后对比，通过率/八维分不降才保留；详见第 13 章评测方法论 | `scripts/eval-rules/` |
 
@@ -130,7 +130,7 @@ AI 编码产出的质量风险可分为四类，缺一便会在某个环节失�
 graph TB
     F["AI 编码质量管控框架"]
     F --> R1["① 制定规约 / Guardrails / Policy-as-Code<br/>conventions/ 阶段化注入"]
-    F --> R2["② 增强知识 / Context Engineering / RAG<br/>现状仅 comprehension_ask 知识库（架构层待建）"]
+    F -->     R2["② 增强知识 / Context Engineering / RAG<br/>架构/功能级知识：单位材料目录 + reqdoc_scan（不进插件）"]
     F --> R3["③ 智能协同 / Agentic Workflow + 人在回路<br/>sdlc / reqdoc 五阶段门禁"]
     F --> R4["④ 度量反馈 / LLM evals / 回归<br/>eval-rules 八维 + --fail-on-regression"]
 ```
@@ -157,7 +157,7 @@ graph LR
 #### 1.6.4 与文档族及演进方向的映射
 
 - **文档族分工**：本文档（通用机制 + ③的过程面 + ④的评测方法）；`workflow-sdlc.md` / `workflow-reqdoc.md` 是③的规则实例；`conventions/` 目录是①的载体；`scripts/eval-rules/` 是④的工具。
-- **演进方向（待办，非本次实现）**：第②柱的"架构级/功能级知识层"目前是最大缺口。后续可在 `knowledge/<type>/`（或接 RAG 检索底座）落地"按需取架构/功能知识注入系统提示"的机制，与现有 `conventions/` 的阶段化注入同源，补齐闭环中最弱的一环。
+- **演进方向（待办，非本次实现）**：第②柱的"架构级/功能级知识"由**需求发起单位的技术侧经项目材料目录提供**，经通用 `reqdoc_scan` 消费；**不进插件、不依赖 AGENTS.md（业务不会用）**。reqdoc 侧约定可选目录 `07_系统现状与能力/`（见 workflow-reqdoc.md 3 章）承载系统架构/现有能力/接口/数据模型，由 `07-系统上下文与现有能力.md` 规约在 edge 阶段强制「先扫后写」，补齐闭环中最弱一环。
 
 ## 2. 技术决策记录
 

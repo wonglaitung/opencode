@@ -1,7 +1,7 @@
 /**
  * reqdoc 文档扫描工具（设计文档 workflow-reqdoc.md 3 章、8 章）。
  * reqdoc_scan —— 按目录扫描需求资料并提取文本（单目录参数，AI 分阶段调用）：
- *   goal→01_背景与目标、rules→03_流程与数据、edge→02_制度与合规/04_角色与权限、prd→06_需求规格产出。
+ *   goal→01_背景与目标、rules→03_流程与数据、edge→02_制度与合规/04_角色与权限（可选 07_系统现状与能力）、prd→06_需求规格产出。
  * 解析范围：docx（jszip 解 document.xml）、pdf（pdfjs 文本层）、xlsx（exceljs）、
  * txt/md/json/csv 等纯文本。图像/未知格式显式降级——qwen3.6 无多模态，杜绝 AI 空承诺看图。
  */
@@ -95,13 +95,13 @@ export function createReqdocScanTool(): Record<string, ToolDefinition> {
     description:
       "reqdoc 需求资料扫描：列出指定需求资料目录下的文件，解析并提取文本内容供分析。" +
       "单目录参数，按阶段分步调用：goal→01_背景与目标、rules→03_流程与数据、" +
-      "edge→02_制度与合规 与 04_角色与权限、prd→06_需求规格产出（检查已有产出）。" +
+      "edge→02_制度与合规 与 04_角色与权限（可选 07_系统现状与能力）、prd→06_需求规格产出（检查已有产出）。" +
       "支持 docx/pdf/xlsx/txt/md/json/csv 等文本类；图像与不支持格式会明确提示降级，请让业务补文字说明。",
     args: {
       directory: z
         .string()
         .describe(
-          "需求资料目录名（01_背景与目标 / 02_制度与合规 / 03_流程与数据 / 04_角色与权限 / 06_需求规格产出）",
+          "需求资料目录名（01_背景与目标 / 02_制度与合规 / 03_流程与数据 / 04_角色与权限 / 06_需求规格产出 / 07_系统现状与能力（可选））",
         ),
     },
     async execute(args, context) {
