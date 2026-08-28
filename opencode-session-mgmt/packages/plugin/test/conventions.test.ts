@@ -22,7 +22,7 @@ describe("loadWorkflowConventions（按工作流类型 + 阶段门控）", () =>
 
   test("reqdoc edge 阶段：注入 edge 规约（异常 + 非功能），不含 rules", () => {
     const text = loadWorkflowConventions("reqdoc", "edge", emptyRoot())
-    expect(text).toContain("异常须区分两类")
+    expect(text).toContain("异常须区分三类")
     expect(text).toContain("非功能须量化")
     expect(text).not.toContain("术语须引用原文")
   })
