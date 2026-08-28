@@ -227,13 +227,28 @@ describe("buildSystemFragment", () => {
       expect(text).not.toContain("术语须引用原文") // rules 阶段：不注入
     })
 
-    test("sdlc implementation 阶段 → 注入 global + implementation，不含 reqdoc 规约", () => {
+    test("sdlc implementation 阶段 → 注入 global + implementation(代码期)，不含 design/reqdoc", () => {
       const s = createWorkflowState("sdlc")
       applyTransition(s, "implementation", "enter", 1)
       const text = buildSystemFragment(s, {}, [], null, NO_OVERLAY)
       expect(text).toContain("《sdlc 编写规约》自遵循清单")
-      expect(text).toContain("凭证与密钥") // implementation
+      expect(text).toContain("复杂度与代码异味") // implementation（安全-代码期）
       expect(text).toContain("AI 编写代码须带 [AI] 标记") // global
+      expect(text).not.toContain("凭证与密钥") // design（安全-设计期）不泄漏
+      expect(text).not.toContain("避免竞态") // design（并发）不泄漏
+      expect(text).not.toContain("术语须引用原文") // reqdoc 隔离
+    })
+
+    test("sdlc design 阶段 → 注入 global + design(安全设计/并发/日志)，不含代码期指标", () => {
+      const s = createWorkflowState("sdlc")
+      applyTransition(s, "design", "enter", 1)
+      const text = buildSystemFragment(s, {}, [], null, NO_OVERLAY)
+      expect(text).toContain("《sdlc 编写规约》自遵循清单")
+      expect(text).toContain("凭证与密钥") // 安全-设计
+      expect(text).toContain("避免竞态") // 并发-设计
+      expect(text).toContain("不打敏感信息") // 日志-设计
+      expect(text).toContain("AI 编写代码须带 [AI] 标记") // global
+      expect(text).not.toContain("复杂度与代码异味") // 代码期不注入
       expect(text).not.toContain("术语须引用原文") // reqdoc 隔离
     })
 

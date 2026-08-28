@@ -190,7 +190,7 @@ stage: global        # 或 implementation / review / …（当前 in_progress �
 
 `stage: global`（或省略）为**常驻规约**、全程注入；否则仅在对应阶段注入；无 in_progress（未开始/空档/完成态，stage===null）只注入 global。两层来源、插件合并：
 
-- **基线（插件打包）**：`packages/plugin/conventions/sdlc/*.md`。当前：`01-提交信息规约` 为 global（`[AI]` 标记，提交发生在完成态、故须常驻），`00-编码规约`/`02-安全规约`/`03-日志与可观测性`/`04-并发·资源·幂等` 为 implementation。
+  - **基线（插件打包）**：`packages/plugin/conventions/sdlc/*.md`。当前：`01-提交信息规约` 为 global（`[AI]` 标记，提交发生在完成态、故须常驻）；`02-安全规约-设计`/`03-日志与可观测性`/`04-并发·资源·幂等` 为 design（设计期须对照输出「技术规范符合性自检」小节）；`00-编码规约`/`02-安全规约-代码` 为 implementation。
 - **机构覆盖（项目内）**：`<项目根>/conventions/sdlc/*.md`，机构自定义，插件读取后追加到基线之后（类型隔离，不跨工作流泄漏）。
 
 通用/常驻的机构规则（跨工作流适用）写机构自己的 `AGENTS.md`（OpenCode 原生合并），不放本目录。新增 sdlc 规约 = 往该目录丢一个带 `stage:` frontmatter 的 `.md`，零代码。加载/过滤/拼接见 `packages/plugin/src/conventions.ts`（`loadWorkflowConventions(type, stage, projectRoot)`）。
