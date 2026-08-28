@@ -18,8 +18,9 @@ flowchart LR
     I --> B
 ```
 
-插件注册四个工具（见 4），由 `createEdgeDebugController` 统一编排生命周期：
-启动 Edge → 轮询等待 CDP 就绪 → WebSocket attach → 订阅事件入缓冲 → 关闭时优雅退出并清理。
+插件注册八个工具（见 4），由 `createEdgeDebugController` 统一编排生命周期：
+启动 Edge → 轮询等待 CDP 就绪 → WebSocket attach → 订阅事件入缓冲 → 关闭时优雅退出并清理；
+另含按需主动读取通道（页面求值与网络详情，见 3.5）。
 
 ## 2 插件机制适配
 
@@ -37,7 +38,8 @@ flowchart LR
 **CDP 客户端（零依赖，决策记录 D1）**：
 
 - `CdpClient.connect(wsUrl)`：bun 原生 WebSocket，握手失败拒绝。
-- `call(method, params)`：自增 id 发送 → pending Map 等待同 id 响应；协议 `error` 拒绝；默认 10 秒超时。
+- `call(method, params, timeoutMs?)`：自增 id 发送 → pending Map 等待同 id 响应；协议 `error` 拒绝；默认 10 秒超时，
+  可按命令覆盖（页面求值用 30 秒，见 3.5）。
 - `on(method, handler)`：事件订阅（无 id 的消息按 method 分发）。
 - `close()`：先拒绝全部 pending，再关 WebSocket，触发 onClose 回调且仅一次。
 - HTTP 助手：`probeVersion(port)`（`GET /json/version`，就绪探测与实例复用判定）、
@@ -68,11 +70,16 @@ flowchart LR
 ### 3.3 日志缓冲与网络降噪（logs.ts / controller.ts）
 
 - 环形缓冲 `createRingBuffer`：每类日志最多 `MAX_LOGS = 50` 条，超出丢弃最旧；`snapshot()` 返回副本。
-- 网络采集订阅两个事件互补（`responseReceived` 不携带 method）：
-  `Network.requestWillBeSent` 记 `requestId → method`；
-  `Network.responseReceived` 按 `shouldKeepResponse` 过滤后入缓冲并消费该映射。
+- 网络采集订阅两个事件互补（`responseReceived` 不携带 method/请求体/请求头）：
+  `Network.requestWillBeSent` 把 `requestId → {method, postData, requestHeaders}` 存入 pendingRequests 映射
+  （postData 入映射时即截断，约束暂存内存）；
+  `Network.responseReceived` 按 `shouldKeepResponse` 过滤后，连同映射回填组条目
+  `{time, requestId, method, url, status, mimeType, postData?, requestHeaders?, responseHeaders?}`
+  入缓冲并消费该映射（响应头取自 `response.headers`）。
 - `shouldKeepResponse`：状态码 >= 400 一律保留；否则仅保留疑似 API（URL 含 `/api/` 或 MIME 含 json）；
   静态资源（css/png/字体等）丢弃，为 Agent 降噪。
+- `toNetworkSummary`：列表输出只含 time/requestId/method/url/status/mimeType，
+  headers/postData 仅经 `get_browser_response_detail` 按条目读取（见 3.5）。
 
 ### 3.4 控制器编排（controller.ts）
 
@@ -86,6 +93,30 @@ flowchart LR
   再 `Browser.close` 优雅关闭（失败由进程树清理兜底）→ `client.close()` → `killProcessTree` → 清缓冲。
 - **被动断开**：浏览器被手动关闭时 WebSocket 断开，onClose 回调复位会话状态（仅当该 client 仍是当前会话）。
 
+### 3.5 页面求值与网络详情读取（controller.ts / logs.ts）
+
+主动读取通道：Console/Network 事件只能被动监听，页面 DOM、JS 运行时状态、localStorage、
+请求/响应头体等信息经 CDP 命令按需拉取——等效于「把 DevTools Console 交给 Agent」。
+
+- `evaluateOnPage(client, expression)`（独立导出，便于假 CDP 服务零 mock 契约测试）：
+  `Runtime.evaluate` + `returnByValue: true`（结果直接取值）+ `awaitPromise: true`（支持页面内 await 异步，
+  如 `await fetch('/api/x').then(r => r.json())`）+ `userGesture: true`（模拟用户手势）。
+  超时 30 秒（`EVALUATE_TIMEOUT_MS`，`awaitPromise` 可能等页面异步操作，长于普通命令的 10 秒），
+  经 `CdpClient.call` 的可选超时参数注入。
+- `formatEvaluateOutcome`：`exceptionDetails` → 抛带堆栈摘要的 `EdgeDebugError`，Agent 可修正表达式重试；
+  正常结果复用 `formatRemoteObject` 序列化。
+- `truncateText` / `MAX_TEXT_CHARS = 20000`：求值结果、页面正文、响应体、请求体统一截断并附原始长度标注。
+- 便捷求值：`PAGE_INFO_EXPRESSION`（url/title/readyState/viewport 的 JSON 字符串，保证可序列化）、
+  `PAGE_TEXT_EXPRESSION`（`document.body?.innerText`，无 body 时空串）；`get_page_info`/`get_page_text`
+  即这两个固定表达式的薄封装。
+- 网络详情：`get_browser_response_detail(requestId)` =
+  `requireNetworkEntry`（按 requestId 查环形缓冲快照，淘汰/不存在时报错引导先取网络日志）+
+  `fetchResponseBody`（独立导出；`Network.getResponseBody`，base64 二进制不倾倒乱码，
+  给 `[二进制内容, 共 N 字节]` 占位）→ 合并条目的 method/url/status/请求头/响应头/请求体 + 响应体输出。
+  CDP 报错（如导航后资源被浏览器丢弃）时补充语义与修复路径再抛出。
+- 求值信任级与人工 Console 注入一致：调试端口仅本机、专用 profile 隔离、会话结束 dispose 兜底；
+  仅作用于 attach 的单个 page target。
+
 ## 4 工具定义
 
 | 工具名 | 入参 | 行为 |
@@ -93,7 +124,11 @@ flowchart LR
 | `start_edge_browser` | `url?: string`（默认 `http://localhost:3000`） | 启动/复用 Edge + CDP 监听，回显加载地址 |
 | `close_edge_browser` | 无 | 优雅关闭；未运行返回提示而非报错 |
 | `get_browser_console_logs` | 无 | 未启动 → 引导先启动；空 → 明确说明；否则 JSON |
-| `get_browser_network_logs` | 无 | 同上（仅 4xx/5xx 与疑似 API 条目） |
+| `get_browser_network_logs` | 无 | 同上（仅 4xx/5xx 与疑似 API 条目，精简字段含 requestId） |
+| `evaluate_in_page` | `expression: string` | 页面上下文执行任意 JS（支持 await），结果格式化并截断；页面抛错转可读错误 |
+| `get_page_info` | 无 | 页面元信息 JSON：url/title/readyState/viewport |
+| `get_page_text` | 无 | 页面正文 innerText（截断） |
+| `get_browser_response_detail` | `requestId: string` | 单条网络请求详情：请求/响应头、请求体、响应体；id 取自网络日志条目 |
 
 ## 5 健壮性与降级
 
@@ -112,9 +147,15 @@ flowchart LR
 
 ## 7 v1 限制与未来扩展
 
-- 仅监听启动时 attach 的**单个 page target**，新开标签页不监听（未来可订阅 `Target` 域做多 target）。
+- 仅监听启动时 attach 的**单个 page target**，新开标签页不监听；`evaluate_in_page` 等主动读取同样只作用于该 target
+  （未来可订阅 `Target` 域做多 target）。
 - 端口固定 9222，不开放配置；网络降噪规则为硬编码启发式。
-- 不抓取请求体/响应体（Agent 需要时可经 `Network.getResponseBody` 扩展）。
+- `Set-Cookie` 等响应头被 Chromium 拆分到 `Network.responseReceivedExtraInfo`，v1 不合并，该类头可能缺失；
+  HttpOnly Cookie 无法经 `document.cookie` 读取（需要时扩展 `Network.getCookies`）。
+- WebSocket 帧内容不采集；无截图能力。
+- 部分请求（流式、二进制等）的 `postData` 在 CDP 事件中缺省；响应体与请求详情依赖浏览器缓冲，
+  导航后旧资源可能已不可取。
+- 输出截断上限 `MAX_TEXT_CHARS = 20000`（求值结果/页面正文/响应体/请求体），Agent 可分段求值获取更完整内容。
 
 ## 8 决策记录
 

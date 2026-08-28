@@ -18,7 +18,7 @@ beforeAll(() => {
       return new Response("无法升级 WebSocket", { status: 400 })
     },
     websocket: {
-      message(ws: ServerWebSocket, raw: string | Buffer) {
+      async message(ws: ServerWebSocket, raw: string | Buffer) {
         const msg = JSON.parse(String(raw)) as { id: number; method: string; params?: unknown }
         switch (msg.method) {
           case "Echo.ok":
@@ -29,6 +29,11 @@ beforeAll(() => {
             break
           case "Never.reply":
             // 故意不回复,用于验证 close 时 pending 被拒绝
+            break
+          case "Delay.reply":
+            // 延迟回复,用于验证自定义超时
+            await Bun.sleep(150)
+            ws.send(JSON.stringify({ id: msg.id, result: { slow: true } }))
             break
           case "Notify.listen":
             ws.send(JSON.stringify({ id: msg.id, result: {} }))
@@ -101,6 +106,20 @@ describe("CdpClient", () => {
 
   test("连接到不可达地址时拒绝", async () => {
     await expect(CdpClient.connect("ws://127.0.0.1:1/")).rejects.toThrow(EdgeDebugError)
+  })
+})
+
+describe("call 自定义超时", () => {
+  test("超过自定义超时未响应即拒绝", async () => {
+    const client = await CdpClient.connect(wsUrl)
+    await expect(client.call("Delay.reply", {}, 30)).rejects.toThrow("CDP 命令超时:Delay.reply")
+    client.close()
+  })
+
+  test("自定义超时足够长时正常返回", async () => {
+    const client = await CdpClient.connect(wsUrl)
+    expect(await client.call("Delay.reply", {}, 5000)).toEqual({ slow: true })
+    client.close()
   })
 })
 

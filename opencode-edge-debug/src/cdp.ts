@@ -62,8 +62,11 @@ export class CdpClient {
     })
   }
 
-  /** 发送一条 CDP 命令,返回其 result;连接不可用、协议错误或超时拒绝。 */
-  call(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
+  /**
+   * 发送一条 CDP 命令,返回其 result;连接不可用、协议错误或超时拒绝。
+   * timeoutMs 可覆盖默认超时(如页面求值带 awaitPromise 时需更长等待)。
+   */
+  call(method: string, params: Record<string, unknown> = {}, timeoutMs: number = CDP_CALL_TIMEOUT_MS): Promise<unknown> {
     return new Promise((resolve, reject) => {
       // WHATWG 规范下 CLOSING/CLOSED 状态 send 静默丢弃,须先行判定快速失败
       if (this.ws.readyState !== WebSocket.OPEN) {
@@ -80,7 +83,7 @@ export class CdpClient {
       const timer = setTimeout(() => {
         this.pending.delete(id)
         reject(new EdgeDebugError(`CDP 命令超时:${method}`))
-      }, CDP_CALL_TIMEOUT_MS)
+      }, timeoutMs)
       this.pending.set(id, { resolve, reject, timer })
     })
   }
