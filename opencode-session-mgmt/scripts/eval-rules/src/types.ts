@@ -131,7 +131,7 @@ export interface GroupSummary {
   rate: number
 }
 
-/** 评分场景聚合：跨评分场景按「每场景多运行平均」求五维平均分（质量飞轮 P0 产出度量）。 */
+/** 评分场景聚合：跨评分场景按「每场景多运行平均」求八维平均分（质量飞轮 P0 产出度量）。 */
 export interface ScoreDimAvg {
   key: ReqdocScoreDimKey
   label: string

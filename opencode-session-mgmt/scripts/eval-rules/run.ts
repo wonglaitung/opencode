@@ -4,7 +4,9 @@
  * 改前跑 baseline(冻结快照)、改后跑 new(新注入格式),对比通过率。
  *
  * 用法:
- *   bun run scripts/eval-rules/run.ts --variant baseline|new [--repeat 3] [--dry] [--workflow sdlc|reqdoc] [--name 场景名子串]
+ *   bun run scripts/eval-rules/run.ts --variant baseline|new [--repeat 3] [--dry] [--workflow sdlc|reqdoc] [--name 场景名子串] [--fail-on-regression]
+ *   --fail-on-regression：仅 new 且库内已有 baseline.json 时生效；整体通过率回退或任一打分卡八维分数
+ *     回退则 exit(1)（合入门槛，见 session-management.md 13.x）。CI 用 `bun run eval:ci` 触发。
  * 环境变量:
  *   EVAL_BASE_URL  OpenAI 兼容端点(默认 http://localhost:8086/v1,本地 vLLM)
  *   EVAL_API_KEY   可选
@@ -71,7 +73,7 @@ for (const sc of scenarios) {
   // 渲染/评分场景（质量飞轮 A4 归因）：留各次运行的模型输出原文——只看判定 detail 无法区分
   // 「纯文本渲染」「错层级标题」「tool_call 占位」，须落原文才能归因（本机留痕，汇报不上行）
   const outputs: string[] = []
-  // 评分场景（质量飞轮 P0，judge.kind==="score"）：累计各运行的五维实得分，汇总成该场景平均分
+  // 评分场景（质量飞轮 P0，judge.kind==="score"）：累计各运行的八维实得分，汇总成该场景平均分
   const isScore = sc.judge.kind === "score"
   const captureOutput = sc.judge.kind === "render" || sc.judge.kind === "score"
   let scoreRuns = 0
@@ -142,7 +144,7 @@ const sdlc = group(results.filter((r) => r.workflowType === "sdlc"))
 const reqdoc = group(results.filter((r) => r.workflowType === "reqdoc"))
 const overall = group(results)
 
-/** 评分场景聚合：跨评分场景按「每场景多运行平均」求五维平均分（质量飞轮 P0 产出度量）。 */
+/** 评分场景聚合：跨评分场景按「每场景多运行平均」求八维平均分（质量飞轮 P0 产出度量）。 */
 function scoreSummary(items: ScenarioResult[]): ScoreSummary | undefined {
   const scored = items.filter((r) => r.scoreAvg)
   if (scored.length === 0) return undefined
@@ -192,14 +194,16 @@ if (variant === "new") {
     ]
     if (prev.summary.sdlc.total > 0) lines.push(`sdlc   ${prev.summary.sdlc.rate}% → ${sdlc.rate}%`)
     if (prev.summary.reqdoc.total > 0) lines.push(`reqdoc ${prev.summary.reqdoc.rate}% → ${reqdoc.rate}%`)
-    // 质量飞轮 P0：baseline→new 的 PRD 渲染产出逐维对比（打分卡五维平均分）
+    // 质量飞轮 P0：baseline→new 的 PRD 渲染产出逐维对比（打分卡八维平均分）
+    let scoreRegressed = false
     if (prev.summary.score && report.summary.score) {
-      lines.push("", "PRD 评分对比（baseline → new，五维平均分）:")
+      lines.push("", "PRD 评分对比（baseline → new，八维平均分）:")
       for (const d of REQDOC_SCORE_DIMS) {
         const b = prev.summary.score.dims.find((x) => x.key === d.key)
         const n = report.summary.score.dims.find((x) => x.key === d.key)
         if (!b || !n) continue
         const delta = n.avg - b.avg
+        if (delta < 0) scoreRegressed = true
         lines.push(`  ${d.label} ${b.avg} → ${n.avg}（${delta >= 0 ? "+" : ""}${delta.toFixed(1)}）`)
       }
       const bt = prev.summary.score.totalAvg
@@ -207,5 +211,11 @@ if (variant === "new") {
       lines.push(`  总分      ${bt} → ${nt}（${nt - bt >= 0 ? "+" : ""}${(nt - bt).toFixed(1)}）`)
     }
     console.log(`\n=== 对比(baseline → new) ===\n${lines.join("\n")}`)
+    // 回归判定（合入门槛，见 session-management.md 13.x）：整体通过率回退 或 任一打分卡维度回退即不合格。
+    const rateRegressed = overall.rate < prev.summary.overall.rate
+    if (process.argv.includes("--fail-on-regression") && (rateRegressed || scoreRegressed)) {
+      console.error("\n❌ 评测回归：通过率或打分卡八维分数相对 baseline 出现回退，不合入。")
+      process.exit(1)
+    }
   }
 }

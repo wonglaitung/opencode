@@ -1,6 +1,6 @@
 /**
  * reqdoc 打分卡工具（实施方案第三节，重构核心补齐）。
- * reqdoc_score —— AI 对照打分卡（5 维权重，满分 100）逐维打分，附扣分明细与证据引用，
+  * reqdoc_score —— AI 对照打分卡（8 维权重，满分 100）逐维打分，附扣分明细与证据引用，
  * 先向业务展示、业务明确认可后调用本工具记录（写入 workflow.score）。作为「进入 prd 阶段」
  * 与定稿（review_submit）的质量门禁依据：total ≥ REQDOC_SCORE_PASS（85）且业务确认方可推进。
  * 可多次重打覆盖（<85 按扣分明细回 edge 追问补缺后重打）。仅 reqdoc 工作流有效。
@@ -66,7 +66,7 @@ export function createReqdocScoreTools(store: Store): Record<string, ToolDefinit
         if (def.type !== "reqdoc") {
           throw new WorkflowOpError(`reqdoc_score 仅用于 reqdoc 工作流（当前为 ${def.type}）`)
         }
-        // 服务端校验：五维齐全、0 ≤ score ≤ 该维度满分；total = Σ 各维，不信任模型自报总分。
+        // 服务端校验：八维齐全、0 ≤ score ≤ 该维度满分；total = Σ 各维，不信任模型自报总分。
         const dims = {} as Record<ReqdocScoreDimKey, { score: number; max: number }>
         const deductions: ReqdocScoreDeduction[] = []
         let total = 0
@@ -106,7 +106,7 @@ export function createReqdocScoreTools(store: Store): Record<string, ToolDefinit
 /** 把打分卡格式化为工具返回文本：各维得分 + 扣分明细 + 总分 + 达标/门禁提示（弱模型直接可见）。 */
 function formatScoreCard(score: ReqdocScore): string {
   const dimLines = REQDOC_SCORE_DIMS.map((dim) => {
-    // 兜底：工具恒写 5 维，但防御旧/异常数据不致渲染崩溃
+    // 兜底：工具恒写 8 维，但防御旧/异常数据不致渲染崩溃
     const d = score.dims[dim.key] ?? { score: 0, max: dim.max }
     return `  ${dim.label}(${dim.key})：${d.score}/${d.max}${d.score < dim.max ? `（扣 ${dim.max - d.score}）` : ""}`
   }).join("\n")

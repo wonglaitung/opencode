@@ -199,13 +199,19 @@ flowchart TD
 | reqdoc-r28 | edge | 先补料再追问：进入边界与异常（edge）追问前，若 01_背景与目标 / 02_制度与合规 / 04_角色与权限 仍全空且业务未选「直接口述」，须先促业务投放其中至少 2 个目录（或确认口述），避免全程 [问答] 兜底导致需求说服力与可追溯性弱；同时提示调用 workflow_baseline(developer_confirmed=true) 录入预估工时与 MTTR 基线，形成 AI 提效对比。已扫描材料充足时可跳过。 |
 | reqdoc-r30 | global | 来源真实性门禁（防全[问答]兜底）：PRD 定稿须有一定书面材料支撑——[文档] 来源占比 ≥30%，或至少 2 个功能点含 ≥1 处 [文档] 支撑，二者满足其一即可；均不满足则 review_submit 被拦截，须业务向 01~04 补充书面材料后重扫 reqdoc_scan，或由业务明确确认「无书面材料可引用」(no_document_confirmed=true) 后定稿。 |
 | reqdoc-r31 | prd | 字段定义环节（数据字典，进 prd 硬前置）：渲染前对每个功能点的输入字段逐一定义——字段名、类型、长度/精度、是否必填、取值域/约束、来源系统/接口——并调用 reqdoc_field_dict(fields=[...]) 记录，写入 06_需求规格产出/数据字典与库表设计/数据字典.md。逐字段与业务确认，业务确认后才落库；字段定义是 material 维度（真实字段/接口证据）的直接来源，缺失则对应维度扣分。workflow_advance(enter prd) 与 review_submit 两处强制要求 fieldDict 非空（需求确无结构化字段可 skip_field_dict=true 豁免）。已确认功能点较多时可分批提交 reqdoc_field_dict，服务端按 feature 合并。 |
+| reqdoc-r25 | global | 阶段可见性（通用）：你每条回复的开头，必须用一行向业务展示当前所处阶段与全部阶段进展，格式——📍 阶段：<当前阶段中文名>（第 N/Y 步）｜ 目的：<本阶段一句话目的> ｜ 已完成：<已 approved 阶段名>✓ ｜ 下一步：<下一阶段名>。处于「未开始/空档」态时，说明「尚未开始，请从<首阶段>开始」或「空档，下一步：<阶段名>」。向业务询问确认/approve 时，必须显式点明所确认的**阶段名**（如「【边界与异常 阶段】以上边界与异常是否确认？」），不得用笼统的「以上流程与规则是否确认」之类不点名阶段的问法。 |
+| reqdoc-r26 | global | 投放/口述 决定未完成前不得推进：需求资料目录（01~04）已建、但业务尚未明确选择「投放材料」还是「直接口述」时，每轮开场都须显式向业务提出二选一（或问清已投放了哪些目录），并停下等待业务明确选择；未获得明确选择不得进入追问、不得先抛其它问题。调用 reqdoc_init 后，必须把工具返回的目录绝对路径与「① 投放材料 / ② 直接口述」二选一原样转述给业务，不得自行浓缩成「方便您后续放材料」之类不触发动作的话术后直接追问。业务选直接口述时先回知情确认（见 reqdoc-r8），部分投放则仅扫描已投目录。 |
+| reqdoc-r27 | global | 关键确认防浅背书：若业务连续 2 轮选择「默认推荐 / 同意默认」，则放弃 A/B/C 默认推荐、当轮改为开放式追问，强制业务对 3 项关键内容给出具体意见——量化目标（如 MTTR 基线/目标具体数字，补满 100 分）、功能范围、权限边界——要求给数字、给真实举例，不得继续走默认；量化目标缺失时直接追问具体数字。插件累计「自主意见占比」，连续默认轮次 ≥2 时 review 阶段会提示补充材料/实例以提升需求真实性。目的在防止「AI 揣测 + 业务走流程」式假确认。此处不做硬拦截，靠 reqdoc-r21 打分门禁兜底。 |
+| reqdoc-r28 | edge | 先补料再追问：进入边界与异常（edge）追问前，若 01_背景与目标 / 02_制度与合规 / 04_角色与权限 仍全空且业务未选「直接口述」，须先促业务投放其中至少 2 个目录（或确认口述），避免全程 [问答] 兜底导致需求说服力与可追溯性弱；同时提示调用 workflow_baseline(developer_confirmed=true) 录入预估工时与 MTTR 基线，形成 AI 提效对比。已扫描材料充足时可跳过。 |
+| reqdoc-r30 | global | 来源真实性门禁（防全[问答]兜底）：PRD 定稿须有一定书面材料支撑——[文档] 来源占比 ≥30%，或至少 2 个功能点含 ≥1 处 [文档] 支撑，二者满足其一即可；均不满足则 review_submit 被拦截，须业务向 01~04 补充书面材料后重扫 reqdoc_scan，或由业务明确确认「无书面材料可引用」(no_document_confirmed=true) 后定稿。 |
+| reqdoc-r31 | prd | 字段定义环节（数据字典，进 prd 硬前置）：渲染前对每个功能点的输入字段逐一定义——字段名、类型、长度/精度、是否必填、取值域/约束、来源系统/接口——并调用 reqdoc_field_dict(fields=[...]) 记录，写入 06_需求规格产出/数据字典与库表设计/数据字典.md。逐字段与业务确认，业务确认后才落库；字段定义是 material 维度（真实字段/接口证据）的直接来源，缺失则对应维度扣分。workflow_advance(enter prd) 与 review_submit 两处强制要求 fieldDict 非空（需求确无结构化字段可 skip_field_dict=true 豁免）。已确认功能点较多时可分批提交 reqdoc_field_dict，服务端按 feature 合并。 |
 | reqdoc-r15 | review | review 是唯一不可由 AI 自行推进的阶段（必须经 review_submit），确保业务真正理解并确认 PRD 要点。 |
 | reqdoc-r16 | review | 将 PRD 拆分为可确认要点（业务目标 / 核心字段 / 异常规则 / 合规要求），comprehension_add 逐段复述输出。 |
 | reqdoc-r17 | review | 业务确认某要点时，立即调用 comprehension_confirm(codeSegmentId=该要点 id)；单次只接受一个要点，逐段确认、禁止一次确认多个。 |
 | reqdoc-r18 | review | 业务追问时详细解释，comprehension_ask 将问答追加到该要点的 explanation。 |
 | reqdoc-r19 | review | 每个要点须达成终态（confirm 接受 / manual 自处理），不允许 pending/rejected 悬空；拒绝的要点先 rewrite 重写或 manual 定论，全部定论且前序阶段（goal/rules/edge/prd）全部 approved 后才可 review_submit；清单四项须全为 true，否则回到 edge/prd。通过率低说明要点含糊，应结合拒绝意见重写，而非简单重试。 |
 
-> 注入时机：进行中阶段为 goal 时注入 8 条（r1-r8）；rules 时注入 7 条（r1-r5 + r9-r10）；edge 时注入 9 条（r1-r5 + r11-r12 + r21-r22）；prd 时注入 11 条（r1-r5 + r13-r14 + r20 + r23-r24 + r31）；review 时注入 10 条（r1-r5 + r15-r19）。
+> 注入时机（实际规则全集至 r31，r29 预留未用，共 30 条）：进行中阶段为 goal 时注入 12 条（9 global：r1-r5、r25-r27、r30；加 3 goal：r6-r8）；rules 时注入 11 条（9 global + 2 rules：r9-r10）；edge 时注入 14 条（9 global + 5 edge：r11-r12、r21-r22、r28）；prd 时注入 15 条（9 global + 6 prd：r13-r14、r20、r23-r24、r31）；review 时注入 14 条（9 global + 5 review：r15-r19）。global 恒为 9 条（r1-r5、r25-r27、r30）。
 
 ## 5. PRD 质量打分卡（实施方案第三节，reqdoc 专属）
 

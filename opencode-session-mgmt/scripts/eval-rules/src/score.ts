@@ -1,6 +1,6 @@
 /**
  * PRD 产出确定性评分（质量飞轮 P0「eval 评分模式」，设计文档 workflow-reqdoc.md 10 章；打分卡标准见 workflow-reqdoc.md 5 章）。
- * 镜像 REQDOC_SCORE_DIMS 的五维扣分标准（workflow.ts），把每个扣分条件映射为
+ * 镜像 REQDOC_SCORE_DIMS 的八维扣分标准（workflow.ts），把每个扣分条件映射为
  * 纯文本谓词，对模型渲染出的 PRD 文本逐维扣分——无需 LLM 判卷，弱模型即可跑。
  *
  * 设计要点：
@@ -12,7 +12,7 @@
  *   若用模板里出现的词会误判扣分。本文件所有词表经手工核对，与
  *   docs/reqdoc-prd-template.md 的结构词无交集——改动模板时须复查本文件。
  * - 与场景 judge（kind="score"）配合：judge 管「渲染没渲染、达不达标」，本评分器
- *   返回的 PrdScore 同时供 run.ts 聚合五维平均分（baseline→new 逐维对比）。
+ *   返回的 PrdScore 同时供 run.ts 聚合八维平均分（baseline→new 逐维对比）。
  */
 import { REQDOC_SCORE_DIMS, type ReqdocScoreDimKey } from "sm-shared"
 

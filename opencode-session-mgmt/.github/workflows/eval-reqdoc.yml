@@ -1,0 +1,53 @@
+name: reqdoc 规则遵循度评测
+
+# 量化弱模型对 reqdoc 注入规则的遵循度（设计文档 session-management.md 13 章）。
+# 与「通过率不降 / 打分卡八维分数不降」合入门槛挂钩：任何八维维度回退或整体通过率回退即 fail。
+# 需自建模型端点：在仓库 Settings → Secrets 配置 EVAL_BASE_URL（及可选 EVAL_API_KEY / EVAL_MODEL）。
+# 未配置端点时工作流自动跳过，避免无端点环境误报失败。
+on:
+  schedule:
+    - cron: "17 3 * * 0" # 每周日 03:17（避开整点）
+  workflow_dispatch:
+    inputs:
+      variant:
+        description: "baseline 冻结当前快照 / new 对比 baseline"
+        required: true
+        default: "new"
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+
+      - name: 冻结 baseline（仅 dispatch 选 baseline）
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.variant == 'baseline' }}
+        env:
+          EVAL_BASE_URL: ${{ secrets.EVAL_BASE_URL }}
+          EVAL_API_KEY: ${{ secrets.EVAL_API_KEY }}
+          EVAL_MODEL: ${{ secrets.EVAL_MODEL }}
+        run: |
+          if [ -z "$EVAL_BASE_URL" ]; then echo "未配置 EVAL_BASE_URL，跳过"; exit 0; fi
+          bun run eval:baseline
+
+      - name: 运行 new 并比对 baseline（回归门禁）
+        if: ${{ github.event_name == 'schedule' || inputs.variant != 'baseline' }}
+        env:
+          EVAL_BASE_URL: ${{ secrets.EVAL_BASE_URL }}
+          EVAL_API_KEY: ${{ secrets.EVAL_API_KEY }}
+          EVAL_MODEL: ${{ secrets.EVAL_MODEL }}
+        run: |
+          if [ -z "$EVAL_BASE_URL" ]; then echo "未配置 EVAL_BASE_URL，跳过评测"; exit 0; fi
+          bun run eval:ci
+
+      - name: 上传评测结果
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results
+          path: scripts/eval-rules/results/*.json
+          if-no-files-found: ignore

@@ -10,7 +10,11 @@
     "build:plugin": "bun build packages/plugin/src/index.ts --outdir dist/plugin --target bun",
     "build:cli": "bun build packages/cli/src/index.ts --compile --outfile dist/opencode-sm",
     "pack:cli": "bash scripts/pack-cli.sh",
-    "pack:bundle": "bash scripts/pack-bundle.sh"
+    "pack:bundle": "bash scripts/pack-bundle.sh",
+    "eval:baseline": "bun run scripts/eval-rules/run.ts --variant baseline",
+    "eval:new": "bun run scripts/eval-rules/run.ts --variant new",
+    "eval:dry": "bun run scripts/eval-rules/run.ts --dry",
+    "eval:ci": "bun run scripts/eval-rules/run.ts --variant new --fail-on-regression"
   },
   "devDependencies": {
     "@types/bun": "^1.3.0",

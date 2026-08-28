@@ -111,7 +111,7 @@ export interface ReqdocFeature {
 }
 
 /**
- * reqdoc 打分卡五维度（实施方案第三节，满分 100 = Σ max）。
+ * reqdoc 打分卡八维度（实施方案第三节，满分 100 = Σ max）。
  * 单点定义：reqdoc_score 工具、prd 门禁、状态条/CLI 展示、评测脚本共用。
  * 每维含 `rule`（判定规则）与 `deductionRules`（扣分标准，方案「Agent 后台判定规则与
  * 扣分标准」列），经 reqdocScoreRubric() 生成提示文本——r21 规则文本与工具描述双通道同源，

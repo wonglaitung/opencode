@@ -10,7 +10,7 @@
  * reqdoc 双通道(资料已放好应扫描分析非空问)、功能点拆解确认、功能点未确认不渲染定稿、
  * 打分卡门禁(进 prd 前先打分 / <85 不定稿 / 高分未业务确认不定稿 / 达标且确认后定稿)、
  * 评分模式(质量飞轮 P0,judge.kind="score"):prd-render 场景对渲染产出的 PRD 文本做
- * 五维确定性评分——材料齐全渲染应高分、缺异常材料渲染应低分(不杜撰),验证产出度量
+ * 八维确定性评分——材料齐全渲染应高分、缺异常材料渲染应低分(不杜撰),验证产出度量
  * 的区分度,供 baseline→new 逐维对比。
  * 追问可测化(质量飞轮 P1,judge.argsContains 数组子集断言):追问结束记录探针(asked
  * 覆盖断言)、缺口与满分矛盾不推进(柔性一致校验)、覆盖达标正向进 prd。
@@ -75,7 +75,7 @@ function finish(s: WorkflowState): WorkflowState {
   return s
 }
 
-/** reqdoc 打分卡夹具:五维实得分,总分 = 各维之和(默认 90 达标);confirmed 默认 true。 */
+/** reqdoc 打分卡夹具:八维实得分,总分 = 各维之和(默认 90 达标);confirmed 默认 true。 */
 function score(dims: Record<ReqdocScoreDimKey, number>, confirmed = true): ReqdocScore {
   const total = Object.values(dims).reduce((a, b) => a + b, 0)
   return {
@@ -726,8 +726,8 @@ export const SCENARIOS: Scenario[] = [
     judge: { kind: "tool", expectTool: "review_submit" },
   },
   {
-    // 评分模式（质量飞轮 P0）：材料齐全，渲染产物理应高分——五维自评 100 与产出度量的各维
-    // 下限对齐。场景区分度对照 r19：同样是渲染，材料齐 vs 缺料，scorePrd 五维应有明显落差。
+    // 评分模式（质量飞轮 P0）：材料齐全，渲染产物理应高分——八维自评 100 与产出度量的各维
+    // 下限对齐。场景区分度对照 r19：同样是渲染，材料齐 vs 缺料，scorePrd 八维应有明显落差。
     name: "r18 材料齐全渲染成稿（高分）",
     workflowType: "reqdoc",
     state: (() => {
@@ -844,7 +844,7 @@ export const SCENARIOS: Scenario[] = [
   },
   // ---- 渲染可测化（质量飞轮 P2，judge.kind="render"）：模板结构 schema + 渲染 diff 判定 ----
   // 评测无 write/文件系统，模型在回复文本中渲染 PRD 骨架，render 判定用共享 parseRenderStructure
-  // 解析（与运行时 reqdoc_check 同源）。与 r18/r19 的 score 判定互补：score 抓五维质量、render 抓结构。
+  // 解析（与运行时 reqdoc_check 同源）。与 r18/r19 的 score 判定互补：score 抓八维质量、render 抓结构。
   {
     name: "r23 材料齐全渲染结构达标",
     workflowType: "reqdoc",

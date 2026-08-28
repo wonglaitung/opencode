@@ -598,7 +598,7 @@ export function resolveWorkflowType(v: unknown): WorkflowType   // 未知值回�
 
 `baseline` 记录项目经理在需求创建时给出的**预估人工工时**（`estimatedHours`，小时、可小数），`setAt` 为录入时间戳。它给出实际周期的参照系：会话结束后，系统按 `（预估工时 − 实际周期）÷ 预估工时` 计算 **AI 提效百分比**。字段可选（无基线的会话提效率为 N/A），可随时重设（幂等覆盖、记最新值，录入规则见 workflow-sdlc.md 3 章 sdlc-r6 / workflow-reqdoc.md 4 章 reqdoc-r7）；录入由开发者在 TUI 对话中转述项目经理的预估（见 4.1 `workflow_baseline`）。
 
-**reqdoc 专属数据（已移至 workflow-reqdoc.md，本文件不重复定义）**：PRD 质量打分卡 `ReqdocScore`（`score` 字段语义、服务端算分、两处硬门禁、≥85 达标）与评分标准 `REQDOC_SCORE_DIMS`（5 维判定规则 + 扣分标准表）见 **workflow-reqdoc.md 5 章**；追问探针清单 `REQDOC_PROBES`（7 条，与打分卡维度一一映射）与柔性一致校验见 **workflow-reqdoc.md 6 章**；渲染结构 schema `REQDOC_TEMPLATE_CHAPTERS`/`REQDOC_TEMPLATE_FIELDS` 与 `parseRenderStructure` 见 **workflow-reqdoc.md 7 章**。
+**reqdoc 专属数据（已移至 workflow-reqdoc.md，本文件不重复定义）**：PRD 质量打分卡 `ReqdocScore`（`score` 字段语义、服务端算分、两处硬门禁、≥85 达标）与评分标准 `REQDOC_SCORE_DIMS`（8 维判定规则 + 扣分标准表）见 **workflow-reqdoc.md 5 章**；追问探针清单 `REQDOC_PROBES`（7 条，与打分卡维度一一映射）与柔性一致校验见 **workflow-reqdoc.md 6 章**；渲染结构 schema `REQDOC_TEMPLATE_CHAPTERS`/`REQDOC_TEMPLATE_FIELDS` 与 `parseRenderStructure` 见 **workflow-reqdoc.md 7 章**。
 
 **ReviewChecklist — 可接手标准检查项（sdlc 专属）**：审查清单由 `WorkflowDefinition.checklist` 定义，sdlc 注册四项（businessIntent/logicExplainable/behaviorVerifiable/designRationale），全部通过后审查阶段才可 approve。清单项要求与验证方式见 **workflow-sdlc.md 5 章**。
 
@@ -824,7 +824,7 @@ flowchart TD
 | `review_submit` | 提交审查清单结果（从 `def.checklist` 生成具名参数） | 由 `def.checklist` 生成具名输入参数（非 auto 项布尔，auto 项插件置真）；**前序阶段须全部 `approved`（审查是最后一关）**；有片段/要点时须已 `comprehension_add` 登记、且**全部处于终态 accepted/manual，不允许 pending/rejected 悬空**；通过时自动计算 `firstPassRate`（sdlc 与 reqdoc 均适用） |
 | `commit_gate_check` | 提交前门禁检查（`def.hasCommitGate=true` 时启用） | 返回未完成阶段列表；未通过时 `tool.execute.before` 阻断 `git commit` |
 | `commit_force_unlock` | 强制提交授权（`def.hasCommitGate=true` 时，3.4 逃生口） | `developer_confirmed` 必须为 true、原因必填；写入一次性授权，门禁放行一次后置 `used` 留痕 |
-| `reqdoc_scan` / `reqdoc_confirm_features` / `reqdoc_score` / `reqdoc_check` / `reqdoc_export` | reqdoc 专属工具（需求资料扫描 / 功能点拆解确认 / 五维打分卡 / 渲染结构校验 / Word 导出），仅 `def.type === "reqdoc"` 时生效 | 各工具的用途与服务端校验见 **workflow-reqdoc.md 8 章** 完整表格 |
+| `reqdoc_scan` / `reqdoc_confirm_features` / `reqdoc_score` / `reqdoc_check` / `reqdoc_export` | reqdoc 专属工具（需求资料扫描 / 功能点拆解确认 / 八维打分卡 / 渲染结构校验 / Word 导出），仅 `def.type === "reqdoc"` 时生效 | 各工具的用途与服务端校验见 **workflow-reqdoc.md 8 章** 完整表格 |
 
 工具定义遵循上游插件 `ToolDefinition` 接口（`packages/plugin/src/tool.ts`），由 `tool` hook 注册后自动进入 LLM 可用工具集（上游 `tool/registry.ts` 已接线）。
 
@@ -1190,7 +1190,7 @@ reqdoc 无 `git commit` 门禁，表中「绕过门禁直接提交」风险不�
 
 **sdlc 12 条规则**（sdlc-r1~r12：6 global + 1 requirements + 5 review）的完整表格（含注入时机）已移至 **workflow-sdlc.md 3 章**，此处不再重复。
 
-**reqdoc 24 条规则**（reqdoc-r1~r24：5 global + 3 goal + 2 rules + 4 edge + 5 prd + 5 review）的完整表格（含注入时机）已移至 **workflow-reqdoc.md 4 章**；需求资料目录契约见 **workflow-reqdoc.md 3 章**。
+**reqdoc 30 条规则**（reqdoc-r1~r31，r29 预留未用：9 global + 3 goal + 2 rules + 5 edge + 6 prd + 5 review）的完整表格（含注入时机）已移至 **workflow-reqdoc.md 4 章**；需求资料目录契约见 **workflow-reqdoc.md 3 章**。
 
 ### 7.5 reqdoc 需求资料目录契约（双通道）
 
@@ -1227,7 +1227,7 @@ reqdoc 无 `git commit` 门禁，表中「绕过门禁直接提交」风险不�
 | `src/prompt.ts` | system prompt 注入片段：阶段化注入（rulesForStage 取 global + 当前阶段规则）+ buildStateBar 阶段状态块替代冗长 JSON（含阶段表头「当前阶段（第 N/Y 步）+ 目的 + 状态」、来源覆盖 [文档]x/[问答]y、渲染校验、追问覆盖多行）；`stage===null` 三态化：未启动（起步）/ 空档态（部分 approved：继续→进入下一阶段 / 回退→revisit）/ 完成态（专用完成块：「提交 commit_gate_check / 开新需求 /new / 改本需求 workflow_revisit」，不注入常规全局规则；合并 open-ide 后完成态另读锁表提示解锁，仅 sdlc） |
 | `src/tools/workflow.ts` | `workflow_advance`（含 reqdoc 进入 prd 的打分卡门禁）/ `workflow_revisit` / `workflow_baseline` / `commit_gate_check` / `commit_force_unlock` 工具 |
 | `src/tools/review.ts` | `comprehension_add` / `comprehension_confirm` / `comprehension_reject` / `comprehension_rewrite` / `comprehension_manual` / `comprehension_ask` / `review_submit` 工具（含防批量确认校验、终态门禁、reqdoc 定稿打分卡 + P1 探针 + P2 渲染复核兜底校验） |
-| `src/tools/reqdoc-scan.ts` / `reqdoc-features.ts` / `reqdoc-score.ts` / `reqdoc-check.ts` / `reqdoc-export.ts` | reqdoc 专属工具（文档扫描 / 功能点拆解确认 / 五维打分卡 / 渲染结构校验 / Word 导出），用途与服务端校验见 **workflow-reqdoc.md 8 章** 完整表格 |
+| `src/tools/reqdoc-scan.ts` / `reqdoc-features.ts` / `reqdoc-score.ts` / `reqdoc-check.ts` / `reqdoc-export.ts` | reqdoc 专属工具（文档扫描 / 功能点拆解确认 / 八维打分卡 / 渲染结构校验 / Word 导出），用途与服务端校验见 **workflow-reqdoc.md 8 章** 完整表格 |
 | `src/tools/quality.ts` | 迭代计数 + AI 代码行数累计逻辑（`quality_report` 已移除，firstPassRate 由 review.ts 自动计算） |
 | `src/workflow-ops.ts` | 阶段转换（enter/approve/revisit，3.3）与提交门禁重算（3.4），工具与门禁共用的状态机 |
 | `src/gate.ts` | `tool.execute.before` 提交门禁拦截（git commit 阻断） |
@@ -1369,7 +1369,7 @@ opencode
 
 ## 13. 评测驱动规则迭代（数据驱动优化）
 
-规则文本优化（阶段化注入、状态条、审查清单引导）以**数据驱动**验证：量化弱模型对注入规则的遵循度，改前跑基线、改后对比。这是本方案的**核心方法论**——规则的每一步措辞调整都必须先有基线数据支撑，避免凭直觉改规则伤害弱模型。脚本 `scripts/eval-rules/`（不入 `bun test`，需真实模型端点）。**通用方法论**（适用于所有 AI 深度绑定开发）见 `plugin-guide/eval-driven-rule-iteration.md`；本章为其在 opencode-session-mgmt 的落地实例。**评测与质量飞轮实操手册（技能）见 `.opencode/skills/workflow-rules-eval/SKILL.md`**——冻结基线 / 三级验证 / 五维 delta 读法 / 归因地图 / 收敛判据可直接照其执行。
+规则文本优化（阶段化注入、状态条、审查清单引导）以**数据驱动**验证：量化弱模型对注入规则的遵循度，改前跑基线、改后对比。这是本方案的**核心方法论**——规则的每一步措辞调整都必须先有基线数据支撑，避免凭直觉改规则伤害弱模型。脚本 `scripts/eval-rules/`（不入 `bun test`，需真实模型端点）。**通用方法论**（适用于所有 AI 深度绑定开发）见 `plugin-guide/eval-driven-rule-iteration.md`；本章为其在 opencode-session-mgmt 的落地实例。**评测与质量飞轮实操手册（技能）见 `.opencode/skills/workflow-rules-eval/SKILL.md`**——冻结基线 / 三级验证 / 八维 delta 读法 / 归因地图 / 收敛判据可直接照其执行。
 
 ### 13.1 运行方式
 
@@ -1393,7 +1393,7 @@ bun run scripts/eval-rules/run.ts --variant new              # 改造后 → res
   bun run scripts/eval-rules/run.ts --variant new --repeat 3
   ```
 
-**读输出与合入门槛**：per-scenario 通过表（`✅`/`❌`，r20-r24 在 reqdoc 段）→ 聚合通过率（整体 / sdlc / reqdoc）→ `=== 对比(baseline → new) ===` 的 PRD 五维逐维 delta（仅 `--variant new` 且库里已有 baseline.json 时打印）。**五维任何一维回退（负号）就不合入**，回滚改动；全过或持平才沉淀资产合入。
+**读输出与合入门槛**：per-scenario 通过表（`✅`/`❌`，r20-r24 在 reqdoc 段）→ 聚合通过率（整体 / sdlc / reqdoc）→ `=== 对比(baseline → new) ===` 的 PRD 八维逐维 delta（仅 `--variant new` 且库里已有 baseline.json 时打印）。**八维任何一维回退（负号）就不合入**，回滚改动；全过或持平才沉淀资产合入。
 
 **baseline 冻结纪律**：`results/baseline.json` 是**入库冻结参照**（fixtures 里改造前规则快照 + 指定模型实测结果），`--variant new` 自动读它对比。只有首次搭评测 / 换模型 / 换端点时才跑 `--variant baseline` 重新冻结并 commit；日常改动**只跑 `--variant new`，不要重跑 baseline 覆盖参照**，否则对比失效。
 
@@ -1411,12 +1411,12 @@ bun run scripts/eval-rules/run.ts --variant new              # 改造后 → res
 
 ### 13.3 判定方式（rule-based，不用 LLM judge）
 
-判定类分两类：**behavior 类**（`tool_use` / `no_tool` / `text`，断言「模型调了什么工具、怎么调、回复含什么」，sdlc 与 reqdoc 全部场景共用）与 **output 类**（`score` 质量飞轮 P0 / `render` 质量飞轮 P2，断言「模型渲染产出的 PRD 文本质量」，**reqdoc 专属**——reqdoc 用它将「通过/不通过」升级为 0-100 五维度量，sdlc 不跑 output 类、只走 behavior 类的通过率）。
+判定类分两类：**behavior 类**（`tool_use` / `no_tool` / `text`，断言「模型调了什么工具、怎么调、回复含什么」，sdlc 与 reqdoc 全部场景共用）与 **output 类**（`score` 质量飞轮 P0 / `render` 质量飞轮 P2，断言「模型渲染产出的 PRD 文本质量」，**reqdoc 专属**——reqdoc 用它将「通过/不通过」升级为 0-100 八维度量，sdlc 不跑 output 类、只走 behavior 类的通过率）。
 
 - 工具类比对 `tool_use` 名称与参数谓词（如 approve 时 `developer_confirmed` 必须 true）；`args` 为参数子集全等匹配，`argsContains`（质量飞轮 P1）为数组子集断言——期望每个元素须出现在实际数组参数中（如断言 asked 覆盖核心探针），两者互不影响、零回归
 - `no_tool` 类断言未调用某工具
 - `text` 类（maxQuestions 问句计数、optionsABC 问句 ≤max 且含「默认」+ ≥2 个 A/B/C 标记、categoryKeywords 探针关键词）为关键词启发式，判定口径脆弱需人工复核
-- `score` 类（质量飞轮 P0）：渲染标记命中 + `scorePrd()` 五维总分/维度上下限校验——同样是 rule-based，只是判定对象从「工具行为」换成「渲染产出质量」
+- `score` 类（质量飞轮 P0）：渲染标记命中 + `scorePrd()` 八维总分/维度上下限校验——同样是 rule-based，只是判定对象从「工具行为」换成「渲染产出质量」
 - `render` 类（质量飞轮 P2）：共享 `parseRenderStructure` 解析模型回复文本，断言必查章节出现（requiredChapters，缺省=全部）、章节顺序正确（ordered）、功能点块数下限（minFeatures）、映射字段逐功能点全标来源（sourceAll）、至少一个 [缺省]（anyDefault，缺料不杜撰的结构信号）——与运行时 `reqdoc_check` 同源，只换「工具+文件」为「评测回复文本」（评测无文件系统）。**r23/r24 启用 `soft` 拆级降权（A3/D7）**：`sourceAll`/`anyDefault` 降为观察项不计通过率，硬门禁只剩章节/顺序/块数结构骨架；渲染/评分场景的模型输出原文落进结果 JSON（`outputs` 字段）供归因（A4）——只看 detail 无法区分「纯文本渲染/错层级标题/tool_call 占位」
 
 ### 13.4 实测记录与迭代闭环
@@ -1428,7 +1428,7 @@ flowchart TD
     A(["迭代起点"]) --> B["冻结 baseline<br/>（仅首次搭评测 / 换模型 / 换端点时）"]
     B --> C["改动<br/>规则 / 探针 / 打分卡 / 模板<br/>或评测脚本 / 判定口径"]
     C --> D["跑 --variant new<br/>自动对比 baseline"]
-    D --> E{"通过率 / 五维分数<br/>有回退？"}
+    D --> E{"通过率 / 八维分数<br/>有回退？"}
     E -->|"是 · 回退"| F["失败场景逐个归因<br/>规则措辞 / 判定口径 / 场景二义性"]
     F --> G["优先调脚本与判定口径<br/>而非膨胀规则"]
     G --> C
@@ -1483,10 +1483,10 @@ flowchart LR
     K --> L(["合入"])
 ```
 
-①②③ 各级的**具体命令、读输出口径与 baseline 冻结纪律**见 13.1 运行方式。本决策图两个工作流共用，但第③步比对口径不同：**sdlc 只看通过率**（baseline→new 不降即可），**reqdoc 额外看打分卡五维分数**（打分卡 0-100 五维度量是 reqdoc 专属度量）。质量飞轮的三支柱机制（把 reqdoc 打分卡接进评测）、reqdoc 落地节奏（P0/P1/P2）与 reqdoc 实测轮次见 **workflow-reqdoc.md 10 章**。
+①②③ 各级的**具体命令、读输出口径与 baseline 冻结纪律**见 13.1 运行方式。本决策图两个工作流共用，但第③步比对口径不同：**sdlc 只看通过率**（baseline→new 不降即可），**reqdoc 额外看打分卡八维分数**（打分卡 0-100 八维度量是 reqdoc 专属度量）。质量飞轮的三支柱机制（把 reqdoc 打分卡接进评测）、reqdoc 落地节奏（P0/P1/P2）与 reqdoc 实测轮次见 **workflow-reqdoc.md 10 章**。
 
 **可持续的保障**
 
-- **一切改动必须过回归**：每次改规则 / 探针 / 模板跑 eval，对比 baseline，任何回退都不合入——reqdoc 以打分卡五维分数不降为准，sdlc 以通过率不降为准（13.4 迭代闭环从「通过率不降」升级为「五维分数不降」）。
+- **一切改动必须过回归**：每次改规则 / 探针 / 模板跑 eval，对比 baseline，任何回退都不合入——reqdoc 以打分卡八维分数不降为准，sdlc 以通过率不降为准（13.4 迭代闭环从「通过率不降」升级为「八维分数不降」）。
 - **改进必须资产化**：新场景进 `scenarios.ts`、新探针进清单、新规则进 fixture——沉淀为可重复资产而非一次性修改。
 - **三同步铁律照旧**：规则 / 工具 / 文档 / mermaid 同步。
