@@ -10,7 +10,7 @@
 
 | 文件 | 类别 | 作用 | 被谁消费 | 能否改名 / 移动 |
 |------|------|------|----------|----------------|
-| [session-management.md](session-management.md) | 设计文档 | **主设计文档**（通用机制 / 架构 / CLI / 统计 / 部署 / 评测；两个工作流的专属内容已拆到下两行文件，本文件只留摘要指针） | [CLAUDE.md](../CLAUDE.md)、[README.md](../README.md)、[.opencode/agent/rules-reviewer.md](../.opencode/agent/rules-reviewer.md)、[deployment.md](deployment.md)、[collector-spec.md](collector-spec.md) 引用其内容 | 改名需同步 5 处引用；一般不主张 |
+| [session-management.md](session-management.md) | 设计文档 | **主设计文档**（通用机制 / 架构 / CLI / 统计 / 部署 / 评测 / **AI 编码质量管控四支柱框架（1.6）**；两个工作流的专属内容已拆到下两行文件，本文件只留摘要指针） | [CLAUDE.md](../CLAUDE.md)、[README.md](../README.md)、[.opencode/agent/rules-reviewer.md](../.opencode/agent/rules-reviewer.md)、[deployment.md](deployment.md)、[collector-spec.md](collector-spec.md) 引用其内容 | 改名需同步 5 处引用；一般不主张 |
 | [workflow-sdlc.md](workflow-sdlc.md) | 设计文档 | 工作流一：sdlc 软件开发定义（阶段 / 四清单 / hasCommitGate）、12 条规则全文、场景一~四、审查清单、统计口径、评测场景 | [session-management.md](session-management.md)（3.2/4.1/7.2/7.4/13 指针指向其章）、[deployment.md](deployment.md)（6.1 对话示例） | 可（同步引用方）；**新增文档进 docs/ 先登记本表** |
 | [workflow-reqdoc.md](workflow-reqdoc.md) | 设计文档 | 工作流二：reqdoc 需求书定义（双通道）、需求资料目录契约、24 条规则全文、PRD 打分卡、追问探针、渲染结构校验、专属工具、场景五、评测 | [session-management.md](session-management.md)（3.2/4.1/7.2/7.4/7.5/13 指针指向其章）、[reqdoc-prd-template.md](reqdoc-prd-template.md) | 可（同步引用方）；**新增文档进 docs/ 先登记本表** |
 | [collector-spec.md](collector-spec.md) | 设计文档 | 收集服务（collector）规范：三端点、聚合、容错 | 无入站引用（独立规范） | 可，但内容被作为部署/开发依据 |
