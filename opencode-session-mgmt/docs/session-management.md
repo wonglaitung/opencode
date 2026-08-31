@@ -1,8 +1,5 @@
-# Session Management: 标准化开发流程、理解保障与效能分析
+## 0. 方法论基础（四支柱框架）
 
-> **文档族说明**：本文档是设计文档族的主文档（通用机制与架构）。文档族共三份：`session-management.md`（本文档，通用机制 / CLI / 统计 / 部署 / 评测）、`workflow-sdlc.md`（工作流一：sdlc 软件开发定义与规则）、`workflow-reqdoc.md`（工作流二：reqdoc 需求书定义与规则）。引用约定：跨文件引用带文件名前缀（如「见 workflow-reqdoc.md 5 章」）；不带前缀的章号（如「见 3.2」）指本文档。通用机制只在本文件定义一次；两个工作流的**专属内容**（工作流定义 / 规则全文 / 清单 / 场景 / 目录契约）已拆到各自文件，本文件只留摘要指针与指引。文档族导览见 1.5。
-
-## 0. AI 编码质量管控框架（方法论基础）
 
 本工程不只是一套 OpenCode 插件，更是一套可复用的 **AI 编码质量管控方法论**的落地：用确定性的机制，把"AI 写代码质量不可控"拆成可治理的维度。业界对 AI 辅助研发的质量管控，普遍落在三类根本杠杆——**约束（让它别乱来）、上下文（让它懂业务/架构）、过程（让它按人类节奏走）**；本工程在三者之外，把"度量反馈"显式立为第四根支柱，构成完整闭环。
 
@@ -26,7 +23,7 @@ AI 编码产出的质量风险可分为四类，缺一便会在某个环节失�
 | ① 制定规约 | Guardrails / Policy-as-Code（Linter、Style Guide、`.cursorrules`/`AGENTS.md`、ADR） | 机构规约按工作流类型放入 `conventions/<type>/*.md`，frontmatter 声明 `stage`，每轮只注入 global + 当前阶段；基线随插件打包，项目根 `conventions/<type>/*.md` 覆盖不跨流泄漏 | `packages/plugin/conventions/` + `src/conventions.ts` |
 | ② 增强知识 | Context Engineering / Repo-level RAG（代码库语义检索、架构文档注入） | 架构/功能级知识由**需求发起单位技术侧经项目材料目录（`07_系统现状与能力/`）+ 通用 `reqdoc_scan`** 提供，**不进插件、不依赖 AGENTS.md**（业务不会用）；现状仅 `comprehension_ask` 把审查问答沉淀为"可检索知识库"（演进方向见 0.4） | `comprehension_*` 工具（部分）；知识层由单位材料目录承载 |
 | ③ 智能协同 | Agentic Workflow + Human-in-the-loop（强制门禁、确认闭环、工具编排） | sdlc / reqdoc 五阶段完成门禁，AI 主动 `workflow_advance`、引导人决策；`comprehension_confirm` / `reqdoc_*` 确认闭环；本插件即此支柱的工程化身 | `packages/plugin` 工作流 + 工具 |
-| ④ 度量反馈 | LLM evals / 回归测试（提示词/规则迭代必带基线） | `scripts/eval-rules` 打分卡八维回归 + `--fail-on-regression`，改规则前跑基线、改后对比，通过率/八维分不降才保留；详见第 13 章评测方法论 | `scripts/eval-rules/` |
+| ④ 度量反馈 | LLM evals / 回归测试（提示词/规则迭代必带基线） | `scripts/eval-rules` 打分卡八维回归 + `--fail-on-regression`，改规则前跑基线、改后对比，通过率/八维分不降才保留；详见第 9 章评测方法论 | `scripts/eval-rules/` |
 
 > **关于"规约沉淀"**：第①柱不是一次性写死的手册，而是随评审与规则迭代持续累积的组织资产——每轮评测发现的弱模型遵循短板，反向沉淀进 `conventions/` 与规则文本，形成"实践 → 规约 → 再实践"的资产化闭环。
 
@@ -75,14 +72,16 @@ graph LR
 |----------|----------|------------|
 | 起点：为什么 / 做什么 | 1 问题、目标与场景 | AI 写代码质量不可控，本系统治理哪四类风险 |
 | 基座：形态与契约 | 2 总体架构与零侵入部署、3 数据模型、4 接口、5 CLI | 如何在不改上游的前提下承载上述能力 |
-| ① 约束 | 7.4–7.5（规则阶段化注入 / 机构规约载体）+ `conventions/` | 用什么确定性的机制划定模型边界 |
-| ② 知识 | `comprehension_ask` 知识库 + reqdoc 双通道材料目录 | 用什么补足架构/功能语义 |
-| ③ 协同 | 2.1–2.2（工作流模型 / 阶段检测）、3.3–3.4（状态机 / 门禁）、4.1（工具）、7.1–7.3（Agent 约束）、理解确认闭环 | 如何把单次交互编排为人在回路的标准流程 |
-| ④ 度量 | 6 统计分析、13 评测驱动规则迭代 | 如何用基线量化前三者的实效、发现退化即回流 |
+| ① 约束 | 6.1–6.2（规则阶段化注入 / 机构规约载体）+ `conventions/` | 用什么确定性的机制划定模型边界 |
+| ② 知识 | 7 增强知识（7.2 双通道材料目录 / 7.3 comprehension 知识库） | 用什么补足架构/功能语义 |
+| ③ 协同 | 8.1–8.2（工作流模型 / 阶段检测）、3.3–3.4（状态机 / 门禁）、8.3（工具）、8.4–8.6（Agent 约束）、理解确认闭环（3.2） | 如何把单次交互编排为人在回路的标准流程 |
+| ④ 度量 | 9 统计分析与评测驱动规则迭代 | 如何用基线量化前三者的实效、发现退化即回流 |
 
-后续 8–12 章（文件清单、部署、升级、安全、验证）是四支柱的**交付与保障**，不属某一支柱，但都服务于「零侵入、可同步上游、可审计」这一总约束。
+后续 10–11 章（文件清单与运维、验证）是四支柱的**交付与保障**，不属某一支柱，但都服务于「零侵入、可同步上游、可审计」这一总约束。
 
-## 1. 概述
+
+
+## 1. 问题、目标与场景
 
 ### 1.1 核心问题
 
@@ -99,6 +98,7 @@ graph LR
 - **疑问一（退出风险）**：AI 写的代码，人能不能接、能不能改、AI 停了怎么办
 - **疑问二（ROI 验证）**：Token 投入与产出之间的关系，同等产出下资源配置的优化空间
 
+
 ### 1.2 核心场景
 
 **基本前提**：开发人员始终在 TUI 内，以自然语言对话的形式进行开发。工作流的推进（进入阶段、确认完成、回退）、代码审查、理解确认，全部通过对话完成，不需要退出 TUI 执行 CLI 命令。
@@ -109,6 +109,7 @@ CLI 只做两件事：
 
 开发人员使用 OpenCode 进行 AI 辅助开发时，经常在同一时间收到多个需求。每个需求需要走完完整流程：需求分析 → 设计 → 编码 → 测试 → 审查 → 提交。每个需求对应一个会话，在不同需求之间来回切换，但每个需求都能走完完整流程。
 
+
 ### 1.3 能力清单
 
 系统提供四项能力：
@@ -118,7 +119,11 @@ CLI 只做两件事：
 3. **理解保障** — 确保开发者真正理解 AI 生成的代码，而非仅仅"审查通过"
 4. **使用分析** — 支撑投入产出评估、算力预算规划与质量监控，为资源配置决策提供数据依据
 
-### 1.4 现状架构
+
+
+## 2. 总体架构与零侵入部署（技术决策）
+
+### 2.1 现状架构
 
 OpenCode 采用 C/S 架构：
 
@@ -157,14 +162,15 @@ graph LR
 
 > **例**：Alice 在 `~/work/user-service` 下执行 `opencode`，OpenCode 自动创建 Project（`worktree=/home/alice/work/user-service`，`name=user-service`，`id=proj_a1b2c3`）；她在 TUI 里创建的会话自动继承 `project_id=proj_a1b2c3`。第二天她在 `~/work/frontend` 启动 OpenCode，会话自动归属另一个 Project。全程无任何配置操作。因此统计时 `opencode-sm stats --period 7d` 省略 `--project` 即按 CWD 自动聚合本项目数据；组/组织层级聚合由外部收集服务 `performance_dashboard` 的看板提供，CLI 仅做本机会话/项目级聚合（见 3.1、5.2）。
 
-**上游未覆盖的能力**由定制三件套补齐——**插件 + 独立 CLI `opencode-sm` + org 收集服务**（见 2.4，全部不修改上游代码）：
+**上游未覆盖的能力**由定制三件套补齐——**插件 + 独立 CLI `opencode-sm` + org 收集服务**（见 10.1，全部不修改上游代码）：
 
 1. 工作流追踪机制（阶段推进、审查门禁、提交门禁）
 2. 理解保障机制（代码片段级的理解确认记录）
 3. 会话标签与扩展属性（tags、status）
 4. 组/组织级的使用统计与质量分析
 
-### 1.5 文档族导览（三个文件怎么分工）
+
+### 2.2 文档族导览（三个文件怎么分工）
 
 本设计文档族按「**通用机制 / 两个工作流**」三层拆分为三个文件，避免原先一个文档里通用实现与两套工作流纠缠难读：
 
@@ -178,167 +184,8 @@ graph LR
 
 ---
 
-## 2. 总体架构与零侵入部署（技术决策）
 
-### 2.1 工作流模型选择
-
-#### 候选方案对比
-
-| | 方案 A：严格流水线 | 方案 B：完成门控 |
-|---|---|---|
-| **模型** | 单向推进，不允许回头 | 自由跳转，提交时统一检查 |
-| **约束点** | 每个阶段转换 | 仅最终提交 |
-| **灵活性** | 差 | 好 |
-| **适合场景** | 瀑布式开发 | 迭代式开发 |
-
-#### 方案 A：严格流水线（被拒绝）
-
-```mermaid
-graph LR
-    A["需求分析"] -->|门禁| B["设计"] -->|门禁| C["编码"] -->|门禁| D["测试"] -->|门禁| E["提交"]
-```
-
-**拒绝原因**：开发人员指出，实际开发中编码时经常发现需求不清楚，需要回到需求分析阶段；测试失败也需要回去改代码。严格流水线无法支持这种反复迭代。
-
-#### 方案 B：完成门控（采用）
-
-```mermaid
-graph TB
-    subgraph IterationZone["自由迭代区（可任意跳转反复）"]
-        direction LR
-        R["需求分析"] <-->|"反复"| D["设计"]
-        D <-->|"反复"| C["编码"]
-        C <-->|"反复"| T["测试"]
-        C <-->|"反复"| RV["审查"]
-        T <-->|"反复"| RV
-        R -.->|"可回退"| C
-        R -.->|"可回退"| T
-        D -.->|"可回退"| T
-    end
-
-    subgraph Gate["提交门禁（硬约束）"]
-        G{"全部阶段<br/>approved?"}
-    end
-
-    IterationZone --> G
-    G -->|"✓ 全部完成"| COMMIT["提交"]
-    G -->|"✗ 有未完成"| BLOCK["阻止提交<br/>列出未完成项"]
-```
-
-**采用原因**：真实开发本质上是迭代的。约束点应该是"所有必需产物是否都已完成"，而不是"当前处于哪个阶段"。
-
-**审查阶段的特殊地位（sdlc）**：审查（review）是 sdlc 五阶段中唯一**不可被 AI 自行推进**的阶段。审查不仅检查代码正确性，更检查**人是否真正理解了代码**。审查清单包含四个硬性检查项（详见 3.2），不满足则审查阶段不可 approve。审查阶段与编码、测试阶段形成迭代循环——编码完成后进入审查，审查不通过则回到编码或测试。审查阶段由 `WorkflowDefinition.reviewStage` 声明；sdlc 与 reqdoc 均声明 `review` 审查阶段（reqdoc 语义为业务确认 PRD 要点）。
-
-### 2.2 阶段检测方式选择
-
-#### 候选方案对比
-
-| | AI 自动推断 | 工具使用模式 | 产物文件判断 | AI 提议+开发者确认 |
-|---|---|---|---|---|
-| **准确度** | 低（语义歧义） | 低（行为歧义） | 低（存在≠确认） | 高（人为决策） |
-| **可靠性** | 概率性 | 启发式 | 机械式 | 确定性 |
-| **实现复杂度** | 高 | 中 | 低 | 低 |
-
-**被拒绝的方案**：
-
-- **AI 从对话推断**：讨论"用户权限"是在做需求分析还是设计？AI 会猜错
-- **从工具使用判断**：写代码时也可能在重新思考需求
-- **从产物文件判断**：文档存在不代表需求已被确认
-
-**核心结论**：唯一真正知道"当前在哪个阶段、是否完成"的人，是**开发者本人**。
-
-#### 采用的方案：AI 提议 + 开发者确认
-
-```mermaid
-sequenceDiagram
-    participant Dev as 开发者
-    participant AI as AI Agent
-    participant Store as 插件库（WorkflowState）
-
-    Note over Dev,Store: 阶段进行中
-    Dev->>AI: 讨论需求细节...
-    AI->>AI: 观察对话上下文
-    AI->>Dev: 📋 需求摘要如下：<br/>是否确认，进入设计阶段？
-
-    alt 开发者确认
-        Dev->>AI: 确认
-        AI->>Store: approve(requirements)
-        Store-->>AI: status = approved
-        AI->>Dev: ✅ 需求已确认，开始设计...
-    else 开发者补充
-        Dev->>AI: 等等，还有一点没讨论
-        AI->>Dev: 好的，请继续补充
-    else 开发者回退
-        Dev->>AI: 回到需求分析，scope 要补充
-        AI->>Store: revisit(requirements)
-        Store-->>AI: requirements: in_progress, revision++<br/>design: 级联回退 in_progress（若已 approved）
-        AI->>Dev: 好的，已回到需求阶段
-    end
-```
-
-**规则**：
-1. 阶段转换的唯一来源是开发者的明确操作
-2. AI 只能提议，绝不自行推进
-3. 开发者说"回到XX"时立即回退
-4. 提交是唯一的硬门禁
-
-### 2.3 统计分析粒度选择
-
-讨论中确认需要三个层级：
-
-```mermaid
-graph TB
-    subgraph Session["会话级"]
-        S1["单会话详情"]
-        S1a["阶段耗时"]
-        S1b["迭代次数"]
-        S1c["AI 费用/Token"]
-    end
-
-    subgraph Project["项目级"]
-        P1["按项目+时段聚合"]
-        P1a["平均阶段耗时"]
-        P1b["需求迭代次数（需求质量）"]
-        P1c["编码-测试循环（代码质量）"]
-        P1d["费用效率 $/行"]
-    end
-
-    subgraph Group["组级"]
-        G1["按组聚合"]
-        G1a["组成员排行"]
-        G1b["组间完成率对比"]
-        G1c["组间一次通过率对比"]
-        G1d["组级质量趋势"]
-    end
-
-    subgraph Org["组织级（org）"]
-        T1["按组织聚合"]
-        T1a["组间排行"]
-        T1b["完成率趋势"]
-        T1c["人力结构弹性分析"]
-    end
-
-    Session -->|"聚合"| Project
-    Project -->|"聚合"| Group
-    Group -->|"聚合"| Org
-```
-
-**统计层级说明**：
-
-| 层级 | 聚合维度 | 对应 CLI 参数 | 用途 |
-|------|----------|---------------|------|
-| 会话级 | 单会话 | `opencode-sm stats <id>` | 开发者自检 |
-| 项目级 | 按项目+时段 | `opencode-sm stats --project "用户系统"`（或省略，自动检测 CWD） | 项目经理跟踪 |
-| 组级 | 按组聚合 | 外部收集服务 `performance_dashboard` 看板（CLI 仅本机统计，组/组织聚合由收集服务据 api_key 哈希解析） | 组长管理、月度汇报 |
-| 组织级（org） | 按组织聚合 | 外部收集服务 `performance_dashboard` 看板 | 领导汇报、预算决策 |
-
-组级统计是核心汇报层级——回应"各组 AI 使用程度和依赖程度"的需求。组级视图展示：成员排行、一次通过率分布、返工率对比、高迭代会话数、AI 净增行数（业务/测试/配置）。
-
-**数据来源决策**：零额外采集。工作流状态变更的时间戳即为分析数据源。
-
-**身份关联决策**：身份以 `api_key` 标识，本地明文存储、上送前转 SHA-256 哈希（网络不传明文）；组/部门/组织等归属由后台收集服务（`performance_dashboard`）据 `api_key` 哈希解析，客户端不再填写 account/group/org。另加 **workflowType（工作流类型）** 维度，由开发者 `opencode-sm init` 填写（api_key / 收集服务地址 / 可选工作流类型），存全局 `identity.json`。workflowType 决定本用户新会话走哪套工作流（开发者 `sdlc` 开发 / 需求分析师 `reqdoc` 需求书），不同角色 = 不同用户（见 3.1、3.2）。跨机聚合在收集服务侧完成（见 2.4、3.1）。
-
-### 2.4 部署架构选择：插件 + 独立 CLI（上游零修改）
+### 2.3 部署架构选择：插件 + 独立 CLI（上游零修改）
 
 #### 决策原则
 
@@ -415,7 +262,10 @@ flowchart LR
 
 ---
 
+
+
 ## 3. 共享基座：数据模型设计
+
 
 ### 3.1 数据模型（插件库 + 全局身份 + 组织聚合库，上游零修改）
 
@@ -652,7 +502,7 @@ export interface WorkflowDefinition {
   reviewStage: string | null              // 哪个阶段是审查阶段（可无）
   checklist: ChecklistItem[]              // 审查清单项（仅 reviewStage 存在时用）
   hasCommitGate: boolean                  // sdlc=true；reqdoc 定稿无 git 门禁 → false
-  rules: RuleItem[]                       // 注入的规则项（见 7.4），阶段化注入：每轮只取 global + 当前阶段
+  rules: RuleItem[]                       // 注入的规则项（见 10.2），阶段化注入：每轮只取 global + 当前阶段
 }
 
 export const WORKFLOW_DEFINITIONS: Record<WorkflowType, WorkflowDefinition>
@@ -670,13 +520,13 @@ export function resolveWorkflowType(v: unknown): WorkflowType   // 未知值回�
 
 **sdlc 定义**（五阶段 `["requirements","design","implementation","testing","review"]`、审查阶段 `review`、四清单项 businessIntent/logicExplainable/behaviorVerifiable/designRationale、`hasCommitGate=true`）已移至 **workflow-sdlc.md 2 章**，规则全文见 **workflow-sdlc.md 3 章**。
 
-**reqdoc 定义**（阶段键 `["goal","rules","edge","prd","review"]`、审查阶段 `review` 语义为业务确认 PRD 要点、四清单项 completeness/clarity/edgeCoverage/resolution、`hasCommitGate=false`）与**五阶段推进流程 mermaid** 已移至 **workflow-reqdoc.md 2 章**。reqdoc 专属内容索引：需求资料目录契约（双通道）见 **workflow-reqdoc.md 3 章**；24 条规则全文见 **workflow-reqdoc.md 4 章**；PRD 质量打分卡 `ReqdocScore` 见 **workflow-reqdoc.md 5 章**；追问探针清单 `REQDOC_PROBES` 见 **workflow-reqdoc.md 6 章**；渲染结构 schema 见 **workflow-reqdoc.md 7 章**；专属工具（含 `reqdoc_export`）见 **workflow-reqdoc.md 8 章**；场景五见 **workflow-reqdoc.md 9 章**；`reqdoc_export` 导出 Word 交付件亦见本文档 8 章文件清单。
+**reqdoc 定义**（阶段键 `["goal","rules","edge","prd","review"]`、审查阶段 `review` 语义为业务确认 PRD 要点、四清单项 completeness/clarity/edgeCoverage/resolution、`hasCommitGate=false`）与**五阶段推进流程 mermaid** 已移至 **workflow-reqdoc.md 2 章**。reqdoc 专属内容索引：需求资料目录契约（双通道）见 **workflow-reqdoc.md 3 章**；24 条规则全文见 **workflow-reqdoc.md 4 章**；PRD 质量打分卡 `ReqdocScore` 见 **workflow-reqdoc.md 5 章**；追问探针清单 `REQDOC_PROBES` 见 **workflow-reqdoc.md 6 章**；渲染结构 schema 见 **workflow-reqdoc.md 7 章**；专属工具（含 `reqdoc_export`）见 **workflow-reqdoc.md 8 章**；场景五见 **workflow-reqdoc.md 9 章**；`reqdoc_export` 导出 Word 交付件亦见本文档 10 章文件清单。
 
 > **ComprehensionRecord 泛化**：`ComprehensionRecord` 是通用机制（sdlc 编码段与 reqdoc PRD 要点共用）——唯一标识字段为 `id`，`file`/`lines` 可选（sdlc 填、reqdoc 不填）。工具参数名一律保留 `codeSegmentId`（sdlc LLM 契约不变），内部映射到 `id`；`comprehension_add` 的 `file`/`lineStart`/`lineEnd` 可选，sdlc 填、reqdoc 省略。
 
 **BaselineEstimate — 基线预估人工工时（6.3）**：
 
-`baseline` 记录项目经理在需求创建时给出的**预估人工工时**（`estimatedHours`，小时、可小数），`setAt` 为录入时间戳。它给出实际周期的参照系：会话结束后，系统按 `（预估工时 − 实际周期）÷ 预估工时` 计算 **AI 提效百分比**。字段可选（无基线的会话提效率为 N/A），可随时重设（幂等覆盖、记最新值，录入规则见 workflow-sdlc.md 3 章 sdlc-r6 / workflow-reqdoc.md 4 章 reqdoc-r7）；录入由开发者在 TUI 对话中转述项目经理的预估（见 4.1 `workflow_baseline`）。
+`baseline` 记录项目经理在需求创建时给出的**预估人工工时**（`estimatedHours`，小时、可小数），`setAt` 为录入时间戳。它给出实际周期的参照系：会话结束后，系统按 `（预估工时 − 实际周期）÷ 预估工时` 计算 **AI 提效百分比**。字段可选（无基线的会话提效率为 N/A），可随时重设（幂等覆盖、记最新值，录入规则见 workflow-sdlc.md 3 章 sdlc-r6 / workflow-reqdoc.md 4 章 reqdoc-r7）；录入由开发者在 TUI 对话中转述项目经理的预估（见 8.3 `workflow_baseline`）。
 
 **reqdoc 专属数据（已移至 workflow-reqdoc.md，本文件不重复定义）**：PRD 质量打分卡 `ReqdocScore`（`score` 字段语义、服务端算分、两处硬门禁、≥85 达标）与评分标准 `REQDOC_SCORE_DIMS`（8 维判定规则 + 扣分标准表）见 **workflow-reqdoc.md 5 章**；追问探针清单 `REQDOC_PROBES`（7 条，与打分卡维度一一映射）与柔性一致校验见 **workflow-reqdoc.md 6 章**；渲染结构 schema `REQDOC_TEMPLATE_CHAPTERS`/`REQDOC_TEMPLATE_FIELDS` 与 `parseRenderStructure` 见 **workflow-reqdoc.md 7 章**。
 
@@ -692,7 +542,7 @@ export function resolveWorkflowType(v: unknown): WorkflowType   // 未知值回�
 
 该指标由 `review_submit` 审查通过时**插件自动计算**，不依赖 Agent 上报。它不设硬性预警阈值（重写频率因团队/任务而异），仅作**返工信号**展示：一次通过率过低提示 AI 返工偏多，应回溯 prompt 或该文件的重写轮次（`rewrites`）。纯讨论会话（无片段）不写，保持 `null`（显示 N/A）。
 
-> 一次通过率由 `review_submit` 自动计算，sdlc 与 reqdoc 均适用：sdlc 分母为「代码片段」、reqdoc 分母为「PRD 要点」，口径一致（未重写即 accepted 占比）。行数三分类/rework/coverage 为 sdlc 专属，reqdoc 为 null（见 6.4）。
+> 一次通过率由 `review_submit` 自动计算，sdlc 与 reqdoc 均适用：sdlc 分母为「代码片段」、reqdoc 分母为「PRD 要点」，口径一致（未重写即 accepted 占比）。行数三分类/rework/coverage 为 sdlc 专属，reqdoc 为 null（见 9.5）。
 
 > 说明：业界 Copilot 的 25–35% 健康接受率针对**行级补全建议**（开发者多数跳过），而本插件是**整段 AI 代码、开发者审查后决定去留**，一次通过率天然偏高，二者口径不同，故不套用该区间。
 
@@ -769,10 +619,10 @@ interface ComprehensionRecord {
 | `firstPassRate` | 插件 | 审查通过时 | 插件 `review_submit` 按「未重写即接受片段 ÷ 全部定论片段」自动计算写入插件 DB（不依赖 Agent 上报） |
 | `iterationCount` | 插件 | 每次代码生成-修改循环，实时更新 | 插件 `tool.execute.after` hook 按文件（write/edit/apply_patch）累计，取各文件最大值写入插件 DB；本机另存 `iterationByFile` 明细 |
 | `linesByFile` | 插件 | 每次 AI 代码编辑，实时更新 | 插件 `tool.execute.after` hook 按净增量口径累计（见下「AI 代码行数统计」） |
-| `reworkRate` | 外部 CI 管道 | 合并后，当检测到同一会话产出的代码被再次修改 | CI 按 sessionID 回写 org 收集服务（见 4.3） |
-| `testCoverage` | 外部 CI 管道 | 合并后，SonarQube/覆盖率工具生成报告时 | CI 按 sessionID 回写 org 收集服务（见 4.3） |
+| `reworkRate` | 外部 CI 管道 | 合并后，当检测到同一会话产出的代码被再次修改 | CI 按 sessionID 回写 org 收集服务（见 4.2） |
+| `testCoverage` | 外部 CI 管道 | 合并后，SonarQube/覆盖率工具生成报告时 | CI 按 sessionID 回写 org 收集服务（见 4.2） |
 
-插件负责会话内指标（`firstPassRate`、`iterationCount`、`linesByFile`，写本机插件库并随汇报上行），外部 CI 负责合并后指标（`reworkRate`、`testCoverage`，回写 org 收集服务）。两条通道在聚合库按 sessionID 合并，互不覆盖，统计时统一聚合（见 4.3）。
+插件负责会话内指标（`firstPassRate`、`iterationCount`、`linesByFile`，写本机插件库并随汇报上行），外部 CI 负责合并后指标（`reworkRate`、`testCoverage`，回写 org 收集服务）。两条通道在聚合库按 sessionID 合并，互不覆盖，统计时统一聚合（见 4.2）。
 
 `reworkRate` 和 `testCoverage` 依赖外部 CI 集成；未接入 CI 时这两个字段默认为 `null`，统计输出中显示为 `N/A`，不影响其他功能。
 
@@ -787,7 +637,7 @@ interface ComprehensionRecord {
 
 参数指纹通过 hash（全参数）提取，区分"重试同一操作"vs"不同目的的编辑"——例如对同一文件做 3 次不同目的的 edit 不会触发 stuck，但用相同 oldString/newString 重试 3 次会触发。
 
-`iterationByFile` 仅存本机插件库用于统计，汇报投影已剥离（不外传文件路径，见第 11 章）。
+`iterationByFile` 仅存本机插件库用于统计，汇报投影已剥离（不外传文件路径，见 10.5）。
 
 **AI 代码行数统计（业务 / 单元测试 / 配置 三分类）**：
 
@@ -811,7 +661,7 @@ interface ComprehensionRecord {
 
 **汇总口径**：`sumLinesByCategory` 将 `linesByFile` 分类累加为 `{business, test, config}` 三个数字；**逐文件 clamp ≥ 0**——AI 净删除代码的文件不产生负贡献，避免「删代码」让会话行数出现反直觉的负值。项目/组/组织级对会话行数**求和**（累加型指标，不做平均）。
 
-**隐私**：`linesByFile` 的文件路径仅存本机插件库；汇报投影（`summarizeWorkflow`）剥离路径，只上行三类聚合数字（与 `iterationByFile` 的处理一致，见第 11 章）。行数指标**仅展示、不设告警阈值**。
+**隐私**：`linesByFile` 的文件路径仅存本机插件库；汇报投影（`summarizeWorkflow`）剥离路径，只上行三类聚合数字（与 `iterationByFile` 的处理一致，见 10.5）。行数指标**仅展示、不设告警阈值**。
 
 
 ### 3.3 状态转换规则
@@ -878,39 +728,17 @@ flowchart TD
     ASK -->|否| WAIT["继续工作"]
 ```
 
-**执行点**：门禁落在插件侧——Agent 调用 `commit_gate_check` 工具获取检查结果；即使 LLM 不遵守规则，`tool.execute.before` hook 也会拦截未过审查的 `git commit`（见 7.3），硬约束不依赖 LLM 自觉。
+**执行点**：门禁落在插件侧——Agent 调用 `commit_gate_check` 工具获取检查结果；即使 LLM 不遵守规则，`tool.execute.before` hook 也会拦截未过审查的 `git commit`（见 8.6），硬约束不依赖 LLM 自觉。
 
 **强制提交（逃生口）**：对应上图「强制提交（需填写原因）」分支，经 `commit_force_unlock` 工具授权：必须 `developer_confirmed=true` 且填写原因，写入 `commit.force = {reason, at, used:false}`。门禁遇到未使用的授权放行**一次** `git commit`，随即置 `used=true`（不删除，留痕于 WorkflowState 并随汇报上行，使"绕过审查"在组/组织统计中可见）。授权为一次性，此后恢复阻断；再次强制需重新授权。
 
 ---
 
+
+
 ## 4. 共享基座：接口设计（插件工具 + 复用上游 API + org 收集服务端点，上游零修改）
 
-### 4.1 插件工具（Agent 在 TUI 对话中调用）
-
-工作流的所有状态变更不经过 REST API，而是通过插件注册的**工具（tool）**完成。Agent 在对话中调用这些工具，校验逻辑写在工具的 handler 内——运行在 daemon 进程里，天然具备服务端强制性。
-
-| 工具 | 用途 | 服务端校验 |
-|------|------|-----------|
-| `workflow_advance` | 提议进入下一阶段 / 标记当前阶段 approved | 必须携带开发者确认语义；`stage` 运行时校验须在 `getDefinition(workflow.type).stages` 内（AI 不可在无确认时调用成功） |
-| `workflow_revisit` | 回退到指定阶段（revision++） | 目标阶段必须存在于 `def.stages`；**级联回退**该阶段之后所有已 `approved` 的下游阶段（同样 revision++，见 3.3） |
-| `workflow_baseline` | 录入/重设基线预估人工工时（项目经理给出，如 8h，6.3） | `developer_confirmed` 必须为 true（防 AI 杜撰）；`estimated_hours > 0`；幂等覆盖记最新值 |
-| `comprehension_add` | 登记一个片段/要点及自然语言解释（sdlc 为代码片段，reqdoc 为 PRD 要点） | 不可重复登记；sdlc 填 `file/lineStart/lineEnd`，reqdoc 省略；登记后 `decision=pending`，待逐段定夺 |
-| `comprehension_confirm` | 接受单个片段/要点（一次通过） | **单次调用只接受一个 `codeSegmentId`**，防止批量确认（见 7.3）；须处于 pending/rejected 才可接受 |
-| `comprehension_ask` | 对片段/要点追问，问答追加到 explanation | 片段/要点必须存在 |
-| `comprehension_reject` | 拒绝单个片段/要点并附补充意见 | 必须存在；`feedback` 必填（意见将用于 AI 重写） |
-| `comprehension_rewrite` | AI 按意见重写后回到待审查 | 须处于 `rejected`；`rewrites++`，feedback 并入 explanation |
-| `comprehension_manual` | 开发者自己处理该片段/要点（自己写/删除） | 须处于 `rejected`；`resolution` 必填；进入终态 `manual` |
-| `review_submit` | 提交审查清单结果（从 `def.checklist` 生成具名参数） | 由 `def.checklist` 生成具名输入参数（非 auto 项布尔，auto 项插件置真）；**前序阶段须全部 `approved`（审查是最后一关）**；有片段/要点时须已 `comprehension_add` 登记、且**全部处于终态 accepted/manual，不允许 pending/rejected 悬空**；通过时自动计算 `firstPassRate`（sdlc 与 reqdoc 均适用） |
-| `commit_gate_check` | 提交前门禁检查（`def.hasCommitGate=true` 时启用） | 返回未完成阶段列表；未通过时 `tool.execute.before` 阻断 `git commit` |
-| `commit_force_unlock` | 强制提交授权（`def.hasCommitGate=true` 时，3.4 逃生口） | `developer_confirmed` 必须为 true、原因必填；写入一次性授权，门禁放行一次后置 `used` 留痕 |
-| `reqdoc_scan` / `reqdoc_confirm_features` / `reqdoc_score` / `reqdoc_check` / `reqdoc_export` | reqdoc 专属工具（需求资料扫描 / 功能点拆解确认 / 八维打分卡 / 渲染结构校验 / Word 导出），仅 `def.type === "reqdoc"` 时生效 | 各工具的用途与服务端校验见 **workflow-reqdoc.md 8 章** 完整表格 |
-
-工具定义遵循上游插件 `ToolDefinition` 接口（`packages/plugin/src/tool.ts`），由 `tool` hook 注册后自动进入 LLM 可用工具集（上游 `tool/registry.ts` 已接线）。
-
-以上工具的行为由当前会话的 `workflow.type` 对应定义驱动：阶段键/中文名/清单项/是否有提交门禁均取自 `getDefinition(workflow.type)`。sdlc 的 `hasCommitGate=true`，行为与改动前一致；reqdoc 的 `hasCommitGate=false`，`commit_gate_*` 工具按 `def.hasCommitGate` 分支直接放行/不注册。
-
-### 4.2 复用的上游 API（不修改）
+### 4.1 复用的上游 API（不修改）
 
 `opencode-sm` 与插件通过上游 SDK 调用以下已有端点，不新增、不修改任何上游端点：
 
@@ -926,7 +754,8 @@ GET  /api/session/:id/context         session.context
 GET  /api/session/:id/history         session.history
 ```
 
-### 4.3 质量指标写入与统计查询
+
+### 4.2 质量指标写入与统计查询
 
 **增量合并语义**：插件工具对本机 `workflow_session.workflow` 的写入采用深度合并（等价于 PATCH DeepPartial），只更新传入的字段，Agent 维护的字段互不覆盖。
 
@@ -953,7 +782,10 @@ GET  /api/session/:id/history         session.history
 
 ---
 
+
+
 ## 5. 共享基座：CLI 命令设计
+
 
 ### 5.1 命令清单
 
@@ -1002,12 +834,12 @@ $ opencode-sm init
 |------|----------|
 | resume（继续开发） | 主路径是 TUI 内切换会话（上游已有，`<leader>1-9` 快速切换）；一次性发消息用上游 `session.prompt` API 或 `opencode run` |
 | create / get / active / compact / interrupt | 上游 REST API 已完备，TUI 与 `opencode-sm` 直接调用，不包装重复命令 |
-| rename | 不提供。上游无标题更新 API，标题自动生成（见 2.4 取舍） |
+| rename | 不提供。上游无标题更新 API，标题自动生成（见 10.1 取舍） |
 | review | 并入 `opencode-sm stats <id>`（本机会话级质量指标） |
 
 **workflow 命令说明**：
 
-工作流的推进（进入阶段、确认、回退）通过 **TUI 内自然语言对话**完成（Agent 调用插件工具，见 4.1），不走 CLI。开发者只需在对话中说"需求确认了"、"回到设计阶段"等；外部查看状态用 `opencode-sm stats <sessionID>`。
+工作流的推进（进入阶段、确认、回退）通过 **TUI 内自然语言对话**完成（Agent 调用插件工具，见 8.3），不走 CLI。开发者只需在对话中说"需求确认了"、"回到设计阶段"等；外部查看状态用 `opencode-sm stats <sessionID>`。
 
 | 子命令 | 行为 |
 |--------|------|
@@ -1041,7 +873,313 @@ sequenceDiagram
 
 ---
 
-## 6. 支柱四·度量反馈：统计分析设计
+
+
+## 6. 支柱一·制定规约（约束）
+
+### 6.1 规则注入机制与规则全文指引
+
+规则以 `WorkflowDefinition.rules: RuleItem[]` 存储（见 3.2），每项带 `stage` 归属（`"global"` 或阶段键）。插件每轮经 `rulesForStage(def, currentInProgressStage(workflow))` **只注入 global + 当前 in_progress 阶段的规则**（弱模型遵循负担最小化，见 8.6）；无进行中阶段时只给 global + 起步提示。规则文本只承载**模型可行动作**（调用哪个工具、何时、确认语义）；插件内部机制（行数统计、stuck 检测、一次通过率计算）由代码强制，不进注入文本。
+
+**sdlc 12 条规则**（sdlc-r1~r12：6 global + 1 requirements + 5 review）的完整表格（含注入时机）已移至 **workflow-sdlc.md 3 章**，此处不再重复。
+
+**reqdoc 30 条规则**（reqdoc-r1~r31，r29 预留未用：9 global + 3 goal + 2 rules + 5 edge + 6 prd + 5 review）的完整表格（含注入时机）已移至 **workflow-reqdoc.md 4 章**；需求资料目录契约见 **workflow-reqdoc.md 3 章**。
+
+
+### 6.2 reqdoc 需求资料目录契约（双通道）
+
+**需求资料目录契约（双通道：文档扫描 + 对话补缺）已整章移至 workflow-reqdoc.md**：三大支柱设计要点与价值链 mermaid 见 **workflow-reqdoc.md 1 章**；目录骨架（01~06，业务投放材料区 + AI 工作区）、目录 → 阶段映射、初始化与引导闭环 mermaid、模板送达、打分卡门禁、追问探针清单与柔性一致校验、渲染结构校验门禁、产出归档、渲染铁律、多模态边界、明确不做清单，见 **workflow-reqdoc.md 3 章**。
+
+---
+
+
+### 6.3 机构规约体系与阶段化注入
+
+第①柱不依赖任何核心改动，载体是插件目录下的 `conventions/` 与插件内 `src/conventions.ts` 的注入机制：
+
+- **机构规约按工作流类型分目录**：`packages/plugin/conventions/<type>/*.md`（基线随插件打包）；机构覆盖放 `<项目根>/conventions/<type>/*.md`，插件按 `workflow.type` 隔离读取、不跨流泄漏。
+- **`stage` 声明驱动阶段化注入**：每个 `.md` 头部 frontmatter 声明 `stage:`，`global` 常驻全程，否则仅在对应当前阶段注入；无 in_progress 时只注入 global。机制与 `rulesForStage` 的「global + 当前阶段」哲学一致，降低弱模型上下文负担（见 10.2）。
+- **只注入、无门禁**：规约经 `buildSystemFragment` 按 `def.type`+`stage` 注入（创建会话的 `createSystemTransform` 收 `directory` 传入项目根），不进 `RuleItem`/打分/评测。
+- **通用常驻机构规则**写机构自己的 `AGENTS.md`（OpenCode 原生合并），不放 conventions 目录；新增工作流规约 = 丢一个带 frontmatter 的 `<type>/` 目录，零代码。
+
+> 第①柱不是一次性手册，而是随评审与规则迭代持续累积的组织资产——每轮评测发现的弱模型遵循短板，反向沉淀进 `conventions/` 与规则文本，形成「实践 → 规约 → 再实践」的资产化闭环（见 9 章评测方法论）。
+
+
+## 7. 支柱二·增强知识（上下文）
+
+### 7.1 知识缺口：为什么需要知识支柱
+
+第②柱对应业界 Context Engineering / Repo-level RAG 概念：让模型在边界内「做对的事」，前提是补足架构与功能语义。约束（①）能划定行为边界，但治不了「理解」——模型不掌握系统现状与业务意图时，会幻觉式实现、改对一处破坏一片。
+
+本工程对「知识」的立场是**务实分层**：通用编码规约（①）与流程编排（③）已能覆盖大部分场景；架构/功能级深度知识由**需求发起单位的业务/技术侧**经项目材料目录提供，经通用 `reqdoc_scan` 消费，**不进插件、不依赖 AGENTS.md**（业务方不会用插件机制）。这是闭环中最弱一环的演进方向（见 0.4）。
+
+### 7.2 单位材料目录与 reqdoc_scan 双通道
+
+业务「口述 + 丢材料」，AI 代笔。需求资料目录契约为双通道（见 workflow-reqdoc.md 3 章）：
+
+- **文档扫描通道**：`reqdoc_scan(directory)` 单目录参数、按阶段分步调用，解析 docx/pdf/xlsx/txt/md/json/csv；qwen3.6 纯文本无多模态，图像显式降级提示文字描述。
+- **对话补缺通道**：业务在对话中补充的材料，由 AI 整理进对应目录（`05_功能点` / `06_需求规格产出`）。
+- **目录骨架**：`01_背景与目标` / `02_制度与合规` / `03_流程与数据`（业务投放材料区）与 `04_角色与权限` / `05_功能点` / `06_需求规格产出`（AI 工作区）；`07_系统现状与能力/` 承载架构/现有能力/接口/数据模型，由 `07-系统上下文与现有能力.md` 规约在 edge 阶段强制「先扫后写」。
+
+该通道是②柱的落地形态：把「单位知识」从散落对话沉淀为可检索、可审计的结构化材料。
+
+### 7.3 comprehension 知识库与可检索化
+
+理解确认（③柱的 `comprehension_*` 工具）在审查阶段产出的 `ComprehensionRecord[]` 本身即一个**可检索知识库**（见 3.2）：每条记录含 AI 的自然语言解释（设计推导、替代方案、风险）。三个月后接手者不需从零读代码——先读 `explanation` 理解意图，再读代码验证匹配，疑问时由其「替代方案与风险」判断改动安全边界。
+
+这是②柱在「会话内」的轻量形态：把一次对话中沉淀的理解，固化为后续维护可消费的知识，而非随会话结束流失。深度架构知识（单位材料目录）与轻量会话知识（comprehension）共同构成②柱的两层。
+
+
+## 8. 支柱三·智能协同（过程）
+
+### 8.1 工作流模型选择
+
+#### 候选方案对比
+
+| | 方案 A：严格流水线 | 方案 B：完成门控 |
+|---|---|---|
+| **模型** | 单向推进，不允许回头 | 自由跳转，提交时统一检查 |
+| **约束点** | 每个阶段转换 | 仅最终提交 |
+| **灵活性** | 差 | 好 |
+| **适合场景** | 瀑布式开发 | 迭代式开发 |
+
+#### 方案 A：严格流水线（被拒绝）
+
+```mermaid
+graph LR
+    A["需求分析"] -->|门禁| B["设计"] -->|门禁| C["编码"] -->|门禁| D["测试"] -->|门禁| E["提交"]
+```
+
+**拒绝原因**：开发人员指出，实际开发中编码时经常发现需求不清楚，需要回到需求分析阶段；测试失败也需要回去改代码。严格流水线无法支持这种反复迭代。
+
+#### 方案 B：完成门控（采用）
+
+```mermaid
+graph TB
+    subgraph IterationZone["自由迭代区（可任意跳转反复）"]
+        direction LR
+        R["需求分析"] <-->|"反复"| D["设计"]
+        D <-->|"反复"| C["编码"]
+        C <-->|"反复"| T["测试"]
+        C <-->|"反复"| RV["审查"]
+        T <-->|"反复"| RV
+        R -.->|"可回退"| C
+        R -.->|"可回退"| T
+        D -.->|"可回退"| T
+    end
+
+    subgraph Gate["提交门禁（硬约束）"]
+        G{"全部阶段<br/>approved?"}
+    end
+
+    IterationZone --> G
+    G -->|"✓ 全部完成"| COMMIT["提交"]
+    G -->|"✗ 有未完成"| BLOCK["阻止提交<br/>列出未完成项"]
+```
+
+**采用原因**：真实开发本质上是迭代的。约束点应该是"所有必需产物是否都已完成"，而不是"当前处于哪个阶段"。
+
+**审查阶段的特殊地位（sdlc）**：审查（review）是 sdlc 五阶段中唯一**不可被 AI 自行推进**的阶段。审查不仅检查代码正确性，更检查**人是否真正理解了代码**。审查清单包含四个硬性检查项（详见 3.2），不满足则审查阶段不可 approve。审查阶段与编码、测试阶段形成迭代循环——编码完成后进入审查，审查不通过则回到编码或测试。审查阶段由 `WorkflowDefinition.reviewStage` 声明；sdlc 与 reqdoc 均声明 `review` 审查阶段（reqdoc 语义为业务确认 PRD 要点）。
+
+
+### 8.2 阶段检测方式选择
+
+#### 候选方案对比
+
+| | AI 自动推断 | 工具使用模式 | 产物文件判断 | AI 提议+开发者确认 |
+|---|---|---|---|---|
+| **准确度** | 低（语义歧义） | 低（行为歧义） | 低（存在≠确认） | 高（人为决策） |
+| **可靠性** | 概率性 | 启发式 | 机械式 | 确定性 |
+| **实现复杂度** | 高 | 中 | 低 | 低 |
+
+**被拒绝的方案**：
+
+- **AI 从对话推断**：讨论"用户权限"是在做需求分析还是设计？AI 会猜错
+- **从工具使用判断**：写代码时也可能在重新思考需求
+- **从产物文件判断**：文档存在不代表需求已被确认
+
+**核心结论**：唯一真正知道"当前在哪个阶段、是否完成"的人，是**开发者本人**。
+
+#### 采用的方案：AI 提议 + 开发者确认
+
+```mermaid
+sequenceDiagram
+    participant Dev as 开发者
+    participant AI as AI Agent
+    participant Store as 插件库（WorkflowState）
+
+    Note over Dev,Store: 阶段进行中
+    Dev->>AI: 讨论需求细节...
+    AI->>AI: 观察对话上下文
+    AI->>Dev: 📋 需求摘要如下：<br/>是否确认，进入设计阶段？
+
+    alt 开发者确认
+        Dev->>AI: 确认
+        AI->>Store: approve(requirements)
+        Store-->>AI: status = approved
+        AI->>Dev: ✅ 需求已确认，开始设计...
+    else 开发者补充
+        Dev->>AI: 等等，还有一点没讨论
+        AI->>Dev: 好的，请继续补充
+    else 开发者回退
+        Dev->>AI: 回到需求分析，scope 要补充
+        AI->>Store: revisit(requirements)
+        Store-->>AI: requirements: in_progress, revision++<br/>design: 级联回退 in_progress（若已 approved）
+        AI->>Dev: 好的，已回到需求阶段
+    end
+```
+
+**规则**：
+1. 阶段转换的唯一来源是开发者的明确操作
+2. AI 只能提议，绝不自行推进
+3. 开发者说"回到XX"时立即回退
+4. 提交是唯一的硬门禁
+
+
+### 8.3 插件工具（Agent 在 TUI 对话中调用）
+
+工作流的所有状态变更不经过 REST API，而是通过插件注册的**工具（tool）**完成。Agent 在对话中调用这些工具，校验逻辑写在工具的 handler 内——运行在 daemon 进程里，天然具备服务端强制性。
+
+| 工具 | 用途 | 服务端校验 |
+|------|------|-----------|
+| `workflow_advance` | 提议进入下一阶段 / 标记当前阶段 approved | 必须携带开发者确认语义；`stage` 运行时校验须在 `getDefinition(workflow.type).stages` 内（AI 不可在无确认时调用成功） |
+| `workflow_revisit` | 回退到指定阶段（revision++） | 目标阶段必须存在于 `def.stages`；**级联回退**该阶段之后所有已 `approved` 的下游阶段（同样 revision++，见 3.3） |
+| `workflow_baseline` | 录入/重设基线预估人工工时（项目经理给出，如 8h，6.3） | `developer_confirmed` 必须为 true（防 AI 杜撰）；`estimated_hours > 0`；幂等覆盖记最新值 |
+| `comprehension_add` | 登记一个片段/要点及自然语言解释（sdlc 为代码片段，reqdoc 为 PRD 要点） | 不可重复登记；sdlc 填 `file/lineStart/lineEnd`，reqdoc 省略；登记后 `decision=pending`，待逐段定夺 |
+| `comprehension_confirm` | 接受单个片段/要点（一次通过） | **单次调用只接受一个 `codeSegmentId`**，防止批量确认（见 8.6）；须处于 pending/rejected 才可接受 |
+| `comprehension_ask` | 对片段/要点追问，问答追加到 explanation | 片段/要点必须存在 |
+| `comprehension_reject` | 拒绝单个片段/要点并附补充意见 | 必须存在；`feedback` 必填（意见将用于 AI 重写） |
+| `comprehension_rewrite` | AI 按意见重写后回到待审查 | 须处于 `rejected`；`rewrites++`，feedback 并入 explanation |
+| `comprehension_manual` | 开发者自己处理该片段/要点（自己写/删除） | 须处于 `rejected`；`resolution` 必填；进入终态 `manual` |
+| `review_submit` | 提交审查清单结果（从 `def.checklist` 生成具名参数） | 由 `def.checklist` 生成具名输入参数（非 auto 项布尔，auto 项插件置真）；**前序阶段须全部 `approved`（审查是最后一关）**；有片段/要点时须已 `comprehension_add` 登记、且**全部处于终态 accepted/manual，不允许 pending/rejected 悬空**；通过时自动计算 `firstPassRate`（sdlc 与 reqdoc 均适用） |
+| `commit_gate_check` | 提交前门禁检查（`def.hasCommitGate=true` 时启用） | 返回未完成阶段列表；未通过时 `tool.execute.before` 阻断 `git commit` |
+| `commit_force_unlock` | 强制提交授权（`def.hasCommitGate=true` 时，3.4 逃生口） | `developer_confirmed` 必须为 true、原因必填；写入一次性授权，门禁放行一次后置 `used` 留痕 |
+| `reqdoc_scan` / `reqdoc_confirm_features` / `reqdoc_score` / `reqdoc_check` / `reqdoc_export` | reqdoc 专属工具（需求资料扫描 / 功能点拆解确认 / 八维打分卡 / 渲染结构校验 / Word 导出），仅 `def.type === "reqdoc"` 时生效 | 各工具的用途与服务端校验见 **workflow-reqdoc.md 8 章** 完整表格 |
+
+工具定义遵循上游插件 `ToolDefinition` 接口（`packages/plugin/src/tool.ts`），由 `tool` hook 注册后自动进入 LLM 可用工具集（上游 `tool/registry.ts` 已接线）。
+
+以上工具的行为由当前会话的 `workflow.type` 对应定义驱动：阶段键/中文名/清单项/是否有提交门禁均取自 `getDefinition(workflow.type)`。sdlc 的 `hasCommitGate=true`，行为与改动前一致；reqdoc 的 `hasCommitGate=false`，`commit_gate_*` 工具按 `def.hasCommitGate` 分支直接放行/不注册。
+
+
+### 8.4 实现机制
+
+工作流约束不修改 OpenCode 核心引擎，而是通过**插件 + 会话级系统提示（system prompt）**实现：插件通过上游已有的 `experimental.chat.system.transform` hook（上游在组装 system prompt 时触发，见 10.1），每轮将工作流规则与当前状态注入 system prompt；状态变更通过插件注册的工具完成，写入插件库。
+
+```mermaid
+flowchart TD
+    subgraph Turn["每轮对话"]
+        SP["上游 System Prompt 组装"]
+        SP -->|"触发 system.transform hook"| RULES["插件注入：<br/>通用+当前阶段规则<br/>+ 阶段状态条"]
+    end
+
+    subgraph Agent["Agent 循环"]
+        LLM["LLM（遵循规则）"]
+        ACTION["Agent 执行动作"]
+        WRITE["调用插件工具<br/>workflow_advance /<br/>comprehension_confirm ..."]
+    end
+
+    subgraph Storage["持久化"]
+        DB["插件 SQLite<br/>workflow_session.workflow"]
+    end
+
+    RULES --> LLM
+    LLM --> ACTION
+    ACTION --> WRITE
+    WRITE --> DB
+    DB -->|"每轮刷新"| RULES
+```
+
+关键点：
+- **规则注入**：上游每一步 Agent 循环都会重新组装 system prompt 并触发 `experimental.chat.system.transform`，插件在此 hook 中从插件库读取当前会话的 `WorkflowState`，将**阶段化规则（global + 当前 in_progress 阶段）**与**阶段状态条**追加到 `output.system`——弱模型只读当前需要的规则与压缩状态，降低遵循负担（7.4、7.3）。插件注入逻辑在 `packages/plugin/src/prompt.ts`，上游引擎 `prompt.ts` 零修改。`stage===null`（无 in_progress）**分三态**：**全未启动**（起步提示）/**空档态**（部分阶段 approved、无进行中：提示「继续→进入下一未启动阶段 / 回退→revisit」，不再误判为「尚未开始」）/**完成态**（全部 approved：走**专用完成块**，给全三条可行动作「提交（如尚未，commit_gate_check）→ 开新需求（/new，保持统计隔离）→ 改本需求（workflow_revisit）」，不注入常规全局规则）。同时 `workflow_advance` 对已 approved 阶段的 enter 报错也区分「返工（revisit）」与「开新需求（/new）」，避免弱模型被推向返工路径复用本会话污染统计（完成瞬间 `review_submit` 返回也直接带出该提示，双保险）。**合并 open-ide 后**：完成态注入块与 `review_submit` 返回额外读锁表（`store.listLocks`），仍有文件被人工锁定时提示开发者确认后逐个 `unlock_file`（仅 sdlc，`hasCommitGate` 门控，reqdoc 不提示）；锁提示由插件硬数据驱动，不依赖弱模型主动查 `list_locked_files`
+- **状态持久化**：Agent 通过插件工具（4.1）写入 `WorkflowState`（阶段变更、审查清单、理解记录），不依赖 LLM 记忆
+- **状态同步**：每轮 hook 触发时读取的都是插件库中的最新状态，确保 Agent 始终知道当前进度
+
+
+### 8.5 实际效果：开发者看到什么
+
+交互场景已按工作流拆分到各自文件：
+- **sdlc 场景一~四**（阶段推进 / 审查理解确认逐段交互 / 提交门禁 / 重复编辑检测）见 **workflow-sdlc.md 4 章**。
+- **reqdoc 场景五**（业务确认，PRD 要点逐段确认）见 **workflow-reqdoc.md 9 章**。
+
+
+### 8.6 规则可靠性
+
+"系统提示"方案的局限在于 LLM 可能不遵守规则。通过以下措施提高可靠性：
+
+| 风险 | 措施 |
+|------|------|
+| Agent 忘记当前阶段 | 每轮 `system.transform` hook 将最新状态压缩为阶段状态条刷新到 system prompt |
+| Agent 自行推进阶段 | 规则重复强调"绝不自行判断"，且 `workflow_advance` 工具在服务端（插件 handler）校验：`approve` 必须 `developer_confirmed=true`（开发者明确确认），否则拒绝 |
+| Agent 跳过审查交互 | 审查阶段是独立的系统提示块，规则优先级最高；`review_submit` 工具在服务端二次校验审查清单（`def.checklist`）与前序阶段，未全部通过则拒绝 |
+| Agent 批量跳过逐段确认 | **服务端防篡改**：`comprehension_confirm` 工具单次调用只接受一个 `codeSegmentId`，批量传入直接报错，防止 LLM 在开发者回复"看起来不错"时将全部片段批量设为 `confirmed` |
+| Agent 绕过门禁直接提交 | `tool.execute.before` hook 拦截 `bash` 中的 `git commit`，未通过 `commit_gate_check` 时抛错阻断——这是插件层的硬约束，不依赖 LLM 自觉 |
+| Agent 重复 enter 已 approved 阶段 | `applyTransition` 服务端校验：`enter` 已 approved 阶段抛错（须 `workflow_revisit` 回退），`enter` 已 in_progress 阶段幂等 no-op（不追加 transition） |
+| 弱模型完成后不知收尾 / 在新会话复用当前会话致统计混入 | 完成态注入**专用完成块**给全「提交 → /new 开新需求 → revisit 改本需求」三条可行动作，且 `review_submit` 通过（门禁 allowed）时返回直接带出 /new 提示——完成瞬间即可见；对已 approved 阶段 enter 的报错也明确「开始下一个需求请执行 /new」，防止弱模型被引导走返工路径复用本会话。合并 open-ide 后完成块另读锁表提示解锁（仅 sdlc） |
+| LLM 上下文窗口不足 | 工作流状态压缩为阶段状态条，system prompt 只注入当前阶段规则（global + 当前 in_progress 阶段，见 10.2），历史规则不重复注入 |
+
+reqdoc 无 `git commit` 门禁，表中「绕过门禁直接提交」风险不适用；其 review 语义为**业务确认 PRD 要点**，防批量走过场的约束（`comprehension_confirm` 单次只接受一个要点）同样生效。
+
+
+
+## 9. 支柱四·度量反馈（评测）
+
+### 9.1 统计分析粒度选择
+
+讨论中确认需要三个层级：
+
+```mermaid
+graph TB
+    subgraph Session["会话级"]
+        S1["单会话详情"]
+        S1a["阶段耗时"]
+        S1b["迭代次数"]
+        S1c["AI 费用/Token"]
+    end
+
+    subgraph Project["项目级"]
+        P1["按项目+时段聚合"]
+        P1a["平均阶段耗时"]
+        P1b["需求迭代次数（需求质量）"]
+        P1c["编码-测试循环（代码质量）"]
+        P1d["费用效率 $/行"]
+    end
+
+    subgraph Group["组级"]
+        G1["按组聚合"]
+        G1a["组成员排行"]
+        G1b["组间完成率对比"]
+        G1c["组间一次通过率对比"]
+        G1d["组级质量趋势"]
+    end
+
+    subgraph Org["组织级（org）"]
+        T1["按组织聚合"]
+        T1a["组间排行"]
+        T1b["完成率趋势"]
+        T1c["人力结构弹性分析"]
+    end
+
+    Session -->|"聚合"| Project
+    Project -->|"聚合"| Group
+    Group -->|"聚合"| Org
+```
+
+**统计层级说明**：
+
+| 层级 | 聚合维度 | 对应 CLI 参数 | 用途 |
+|------|----------|---------------|------|
+| 会话级 | 单会话 | `opencode-sm stats <id>` | 开发者自检 |
+| 项目级 | 按项目+时段 | `opencode-sm stats --project "用户系统"`（或省略，自动检测 CWD） | 项目经理跟踪 |
+| 组级 | 按组聚合 | 外部收集服务 `performance_dashboard` 看板（CLI 仅本机统计，组/组织聚合由收集服务据 api_key 哈希解析） | 组长管理、月度汇报 |
+| 组织级（org） | 按组织聚合 | 外部收集服务 `performance_dashboard` 看板 | 领导汇报、预算决策 |
+
+组级统计是核心汇报层级——回应"各组 AI 使用程度和依赖程度"的需求。组级视图展示：成员排行、一次通过率分布、返工率对比、高迭代会话数、AI 净增行数（业务/测试/配置）。
+
+**数据来源决策**：零额外采集。工作流状态变更的时间戳即为分析数据源。
+
+**身份关联决策**：身份以 `api_key` 标识，本地明文存储、上送前转 SHA-256 哈希（网络不传明文）；组/部门/组织等归属由后台收集服务（`performance_dashboard`）据 `api_key` 哈希解析，客户端不再填写 account/group/org。另加 **workflowType（工作流类型）** 维度，由开发者 `opencode-sm init` 填写（api_key / 收集服务地址 / 可选工作流类型），存全局 `identity.json`。workflowType 决定本用户新会话走哪套工作流（开发者 `sdlc` 开发 / 需求分析师 `reqdoc` 需求书），不同角色 = 不同用户（见 3.1、3.2）。跨机聚合在收集服务侧完成（见 10.1、3.1）。
+
+
 
 统计分析的定位是**投入产出评估与资源规划的数据基础**，服务于三个明确目标：
 
@@ -1049,7 +1187,7 @@ sequenceDiagram
 2. **质量监控** — 跟踪一次通过率、返工率、覆盖率，确保提效不以牺牲质量为代价
 3. **流程优化** — 阶段耗时与迭代次数分析，识别瓶颈环节
 
-### 6.1 数据来源（零额外采集）
+### 9.2 数据来源（零额外采集）
 
 ```mermaid
 graph LR
@@ -1086,7 +1224,7 @@ graph LR
     RV --> M6
 ```
 
-### 6.2 三级统计输出示例
+### 9.3 三级统计输出示例
 
 **会话级**：
 
@@ -1171,7 +1309,7 @@ AI 使用: 对话 47轮 | $0.36 | 85K tokens
 趋势: 需求迭代 ↓1.3→0.8 | 单行成本 ↓$0.03→$0.02 | 返工率 ↓12%→7% | 提效 ↑58%→70%
 ```
 
-### 6.3 质量维度指标定义
+### 9.4 质量维度指标定义
 
 质量维度数据用于验证"提效"不是建立在牺牲质量的基础上，同时支撑退出风险管控中的质量衰减监控（措施三）。
 
@@ -1195,7 +1333,7 @@ AI 使用: 对话 47轮 | $0.36 | 85K tokens
 - **AI 代码行数**为累加型指标：会话级展示三分类数值，项目/组/组织级展示各会话行数**求和**（不做平均），全层级仅展示、不告警
 - **AI 提效率**为比率型指标（同一次通过率/返工率）：项目/组/组织级对「有基线且有有效周期」的会话**求平均**；无基线会话不参与，全无基线时显示 N/A（并以基线会话数 0/N 示覆盖率）；组/组织级另按汇报时间分**早/近半段**展示均值走向（如 提效 ↑55%→68%），即研发提效曲线在纯文本 CLI 下的呈现
 
-### 6.4 多流程统计分区（type 感知）
+### 9.5 多流程统计分区（type 感知）
 
 不同工作流（sdlc / reqdoc）的指标不同，但**报告形状保持单一**，不建 union/meta-schema：
 
@@ -1206,83 +1344,138 @@ AI 使用: 对话 47轮 | $0.36 | 85K tokens
 
 ---
 
-## 7. 支柱三·智能协同：Agent 工作流约束
 
-### 7.1 实现机制
 
-工作流约束不修改 OpenCode 核心引擎，而是通过**插件 + 会话级系统提示（system prompt）**实现：插件通过上游已有的 `experimental.chat.system.transform` hook（上游在组装 system prompt 时触发，见 2.4），每轮将工作流规则与当前状态注入 system prompt；状态变更通过插件注册的工具完成，写入插件库。
+规则文本优化（阶段化注入、状态条、审查清单引导）以**数据驱动**验证：量化弱模型对注入规则的遵循度，改前跑基线、改后对比。这是本方案的**核心方法论**——规则的每一步措辞调整都必须先有基线数据支撑，避免凭直觉改规则伤害弱模型。脚本 `scripts/eval-rules/`（不入 `bun test`，需真实模型端点）。**通用方法论**（适用于所有 AI 深度绑定开发）见 `plugin-guide/eval-driven-rule-iteration.md`；本章为其在 opencode-session-mgmt 的落地实例。**评测与质量飞轮实操手册（技能）见 `.opencode/skills/workflow-rules-eval/SKILL.md`**——冻结基线 / 三级验证 / 八维 delta 读法 / 归因地图 / 收敛判据可直接照其执行。
+
+### 9.6 运行方式
+
+```bash
+# 冻结的 baseline 快照在 scripts/eval-rules/fixtures/baseline/（改造前的规则全文，可复现旧注入格式）
+bun run scripts/eval-rules/run.ts --variant baseline --dry   # 只打印注入片段与判定期望，不调模型
+bun run scripts/eval-rules/run.ts --variant baseline         # 跑基线通过率 → results/baseline.json
+bun run scripts/eval-rules/run.ts --variant new              # 改造后 → results/new.json，自动对比 baseline
+```
+
+分三级验证（对应 13.6 决策图的 ①②③，何时跑哪级见「改动分级决策图」）：
+
+- **① 干跑（秒级，每次改完必做）**：`--variant new --dry` 与 `--variant baseline --dry` 各跑一次，验证 46 场景注入片段与判定期望渲染正常，不调模型。
+- **② mock 冒烟（仅改评测脚本时）**：临时起一个 mock OpenAI 端点返回罐装 tool_calls（针对新增场景命中其判定路径，如 r20 返回 `reqdoc_probe(asked=[...])`、r22 返回 `workflow_advance(enter prd)`），`EVAL_BASE_URL` 指过去非 dry 跑一遍，确认判定与聚合/对比路径不炸；跑完删掉 mock、`git checkout` 还原 `results/*.json`。
+- **③ 真实模型对比（重闸，合入前必过）**：
+  ```bash
+  # 本地 vLLM（默认端点 http://localhost:8086/v1，qwen3.6）
+  bun run scripts/eval-rules/run.ts --variant new --repeat 3
+  # 远端推理模型（deepseek-v4-flash 等，EVAL_MAX_TOKENS=4096 留 thinking 空间；deepseek-v4-pro-0813 等长 reasoning 推理模型实测须 16384，否则 thinking 截断发不出工具调用）
+  EVAL_BASE_URL=https://<端点>/v1 EVAL_API_KEY=<key> EVAL_MODEL=<model-id> EVAL_MAX_TOKENS=16384 \
+  bun run scripts/eval-rules/run.ts --variant new --repeat 3
+  ```
+
+**读输出与合入门槛**：per-scenario 通过表（`✅`/`❌`，r20-r24 在 reqdoc 段）→ 聚合通过率（整体 / sdlc / reqdoc）→ `=== 对比(baseline → new) ===` 的 PRD 八维逐维 delta（仅 `--variant new` 且库里已有 baseline.json 时打印）。**八维任何一维回退（负号）就不合入**，回滚改动；全过或持平才沉淀资产合入。
+
+**baseline 冻结纪律**：`results/baseline.json` 是**入库冻结参照**（fixtures 里改造前规则快照 + 指定模型实测结果），`--variant new` 自动读它对比。只有首次搭评测 / 换模型 / 换端点时才跑 `--variant baseline` 重新冻结并 commit；日常改动**只跑 `--variant new`，不要重跑 baseline 覆盖参照**，否则对比失效。
+
+**陷阱**：改了 `packages/shared` 后必须 `rm -rf node_modules/sm-shared && bun install`（hoisted 拷贝残留，见 9.10），否则评测读到旧规则文本而 `bun test` 仍全绿，易漏。
+
+- 环境变量：`EVAL_BASE_URL`（OpenAI 兼容端点，默认 `http://localhost:8086/v1`，本地 vLLM）、`EVAL_API_KEY`、`EVAL_MODEL`（默认 `/models/qwen3`，本地 vLLM 的模型 id）、`EVAL_MAX_TOKENS`（输出上限，默认 2048；推理模型须按需留 thinking 空间——deepseek-*-flash 4096，deepseek-v4-pro-0813 等长 reasoning 模型实测 16384 才够发出工具调用，4096 下 thinking 截断、content 与 tool_calls 双双为空导致误判失败；慢速弱模型 2048 防拖超时）、`EVAL_TIMEOUT_MS`（单请求超时，默认 180000，含网络/超时错误重试 3 次；16k token 渲染长输出的 reqdoc 场景须提至 300000）；`--repeat N` 重复多次取通过率（聚合按**运行次数**统计，防单次抖动掩盖趋势）
+- **baseline 与 new 共用同一状态夹具**（`finish()` 重算 commit），保证可对等比较
+
+### 9.7 场景集
+
+46 个场景（sdlc s1-s22 + reqdoc r1-r24），覆盖关键规则：基线录入、确认后 approve、无确认不 approve、回到XX→revisit、审查逐段不批量、前序未完成不 submit、提交前查门禁、完成后提示 /new 与开新需求、空档态继续、审查全流程、open_ide 手工锁定与解锁、reqdoc 渐进引导 / 双通道功能点拆解 / 打分卡门禁 / 评分 / 追问 / 渲染。
+
+- **sdlc 场景 s1-s22 明细**（含完成态 /new、空档态继续、审查全流程、open_ide 锁定、SDLC 完结解锁）见 **workflow-sdlc.md 8 章**。
+- **reqdoc 场景 r1-r24 明细**（渐进引导、双通道功能点拆解、打分卡门禁、评分模式、追问可测化、渲染可测化）与质量飞轮见 **workflow-reqdoc.md 10 章**。
+
+### 9.8 判定方式（rule-based，不用 LLM judge）
+
+判定类分两类：**behavior 类**（`tool_use` / `no_tool` / `text`，断言「模型调了什么工具、怎么调、回复含什么」，sdlc 与 reqdoc 全部场景共用）与 **output 类**（`score` 质量飞轮 P0 / `render` 质量飞轮 P2，断言「模型渲染产出的 PRD 文本质量」，**reqdoc 专属**——reqdoc 用它将「通过/不通过」升级为 0-100 八维度量，sdlc 不跑 output 类、只走 behavior 类的通过率）。
+
+- 工具类比对 `tool_use` 名称与参数谓词（如 approve 时 `developer_confirmed` 必须 true）；`args` 为参数子集全等匹配，`argsContains`（质量飞轮 P1）为数组子集断言——期望每个元素须出现在实际数组参数中（如断言 asked 覆盖核心探针），两者互不影响、零回归
+- `no_tool` 类断言未调用某工具
+- `text` 类（maxQuestions 问句计数、optionsABC 问句 ≤max 且含「默认」+ ≥2 个 A/B/C 标记、categoryKeywords 探针关键词）为关键词启发式，判定口径脆弱需人工复核
+- `score` 类（质量飞轮 P0）：渲染标记命中 + `scorePrd()` 八维总分/维度上下限校验——同样是 rule-based，只是判定对象从「工具行为」换成「渲染产出质量」
+- `render` 类（质量飞轮 P2）：共享 `parseRenderStructure` 解析模型回复文本，断言必查章节出现（requiredChapters，缺省=全部）、章节顺序正确（ordered）、功能点块数下限（minFeatures）、映射字段逐功能点全标来源（sourceAll）、至少一个 [缺省]（anyDefault，缺料不杜撰的结构信号）——与运行时 `reqdoc_check` 同源，只换「工具+文件」为「评测回复文本」（评测无文件系统）。**r23/r24 启用 `soft` 拆级降权（A3/D7）**：`sourceAll`/`anyDefault` 降为观察项不计通过率，硬门禁只剩章节/顺序/块数结构骨架；渲染/评分场景的模型输出原文落进结果 JSON（`outputs` 字段）供归因（A4）——只看 detail 无法区分「纯文本渲染/错层级标题/tool_call 占位」
+
+### 9.9 实测记录与迭代闭环
+
+**迭代闭环**：改规则前跑 `--variant baseline` 冻结基线 → 改规则/脚本 → 跑 `--variant new` 对比 → 通过率不降才保留；失败场景逐个归因（规则措辞 / 判定口径 / 场景二义性），优先调脚本与判定口径而非膨胀规则。reqdoc 侧质量飞轮轮次（打分卡补齐 39 / P0 41 / P1 44 / P2 46）见 workflow-reqdoc.md 10 章。
 
 ```mermaid
 flowchart TD
-    subgraph Turn["每轮对话"]
-        SP["上游 System Prompt 组装"]
-        SP -->|"触发 system.transform hook"| RULES["插件注入：<br/>通用+当前阶段规则<br/>+ 阶段状态条"]
-    end
-
-    subgraph Agent["Agent 循环"]
-        LLM["LLM（遵循规则）"]
-        ACTION["Agent 执行动作"]
-        WRITE["调用插件工具<br/>workflow_advance /<br/>comprehension_confirm ..."]
-    end
-
-    subgraph Storage["持久化"]
-        DB["插件 SQLite<br/>workflow_session.workflow"]
-    end
-
-    RULES --> LLM
-    LLM --> ACTION
-    ACTION --> WRITE
-    WRITE --> DB
-    DB -->|"每轮刷新"| RULES
+    A(["迭代起点"]) --> B["冻结 baseline<br/>（仅首次搭评测 / 换模型 / 换端点时）"]
+    B --> C["改动<br/>规则 / 探针 / 打分卡 / 模板<br/>或评测脚本 / 判定口径"]
+    C --> D["跑 --variant new<br/>自动对比 baseline"]
+    D --> E{"通过率 / 八维分数<br/>有回退？"}
+    E -->|"是 · 回退"| F["失败场景逐个归因<br/>规则措辞 / 判定口径 / 场景二义性"]
+    F --> G["优先调脚本与判定口径<br/>而非膨胀规则"]
+    G --> C
+    E -->|"否 · 全过或持平"| H["保留改动 · 沉淀资产<br/>新场景 / 探针 / 规则进 fixture"]
+    H --> I(["合入"])
 ```
 
-关键点：
-- **规则注入**：上游每一步 Agent 循环都会重新组装 system prompt 并触发 `experimental.chat.system.transform`，插件在此 hook 中从插件库读取当前会话的 `WorkflowState`，将**阶段化规则（global + 当前 in_progress 阶段）**与**阶段状态条**追加到 `output.system`——弱模型只读当前需要的规则与压缩状态，降低遵循负担（7.4、7.3）。插件注入逻辑在 `packages/plugin/src/prompt.ts`，上游引擎 `prompt.ts` 零修改。`stage===null`（无 in_progress）**分三态**：**全未启动**（起步提示）/**空档态**（部分阶段 approved、无进行中：提示「继续→进入下一未启动阶段 / 回退→revisit」，不再误判为「尚未开始」）/**完成态**（全部 approved：走**专用完成块**，给全三条可行动作「提交（如尚未，commit_gate_check）→ 开新需求（/new，保持统计隔离）→ 改本需求（workflow_revisit）」，不注入常规全局规则）。同时 `workflow_advance` 对已 approved 阶段的 enter 报错也区分「返工（revisit）」与「开新需求（/new）」，避免弱模型被推向返工路径复用本会话污染统计（完成瞬间 `review_submit` 返回也直接带出该提示，双保险）。**合并 open-ide 后**：完成态注入块与 `review_submit` 返回额外读锁表（`store.listLocks`），仍有文件被人工锁定时提示开发者确认后逐个 `unlock_file`（仅 sdlc，`hasCommitGate` 门控，reqdoc 不提示）；锁提示由插件硬数据驱动，不依赖弱模型主动查 `list_locked_files`
-- **状态持久化**：Agent 通过插件工具（4.1）写入 `WorkflowState`（阶段变更、审查清单、理解记录），不依赖 LLM 记忆
-- **状态同步**：每轮 hook 触发时读取的都是插件库中的最新状态，确保 Agent 始终知道当前进度
+**实测结果一**（2026-08-12，deepseek-v4-flash，repeat 3，按运行次数）：整体 **76% → 93%**（reqdoc 61% → 100%，sdlc 88% 持平）。驱动改进的三处迭代：状态条列出**待确认项 id**（让模型知道要 confirm 什么）、规则显式排除模糊表态（「你看着办」不算确认）、review_submit 规则补「前序须全部 approved」。基线快照冻结于 `fixtures/baseline/`，`results/{baseline,new}.json` 入库作参照，任何模型/时刻可重跑对比。
 
-### 7.2 实际效果：开发者看到什么
+**实测结果二**（2026-08-14，29 场景，repeat 1）：本地 qwen3.6（vLLM 8086）整体 **28/29（97%）**，唯一失败 `r1 渐进引导 ≤2 问`（问句 17 个超上限 2）；远端 deepseek-v4-flash（zen/go）整体 **28/29（97%）**，唯一失败 `r10 要点拒绝后重写`（userTurn「边界这块」存在二义——edge 阶段名 vs 要点 id，模型偶发改走 `workflow_revisit`）。
 
-交互场景已按工作流拆分到各自文件：
-- **sdlc 场景一~四**（阶段推进 / 审查理解确认逐段交互 / 提交门禁 / 重复编辑检测）见 **workflow-sdlc.md 4 章**。
-- **reqdoc 场景五**（业务确认，PRD 要点逐段确认）见 **workflow-reqdoc.md 9 章**。
+**实测结果三**（2026-08-14，31 场景含 s20-s21，repeat 1）：新增 `open_ide`/`unlock_file` 手工文件锁场景（sdlc-r12，open-ide 此后并入本工程）。远端 deepseek-v4-flash（zen/go，`EVAL_MAX_TOKENS=4096`）整体 **31/31（100%）**；本地 qwen3.6（`EVAL_MAX_TOKENS=2048`）整体 **28/31（90%）**，sdlc **21/21（100%）**（r12 改动零回归），reqdoc 仅 `r1 渐进引导`（既有稳定失败）与 `r2/r10 要点 id 参数匹配`（qwen3.6 对中文 id 精确复述波动，与 r12 无关）。s20/s21 初版 userTurn 未指明文件却期望模型杜撰 `file` 调 `open_ide`（与「未明确文件先询问」规则矛盾），两模型均失败；改为明确 `auth/service.ts` 后通过——**新增场景的 userTurn 须先满足规则触发前提**。
 
-### 7.3 规则可靠性
+**实测结果四**（2026-08-17，46 场景含 P1/P2 质量飞轮，reqdoc 24 场景三模型对比）：reqdoc 工作流新增打分卡（reqdoc_score）、探针清单（reqdoc_probe）、渲染校验（reqdoc_check）后，三模型 reqdoc 通过率：**DeepSeek-V4-Flash 49/72 (68%)** > **qwen3.6 16/24 (67%, repeat 1)** > **mimo-v2.5 39/72 (54%)**。SDLC 未改动，mimo-v2.5 SDLC baseline 41/66 (62%) 与 deepseek 持平。关键发现：(1) r23/r24 渲染结构场景三模型均 0/3（模型不按模板生成结构化 PRD）；(2) qwen3.6 唯一通过 r24（缺料渲染+缺省标注）；(3) DeepSeek 在工具调用场景（r5/r11/r17/r20）显著更强。工具描述加 prd 门禁约束（reqdoc_score/reqdoc_confirm_features）对 mimo-v2.5 无显著效果（53%→54%），render judge 加 fuzzy 匹配对 r23/r24 无效果（模型不生成 markdown 标题）。
 
-"系统提示"方案的局限在于 LLM 可能不遵守规则。通过以下措施提高可靠性：
+**实测结果五**（2026-08-17，deepseek-v4-pro-0813，repeat 3）：r12/r14 场景缺陷修复后的全量重跑，整体 **108/138 (78%)**（sdlc 57/66 (86%)，reqdoc 51/72 (71%)，PRD 评分 88.6/100）。**r12 确认语修复生效（3/3）**；**r14 仍未通过（0/3）**——注入已正确（edge 阶段注入打分门禁规则），但模型在「资料放好则 reqdoc_scan」与「进 prd 前 reqdoc_score」两条 edge 路径间优先走 scan，属 userTurn 二义性（未说明材料状态）而非注入缺陷。既有已知失败延续：r23/r24 渲染结构 0/3、r1 渐进引导 0/3；s15 拒绝后重写 0/3、r20 追问探针 0/3、r22 进 prd 0/3 为该模型新暴露。
 
-| 风险 | 措施 |
-|------|------|
-| Agent 忘记当前阶段 | 每轮 `system.transform` hook 将最新状态压缩为阶段状态条刷新到 system prompt |
-| Agent 自行推进阶段 | 规则重复强调"绝不自行判断"，且 `workflow_advance` 工具在服务端（插件 handler）校验：`approve` 必须 `developer_confirmed=true`（开发者明确确认），否则拒绝 |
-| Agent 跳过审查交互 | 审查阶段是独立的系统提示块，规则优先级最高；`review_submit` 工具在服务端二次校验审查清单（`def.checklist`）与前序阶段，未全部通过则拒绝 |
-| Agent 批量跳过逐段确认 | **服务端防篡改**：`comprehension_confirm` 工具单次调用只接受一个 `codeSegmentId`，批量传入直接报错，防止 LLM 在开发者回复"看起来不错"时将全部片段批量设为 `confirmed` |
-| Agent 绕过门禁直接提交 | `tool.execute.before` hook 拦截 `bash` 中的 `git commit`，未通过 `commit_gate_check` 时抛错阻断——这是插件层的硬约束，不依赖 LLM 自觉 |
-| Agent 重复 enter 已 approved 阶段 | `applyTransition` 服务端校验：`enter` 已 approved 阶段抛错（须 `workflow_revisit` 回退），`enter` 已 in_progress 阶段幂等 no-op（不追加 transition） |
-| 弱模型完成后不知收尾 / 在新会话复用当前会话致统计混入 | 完成态注入**专用完成块**给全「提交 → /new 开新需求 → revisit 改本需求」三条可行动作，且 `review_submit` 通过（门禁 allowed）时返回直接带出 /new 提示——完成瞬间即可见；对已 approved 阶段 enter 的报错也明确「开始下一个需求请执行 /new」，防止弱模型被引导走返工路径复用本会话。合并 open-ide 后完成块另读锁表提示解锁（仅 sdlc） |
-| LLM 上下文窗口不足 | 工作流状态压缩为阶段状态条，system prompt 只注入当前阶段规则（global + 当前 in_progress 阶段，见 7.4），历史规则不重复注入 |
+**实测结果六**（2026-08-17，deepseek-v4-pro-0813，repeat 3，`EVAL_MAX_TOKENS=16384` + `EVAL_TIMEOUT_MS=300000`）：整体 **112/138 (81%)**（sdlc 59/66 (89%)，reqdoc 53/72 (74%)，PRD 评分 87.6/100）。**关键：EVAL_MAX_TOKENS 4096 → 16384 是必要前提**——r14 修复后模型 reasoning 极长，4096 下 thinking 截断、content 与 tool_calls 双双为空被误判失败；提升后**r14 0/3 → 2/3**、s12 1/3→3/3、s15 0/3→2/3、s19 2/3→3/3、r20 0/3→2/3。r14 仍偶发走 reqdoc_scan（userTurn 已给足材料+业务确认，2/3 稳定）。稳定失败延续：r1 渐进引导 0/3、r22 进 prd 0/3（workflow_advance 参数不匹配）、r23/r24 渲染结构 0/3（模型不逐字段标来源/不按模板结构）、s21/s22 解锁 2/3。**评测脚本加固**：run.ts 加 `--name` 场景过滤与 per-scenario 容错（单次请求重试耗尽记为失败并继续，不再中断整轮），长输出渲染场景须提 `EVAL_TIMEOUT_MS`。
 
-reqdoc 无 `git commit` 门禁，表中「绕过门禁直接提交」风险不适用；其 review 语义为**业务确认 PRD 要点**，防批量走过场的约束（`comprehension_confirm` 单次只接受一个要点）同样生效。
+**实测结果七**（2026-08-18，deepseek-v4-pro-0813，repeat 3）：整体 **125/138 (91%)**（reqdoc **62/72 (86%)**，sdlc **63/66 (95%)**，PRD 评分 87.6/100）。两处场景前提修复带来 reqdoc +12%：**r6 判定关键词矛盾修复**（0/3→3/3）——reqdoc-r2 明文要求业务语言、禁止技术词，旧判定却查「超时/驳回/失败/补单」等技术词，模型问「连点提交/断网」匹配不上；改为业务说法（谁能看/连点/断网/留痕/复核）后自洽；**r22 场景前提修复**（0/3→3/3）——edge 若 in_progress 模型会先 `approve(edge)` 再 `enter(prd)`，单轮评测无法模拟两阶段，judge 期望单轮 enter 会误判；edge 改 approved 后模型直接 enter(prd)。**r19 缺省遵循**（1/3→3/3，模型正确标 [缺省]、edgeControl 5）、**r14**（→3/3）随之前 userTurn 修复稳定。稳定失败收敛为：**r23/r24 渲染结构**（0/3，单轮 vs 多轮思维方差，用户定「接受现状」；后经 A3/D7 `soft` 拆级降权——来源标注降观察项不计通过率，硬门禁只剩结构骨架）、r1 渐进引导（1/3，推理模型英文 thinking 风格）、r17/r20/s15/s16/s22（2/3，低频偶发）。
 
-### 7.4 规则注入机制与规则全文指引
+### 9.10 关键教训（多次迭代沉淀）
 
-规则以 `WorkflowDefinition.rules: RuleItem[]` 存储（见 3.2），每项带 `stage` 归属（`"global"` 或阶段键）。插件每轮经 `rulesForStage(def, currentInProgressStage(workflow))` **只注入 global + 当前 in_progress 阶段的规则**（弱模型遵循负担最小化，见 7.3）；无进行中阶段时只给 global + 起步提示。规则文本只承载**模型可行动作**（调用哪个工具、何时、确认语义）；插件内部机制（行数统计、stuck 检测、一次通过率计算）由代码强制，不进注入文本。
+- **判定关键词须与规则要求的语言自洽**：reqdoc-r2 明文要求业务语言、禁止技术词，r6 判定却查「超时/驳回/失败/补单」等技术词——模型按规则用业务说法问「连点提交/断网」就匹配不上，误判失败。判定词表须与规则约束的语言一致（业务说法），否则评测测的是「违背规则的措辞」而非「遵循规则」。
+- **单轮评测无法模拟多阶段状态机动作**：r22 场景 edge 若 in_progress，模型按状态机正确先 `approve(edge)` 再 `enter(prd)`，但 judge 期望单轮直接 enter——场景前提须把前置阶段设为已 approved，让期望动作成为单轮可达的一步（同理 r23/r24 渲染属「先 scan/确认再渲染」的多轮思维，单轮评测呈高方差）。
+- **规则文本保持简洁**：曾尝试给 r9/r11/r17/r19 补「须调用工具、逐段各调用一次」等详细措辞，实测发现弱模型对复杂措辞敏感（qwen3.6 出现 r2 确认要点不再调工具、r10 要点 id 错填），已全部回滚——提升应走脚本适配与判定口径，而非规则膨胀。
+- **评测脚本对推理模型的适配**：`msg.content` 为空时回退 `reasoning_content`（推理模型正文可能在 thinking，text 类判定读不到 content）；输出上限用 `EVAL_MAX_TOKENS` 可配——推理模型显式留 thinking 空间（deepseek-*-flash 4096，**deepseek-v4-pro-0813 等长 reasoning 模型实测须 16384**，否则 thinking 截断致 content 与 tool_calls 双双为空、工具场景被误判「未调用」），**慢速弱模型默认 2048**（本地 qwen3.6 实测 ~16 tok/s，4096 下长生成场景拖到超时）；16k token 长输出的 reqdoc 渲染场景须提 `EVAL_TIMEOUT_MS` 至 300000，并给 run.ts 加 per-scenario 容错防单场景超时中断整轮。
+- **评测请求须带超时 + 重试**：`client.ts` 用 `EVAL_TIMEOUT_MS`（默认 180s）+ 网络/超时错误重试 3 次（HTTP 4xx/5xx 不重试），否则偶发超时中断整轮评测（曾丢 25 分钟全量结果）。
+- **新增场景的 userTurn 须与规则前提一致**：先满足规则触发条件再期望动作——s20 曾用未指明文件的发言却期望模型杜撰 `file` 调 `open_ide`（规则要求「先询问」），两模型均失败；明确文件后通过。
+- **判定口径适配模型能力**：`exactCount`（恰 N 次）对单轮单发 tool_call 的推理模型过苛，可放宽为「≥1 次 confirm 且 `distinctArg` 不重复」，反映能力基线而非单次抖动。
+- **场景 userTurn 避免二义性**：发言词不要同时是阶段名与要点 id（如「边界这块」既像 edge 阶段又像要点 id），否则强模型可能误走 `workflow_revisit`。
+- **hoisted 拷贝残留影响评测**：评测脚本经 `node_modules/sm-shared` 解析共享包，`node-linker=hoisted` 下它是真实拷贝；修改 `packages/shared` 后须删除 `node_modules/sm-shared` 并 `bun install` 重同步，否则评测读到旧规则文本（`typecheck`/`bun test` 仍全绿，易漏）。
 
-**sdlc 12 条规则**（sdlc-r1~r12：6 global + 1 requirements + 5 review）的完整表格（含注入时机）已移至 **workflow-sdlc.md 3 章**，此处不再重复。
+### 9.11 改动分级决策图（两个工作流共用评测门）
 
-**reqdoc 30 条规则**（reqdoc-r1~r31，r29 预留未用：9 global + 3 goal + 2 rules + 5 edge + 6 prd + 5 review）的完整表格（含注入时机）已移至 **workflow-reqdoc.md 4 章**；需求资料目录契约见 **workflow-reqdoc.md 3 章**。
+不是任何改动都跑评测门——只有碰触「模型行为面」的改动才需要（模型读进上下文的内容：规则文本 / 探针清单 / 打分卡 / 模板 / 工具描述 / 状态条注入格式；**评测脚本不属于行为面**——它是对照物/量尺，改判定口径是「换尺子」不是「改被测内容」，但同样要过评测门，判据变了结果不可直接对比）；机制面改动（工具逻辑 / 门禁 / 状态机 / DB / 汇报 / CLI / collector / 纯注释文档）由 `bun test` + `typecheck` 兜底，不跑评测门。行为面改动的分级验证（①②是③的前置自检，**③真实模型对比是合入前唯一不可省的重闸**）：
 
-### 7.5 reqdoc 需求资料目录契约（双通道）
+```mermaid
+flowchart LR
+    A(["改动"]) --> B{"碰触模型行为面？"}
+    B -->|"否 · 机制面<br/>工具逻辑/门禁/状态机/DB<br/>CLI/collector/纯注释文档"| C["bun test + typecheck<br/>（346 单测，秒级）"]
+    C --> Z(["合入 · 不跑评测门"])
+    B -->|"是 · 行为面<br/>规则/探针/打分卡/模板<br/>工具描述/注入格式；<br/>评测脚本=换尺子也须过评测门"| D["进入评测门"]
+    D --> E["① --dry 渲染验证<br/>（46 场景，秒级，不调模型）"]
+    E --> F{"改动类别？"}
+    F -->|"规则/探针/打分卡/模板<br/>（模型看到的实质内容）"| H
+    F -->|"评测脚本/判定口径/注入格式<br/>（换尺子：评测自身或形态）"| G["② mock 冒烟<br/>（验证判定与聚合路径）"]
+    G --> H
+    H["③ 真实模型 baseline→new 对比<br/>（重闸，必过）"] --> I{"对比基线：有回退？"}
+    I -->|"是"| J(["不合入 · 回退改动"])
+    I -->|"否"| K["沉淀资产<br/>（新场景/探针/规则进 fixture）"]
+    K --> L(["合入"])
+```
 
-**需求资料目录契约（双通道：文档扫描 + 对话补缺）已整章移至 workflow-reqdoc.md**：三大支柱设计要点与价值链 mermaid 见 **workflow-reqdoc.md 1 章**；目录骨架（01~06，业务投放材料区 + AI 工作区）、目录 → 阶段映射、初始化与引导闭环 mermaid、模板送达、打分卡门禁、追问探针清单与柔性一致校验、渲染结构校验门禁、产出归档、渲染铁律、多模态边界、明确不做清单，见 **workflow-reqdoc.md 3 章**。
+①②③ 各级的**具体命令、读输出口径与 baseline 冻结纪律**见 9.6 运行方式。本决策图两个工作流共用，但第③步比对口径不同：**sdlc 只看通过率**（baseline→new 不降即可），**reqdoc 额外看打分卡八维分数**（打分卡 0-100 八维度量是 reqdoc 专属度量）。质量飞轮的三支柱机制（把 reqdoc 打分卡接进评测）、reqdoc 落地节奏（P0/P1/P2）与 reqdoc 实测轮次见 **workflow-reqdoc.md 10 章**。
 
----
+**可持续的保障**
 
-## 8. 文件清单
+- **一切改动必须过回归**：每次改规则 / 探针 / 模板跑 eval，对比 baseline，任何回退都不合入——reqdoc 以打分卡八维分数不降为准，sdlc 以通过率不降为准（13.4 迭代闭环从「通过率不降」升级为「八维分数不降」）。
+- **改进必须资产化**：新场景进 `scenarios.ts`、新探针进清单、新规则进 fixture——沉淀为可重复资产而非一次性修改。
+- **三同步铁律照旧**：规则 / 工具 / 文档 / mermaid 同步。
+
+
+
+## 10. 文件清单与运维（部署/安全/同步）
+
 
 ### 上游 OpenCode（零修改）
 
-不修改、不新增任何上游包（`packages/*`）内的文件。仅依赖上游已有的插件 Hook 体系与 session REST API（见 2.4、4.2）。
+不修改、不新增任何上游包（`packages/*`）内的文件。仅依赖上游已有的插件 Hook 体系与 session REST API（见 10.1、4.2）。
 
 ### 契约包 `opencode-session-mgmt/packages/shared/`（新建，三包共用）
 
@@ -1347,7 +1540,7 @@ reqdoc 无 `git commit` 门禁，表中「绕过门禁直接提交」风险不�
 
 ---
 
-## 9. 部署与分发
+
 
 **核心原则：开发者零编译**。三个包由团队构建发布一次，开发者只做安装与配置。
 
@@ -1357,7 +1550,7 @@ reqdoc 无 `git commit` 门禁，表中「绕过门禁直接提交」风险不�
 | `opencode-sm` CLI | npm 包，或 `bun build --compile` 单文件二进制经内部分发 | `npm i -g @yourorg/opencode-sm`（或接收二进制） |
 | 后台收集服务 `performance_dashboard` | 运维在 org 内网服务器部署一次（见外部项目） | 无——仅在 init 时填写其地址 |
 
-### 9.1 组织管理员（一次性）
+### 10.1 组织管理员（一次性）
 
 ```bash
 # 内网服务器部署收集服务（外部项目 performance_dashboard，详见其仓库）
@@ -1365,7 +1558,7 @@ reqdoc 无 `git commit` 门禁，表中「绕过门禁直接提交」风险不�
 # （如 http://10.0.1.20:8787）告知全体成员，作为 init 的收集服务地址
 ```
 
-### 9.2 开发者（一次性，约 2 分钟）
+### 10.2 开发者（一次性，约 2 分钟）
 
 ```bash
 npm i -g @yourorg/opencode-sm                    # 1. 装独立 CLI
@@ -1376,34 +1569,23 @@ opencode-sm init                                  # 3. 两问：api_key / 收集
 
 此后开发者照常使用 `opencode`（TUI）——工作流规则随 system prompt 自动注入，阶段推进、审查、理解确认全部在对话中完成；外部查看用 `opencode-sm stats`。
 
-### 9.3 升级路径
+### 10.3 升级路径
 
 | 场景 | 操作 | 影响面 |
 |------|------|--------|
 | 插件 / CLI 升级 | 团队发新版；开发者 `npm update`（插件亦可由 OpenCode 启动时自动拉新） | 仅定制三包 |
-| OpenCode 上游升级 | 开发者照常升级本体 | 与定制互不干扰，无合并、无迁移（见第 10 章） |
+| OpenCode 上游升级 | 开发者照常升级本体 | 与定制互不干扰，无合并、无迁移（见 10.6） |
 
-### 9.4 环境决策点
+### 10.4 环境决策点
 
 - **有内部 npm registry**：插件与 CLI 均走 npm，最省心；**无 registry**：插件以 git 路径/本地目录分发（上游 loader 支持本地路径），CLI 以 `bun build --compile` 二进制分发
 - **插件发布形态**：建议团队侧编译为 JS 后发布（不受目标机 bun 版本影响）；此构建对开发者透明
 
 ---
 
-## 10. 升级兼容性（上游同步）
 
-本方案的核心目标是**让后续同步 OpenCode 上游更新没有合并冲突**：
+### 10.5 安全与隐私
 
-- **上游零修改**：不改任何上游包内文件，上游版本升级等同正常更新，无核心文件冲突、无核心 schema 迁移对齐负担
-- **数据独立**：定制数据全部在插件自有 SQLite 与 org 聚合库，表结构迁移各自自管，与上游 schema 演进互不影响；对上游会话仅以 `sessionID` 逻辑关联
-- **接口稳定面小**：仅依赖上游插件 Hook 与 session REST API 两类公开接口；**插件不直读上游数据库**，上游内部表结构变化对定制无影响
-- **experimental hook 风险受控**：`experimental.chat.system.transform` 若被上游调整签名，影响面仅插件包 `src/prompt.ts` 一处适配层，升级后回归测试即可，成本远低于核心合并
-- **上游行为不变**：TUI、上游 CLI、上游 API 消费者均不受影响；卸载插件（移除 `config.plugin` 条目）即完全还原
-- **快照语义**：身份（`apiKey` 哈希）随汇报固化，调整 `identity.json` 不追溯历史统计（见 3.1）
-
----
-
-## 11. 安全与隐私
 
 - 本机会话数据存储于本地插件 SQLite；跨机汇聚仅传输**流程摘要**（阶段时间戳、cost/tokens、质量指标、身份字段），**不含代码内容**
 - 迭代计数明细 `iterationByFile`、行数明细 `linesByFile`（键均为文件路径）仅存本机插件库，汇报投影（`summarizeWorkflow`）已剥离——与理解确认片段剥离 `file`/`lines`/`explanation` 的口径一致，文件路径不上行；行数仅以业务/测试/配置三类聚合数字上行
@@ -1417,7 +1599,25 @@ opencode-sm init                                  # 3. 两问：api_key / 收集
 
 ---
 
-## 12. 验证方式
+
+### 10.6 升级兼容性（上游同步）
+
+
+本方案的核心目标是**让后续同步 OpenCode 上游更新没有合并冲突**：
+
+- **上游零修改**：不改任何上游包内文件，上游版本升级等同正常更新，无核心文件冲突、无核心 schema 迁移对齐负担
+- **数据独立**：定制数据全部在插件自有 SQLite 与 org 聚合库，表结构迁移各自自管，与上游 schema 演进互不影响；对上游会话仅以 `sessionID` 逻辑关联
+- **接口稳定面小**：仅依赖上游插件 Hook 与 session REST API 两类公开接口；**插件不直读上游数据库**，上游内部表结构变化对定制无影响
+- **experimental hook 风险受控**：`experimental.chat.system.transform` 若被上游调整签名，影响面仅插件包 `src/prompt.ts` 一处适配层，升级后回归测试即可，成本远低于核心合并
+- **上游行为不变**：TUI、上游 CLI、上游 API 消费者均不受影响；卸载插件（移除 `config.plugin` 条目）即完全还原
+- **快照语义**：身份（`apiKey` 哈希）随汇报固化，调整 `identity.json` 不追溯历史统计（见 3.1）
+
+---
+
+
+
+## 11. 验证方式
+
 
 上游命令与 `opencode-sm` 均通过 daemon 自动启动机制工作，无需手动操作。
 
@@ -1445,128 +1645,6 @@ opencode
 
 上游回归：因上游零修改，只需确认插件启用/卸载两种状态下上游既有测试（`packages/core/test/session-*.test.ts`、`packages/tui/test/`、`packages/sdk/js`）均通过。
 
-规则遵循度评测与数据驱动的规则迭代是**独立的验证方法论**，见第 13 章（重要：改规则前必须跑基线对比，不随 `bun test` 走）。
+规则遵循度评测与数据驱动的规则迭代是**独立的验证方法论**，见第 9 章（重要：改规则前必须跑基线对比，不随 `bun test` 走）。
 
-## 13. 支柱四·度量反馈：评测驱动规则迭代（数据驱动优化）
 
-规则文本优化（阶段化注入、状态条、审查清单引导）以**数据驱动**验证：量化弱模型对注入规则的遵循度，改前跑基线、改后对比。这是本方案的**核心方法论**——规则的每一步措辞调整都必须先有基线数据支撑，避免凭直觉改规则伤害弱模型。脚本 `scripts/eval-rules/`（不入 `bun test`，需真实模型端点）。**通用方法论**（适用于所有 AI 深度绑定开发）见 `plugin-guide/eval-driven-rule-iteration.md`；本章为其在 opencode-session-mgmt 的落地实例。**评测与质量飞轮实操手册（技能）见 `.opencode/skills/workflow-rules-eval/SKILL.md`**——冻结基线 / 三级验证 / 八维 delta 读法 / 归因地图 / 收敛判据可直接照其执行。
-
-### 13.1 运行方式
-
-```bash
-# 冻结的 baseline 快照在 scripts/eval-rules/fixtures/baseline/（改造前的规则全文，可复现旧注入格式）
-bun run scripts/eval-rules/run.ts --variant baseline --dry   # 只打印注入片段与判定期望，不调模型
-bun run scripts/eval-rules/run.ts --variant baseline         # 跑基线通过率 → results/baseline.json
-bun run scripts/eval-rules/run.ts --variant new              # 改造后 → results/new.json，自动对比 baseline
-```
-
-分三级验证（对应 13.6 决策图的 ①②③，何时跑哪级见「改动分级决策图」）：
-
-- **① 干跑（秒级，每次改完必做）**：`--variant new --dry` 与 `--variant baseline --dry` 各跑一次，验证 46 场景注入片段与判定期望渲染正常，不调模型。
-- **② mock 冒烟（仅改评测脚本时）**：临时起一个 mock OpenAI 端点返回罐装 tool_calls（针对新增场景命中其判定路径，如 r20 返回 `reqdoc_probe(asked=[...])`、r22 返回 `workflow_advance(enter prd)`），`EVAL_BASE_URL` 指过去非 dry 跑一遍，确认判定与聚合/对比路径不炸；跑完删掉 mock、`git checkout` 还原 `results/*.json`。
-- **③ 真实模型对比（重闸，合入前必过）**：
-  ```bash
-  # 本地 vLLM（默认端点 http://localhost:8086/v1，qwen3.6）
-  bun run scripts/eval-rules/run.ts --variant new --repeat 3
-  # 远端推理模型（deepseek-v4-flash 等，EVAL_MAX_TOKENS=4096 留 thinking 空间；deepseek-v4-pro-0813 等长 reasoning 推理模型实测须 16384，否则 thinking 截断发不出工具调用）
-  EVAL_BASE_URL=https://<端点>/v1 EVAL_API_KEY=<key> EVAL_MODEL=<model-id> EVAL_MAX_TOKENS=16384 \
-  bun run scripts/eval-rules/run.ts --variant new --repeat 3
-  ```
-
-**读输出与合入门槛**：per-scenario 通过表（`✅`/`❌`，r20-r24 在 reqdoc 段）→ 聚合通过率（整体 / sdlc / reqdoc）→ `=== 对比(baseline → new) ===` 的 PRD 八维逐维 delta（仅 `--variant new` 且库里已有 baseline.json 时打印）。**八维任何一维回退（负号）就不合入**，回滚改动；全过或持平才沉淀资产合入。
-
-**baseline 冻结纪律**：`results/baseline.json` 是**入库冻结参照**（fixtures 里改造前规则快照 + 指定模型实测结果），`--variant new` 自动读它对比。只有首次搭评测 / 换模型 / 换端点时才跑 `--variant baseline` 重新冻结并 commit；日常改动**只跑 `--variant new`，不要重跑 baseline 覆盖参照**，否则对比失效。
-
-**陷阱**：改了 `packages/shared` 后必须 `rm -rf node_modules/sm-shared && bun install`（hoisted 拷贝残留，见 13.5），否则评测读到旧规则文本而 `bun test` 仍全绿，易漏。
-
-- 环境变量：`EVAL_BASE_URL`（OpenAI 兼容端点，默认 `http://localhost:8086/v1`，本地 vLLM）、`EVAL_API_KEY`、`EVAL_MODEL`（默认 `/models/qwen3`，本地 vLLM 的模型 id）、`EVAL_MAX_TOKENS`（输出上限，默认 2048；推理模型须按需留 thinking 空间——deepseek-*-flash 4096，deepseek-v4-pro-0813 等长 reasoning 模型实测 16384 才够发出工具调用，4096 下 thinking 截断、content 与 tool_calls 双双为空导致误判失败；慢速弱模型 2048 防拖超时）、`EVAL_TIMEOUT_MS`（单请求超时，默认 180000，含网络/超时错误重试 3 次；16k token 渲染长输出的 reqdoc 场景须提至 300000）；`--repeat N` 重复多次取通过率（聚合按**运行次数**统计，防单次抖动掩盖趋势）
-- **baseline 与 new 共用同一状态夹具**（`finish()` 重算 commit），保证可对等比较
-
-### 13.2 场景集
-
-46 个场景（sdlc s1-s22 + reqdoc r1-r24），覆盖关键规则：基线录入、确认后 approve、无确认不 approve、回到XX→revisit、审查逐段不批量、前序未完成不 submit、提交前查门禁、完成后提示 /new 与开新需求、空档态继续、审查全流程、open_ide 手工锁定与解锁、reqdoc 渐进引导 / 双通道功能点拆解 / 打分卡门禁 / 评分 / 追问 / 渲染。
-
-- **sdlc 场景 s1-s22 明细**（含完成态 /new、空档态继续、审查全流程、open_ide 锁定、SDLC 完结解锁）见 **workflow-sdlc.md 8 章**。
-- **reqdoc 场景 r1-r24 明细**（渐进引导、双通道功能点拆解、打分卡门禁、评分模式、追问可测化、渲染可测化）与质量飞轮见 **workflow-reqdoc.md 10 章**。
-
-### 13.3 判定方式（rule-based，不用 LLM judge）
-
-判定类分两类：**behavior 类**（`tool_use` / `no_tool` / `text`，断言「模型调了什么工具、怎么调、回复含什么」，sdlc 与 reqdoc 全部场景共用）与 **output 类**（`score` 质量飞轮 P0 / `render` 质量飞轮 P2，断言「模型渲染产出的 PRD 文本质量」，**reqdoc 专属**——reqdoc 用它将「通过/不通过」升级为 0-100 八维度量，sdlc 不跑 output 类、只走 behavior 类的通过率）。
-
-- 工具类比对 `tool_use` 名称与参数谓词（如 approve 时 `developer_confirmed` 必须 true）；`args` 为参数子集全等匹配，`argsContains`（质量飞轮 P1）为数组子集断言——期望每个元素须出现在实际数组参数中（如断言 asked 覆盖核心探针），两者互不影响、零回归
-- `no_tool` 类断言未调用某工具
-- `text` 类（maxQuestions 问句计数、optionsABC 问句 ≤max 且含「默认」+ ≥2 个 A/B/C 标记、categoryKeywords 探针关键词）为关键词启发式，判定口径脆弱需人工复核
-- `score` 类（质量飞轮 P0）：渲染标记命中 + `scorePrd()` 八维总分/维度上下限校验——同样是 rule-based，只是判定对象从「工具行为」换成「渲染产出质量」
-- `render` 类（质量飞轮 P2）：共享 `parseRenderStructure` 解析模型回复文本，断言必查章节出现（requiredChapters，缺省=全部）、章节顺序正确（ordered）、功能点块数下限（minFeatures）、映射字段逐功能点全标来源（sourceAll）、至少一个 [缺省]（anyDefault，缺料不杜撰的结构信号）——与运行时 `reqdoc_check` 同源，只换「工具+文件」为「评测回复文本」（评测无文件系统）。**r23/r24 启用 `soft` 拆级降权（A3/D7）**：`sourceAll`/`anyDefault` 降为观察项不计通过率，硬门禁只剩章节/顺序/块数结构骨架；渲染/评分场景的模型输出原文落进结果 JSON（`outputs` 字段）供归因（A4）——只看 detail 无法区分「纯文本渲染/错层级标题/tool_call 占位」
-
-### 13.4 实测记录与迭代闭环
-
-**迭代闭环**：改规则前跑 `--variant baseline` 冻结基线 → 改规则/脚本 → 跑 `--variant new` 对比 → 通过率不降才保留；失败场景逐个归因（规则措辞 / 判定口径 / 场景二义性），优先调脚本与判定口径而非膨胀规则。reqdoc 侧质量飞轮轮次（打分卡补齐 39 / P0 41 / P1 44 / P2 46）见 workflow-reqdoc.md 10 章。
-
-```mermaid
-flowchart TD
-    A(["迭代起点"]) --> B["冻结 baseline<br/>（仅首次搭评测 / 换模型 / 换端点时）"]
-    B --> C["改动<br/>规则 / 探针 / 打分卡 / 模板<br/>或评测脚本 / 判定口径"]
-    C --> D["跑 --variant new<br/>自动对比 baseline"]
-    D --> E{"通过率 / 八维分数<br/>有回退？"}
-    E -->|"是 · 回退"| F["失败场景逐个归因<br/>规则措辞 / 判定口径 / 场景二义性"]
-    F --> G["优先调脚本与判定口径<br/>而非膨胀规则"]
-    G --> C
-    E -->|"否 · 全过或持平"| H["保留改动 · 沉淀资产<br/>新场景 / 探针 / 规则进 fixture"]
-    H --> I(["合入"])
-```
-
-**实测结果一**（2026-08-12，deepseek-v4-flash，repeat 3，按运行次数）：整体 **76% → 93%**（reqdoc 61% → 100%，sdlc 88% 持平）。驱动改进的三处迭代：状态条列出**待确认项 id**（让模型知道要 confirm 什么）、规则显式排除模糊表态（「你看着办」不算确认）、review_submit 规则补「前序须全部 approved」。基线快照冻结于 `fixtures/baseline/`，`results/{baseline,new}.json` 入库作参照，任何模型/时刻可重跑对比。
-
-**实测结果二**（2026-08-14，29 场景，repeat 1）：本地 qwen3.6（vLLM 8086）整体 **28/29（97%）**，唯一失败 `r1 渐进引导 ≤2 问`（问句 17 个超上限 2）；远端 deepseek-v4-flash（zen/go）整体 **28/29（97%）**，唯一失败 `r10 要点拒绝后重写`（userTurn「边界这块」存在二义——edge 阶段名 vs 要点 id，模型偶发改走 `workflow_revisit`）。
-
-**实测结果三**（2026-08-14，31 场景含 s20-s21，repeat 1）：新增 `open_ide`/`unlock_file` 手工文件锁场景（sdlc-r12，open-ide 此后并入本工程）。远端 deepseek-v4-flash（zen/go，`EVAL_MAX_TOKENS=4096`）整体 **31/31（100%）**；本地 qwen3.6（`EVAL_MAX_TOKENS=2048`）整体 **28/31（90%）**，sdlc **21/21（100%）**（r12 改动零回归），reqdoc 仅 `r1 渐进引导`（既有稳定失败）与 `r2/r10 要点 id 参数匹配`（qwen3.6 对中文 id 精确复述波动，与 r12 无关）。s20/s21 初版 userTurn 未指明文件却期望模型杜撰 `file` 调 `open_ide`（与「未明确文件先询问」规则矛盾），两模型均失败；改为明确 `auth/service.ts` 后通过——**新增场景的 userTurn 须先满足规则触发前提**。
-
-**实测结果四**（2026-08-17，46 场景含 P1/P2 质量飞轮，reqdoc 24 场景三模型对比）：reqdoc 工作流新增打分卡（reqdoc_score）、探针清单（reqdoc_probe）、渲染校验（reqdoc_check）后，三模型 reqdoc 通过率：**DeepSeek-V4-Flash 49/72 (68%)** > **qwen3.6 16/24 (67%, repeat 1)** > **mimo-v2.5 39/72 (54%)**。SDLC 未改动，mimo-v2.5 SDLC baseline 41/66 (62%) 与 deepseek 持平。关键发现：(1) r23/r24 渲染结构场景三模型均 0/3（模型不按模板生成结构化 PRD）；(2) qwen3.6 唯一通过 r24（缺料渲染+缺省标注）；(3) DeepSeek 在工具调用场景（r5/r11/r17/r20）显著更强。工具描述加 prd 门禁约束（reqdoc_score/reqdoc_confirm_features）对 mimo-v2.5 无显著效果（53%→54%），render judge 加 fuzzy 匹配对 r23/r24 无效果（模型不生成 markdown 标题）。
-
-**实测结果五**（2026-08-17，deepseek-v4-pro-0813，repeat 3）：r12/r14 场景缺陷修复后的全量重跑，整体 **108/138 (78%)**（sdlc 57/66 (86%)，reqdoc 51/72 (71%)，PRD 评分 88.6/100）。**r12 确认语修复生效（3/3）**；**r14 仍未通过（0/3）**——注入已正确（edge 阶段注入打分门禁规则），但模型在「资料放好则 reqdoc_scan」与「进 prd 前 reqdoc_score」两条 edge 路径间优先走 scan，属 userTurn 二义性（未说明材料状态）而非注入缺陷。既有已知失败延续：r23/r24 渲染结构 0/3、r1 渐进引导 0/3；s15 拒绝后重写 0/3、r20 追问探针 0/3、r22 进 prd 0/3 为该模型新暴露。
-
-**实测结果六**（2026-08-17，deepseek-v4-pro-0813，repeat 3，`EVAL_MAX_TOKENS=16384` + `EVAL_TIMEOUT_MS=300000`）：整体 **112/138 (81%)**（sdlc 59/66 (89%)，reqdoc 53/72 (74%)，PRD 评分 87.6/100）。**关键：EVAL_MAX_TOKENS 4096 → 16384 是必要前提**——r14 修复后模型 reasoning 极长，4096 下 thinking 截断、content 与 tool_calls 双双为空被误判失败；提升后**r14 0/3 → 2/3**、s12 1/3→3/3、s15 0/3→2/3、s19 2/3→3/3、r20 0/3→2/3。r14 仍偶发走 reqdoc_scan（userTurn 已给足材料+业务确认，2/3 稳定）。稳定失败延续：r1 渐进引导 0/3、r22 进 prd 0/3（workflow_advance 参数不匹配）、r23/r24 渲染结构 0/3（模型不逐字段标来源/不按模板结构）、s21/s22 解锁 2/3。**评测脚本加固**：run.ts 加 `--name` 场景过滤与 per-scenario 容错（单次请求重试耗尽记为失败并继续，不再中断整轮），长输出渲染场景须提 `EVAL_TIMEOUT_MS`。
-
-**实测结果七**（2026-08-18，deepseek-v4-pro-0813，repeat 3）：整体 **125/138 (91%)**（reqdoc **62/72 (86%)**，sdlc **63/66 (95%)**，PRD 评分 87.6/100）。两处场景前提修复带来 reqdoc +12%：**r6 判定关键词矛盾修复**（0/3→3/3）——reqdoc-r2 明文要求业务语言、禁止技术词，旧判定却查「超时/驳回/失败/补单」等技术词，模型问「连点提交/断网」匹配不上；改为业务说法（谁能看/连点/断网/留痕/复核）后自洽；**r22 场景前提修复**（0/3→3/3）——edge 若 in_progress 模型会先 `approve(edge)` 再 `enter(prd)`，单轮评测无法模拟两阶段，judge 期望单轮 enter 会误判；edge 改 approved 后模型直接 enter(prd)。**r19 缺省遵循**（1/3→3/3，模型正确标 [缺省]、edgeControl 5）、**r14**（→3/3）随之前 userTurn 修复稳定。稳定失败收敛为：**r23/r24 渲染结构**（0/3，单轮 vs 多轮思维方差，用户定「接受现状」；后经 A3/D7 `soft` 拆级降权——来源标注降观察项不计通过率，硬门禁只剩结构骨架）、r1 渐进引导（1/3，推理模型英文 thinking 风格）、r17/r20/s15/s16/s22（2/3，低频偶发）。
-
-### 13.5 关键教训（多次迭代沉淀）
-
-- **判定关键词须与规则要求的语言自洽**：reqdoc-r2 明文要求业务语言、禁止技术词，r6 判定却查「超时/驳回/失败/补单」等技术词——模型按规则用业务说法问「连点提交/断网」就匹配不上，误判失败。判定词表须与规则约束的语言一致（业务说法），否则评测测的是「违背规则的措辞」而非「遵循规则」。
-- **单轮评测无法模拟多阶段状态机动作**：r22 场景 edge 若 in_progress，模型按状态机正确先 `approve(edge)` 再 `enter(prd)`，但 judge 期望单轮直接 enter——场景前提须把前置阶段设为已 approved，让期望动作成为单轮可达的一步（同理 r23/r24 渲染属「先 scan/确认再渲染」的多轮思维，单轮评测呈高方差）。
-- **规则文本保持简洁**：曾尝试给 r9/r11/r17/r19 补「须调用工具、逐段各调用一次」等详细措辞，实测发现弱模型对复杂措辞敏感（qwen3.6 出现 r2 确认要点不再调工具、r10 要点 id 错填），已全部回滚——提升应走脚本适配与判定口径，而非规则膨胀。
-- **评测脚本对推理模型的适配**：`msg.content` 为空时回退 `reasoning_content`（推理模型正文可能在 thinking，text 类判定读不到 content）；输出上限用 `EVAL_MAX_TOKENS` 可配——推理模型显式留 thinking 空间（deepseek-*-flash 4096，**deepseek-v4-pro-0813 等长 reasoning 模型实测须 16384**，否则 thinking 截断致 content 与 tool_calls 双双为空、工具场景被误判「未调用」），**慢速弱模型默认 2048**（本地 qwen3.6 实测 ~16 tok/s，4096 下长生成场景拖到超时）；16k token 长输出的 reqdoc 渲染场景须提 `EVAL_TIMEOUT_MS` 至 300000，并给 run.ts 加 per-scenario 容错防单场景超时中断整轮。
-- **评测请求须带超时 + 重试**：`client.ts` 用 `EVAL_TIMEOUT_MS`（默认 180s）+ 网络/超时错误重试 3 次（HTTP 4xx/5xx 不重试），否则偶发超时中断整轮评测（曾丢 25 分钟全量结果）。
-- **新增场景的 userTurn 须与规则前提一致**：先满足规则触发条件再期望动作——s20 曾用未指明文件的发言却期望模型杜撰 `file` 调 `open_ide`（规则要求「先询问」），两模型均失败；明确文件后通过。
-- **判定口径适配模型能力**：`exactCount`（恰 N 次）对单轮单发 tool_call 的推理模型过苛，可放宽为「≥1 次 confirm 且 `distinctArg` 不重复」，反映能力基线而非单次抖动。
-- **场景 userTurn 避免二义性**：发言词不要同时是阶段名与要点 id（如「边界这块」既像 edge 阶段又像要点 id），否则强模型可能误走 `workflow_revisit`。
-- **hoisted 拷贝残留影响评测**：评测脚本经 `node_modules/sm-shared` 解析共享包，`node-linker=hoisted` 下它是真实拷贝；修改 `packages/shared` 后须删除 `node_modules/sm-shared` 并 `bun install` 重同步，否则评测读到旧规则文本（`typecheck`/`bun test` 仍全绿，易漏）。
-
-### 13.6 改动分级决策图（两个工作流共用评测门）
-
-不是任何改动都跑评测门——只有碰触「模型行为面」的改动才需要（模型读进上下文的内容：规则文本 / 探针清单 / 打分卡 / 模板 / 工具描述 / 状态条注入格式；**评测脚本不属于行为面**——它是对照物/量尺，改判定口径是「换尺子」不是「改被测内容」，但同样要过评测门，判据变了结果不可直接对比）；机制面改动（工具逻辑 / 门禁 / 状态机 / DB / 汇报 / CLI / collector / 纯注释文档）由 `bun test` + `typecheck` 兜底，不跑评测门。行为面改动的分级验证（①②是③的前置自检，**③真实模型对比是合入前唯一不可省的重闸**）：
-
-```mermaid
-flowchart LR
-    A(["改动"]) --> B{"碰触模型行为面？"}
-    B -->|"否 · 机制面<br/>工具逻辑/门禁/状态机/DB<br/>CLI/collector/纯注释文档"| C["bun test + typecheck<br/>（346 单测，秒级）"]
-    C --> Z(["合入 · 不跑评测门"])
-    B -->|"是 · 行为面<br/>规则/探针/打分卡/模板<br/>工具描述/注入格式；<br/>评测脚本=换尺子也须过评测门"| D["进入评测门"]
-    D --> E["① --dry 渲染验证<br/>（46 场景，秒级，不调模型）"]
-    E --> F{"改动类别？"}
-    F -->|"规则/探针/打分卡/模板<br/>（模型看到的实质内容）"| H
-    F -->|"评测脚本/判定口径/注入格式<br/>（换尺子：评测自身或形态）"| G["② mock 冒烟<br/>（验证判定与聚合路径）"]
-    G --> H
-    H["③ 真实模型 baseline→new 对比<br/>（重闸，必过）"] --> I{"对比基线：有回退？"}
-    I -->|"是"| J(["不合入 · 回退改动"])
-    I -->|"否"| K["沉淀资产<br/>（新场景/探针/规则进 fixture）"]
-    K --> L(["合入"])
-```
-
-①②③ 各级的**具体命令、读输出口径与 baseline 冻结纪律**见 13.1 运行方式。本决策图两个工作流共用，但第③步比对口径不同：**sdlc 只看通过率**（baseline→new 不降即可），**reqdoc 额外看打分卡八维分数**（打分卡 0-100 八维度量是 reqdoc 专属度量）。质量飞轮的三支柱机制（把 reqdoc 打分卡接进评测）、reqdoc 落地节奏（P0/P1/P2）与 reqdoc 实测轮次见 **workflow-reqdoc.md 10 章**。
-
-**可持续的保障**
-
-- **一切改动必须过回归**：每次改规则 / 探针 / 模板跑 eval，对比 baseline，任何回退都不合入——reqdoc 以打分卡八维分数不降为准，sdlc 以通过率不降为准（13.4 迭代闭环从「通过率不降」升级为「八维分数不降」）。
-- **改进必须资产化**：新场景进 `scenarios.ts`、新探针进清单、新规则进 fixture——沉淀为可重复资产而非一次性修改。
-- **三同步铁律照旧**：规则 / 工具 / 文档 / mermaid 同步。
