@@ -17,6 +17,7 @@
 | [deployment.md](deployment.md) | 设计文档 | **部署与使用手册**（新人先看）：装 OpenCode、启用插件、CLI、收集服务、内网隔离、FAQ | [README.md](../README.md) 链接；自身引用 [qwen3.6-27b.chat-template.jinja](qwen3.6-27b.chat-template.jinja) | 改名需同步 README.md |
 | [upstream-sync.md](upstream-sync.md) | 设计文档 | 上游同步方案：remote 布局、同步命令、冲突预案、同步记录 | [README.md](../README.md)、[CLAUDE.md](../CLAUDE.md)、[.opencode/command/sync-upstream.md](../.opencode/command/sync-upstream.md)、[deployment.md](deployment.md) | 改名需同步 4 处引用 |
 | [mixed-development-workflow.md](mixed-development-workflow.md) | 设计文档 | ~~混合开发工作流参考~~ **已并入 [session-management.md](session-management.md) 8.7**（open_ide 文件锁 / 人机协同写码边界），本文件删除，勿再引用 | — | — |
+| [leadership-brief.md](leadership-brief.md) | 设计文档 | **向上汇报材料**（给管理层）：方案价值、退出风险/ROI 回应、兼容现状、决策请求（技术细节见 session-management.md） | 无入站引用 | 可 |
 | [reqdoc-prd-template.md](reqdoc-prd-template.md) | 运行时资源 | reqdoc PRD 模板的 **md 渲染载体与权威源**（prd 阶段由插件注入） | **代码硬引用**：[template.ts](../packages/plugin/src/template.ts)（`TEMPLATE_FILENAME` 常量拼接候选路径）、[workflow.ts](../packages/shared/src/workflow.ts)（r14/r20 规则文本）、[pack-bundle.sh](../scripts/pack-bundle.sh)（拷 docs/ 到 bundle 根）、[template.test.ts](../packages/plugin/test/template.test.ts) | **不可改名 / 不可移出 docs/ 根**（模板送达机制按 `docs/<此文件名>` 解析，移动即破坏） |
 | [qwen3.6-27b.chat-template.jinja](qwen3.6-27b.chat-template.jinja) | 部署参考 | 部署模型 qwen3.6-27b 的 chat template（vLLM 部署用） | [deployment.md](deployment.md) | 可（同步 deployment.md） |
 
