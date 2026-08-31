@@ -74,7 +74,7 @@ graph LR
 | 基座：形态与契约 | 2 总体架构与零侵入部署、3 数据模型、4 接口、5 CLI | 如何在不改上游的前提下承载上述能力 |
 | ① 约束 | 6.1–6.2（规则阶段化注入 / 机构规约载体）+ `conventions/` | 用什么确定性的机制划定模型边界 |
 | ② 知识 | 7 增强知识（7.2 双通道材料目录 / 7.3 comprehension 知识库） | 用什么补足架构/功能语义 |
-| ③ 协同 | 8.1–8.2（工作流模型 / 阶段检测）、3.3–3.4（状态机 / 门禁）、8.3（工具）、8.4–8.6（Agent 约束）、理解确认闭环（3.2） | 如何把单次交互编排为人在回路的标准流程 |
+| ③ 协同 | 8.1–8.2（工作流模型 / 阶段检测）、3.3–3.4（状态机 / 门禁）、8.3（工具）、8.4–8.6（Agent 约束）、8.7（手工编码与 IDE 协同）、理解确认闭环（3.2） | 如何把单次交互编排为人在回路的标准流程 |
 | ④ 度量 | 9 统计分析与评测驱动规则迭代 | 如何用基线量化前三者的实效、发现退化即回流 |
 
 后续 10–11 章（文件清单与运维、验证）是四支柱的**交付与保障**，不属某一支柱，但都服务于「零侵入、可同步上游、可审计」这一总约束。
@@ -112,12 +112,13 @@ CLI 只做两件事：
 
 ### 1.3 能力清单
 
-系统提供四项能力：
+系统提供五项能力：
 
 1. **会话管理** — 纯 CLI 子命令，不依赖 TUI 也能管理会话
 2. **工作流追踪** — 确保每个会话走完完整流程，允许反复迭代但不可跳过
 3. **理解保障** — 确保开发者真正理解 AI 生成的代码，而非仅仅"审查通过"
 4. **使用分析** — 支撑投入产出评估、算力预算规划与质量监控，为资源配置决策提供数据依据
+5. **混合开发** — 支持开发者在工作流之外用自有 IDE（含其内置智能插件）手工编写代码，经 open_ide 文件锁协调防覆盖后回归测试与审查（见 8.7）
 
 
 
@@ -732,6 +733,27 @@ flowchart TD
 
 **强制提交（逃生口）**：对应上图「强制提交（需填写原因）」分支，经 `commit_force_unlock` 工具授权：必须 `developer_confirmed=true` 且填写原因，写入 `commit.force = {reason, at, used:false}`。门禁遇到未使用的授权放行**一次** `git commit`，随即置 `used=true`（不删除，留痕于 WorkflowState 并随汇报上行，使"绕过审查"在组/组织统计中可见）。授权为一次性，此后恢复阻断；再次强制需重新授权。
 
+### 3.5 人工文件锁表（file_lock）
+
+open_ide 文件锁的持久化载体，是插件自有 SQLite 的第二张表（`packages/plugin/src/db/schema.ts`，`v4` 迁移加入）：
+
+```sql
+CREATE TABLE IF NOT EXISTS file_lock (
+  session_id TEXT NOT NULL,
+  file_path  TEXT NOT NULL,
+  PRIMARY KEY (session_id, file_path)
+);
+```
+
+| 要点 | 说明 |
+|------|------|
+| 主键 | `(session_id, file_path)`；锁按会话隔离，`lock`/`unlock` 幂等（`INSERT OR IGNORE` / `DELETE`） |
+| 路径口径 | 相对路径一律以项目目录 `resolve` 成绝对路径后存储与比较，保证锁定端（open_ide/lock_file）与拦截端（tool.execute.before）的相对/绝对参数匹配一致 |
+| 持久化 | 落 SQLite，daemon 重启自动恢复；锁不随汇报上行（仅本地元数据，见 8.7.7） |
+| 生命周期 | 会话删除后为惰性残留，启动时 `startup.pruneLocks` 以 `session.list` 比对清理；插件卸载/dispose 时 `clearAllLocks` |
+
+机制细节（open_ide 工具、lock/unlock/list 工具、软提示 + 硬拦截）见 **8.7**。
+
 ---
 
 
@@ -1090,7 +1112,7 @@ flowchart TD
 ```
 
 关键点：
-- **规则注入**：上游每一步 Agent 循环都会重新组装 system prompt 并触发 `experimental.chat.system.transform`，插件在此 hook 中从插件库读取当前会话的 `WorkflowState`，将**阶段化规则（global + 当前 in_progress 阶段）**与**阶段状态条**追加到 `output.system`——弱模型只读当前需要的规则与压缩状态，降低遵循负担（7.4、7.3）。插件注入逻辑在 `packages/plugin/src/prompt.ts`，上游引擎 `prompt.ts` 零修改。`stage===null`（无 in_progress）**分三态**：**全未启动**（起步提示）/**空档态**（部分阶段 approved、无进行中：提示「继续→进入下一未启动阶段 / 回退→revisit」，不再误判为「尚未开始」）/**完成态**（全部 approved：走**专用完成块**，给全三条可行动作「提交（如尚未，commit_gate_check）→ 开新需求（/new，保持统计隔离）→ 改本需求（workflow_revisit）」，不注入常规全局规则）。同时 `workflow_advance` 对已 approved 阶段的 enter 报错也区分「返工（revisit）」与「开新需求（/new）」，避免弱模型被推向返工路径复用本会话污染统计（完成瞬间 `review_submit` 返回也直接带出该提示，双保险）。**合并 open-ide 后**：完成态注入块与 `review_submit` 返回额外读锁表（`store.listLocks`），仍有文件被人工锁定时提示开发者确认后逐个 `unlock_file`（仅 sdlc，`hasCommitGate` 门控，reqdoc 不提示）；锁提示由插件硬数据驱动，不依赖弱模型主动查 `list_locked_files`
+- **规则注入**：上游每一步 Agent 循环都会重新组装 system prompt 并触发 `experimental.chat.system.transform`，插件在此 hook 中从插件库读取当前会话的 `WorkflowState`，将**阶段化规则（global + 当前 in_progress 阶段）**与**阶段状态条**追加到 `output.system`——弱模型只读当前需要的规则与压缩状态，降低遵循负担（7.4、7.3）。插件注入逻辑在 `packages/plugin/src/prompt.ts`，上游引擎 `prompt.ts` 零修改。`stage===null`（无 in_progress）**分三态**：**全未启动**（起步提示）/**空档态**（部分阶段 approved、无进行中：提示「继续→进入下一未启动阶段 / 回退→revisit」，不再误判为「尚未开始」）/**完成态**（全部 approved：走**专用完成块**，给全三条可行动作「提交（如尚未，commit_gate_check）→ 开新需求（/new，保持统计隔离）→ 改本需求（workflow_revisit）」，不注入常规全局规则）。同时 `workflow_advance` 对已 approved 阶段的 enter 报错也区分「返工（revisit）」与「开新需求（/new）」，避免弱模型被推向返工路径复用本会话污染统计（完成瞬间 `review_submit` 返回也直接带出该提示，双保险）。**合并 open-ide 后（详见 8.7）**：完成态注入块与 `review_submit` 返回额外读锁表（`store.listLocks`），仍有文件被人工锁定时提示开发者确认后逐个 `unlock_file`（仅 sdlc，`hasCommitGate` 门控，reqdoc 不提示）；锁提示由插件硬数据驱动，不依赖弱模型主动查 `list_locked_files`
 - **状态持久化**：Agent 通过插件工具（4.1）写入 `WorkflowState`（阶段变更、审查清单、理解记录），不依赖 LLM 记忆
 - **状态同步**：每轮 hook 触发时读取的都是插件库中的最新状态，确保 Agent 始终知道当前进度
 
@@ -1114,10 +1136,150 @@ flowchart TD
 | Agent 批量跳过逐段确认 | **服务端防篡改**：`comprehension_confirm` 工具单次调用只接受一个 `codeSegmentId`，批量传入直接报错，防止 LLM 在开发者回复"看起来不错"时将全部片段批量设为 `confirmed` |
 | Agent 绕过门禁直接提交 | `tool.execute.before` hook 拦截 `bash` 中的 `git commit`，未通过 `commit_gate_check` 时抛错阻断——这是插件层的硬约束，不依赖 LLM 自觉 |
 | Agent 重复 enter 已 approved 阶段 | `applyTransition` 服务端校验：`enter` 已 approved 阶段抛错（须 `workflow_revisit` 回退），`enter` 已 in_progress 阶段幂等 no-op（不追加 transition） |
-| 弱模型完成后不知收尾 / 在新会话复用当前会话致统计混入 | 完成态注入**专用完成块**给全「提交 → /new 开新需求 → revisit 改本需求」三条可行动作，且 `review_submit` 通过（门禁 allowed）时返回直接带出 /new 提示——完成瞬间即可见；对已 approved 阶段 enter 的报错也明确「开始下一个需求请执行 /new」，防止弱模型被引导走返工路径复用本会话。合并 open-ide 后完成块另读锁表提示解锁（仅 sdlc） |
+| 弱模型完成后不知收尾 / 在新会话复用当前会话致统计混入 | 完成态注入**专用完成块**给全「提交 → /new 开新需求 → revisit 改本需求」三条可行动作，且 `review_submit` 通过（门禁 allowed）时返回直接带出 /new 提示——完成瞬间即可见；对已 approved 阶段 enter 的报错也明确「开始下一个需求请执行 /new」，防止弱模型被引导走返工路径复用本会话。合并 open-ide 后完成块另读锁表提示解锁（仅 sdlc，详见 8.7） |
 | LLM 上下文窗口不足 | 工作流状态压缩为阶段状态条，system prompt 只注入当前阶段规则（global + 当前 in_progress 阶段，见 10.2），历史规则不重复注入 |
 
 reqdoc 无 `git commit` 门禁，表中「绕过门禁直接提交」风险不适用；其 review 语义为**业务确认 PRD 要点**，防批量走过场的约束（`comprehension_confirm` 单次只接受一个要点）同样生效。
+
+### 8.7 混合开发：手工编码与 IDE 协同（open_ide 文件锁）
+
+#### 8.7.1 背景与定位
+
+同事常在自己的 IDE（VS Code / IntelliJ IDEA）里用**内置智能插件**（Cursor、Copilot 等）生成代码。这类「工作流之外的手工编写」不能简单禁用，也不该把一切都塞进 Agent 流程。本系统通过 **open_ide 文件锁**机制支持混合开发：**需求/设计/测试/审查走工作流，代码部分由开发者在 IDE 里手工写，再回到工作流完成测试与审查**。
+
+open_ide 是一个**协调机制**，而非新流程：它让 Agent「打开开发者的 IDE + 锁定目标文件」，使两路 AI 不会互相覆盖——开发者在 IDE 里用其插件写的代码，opencode Agent 不得再用 write/edit/apply_patch 覆盖（服务端硬拦截）。机制不改工作流模型（仍是最小化的完成门禁），只在「人在回路」上加了一层防冲突护栏。
+
+#### 8.7.2 交互主干流程
+
+```mermaid
+graph TB
+    Start["新需求会话"] --> Req["requirements 阶段<br/>workflow_advance enter → approve"]
+    Req --> Des["design 阶段<br/>workflow_advance enter → approve"]
+    Des --> Split{"是否部分代码手工写？"}
+
+    Split -->|"否，全部 AI 生成"| Imp1["implementation 阶段<br/>AI 直接编码"]
+    Split -->|"是，部分手工"| Lock["open_ide 锁定手工文件<br/>（必须带 file 参数，防 AI 覆盖）"]
+
+    Lock --> Manual["开发者手工/IDE 插件改锁定的文件"]
+    Manual --> Unlock["开发者明确确认改完 → unlock_file<br/>AI 重新读取最新文件内容"]
+    Unlock --> Imp2["AI 改剩余未锁定的文件"]
+
+    Imp1 --> Tst["testing 阶段<br/>workflow_advance enter → approve"]
+    Imp2 --> Tst
+
+    Tst --> Rev["review 阶段（审查）"]
+    Rev --> Comps["AI 只对其生成的改动 comprehension_add 逐段登记<br/>（手工改动不进理解确认片段）"]
+    Comps --> Confirm["开发者逐段 comprehension_confirm 定论"]
+    Confirm --> Checklist["审查清单确认<br/>businessIntent / logicExplainable / behaviorVerifiable"]
+
+    Checklist --> Submit["review_submit"]
+    Submit --> Gate["提交门禁放行 → git commit"]
+    Gate --> New["/new 开新需求，保持统计隔离"]
+```
+
+#### 8.7.3 open_ide 工具与 IDE 探测
+
+`open_ide` 工具由插件注册（`src/open-ide/open-ide-tool.ts`），供 Agent 在开发者要求手工改码时调用：
+
+| 参数 | 说明 |
+|------|------|
+| `file` | 目标文件（相对项目目录或绝对路径）；**指定即自动锁定**该文件（防 AI 覆盖） |
+| `line` / `column` | 定位到指定行/列（配合 file） |
+| `ide` | 强制指定 IDE id（`config.json` 中的 id，如 `vscode` / `idea`）；缺省按配置顺序取第一个可用的 |
+
+**IDE 探测与预设**（`presets.ts` / `config.ts`）：内置预设只保留最小集 `vscode` + `idea`，kind 决定文件定位的 CLI 语法（vscode 用 `-g <path>:<line>[:<col>]`，idea 用 `--line <n> [--column <n>] <path>`）；候选按平台给出（PATH 名 + 常见绝对安装路径 + 版本化 glob），依序取第一个命中；`config.json` 的 `tools` 可覆盖任一 id 的 binary/kind，`order` 可改探测次序（缺省 vscode→idea）。读取只在插件加载时一次。
+
+> **Windows 路径陷阱**：`config.json` 里 `tools.binary` 写 Windows 路径时，单反斜杠是 JSON 转义符——`\P` 属非法转义会导致整个 JSON 解析失败（回退内置预设且用户不明所以），`\b`/`\n` 等则会被静默转成控制字符。文档与 warning 均明确要求**用正斜杠 `/` 或双反斜杠 `\\`**（见 AGENTS.md「经验教训」）。
+
+#### 8.7.4 人工文件锁机制
+
+锁由 `LockRegistry` 管理（`src/open-ide/lock.ts`），后端为插件 SQLite 的 `file_lock` 表（见 3.5）。核心工具与服务端约束：
+
+| 工具 | 用途 | 服务端校验 |
+|------|------|-----------|
+| `open_ide`（带 file） | 打开 IDE 定位文件并**自动锁定** | 服务端 `registry.lock` |
+| `lock_file` | 手工声明某文件由人工接管 | 服务端锁定；通常由 open_ide 自动完成 |
+| `unlock_file` | 解锁指定文件 | **`developer_confirmed=true` 必须**（开发者明确说「改完了/可以继续」）；逐文件解锁 |
+| `list_locked_files` | 查看当前会话锁定清单 | 只读 |
+
+锁定期间有两层保障（与提交门禁同哲学，不依赖 LLM 自觉）：
+
+```mermaid
+flowchart LR
+    A["开发者要手工改代码"] --> B{"是否已锁定？"}
+    B -->|"否"| C["AI 调 open_ide(file)<br/>→ 拉起 IDE + 自动锁定"]
+    B -->|"是"| D["已锁定（lock_file 亦可）"]
+    C --> D
+    D --> E["system.transform 每轮注入<br/>锁定提示（软）"]
+    D --> F["tool.execute.before 硬拦截<br/>write/edit/apply_patch（硬）"]
+    E --> G["AI 不得修改被锁文件"]
+    F --> G
+    D --> H["开发者手工/IDE 插件改码"]
+    H --> I["开发者说「改完了」"]
+    I --> J["AI 调 unlock_file<br/>developer_confirmed=true"]
+    J --> K["AI 重新读取最新内容后继续"]
+```
+
+- **软提示（lock-hint）**：`experimental.chat.system.transform` 在有锁文件时向 `output.system` push 一段「人工文件锁」提示，让 AI 知道哪些文件正被人工修改、不得编辑；要求对每个已确认改完的文件单独 `unlock_file`，未明确提及的保持锁定，解锁后重读最新内容。
+- **硬拦截（lock-gate）**：`tool.execute.before` 对 write/edit/apply_patch 提取目标文件，任一被锁即抛中文错误阻断（上游对所有插件 before hook 统一触发，故单插件即可拦全部编辑工具）。
+- **幂等与持久化**：lock/unlock 幂等；相对路径一律以项目目录 resolve 成绝对路径后比较，保证相对/绝对匹配一致；锁按会话隔离、存 `file_lock` 表，daemon 重启自动恢复。
+- **孤儿清理**：会话被删后其锁为惰性残留，启动时 `startup.pruneLocks` 以 `session.list` 比对清理（与孤儿记录清理同一逻辑）。
+
+#### 8.7.5 与工作流的衔接
+
+**阶段硬性约束**（完成门禁模型下，手工代码照样能走通）：
+
+```mermaid
+graph TB
+    A["直接跳过 implementation 进入 testing？"] --> B{"implementation 是否 approved？"}
+    B -->|"否（代码是手工写的）"| C["先 workflow_advance approve implementation<br/>developer_confirmed=true"]
+    C --> D["review_submit 前置校验：<br/>requirements/design/implementation/testing<br/>全部 approved"]
+    B -->|"是"| D
+    D -->|"未全部 approved"| E["补齐前置阶段后重试"]
+    D -->|"全部 approved"| F["审查可提交"]
+```
+
+- 阶段进入/批准/回退可任意跳转，唯二硬约束：`review_submit` 前置四阶段全 approved；`git commit` 被门禁拦截直到五阶段全 approved。
+
+**审查：谁写的审谁**（手工代码不进理解确认片段）：
+
+```mermaid
+graph LR
+    Review["review 阶段"] --> AI{"本会话有 AI 代码编辑？<br/>（iterationCount > 0）"}
+    AI -->|"是"| Seg["AI 生成的改动拆分登记<br/>comprehension_add（file/行号/解释）<br/>review_submit 强制要求至少 1 段"]
+    Seg --> Term["每段须终态：<br/>confirm 接受 / reject→rewrite / manual 自处理<br/>不允许 pending/rejected 悬空"]
+    AI -->|"否（纯手工/纯讨论）"| NoSeg["无需片段，直接过清单"]
+    Term --> Check["审查清单三项全 true<br/>（覆盖整体交付，含手工部分）"]
+    NoSeg --> Check
+    Check --> Rate["通过时自动计算一次通过率 firstPassRate"]
+```
+
+- **AI 生成的代码**逐段理解确认（做了什么/为什么/替代方案/风险），是审查核心；**手工写的代码**不进理解确认片段（AI 不解释它没写的代码），由开发者经清单项整体把关。一次通过率 `firstPassRate` 只统计 AI 片段，手工改动不稀释该指标。
+
+**完成态解锁提示**：SDLC 完结时（全部阶段 approved，`hasCommitGate` 门控，reqdoc 不提示），完成态注入块与 `review_submit` 返回会读锁表（`store.listLocks`），仍有文件被人工锁定时提示开发者确认后逐个 `unlock_file`——锁提示由插件硬数据驱动，不依赖弱模型主动查 `list_locked_files`。
+
+#### 8.7.6 手工改动与设计冲突
+
+```mermaid
+graph TB
+    A{"开发者手工改动的做法<br/>与已批准的设计一致？"} -->|"一致（仅分工）"| B["无需回退设计<br/>open_ide 锁定该文件直接改"]
+    B --> F["继续测试 → 审查 → 提交"]
+    A -->|"不一致（推翻方案）"| C["建议 workflow_revisit design<br/>更新设计方案"]
+    C --> D{"开发者确认回退？"}
+    D -->|"是"| E["design 回到 in_progress（revision++）<br/>级联回退其后已 approved 的阶段<br/>更新方案后重新 approve"]
+    D -->|"否，坚持强推"| F
+    E --> F
+    F --> G["说明：<br/>两种路径门禁都能跑通，<br/>区别在返工率统计与设计记录一致性"]
+```
+
+- **同一方案的分工**：不用回设计阶段，直接锁定文件手工改即可。
+- **推翻已批准方案**：无硬性拦截（工作流不 diff 设计与代码），但正确做法是回退设计，否则 `designRationale` 与实际不符、返工率统计漏记偏差。注意 `workflow_revisit` 会**级联回退**其后已 approved 的阶段（如 testing/review）。
+
+#### 8.7.7 配置与安全边界
+
+- **config.json 位置**：插件包根（`packages/plugin/config.json`，插件加载时读一次）。`order` 缺省 `["vscode","idea"]`；`tools` 单条覆盖 `{binary, kind}`；配置缺失/无效 JSON 回退内置预设，不崩溃（warning 会点出 Windows 反斜杠诱因）。
+- **安全边界**：文件锁只是本地元数据（session_id + 文件路径），**不含代码内容**，不随汇报上行；子代理会话的锁定行为照常生效（`tool.execute.before` 全局拦截），但子代理不建工作流记录。
+- **评测覆盖**：sdlc-r12 规则与评测场景 s20/s21（open_ide 锁定、改完确认解锁）覆盖本机制，实测通过（见 9.9 实测结果三）；新增场景的 userTurn 必须先行指明文件，不得期望模型杜撰 `file`（见 9.10 教训）。
 
 
 
@@ -1497,13 +1659,15 @@ flowchart LR
 | `src/db/schema.ts` | 插件库表定义（仅 `workflow_session` 一张表） |
 | `src/db/index.ts` | 插件 SQLite 初始化与迁移（bun:sqlite，WAL 模式） |
 | `src/identity.ts` | 读全局 `identity.json`，解析 `api_key`（上送前转 SHA-256 哈希）；不再打标 account_id |
-| `src/prompt.ts` | system prompt 注入片段：阶段化注入（rulesForStage 取 global + 当前阶段规则）+ buildStateBar 阶段状态块替代冗长 JSON（含阶段表头「当前阶段（第 N/Y 步）+ 目的 + 状态」、来源覆盖 [文档]x/[问答]y、渲染校验、追问覆盖多行）；`stage===null` 三态化：未启动（起步）/ 空档态（部分 approved：继续→进入下一阶段 / 回退→revisit）/ 完成态（专用完成块：「提交 commit_gate_check / 开新需求 /new / 改本需求 workflow_revisit」，不注入常规全局规则；合并 open-ide 后完成态另读锁表提示解锁，仅 sdlc） |
+| `src/prompt.ts` | system prompt 注入片段：阶段化注入（rulesForStage 取 global + 当前阶段规则）+ buildStateBar 阶段状态块替代冗长 JSON（含阶段表头「当前阶段（第 N/Y 步）+ 目的 + 状态」、来源覆盖 [文档]x/[问答]y、渲染校验、追问覆盖多行）；`stage===null` 三态化：未启动（起步）/ 空档态（部分 approved：继续→进入下一阶段 / 回退→revisit）/ 完成态（专用完成块：「提交 commit_gate_check / 开新需求 /new / 改本需求 workflow_revisit」，不注入常规全局规则；合并 open-ide 后完成态另读锁表提示解锁，仅 sdlc；详见 8.7） |
 | `src/tools/workflow.ts` | `workflow_advance`（含 reqdoc 进入 prd 的打分卡门禁）/ `workflow_revisit` / `workflow_baseline` / `commit_gate_check` / `commit_force_unlock` 工具 |
 | `src/tools/review.ts` | `comprehension_add` / `comprehension_confirm` / `comprehension_reject` / `comprehension_rewrite` / `comprehension_manual` / `comprehension_ask` / `review_submit` 工具（含防批量确认校验、终态门禁、reqdoc 定稿打分卡 + P1 探针 + P2 渲染复核兜底校验） |
 | `src/tools/reqdoc-scan.ts` / `reqdoc-features.ts` / `reqdoc-score.ts` / `reqdoc-check.ts` / `reqdoc-export.ts` | reqdoc 专属工具（文档扫描 / 功能点拆解确认 / 八维打分卡 / 渲染结构校验 / Word 导出），用途与服务端校验见 **workflow-reqdoc.md 8 章** 完整表格 |
 | `src/tools/quality.ts` | 迭代计数 + AI 代码行数累计逻辑（`quality_report` 已移除，firstPassRate 由 review.ts 自动计算） |
 | `src/workflow-ops.ts` | 阶段转换（enter/approve/revisit，3.3）与提交门禁重算（3.4），工具与门禁共用的状态机 |
 | `src/gate.ts` | `tool.execute.before` 提交门禁拦截（git commit 阻断） |
+| `src/open-ide/` | 人工文件锁与 IDE 协同（open-ide 合并）：`open-ide-tool.ts`（open_ide 工具）、`ide.ts`（IDE 探测/拉起）、`presets.ts`（vscode/idea 预设）、`config.ts`（config.json 读取合并）、`lock.ts`（LockRegistry）、`lock-gate.ts`（tool.execute.before 硬拦截）、`lock-hint.ts`（system.transform 锁定提示）、`tools/lock-tools.ts`（lock_file/unlock_file/list_locked_files）、`patched.ts`/`errors.ts`（8.7） |
+| `config.json` | IDE 工具配置（插件根，上溯一层）：`order` 探测次序（缺省 vscode→idea）+ `tools` 单条目覆盖 binary/kind；缺失/无效 JSON 回退内置预设（Windows 路径须用正斜杠，见 8.7.7） |
 | `src/report.ts` | 会话摘要汇报：推送至 `collector_url`，不可用时本地缓冲、恢复补推（fetch 带 5 秒超时，防止不可达时无界挂起） |
 | `src/stats.ts` | 本机统计聚合查询（按 workflow.type 分区，sdlc 专属指标仅 sdlc 计算；供 opencode-sm 复用） |
 | `test/*.test.ts` | 工具校验逻辑、合并语义、门禁、汇报缓冲的单元测试 |

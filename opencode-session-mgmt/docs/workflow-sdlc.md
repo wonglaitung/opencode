@@ -158,7 +158,7 @@ sdlc 的审查清单（`ReviewChecklist`）由 `WorkflowDefinition.checklist` �
 
 ## 6. 提交门禁与强制提交
 
-提交门禁机制（`WorkflowDefinition.hasCommitGate` 驱动、`tool.execute.before` 硬拦截、`commit_force_unlock` 强制提交逃生口）见 session-management.md 3.4。sdlc 是 `hasCommitGate=true` 的工作流，因此 `commit_gate_check` / `commit_force_unlock` 工具对 sdlc 会话启用（reqdoc 不启用）。**手工修改走 open_ide 锁定**（sdlc-r12，软提示 + 硬拦截）：锁持久化进 SQLite `file_lock` 表，SDLC 完结时完成态注入解锁提示（仅 sdlc）。
+提交门禁机制（`WorkflowDefinition.hasCommitGate` 驱动、`tool.execute.before` 硬拦截、`commit_force_unlock` 强制提交逃生口）见 session-management.md 3.4。sdlc 是 `hasCommitGate=true` 的工作流，因此 `commit_gate_check` / `commit_force_unlock` 工具对 sdlc 会话启用（reqdoc 不启用）。**手工修改走 open_ide 锁定**（sdlc-r12，软提示 + 硬拦截，机制详见 session-management.md 8.7）：锁持久化进 SQLite `file_lock` 表，SDLC 完结时完成态注入解锁提示（仅 sdlc）。
 
 ## 7. sdlc 专属统计口径
 
@@ -173,7 +173,7 @@ sdlc 的审查清单（`ReviewChecklist`）由 `WorkflowDefinition.checklist` �
 - **完成后开新需求不重启**（s10，`no_tool` 禁 `workflow_advance`/`workflow_revisit`）
 - **空档态继续进入下一阶段**（s11，部分 approved 无 in_progress → `workflow_advance` enter 下一阶段）
 - **审查全流程**（s12-s19：正向 review_submit 且片段全定论、片段未定论不 submit、reject 必带反馈、拒绝后 rewrite/manual、追问 ask、审查不可 advance approve 必须 review_submit、拒绝复议后 confirm）
-- **手工修改走 open_ide 锁定与改完确认解锁**（s20-s21，sdlc-r12 规则，open_ide/unlock_file 契约——open-ide 已**物理合并**进本工程 `packages/plugin/src/open-ide/`，单一插件加载；锁持久化进 SQLite `file_lock` 表，daemon 重启自动恢复，会话删除后由启动时 `pruneLocks` 修剪）
+- **手工修改走 open_ide 锁定与改完确认解锁**（s20-s21，sdlc-r12 规则，open_ide/unlock_file 契约，机制详见 session-management.md 8.7——open-ide 已**物理合并**进本工程 `packages/plugin/src/open-ide/`，单一插件加载；锁持久化进 SQLite `file_lock` 表，daemon 重启自动恢复，会话删除后由启动时 `pruneLocks` 修剪）
 - **SDLC 完结 → 提示解锁**（合并新增，插件硬能力）：完成态注入与 `review_submit` 返回均直接读锁表，有锁时提示开发者确认后逐个 `unlock_file`；仅 sdlc（`hasCommitGate` 门控），reqdoc 完成态不提示
 
 > sdlc 改动走**共享评测门**（session-management.md 13.6 改动分级决策图，baseline→new 对比）验证零回退，只看**通过率**不降；sdlc **不跑** reqdoc 的质量飞轮（打分卡 0-100 八维度量是 reqdoc 专属，见 workflow-reqdoc.md 10 章）。reqdoc 侧 r7/r8-r10 同口径场景见 workflow-reqdoc.md 10 章。

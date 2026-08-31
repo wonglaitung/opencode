@@ -10,13 +10,13 @@
 
 | 文件 | 类别 | 作用 | 被谁消费 | 能否改名 / 移动 |
 |------|------|------|----------|----------------|
-| [session-management.md](session-management.md) | 设计文档 | **主设计文档**（通用机制 / 架构 / CLI / 统计 / 部署 / 评测 / **方法论基础置顶：AI 编码质量管控四支柱框架（第 0 章）**；两个工作流的专属内容已拆到下两行文件，本文件只留摘要指针） | [CLAUDE.md](../CLAUDE.md)、[README.md](../README.md)、[.opencode/agent/rules-reviewer.md](../.opencode/agent/rules-reviewer.md)、[deployment.md](deployment.md)、[collector-spec.md](collector-spec.md) 引用其内容 | 改名需同步 5 处引用；一般不主张 |
-| [workflow-sdlc.md](workflow-sdlc.md) | 设计文档 | 工作流一：sdlc 软件开发定义（阶段 / 四清单 / hasCommitGate）、12 条规则全文、场景一~四、审查清单、统计口径、评测场景 | [session-management.md](session-management.md)（3.2/4.1/7.2/7.4/13 指针指向其章）、[deployment.md](deployment.md)（6.1 对话示例） | 可（同步引用方）；**新增文档进 docs/ 先登记本表** |
-| [workflow-reqdoc.md](workflow-reqdoc.md) | 设计文档 | 工作流二：reqdoc 需求书定义（双通道）、需求资料目录契约、24 条规则全文、PRD 打分卡、追问探针、渲染结构校验、专属工具、场景五、评测 | [session-management.md](session-management.md)（3.2/4.1/7.2/7.4/7.5/13 指针指向其章）、[reqdoc-prd-template.md](reqdoc-prd-template.md) | 可（同步引用方）；**新增文档进 docs/ 先登记本表** |
+| [session-management.md](session-management.md) | 设计文档 | **主设计文档**（通用机制 / 架构 / CLI / 统计 / 部署 / 评测 / **方法论基础置顶：AI 编码质量管控四支柱框架（第 0 章）**；四支柱为主线（6 规约 / 7 知识 / 8 协同 / 9 度量），8.7 含混合开发与 open_ide 文件锁；两个工作流的专属内容已拆到下两行文件） | [CLAUDE.md](../CLAUDE.md)、[README.md](../README.md)、[.opencode/agent/rules-reviewer.md](../.opencode/agent/rules-reviewer.md)、[deployment.md](deployment.md)、[collector-spec.md](collector-spec.md) 引用其内容 | 改名需同步 5 处引用；一般不主张 |
+| [workflow-sdlc.md](workflow-sdlc.md) | 设计文档 | 工作流一：sdlc 软件开发定义（阶段 / 四清单 / hasCommitGate）、12 条规则全文、场景一~四、审查清单、统计口径、评测场景 | [session-management.md](session-management.md)（3.2/6.1/8.3/8.5/9 指针指向其章）、[deployment.md](deployment.md)（6.1 对话示例） | 可（同步引用方）；**新增文档进 docs/ 先登记本表** |
+| [workflow-reqdoc.md](workflow-reqdoc.md) | 设计文档 | 工作流二：reqdoc 需求书定义（双通道）、需求资料目录契约、24 条规则全文、PRD 打分卡、追问探针、渲染结构校验、专属工具、场景五、评测 | [session-management.md](session-management.md)（3.2/6.1/6.2/8.3/8.5/9 指针指向其章）、[reqdoc-prd-template.md](reqdoc-prd-template.md) | 可（同步引用方）；**新增文档进 docs/ 先登记本表** |
 | [collector-spec.md](collector-spec.md) | 设计文档 | 收集服务（collector）规范：三端点、聚合、容错 | 无入站引用（独立规范） | 可，但内容被作为部署/开发依据 |
 | [deployment.md](deployment.md) | 设计文档 | **部署与使用手册**（新人先看）：装 OpenCode、启用插件、CLI、收集服务、内网隔离、FAQ | [README.md](../README.md) 链接；自身引用 [qwen3.6-27b.chat-template.jinja](qwen3.6-27b.chat-template.jinja) | 改名需同步 README.md |
 | [upstream-sync.md](upstream-sync.md) | 设计文档 | 上游同步方案：remote 布局、同步命令、冲突预案、同步记录 | [README.md](../README.md)、[CLAUDE.md](../CLAUDE.md)、[.opencode/command/sync-upstream.md](../.opencode/command/sync-upstream.md)、[deployment.md](deployment.md) | 改名需同步 4 处引用 |
-| [mixed-development-workflow.md](mixed-development-workflow.md) | 设计文档 | 混合开发工作流参考（人机协同写码的边界约定） | 无入站引用 | 可 |
+| [mixed-development-workflow.md](mixed-development-workflow.md) | 设计文档 | ~~混合开发工作流参考~~ **已并入 [session-management.md](session-management.md) 8.7**（open_ide 文件锁 / 人机协同写码边界），本文件删除，勿再引用 | — | — |
 | [reqdoc-prd-template.md](reqdoc-prd-template.md) | 运行时资源 | reqdoc PRD 模板的 **md 渲染载体与权威源**（prd 阶段由插件注入） | **代码硬引用**：[template.ts](../packages/plugin/src/template.ts)（`TEMPLATE_FILENAME` 常量拼接候选路径）、[workflow.ts](../packages/shared/src/workflow.ts)（r14/r20 规则文本）、[pack-bundle.sh](../scripts/pack-bundle.sh)（拷 docs/ 到 bundle 根）、[template.test.ts](../packages/plugin/test/template.test.ts) | **不可改名 / 不可移出 docs/ 根**（模板送达机制按 `docs/<此文件名>` 解析，移动即破坏） |
 | [qwen3.6-27b.chat-template.jinja](qwen3.6-27b.chat-template.jinja) | 部署参考 | 部署模型 qwen3.6-27b 的 chat template（vLLM 部署用） | [deployment.md](deployment.md) | 可（同步 deployment.md） |
 
