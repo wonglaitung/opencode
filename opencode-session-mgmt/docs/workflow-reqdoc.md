@@ -18,6 +18,8 @@ reqdoc 的价值链是「**引导追问（喂入）→ 打分卡（门禁）→ 
 
 ```mermaid
 flowchart TD
+    IMP["已有初稿（docx/pdf/txt 等）"] --> IMP2["reqdoc_import 落盘 00_初稿需求书<br/>+ reqdoc_review_conventions 规约初评"]
+    IMP2 -. 诊断后逐步补全（不自动快进） .-> A
     I["业务口述 + 材料投放"] --> A["① 引导追问（喂入）<br/>渐进探针补齐缺口（goal→rules→edge）<br/>最多 5 问 A/B/C、最长 3 轮"]
     A --> B["② 打分卡（门禁）<br/>8 维 100 分 ≥85 硬拦截<br/>total 服务端算、business_confirmed 强制"]
     B --> C["③ 模板渲染（交付）<br/>模版.docx 权威源 + r20 渲染铁律<br/>字段映射 + 模板送达"]
@@ -29,6 +31,7 @@ flowchart TD
     style B fill:#e8f2e2,stroke:#6a9c4f
     style C fill:#e8f2e2,stroke:#6a9c4f
     style D fill:#e8f2e2,stroke:#6a9c4f
+    style IMP2 fill:#e6f0ff,stroke:#4285f4
 ```
 
 **风险分布**：三大支柱已全部**结构性固化**——打分（P0：单一事实源 + 服务端算分）、追问（P1：探针清单 `REQDOC_PROBES` + `reqdoc_probe` 记录 + 柔性一致校验）、渲染（P2：模板结构 schema + `parseRenderStructure` 渲染 diff 校验 + `reqdoc_check` 工具 + 定稿复核门禁），漂移风险均低。渲染「严格逐字遵循」从纯规则文本升级为可解析校验：缺章节/乱序/功能点块数不符/映射字段漏来源/「[缺省]↔满分」矛盾都被结构代码抓住（运行时工具与评测判定同源）。
@@ -62,6 +65,8 @@ graph TB
 
     subgraph Close["定稿闭环（业务确认）"]
         C{"全部要点<br/>已定论?"}
+        G1{"完整性门禁<br/>[缺省] 须带理由?"}
+        G2{"一致性门禁<br/>更改功能须 3.6 点明改造?"}
     end
 
     IterationZone --> F
@@ -71,7 +76,11 @@ graph TB
     SG -->|"✓"| P
     EBACK --> E
     IterationZone --> C
-    C -->|"✓ 全部确认"| PRD["PRD 定稿<br/>产出归档 07_需求规格产出"]
+    C -->|"✓ 全部确认"| G1
+    G1 -->|"✗ 裸 [缺省] 无理由"| BACK
+    G1 -->|"✓"| G2
+    G2 -->|"✗ 未点明改造"| BACK
+    G2 -->|"✓"| PRD["PRD 定稿<br/>产出归档 07_需求规格产出<br/>自动写文档变更过程版本记录"]
     C -->|"✗ 有未定论"| BACK["回到 prd/edge<br/>补充或重写要点"]
 ```
 
@@ -127,6 +136,8 @@ reqdoc 面向**业务人员**。业务习惯把现成资料（监管发文、旧
 
 ```mermaid
 flowchart TD
+    IMP["已有初稿（docx/pdf/txt）"] --> IMP2["reqdoc_import 落盘 00_初稿需求书<br/>+ reqdoc_review_conventions 规约初评"]
+    IMP2 -. 诊断后逐步补全（不自动快进） .-> A
     A["进入 goal 阶段"] --> B{"项目根已存在 00~07 目录?"}
     B -- "否" --> C["询问业务：是否搭建需求资料目录骨架?"]
     C --> D{"业务确认?"}
@@ -146,7 +157,11 @@ flowchart TD
     SG -->|"✓"| L["prd：功能点拆解 → reqdoc_confirm_features 确认 → reqdoc_field_dict 数据字典 → 按模版渲染（模板注入 + r20 铁律）→ reqdoc_export 导 Word"]
     L --> L2["reqdoc_check 渲染结构校验<br/>（P2：章节骨架/功能点块数/字段来源 diff）"]
     L2 -->|"✗ 有违规（缺章节/乱序/块数不符/漏来源）"| L
-    L2 -->|"✓ 结构合规（未记录则柔性放行）"| M["产出归档 07_需求规格产出（附_流程图/测试用例/界面草图/数据字典与库表设计/权限矩阵与审批流 + Word(.docx) + 2.10 附件清单）+ review 业务确认"]
+    L2 -->|"✓ 结构合规（未记录则柔性放行）"| G1{"完整性门禁<br/>[缺省] 须带理由?"}
+    G1 -->|"✗ 裸 [缺省] 无理由"| BACK["回 prd 补 [文档]/[问答]<br/>或改 [缺省：理由]"]
+    G1 -->|"✓"| G2{"一致性门禁<br/>更改功能须 3.6 点明改造?"}
+    G2 -->|"✗ 未点明改造"| BACK2["回 3.6 补改造说明"]
+    G2 -->|"✓"| M["产出归档 07_需求规格产出（附_流程图/测试用例/界面草图/数据字典与库表设计/权限矩阵与审批流 + Word(.docx) + 2.10 附件清单）+ review 业务确认<br/>自动写文档变更过程版本记录（初始 1.0 / 重做 1.N）"]
 ```
 
 - **就绪检查**：进入 goal 阶段时检查 00~07 是否存在；缺失则调用 `reqdoc_init` 搭建骨架（幂等，绝不重建或覆盖业务已放材料），并向业务展示各材料目录绝对路径、说明「有多少投多少、未投目录口述补全」，显式提出「投放材料 / 直接口述」二选一（详见 reqdoc-r8）；业务拒绝则直接对话式引导。
@@ -211,13 +226,14 @@ flowchart TD
 | reqdoc-r28 | edge | 先补料再追问：进入边界与异常（edge）追问前，若 01_背景与目标 / 03_制度与合规 / 04_角色与权限 仍全空且业务未选「直接口述」，须先促业务投放其中至少 2 个目录（或确认口述），避免全程 [问答] 兜底导致需求说服力与可追溯性弱；同时提示调用 workflow_baseline(developer_confirmed=true) 录入预估工时与 MTTR 基线，形成 AI 提效对比。已扫描材料充足时可跳过。 |
 | reqdoc-r30 | global | 来源真实性门禁（防全[问答]兜底）：PRD 定稿须有一定书面材料支撑——[文档] 来源占比 ≥30%，或至少 2 个功能点含 ≥1 处 [文档] 支撑，二者满足其一即可；均不满足则 review_submit 被拦截，须业务向 01~05 补充书面材料后重扫 reqdoc_scan，或由业务明确确认「无书面材料可引用」(no_document_confirmed=true) 后定稿。 |
 | reqdoc-r31 | prd | 字段定义环节（数据字典，进 prd 硬前置）：渲染前对每个功能点的输入字段逐一定义——字段名、类型、长度/精度、是否必填、取值域/约束、来源系统/接口——并调用 reqdoc_field_dict(fields=[...]) 记录，写入 07_需求规格产出/数据字典与库表设计/数据字典.md。逐字段与业务确认，业务确认后才落库；字段定义是 material 维度（真实字段/接口证据）的直接来源，缺失则对应维度扣分。workflow_advance(enter prd) 与 review_submit 两处强制要求 fieldDict 非空（需求确无结构化字段可 skip_field_dict=true 豁免）。已确认功能点较多时可分批提交 reqdoc_field_dict，服务端按 feature 合并。 |
+| reqdoc-r32 | global | 基于初稿完善入口：业务已有零散初稿（docx/pdf/txt 等）放 00_初稿需求书后调 reqdoc_import，解析为 [文档] 来源并产出「规约初评」（按 7 份机构规约逐条点评，给 AI 修/人工补材料/对话补 三类补全路径）；规约初评只诊断不改写初稿，不自动快进、不自动 approve 任何阶段，诊断后引导业务逐阶段走工作流补全。 |
 | reqdoc-r15 | review | review 是唯一不可由 AI 自行推进的阶段（必须经 review_submit），确保业务真正理解并确认 PRD 要点。 |
 | reqdoc-r16 | review | 将 PRD 拆分为可确认要点（业务目标 / 核心字段 / 异常规则 / 合规要求），comprehension_add 逐段复述输出。 |
 | reqdoc-r17 | review | 业务确认某要点时，立即调用 comprehension_confirm(codeSegmentId=该要点 id)；单次只接受一个要点，逐段确认、禁止一次确认多个。 |
 | reqdoc-r18 | review | 业务追问时详细解释，comprehension_ask 将问答追加到该要点的 explanation。 |
 | reqdoc-r19 | review | 每个要点须达成终态（confirm 接受 / manual 自处理），不允许 pending/rejected 悬空；拒绝的要点先 rewrite 重写或 manual 定论，全部定论且前序阶段（goal/rules/edge/prd）全部 approved 后才可 review_submit；清单四项须全为 true，否则回到 edge/prd。通过率低说明要点含糊，应结合拒绝意见重写，而非简单重试。 |
 
-> 注入时机（实际规则全集至 r31，r29 预留未用，共 30 条）：进行中阶段为 goal 时注入 12 条（9 global：r1-r5、r25-r27、r30；加 3 goal：r6-r8）；rules 时注入 11 条（9 global + 2 rules：r9-r10）；edge 时注入 14 条（9 global + 5 edge：r11-r12、r21-r22、r28）；prd 时注入 15 条（9 global + 6 prd：r13-r14、r20、r23-r24、r31）；review 时注入 14 条（9 global + 5 review：r15-r19）。global 恒为 9 条（r1-r5、r25-r27、r30）。
+> 注入时机（实际规则全集至 r32，r29 预留未用，共 31 条）：进行中阶段为 goal 时注入 13 条（10 global：r1-r5、r25-r27、r30、r32；加 3 goal：r6-r8）；rules 时注入 12 条（10 global + 2 rules：r9-r10）；edge 时注入 15 条（10 global + 5 edge：r11-r12、r21-r22、r28）；prd 时注入 16 条（10 global + 6 prd：r13-r14、r20、r23-r24、r31）；review 时注入 15 条（10 global + 5 review：r15-r19）。global 恒为 10 条（r1-r5、r25-r27、r30、r32）。
 
 ## 5. PRD 质量打分卡（实施方案第三节，reqdoc 专属）
 
@@ -279,6 +295,8 @@ reqdoc 无 git 提交门禁（`hasCommitGate=false`），`commit_gate_*` 工具�
 | `reqdoc_check` | reqdoc 渲染结构校验（质量飞轮 P2）：PRD 渲染写盘后对照模板结构 schema 做渲染 diff 校验（章节骨架/功能点块数/映射字段来源标注），结果写入 `WorkflowState.render`（返回校验卡片） | 仅 reqdoc；`source` 为 PRD md 相对项目根路径；不强制调用（柔性，未记录则定稿放行）；一旦记录，review_submit 定稿时重读源 md 复核——结构违规与「[缺省]↔满分」矛盾拦截 |
 | `reqdoc_export` | reqdoc PRD 导出：定稿 PRD 从 md 转 Word（.docx）交付件，与源 md 同目录归档 | 仅 reqdoc；`source` 为 PRD md 相对项目根路径；仅转换 .md 文件（源不可读报错提示先完成渲染） |
 | `reqdoc_field_dict` | reqdoc 字段定义（数据字典，P2.5）：进 prd 渲染前逐字段定义名称/类型/长度/必填/取值/来源系统，记录进 `WorkflowState.fieldDict` 并写入 `07_需求规格产出/数据字典与库表设计/数据字典.md` | 仅 reqdoc；`fields` 可分批提交，服务端按 feature+name 合并 |
+| `reqdoc_import` | reqdoc 基于初稿完善入口：把业务已有初稿（docx/pdf/txt 等）落盘 `00_初稿需求书/`、解析为 `[文档]` 来源，并产出「规约初评」（按 7 份机构规约逐条点评 + 三类补全路径） | 仅 reqdoc；不自动 approve 任何阶段、不自动快进；规约初评只诊断不改写初稿 |
+| `reqdoc_review_conventions` | reqdoc 规约初评：读取 `00_初稿需求书/` 下的初稿，按 7 份机构规约输出「满足/缺失/矛盾 + 引用段落 + 补全路径」结构化初评 | 仅 reqdoc；无初稿时提示先 reqdoc_import；初评是诊断，不改写初稿 |
 
 ## 9. 实际效果：业务确认（场景五）
 
