@@ -141,9 +141,17 @@ export async function mdToDocx(md: string): Promise<Buffer> {
       i++
       continue
     }
-    // 无序列表（○/● 选项行也是 - 开头）
+    // 无序列表；模板内 ○/● 选项行也以 - 开头，但属勾选占位而非真正的项目符号，
+    // 若按项目符号处理 Word 会在前方再加一个 ●，故此类行改为普通段落（仅去掉 - 前缀）。
     if (/^[-*•]\s+/.test(trimmed)) {
-      children.push(new Paragraph({ children: inlineRuns(trimmed.replace(/^[-*•]\s+/, "")), bullet: { level: 0 } }))
+      const content = trimmed.replace(/^[-*•]\s+/, "")
+      const isOptionRow = /^[○●]/.test(content)
+      children.push(
+        new Paragraph({
+          children: inlineRuns(content),
+          ...(isOptionRow ? {} : { bullet: { level: 0 } }),
+        }),
+      )
       i++
       continue
     }

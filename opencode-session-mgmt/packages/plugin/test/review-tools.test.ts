@@ -666,8 +666,8 @@ describe("reqdoc 渲染定稿复核门禁（质量飞轮 P2）", () => {
 
   /** 结构齐全的单功能点 PRD（映射字段全标来源；2.3 默认 [文档]，不触发缺省↔满分）。 */
   const goodMd = (): string =>
-    `## 一、项目信息\n## 二、文档变更过程\n## 第一章 需求概述\n### 1.1 需求类型\n### 1.2 属于流程优化项目\n### 1.3 涉及跨部门项目\n### 1.4 涉及总行开发\n### 1.5 希望完成时间\n### 1.6 需求提出原因及功能概述\n## 第二章 术语定义与业务规则\n### 2.1 术语定义\n### 2.2 业务规则\n## 第三章 需求功能详述\n### 功能点 1\n#### 1. 功能点输入要素\n##### 1.1 简要概述 [文档]\n##### 1.2 控制要求 [文档]\n#### 2. 功能点处理要求\n##### 2.1 输入要素的检查 [文档]\n##### 2.2 系统处理过程 [文档]\n##### 2.3 异常处理要求 [文档]\n##### 2.4 提示信息 [文档]\n##### 2.5 其他要求 [文档]\n##### 2.6 清算处理 [文档]\n##### 2.7 差错处理 [文档]\n##### 2.8 交易安全性 [文档]\n##### 2.9 数据存贮和清理 [文档]\n##### 2.10 附件 [文档]\n` +
-    `## 第四章 非功能需求\n### 4.1 性能与容量\n### 4.2 可用性与可靠性\n### 4.3 安全与信创\n### 4.4 数据主权与合规\n## 第五章 验收标准\n### 5.1 功能点验收指标\n### 5.2 量化验收口径\n`
+    `## 第一章 项目信息\n## 第二章 文档变更过程\n## 第三章 需求概述\n### 3.1 需求类型\n### 3.2 属于流程优化项目\n### 3.3 涉及跨部门项目\n### 3.4 涉及总行开发\n### 3.5 希望完成时间\n### 3.6 需求提出原因及功能概述\n## 第四章 术语定义与业务规则\n### 4.1 术语定义\n### 4.2 业务规则\n## 第五章 需求功能详述\n### 功能点 1\n#### 1. 功能点输入要素\n##### 1.1 简要概述 [文档]\n##### 1.2 控制要求 [文档]\n#### 2. 功能点处理要求\n##### 2.1 输入要素的检查 [文档]\n##### 2.2 系统处理过程 [文档]\n##### 2.3 异常处理要求 [文档]\n##### 2.4 提示信息 [文档]\n##### 2.5 其他要求 [文档]\n##### 2.6 清算处理 [文档]\n##### 2.7 差错处理 [文档]\n##### 2.8 交易安全性 [文档]\n##### 2.9 数据存贮和清理 [文档]\n##### 2.10 附件 [文档]\n` +
+    `## 第六章 非功能需求\n### 6.1 性能与容量\n### 6.2 可用性与可靠性\n### 6.3 安全与信创\n### 6.4 数据主权与合规\n## 第七章 验收标准\n### 7.1 功能点验收指标\n### 7.2 量化验收口径\n`
 
   /** reqdoc 定稿前置：前序阶段 approved + 1 个已确认功能点 + 达标已确认打分（edgeControl 默认 30/30）。 */
   const setupReqdoc = (): { store: Store; worktree: string; ctx: never; rel: string } => {
@@ -698,12 +698,12 @@ describe("reqdoc 渲染定稿复核门禁（质量飞轮 P2）", () => {
 
   test("结构违规（缺章节）拒定稿：reqdoc_check 记录后 review_submit 拦", async () => {
     const { store, worktree, ctx, rel } = setupReqdoc()
-    writeMd(worktree, rel, goodMd().replace("## 第二章 术语定义与业务规则\n### 2.1 术语定义\n### 2.2 业务规则\n", ""))
+    writeMd(worktree, rel, goodMd().replace("## 第四章 术语定义与业务规则\n### 4.1 术语定义\n### 4.2 业务规则\n", ""))
     const checkTools = createReqdocCheckTools(store)
     await checkTools.reqdoc_check!.execute({ source: rel } as never, ctx)
     await expect(
       createReviewTools(store).review_submit!.execute(reviewArgs, ctx),
-    ).rejects.toThrow(/渲染定稿复核未通过.*缺章节.*第二章 术语定义与业务规则/)
+    ).rejects.toThrow(/渲染定稿复核未通过.*缺章节.*第四章 术语定义与业务规则/)
     store.close()
   })
 
@@ -726,10 +726,10 @@ describe("reqdoc 渲染定稿复核门禁（质量飞轮 P2）", () => {
     const out = String(await checkTools.reqdoc_check!.execute({ source: rel } as never, ctx))
     expect(out).toContain("结构合规")
     // 记录后改动源 md（快照防篡改：定稿复核须重读，发现缺第三章）
-    writeMd(worktree, rel, goodMd().replace("## 第三章 需求功能详述", "## 第三章 需求功能详述（仅标题）"))
+    writeMd(worktree, rel, goodMd().replace("## 第五章 需求功能详述", "## 第五章 需求功能详述（仅标题）"))
     await expect(
       createReviewTools(store).review_submit!.execute(reviewArgs, ctx),
-    ).rejects.toThrow(/渲染定稿复核未通过.*缺章节.*第三章 需求功能详述/)
+    ).rejects.toThrow(/渲染定稿复核未通过.*缺章节.*第五章 需求功能详述/)
     store.close()
   })
 
@@ -831,7 +831,7 @@ describe("P2.5 字段定义门禁 / P3.10 溯源写回", () => {
     const worktree = mkdtempSync(join(tmpdir(), "sm-srcback-"))
     const rel = "06_需求规格产出/1_测试/需求规格书.md"
     mkdirSync(dirname(join(worktree, rel)), { recursive: true })
-    const md0 = "## 第一章 需求概述\n### 1.1 需求类型\n"
+    const md0 = "## 第三章 需求概述\n### 3.1 需求类型\n"
     writeFileSync(join(worktree, rel), md0, "utf8")
     const ctx = { sessionID: "r1", worktree } as never
     const render: ReqdocRender = {

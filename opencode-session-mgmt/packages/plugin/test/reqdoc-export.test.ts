@@ -67,6 +67,21 @@ describe("reqdoc_export", () => {
     ])
   })
 
+  test("○/● 选项行不加 Word 项目符号（避免多一个 ●）", async () => {
+    const md = `# 标题
+
+- 真实列表项
+- ○ 涉及　● 不涉及
+- ○ 适用　● 不适用`
+    const buf = await mdToDocx(md)
+    const zip = await JSZip.loadAsync(buf)
+    const xml = await zip.file("word/document.xml")!.async("text")
+    expect(xml).toContain("○ 涉及　● 不涉及")
+    expect(xml).toContain("○ 适用　● 不适用")
+    // 仅真实列表项带 numPr，两条选项行不带（否则 Word 会在前方叠加一个 ●）
+    expect(xml.match(/<w:numPr>/g)?.length).toBe(1)
+  })
+
   test("工具把 .docx 写到源 md 同目录并返回路径", async () => {
     const worktree = tempDir()
     const rel = "06_需求规格产出/1_名单排查/需求规格书.md"

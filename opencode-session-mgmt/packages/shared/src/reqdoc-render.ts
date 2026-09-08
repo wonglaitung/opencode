@@ -27,45 +27,45 @@ export interface ReqdocTemplateChapter {
 
 /** reqdoc PRD 模板章节骨架（docs/reqdoc-prd-template.md 的有序章节树）。 */
 export const REQDOC_TEMPLATE_CHAPTERS: readonly ReqdocTemplateChapter[] = [
-  { key: "project_info", title: "一、项目信息", meta: true },
-  { key: "doc_change", title: "二、文档变更过程", meta: true },
+  { key: "project_info", title: "第一章 项目信息", meta: true },
+  { key: "doc_change", title: "第二章 文档变更过程", meta: true },
   {
     key: "overview",
-    title: "第一章 需求概述",
+    title: "第三章 需求概述",
     sections: [
-      { key: "1.1", title: "需求类型" },
-      { key: "1.2", title: "属于流程优化项目" },
-      { key: "1.3", title: "涉及跨部门项目" },
-      { key: "1.4", title: "涉及总行开发" },
-      { key: "1.5", title: "希望完成时间" },
-      { key: "1.6", title: "需求提出原因及功能概述" },
+      { key: "3.1", title: "需求类型" },
+      { key: "3.2", title: "属于流程优化项目" },
+      { key: "3.3", title: "涉及跨部门项目" },
+      { key: "3.4", title: "涉及总行开发" },
+      { key: "3.5", title: "希望完成时间" },
+      { key: "3.6", title: "需求提出原因及功能概述" },
     ],
   },
   {
     key: "terms",
-    title: "第二章 术语定义与业务规则",
+    title: "第四章 术语定义与业务规则",
     sections: [
-      { key: "2.1", title: "术语定义" },
-      { key: "2.2", title: "业务规则" },
+      { key: "4.1", title: "术语定义" },
+      { key: "4.2", title: "业务规则" },
     ],
   },
-  { key: "details", title: "第三章 需求功能详述" },
+  { key: "details", title: "第五章 需求功能详述" },
   {
     key: "nfr",
-    title: "第四章 非功能需求",
+    title: "第六章 非功能需求",
     sections: [
-      { key: "4.1", title: "性能与容量" },
-      { key: "4.2", title: "可用性与可靠性" },
-      { key: "4.3", title: "安全与信创" },
-      { key: "4.4", title: "数据主权与合规" },
+      { key: "6.1", title: "性能与容量" },
+      { key: "6.2", title: "可用性与可靠性" },
+      { key: "6.3", title: "安全与信创" },
+      { key: "6.4", title: "数据主权与合规" },
     ],
   },
   {
     key: "acceptance",
-    title: "第五章 验收标准",
+    title: "第七章 验收标准",
     sections: [
-      { key: "5.1", title: "功能点验收指标" },
-      { key: "5.2", title: "量化验收口径" },
+      { key: "7.1", title: "功能点验收指标" },
+      { key: "7.2", title: "量化验收口径" },
     ],
   },
 ]
@@ -95,21 +95,38 @@ export const REQDOC_TEMPLATE_FIELDS: readonly ReqdocTemplateField[] = [
   { key: "2.9", title: "数据存贮和清理", dims: ["compliance"] },
 ]
 
-/** 功能点块内子小节（模板「功能点 N」的固定骨架：输入要素 1.1/1.2 + 处理要求 2.1-2.10）。 */
-export const FEATURE_SUB_SECTIONS: readonly { key: string; title: string }[] = [
-  { key: "1.1", title: "简要概述" },
-  { key: "1.2", title: "控制要求" },
-  { key: "2.1", title: "输入要素的检查" },
-  { key: "2.2", title: "系统处理过程" },
-  { key: "2.3", title: "异常处理要求" },
-  { key: "2.4", title: "提示信息" },
-  { key: "2.5", title: "其他要求" },
-  { key: "2.6", title: "清算处理" },
-  { key: "2.7", title: "差错处理" },
-  { key: "2.8", title: "交易安全性" },
-  { key: "2.9", title: "数据存贮和清理" },
-  { key: "2.10", title: "附件" },
+/**
+ * 功能点块内子小节（模板「功能点 N」的固定骨架：输入要素 group1=1.1/1.2 + 处理要求 group2=2.1-2.10）。
+ * 编号全局连续：第 k 个功能点（k 从 1 起）的输入要素=第 (2k-1) 组、处理要求=第 (2k) 组，
+ * 故功能点 1 为 1./2.，功能点 2 为 3./4.，功能点 N 为 (2N-1)./(2N).，避免各功能点下重复 1.1。
+ * 校验时按块序号 bi（0 起）偏移：绝对组号 = 2*bi + group。
+ */
+export interface FeatureSubSection {
+  /** 组内分组（1=输入要素，2=处理要求） */
+  group: number
+  /** 组内小节号（如 1.1 的 sub=1、2.10 的 sub=10） */
+  sub: number
+  title: string
+}
+export const FEATURE_SUB_SECTIONS: readonly FeatureSubSection[] = [
+  { group: 1, sub: 1, title: "简要概述" },
+  { group: 1, sub: 2, title: "控制要求" },
+  { group: 2, sub: 1, title: "输入要素的检查" },
+  { group: 2, sub: 2, title: "系统处理过程" },
+  { group: 2, sub: 3, title: "异常处理要求" },
+  { group: 2, sub: 4, title: "提示信息" },
+  { group: 2, sub: 5, title: "其他要求" },
+  { group: 2, sub: 6, title: "清算处理" },
+  { group: 2, sub: 7, title: "差错处理" },
+  { group: 2, sub: 8, title: "交易安全性" },
+  { group: 2, sub: 9, title: "数据存贮和清理" },
+  { group: 2, sub: 10, title: "附件" },
 ]
+
+/** 第 bi 个功能点块（0 起）内某相对分组 sub 的绝对编号（如块 0 的 group2.sub1 → "2.1"，块 1 的 → "4.1"）。 */
+function featureSubKey(bi: number, s: FeatureSubSection): string {
+  return `${2 * bi + s.group}.${s.sub}`
+}
 
 /** 来源标注标签（渲染时逐字段标来源，同 reqdoc-r14/r20）：「补」= 模板无对应字段的补充内容。 */
 const SOURCE_TAG_RE = /(\[文档\]|\[问答\]|\[缺省\]|「补」)/g
@@ -258,18 +275,23 @@ export function parseRenderStructure(md: string): RenderStructure {
         return !!h && h.level <= maxLevel && clean(h.text) === clean(text)
       }
       // 主分组标题「1. 功能点输入要素」/「2. 功能点处理要求」为可选分组标签（模型常写为纯文本或省略），
-      // 其下子项（1.1/1.2 与 2.1~2.10）齐全即视为结构完整，故不再硬要求。
+      // 其下子项（1.1/1.2 与 2.1~2.10）齐全即视为结构完整，故不再硬要求。编号全局连续：
+      // 第 bi 个功能点（0 起）的绝对组号 = 2*bi + group，故多功能点下编号不重复（1./2.、3./4.、…）。
       for (const s of FEATURE_SUB_SECTIONS) {
-        if (!blockLines.some((l) => matchHeading(l, 5, `${s.key} ${s.title}`))) {
+        const absKey = featureSubKey(bi, s)
+        if (!blockLines.some((l) => matchHeading(l, 5, `${absKey} ${s.title}`))) {
           featureOk = false
-          missingFeatureSections.push(`${label} 缺 ${s.key} ${s.title}`)
+          missingFeatureSections.push(`${label} 缺 ${absKey} ${s.title}`)
         }
       }
      // 块内任何位置出现 [文档] 即视为本块有文档支撑（用于定稿门禁 Z）；标题或内容里的都算
      if (blockLines.join("\n").includes("[文档]")) docBlocks += 1
-     for (const f of REQDOC_TEMPLATE_FIELDS) {
-        const fi = blockLines.findIndex((l) => matchHeading(l, 5, `${f.key} ${f.title}`))
-       if (fi < 0) continue // 结构缺失已在上报
+      for (const f of REQDOC_TEMPLATE_FIELDS) {
+        // f.key 为相对键（如 "2.1"）；第 bi 个功能点的绝对组号 = 2*bi + 组号，与子小节编号同源连续。
+        const [fg, fs] = f.key.split(".")
+        const absKey = `${2 * bi + Number(fg)}.${fs}`
+        const fi = blockLines.findIndex((l) => matchHeading(l, 5, `${absKey} ${f.title}`))
+        if (fi < 0) continue // 结构缺失已在上报
        // 来源标注可能在标题行上（「##### 2.1 … [文档]」）或标题下内容里，两者都算；到下一级 ≤5 标题止
        let body = blockLines[fi] + "\n"
        for (let j = fi + 1; j < blockLines.length; j++) {
@@ -382,11 +404,11 @@ export function noDocumentSupportViolation(render: ReqdocRender | undefined): st
 export function renderCheckRubric(): string {
   const fields = REQDOC_TEMPLATE_FIELDS.map((f) => `${f.key} ${f.title}（对应 ${f.dims.join("/")}）`).join("、")
   return (
-    `章节骨架（须齐全、顺序正确）：一、项目信息；二、文档变更过程；第一章 需求概述（1.1 需求类型~1.6 需求提出原因及功能概述）；` +
-    `第二章 术语定义与业务规则（2.1 术语定义/2.2 业务规则）；第三章 需求功能详述（每功能点：输入要素 1.1/1.2，` +
-    `处理要求 2.1 输入要素的检查~2.10 附件，编号连续）；第四章 非功能需求（4.1 性能与容量~4.4 数据主权与合规）；第五章 验收标准（5.1 功能点验收指标/5.2 量化验收口径）。\n` +
+    `章节骨架（须齐全、顺序正确）：第一章 项目信息；第二章 文档变更过程；第三章 需求概述（3.1 需求类型~3.6 需求提出原因及功能概述）；` +
+    `第四章 术语定义与业务规则（4.1 术语定义/4.2 业务规则）；第五章 需求功能详述（每功能点：输入要素 (2k-1).1/(2k-1).2，` +
+    `处理要求 (2k).1 输入要素的检查~(2k).10 附件，k=功能点序号，编号全局连续不重复）；第六章 非功能需求（6.1 性能与容量~6.4 数据主权与合规）；第七章 验收标准（7.1 功能点验收指标/7.2 量化验收口径）。\n` +
     `功能点块标题：每个功能点须用三级标题（###）起头、带序号，形如「### 功能点 N」或「### N_功能点名称」（例：「### 1_故障应急智能检索」）；校验器按此类标题计数功能点块数，缺序号或非三级标题（##/####）不被识别为块。\n` +
-    `块内固定小节（标题编号+名称须齐全，层级不拘——三级/四级/五级标题均可，不强制四级或五级）：主分组标题「1. 功能点输入要素」（含 1.1 简要概述、1.2 控制要求）与「2. 功能点处理要求」（含 2.1~2.10）为可选分组标签，模型常写为纯文本或省略，其下子项齐全即视为完整；小节标题须含编号与名称（如「2.1 输入要素的检查」），来源标签可包全角括号（如「2.1 输入要素的检查（[问答]）」）。\n` +
+    `块内固定小节（标题编号+名称须齐全，层级不拘——三级/四级/五级标题均可，不强制四级或五级）：主分组标题「(2k-1). 功能点输入要素」（含 (2k-1).1 简要概述、(2k-1).2 控制要求）与「(2k). 功能点处理要求」（含 (2k).1~(2k).10）为可选分组标签，模型常写为纯文本或省略，其下子项齐全即视为完整；小节标题须含编号与名称（如「4.1 输入要素的检查」），来源标签可包全角括号（如「4.1 输入要素的检查（[问答]）」）。\n` +
     `映射字段须逐功能点标来源 [文档]/[问答]/[缺省]（标在标题行或该小节正文内均可）：1.2 控制要求、2.1 输入要素的检查、2.3 异常处理要求、2.6 清算处理、2.7 差错处理、2.8 交易安全性、2.9 数据存贮和清理。\n必填字段（逐功能点须标来源 [文档]/[问答]/[缺省]，同 reqdoc-r14/r20）：${fields}。\n` +
     `[缺省] 字段对应打分卡维度打满分 = 渲染缺口与自评矛盾，review_submit 定稿会被拦。`
   )

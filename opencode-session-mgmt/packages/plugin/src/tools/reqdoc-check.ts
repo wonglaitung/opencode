@@ -86,16 +86,16 @@ function focusFeatureDiff(render: ReqdocRender, featureArg: string): { label: st
   const missing = render.missingFeatureSections
     .filter((s) => s.startsWith(`${label} 缺`))
     .map((s) => s.replace(`${label} 缺 `, ""))
-  const present = FEATURE_SUB_SECTIONS.map((s) => `${s.key} ${s.title}`).filter((t) => !missing.includes(t))
+  const present = FEATURE_SUB_SECTIONS.map((s) => `${s.group}.${s.sub} ${s.title}`).filter((t) => !missing.includes(t))
   return { label, present, missing }
 }
 
 /** 期望功能点块骨架（同源 renderCheckRubric，避免漂移），供 check 卡片展示"期望 vs 实际"。 */
 function expectedSkeleton(): string {
-  const subs = FEATURE_SUB_SECTIONS.map((s) => `${s.key} ${s.title}`).join("、")
+  const subs = FEATURE_SUB_SECTIONS.map((s) => `${s.group}.${s.sub} ${s.title}`).join("、")
   const fields = REQDOC_TEMPLATE_FIELDS.map((f) => `${f.key} ${f.title}`).join("、")
   return (
-    `期望每功能点块：${subs}；主分组标题「1. 功能点输入要素」「2. 功能点处理要求」为可选分组标签（可纯文本/省略），` +
+    `期望每功能点块：${subs}；主分组标题「(2k-1). 功能点输入要素」「(2k). 功能点处理要求」（k=功能点序号，编号全局连续）为可选分组标签（可纯文本/省略），` +
     `小节层级 3~5 均可，标题须含编号+名称；映射字段须逐功能点标来源 [文档]/[问答]/[缺省]（可包全角括号，如「2.1 输入要素的检查（[问答]）」）：${fields}。`
   )
 }
@@ -122,7 +122,7 @@ function formatRenderCard(
       ? ""
       : typeof focused === "string"
         ? `\n🔍 增量诊断：${focused}`
-        : `\n🔍 增量诊断（${focused.label} 期望 vs 实际）：\n  期望子小节：${FEATURE_SUB_SECTIONS.map((s) => `${s.key} ${s.title}`).join("、")}\n  ✓ 已具备：${focused.present.join("、") || "（无）"}\n  ✗ 缺失：${focused.missing.join("、") || "（无）"}`
+        : `\n🔍 增量诊断（${focused.label} 期望 vs 实际）：\n  期望子小节：${FEATURE_SUB_SECTIONS.map((s) => `${s.group}.${s.sub} ${s.title}`).join("、")}\n  ✓ 已具备：${focused.present.join("、") || "（无）"}\n  ✗ 缺失：${focused.missing.join("、") || "（无）"}`
   const iterateNote =
     fails >= 3
       ? `\n⚠ 已连续 ${fails} 次校验不通过：建议人工介入核对模板格式/结构（章节标题须为 ##/###、功能点块须 ### 起头带序号），或请业务补充材料后重渲染，避免模型在错误结构上反复打磨。`

@@ -187,7 +187,7 @@ describe("buildSystemFragment", () => {
       // 注入块头部标记（规则文本无此字样，可精确区分）
       expect(text).toContain("# 《业务需求说明书》模板全文（插件自动送达")
       expect(text).toContain("# 业务需求说明书模板") // 模板正文首行
-      expect(text).toContain("## 一、项目信息")
+      expect(text).toContain("## 第一章 项目信息")
     })
 
     test("reqdoc prd 阶段 + 模板读不到（null）→ 不注入，退内联骨架", () => {
@@ -267,7 +267,7 @@ describe("buildStateBar 渲染校验行（质量飞轮 P2）", () => {
     checkedAt: 1000,
     expectedFeatures: 1,
     ok: true,
-    chaptersPresent: ["一、项目信息", "二、文档变更过程", "第一章 需求概述", "第二章 术语定义与业务规则", "第三章 需求功能详述"],
+    chaptersPresent: ["第一章 项目信息", "第二章 文档变更过程", "第三章 需求概述", "第四章 术语定义与业务规则", "第五章 需求功能详述"],
     missing: [],
     outOfOrder: [],
     missingSections: [],
@@ -290,9 +290,9 @@ describe("buildStateBar 渲染校验行（质量飞轮 P2）", () => {
 
   test("reqdoc 记录过但有违规 → ✗ 缺章节等明细", () => {
     const s = createWorkflowState("reqdoc")
-    s.render = { ...okRender(), missing: ["第二章 术语定义与业务规则"], ok: false, chaptersPresent: okRender().chaptersPresent.filter((c) => c !== "第二章 术语定义与业务规则") }
+    s.render = { ...okRender(), missing: ["第四章 术语定义与业务规则"], ok: false, chaptersPresent: okRender().chaptersPresent.filter((c) => c !== "第四章 术语定义与业务规则") }
     const bar = buildStateBar(s, "prd")
-    expect(bar).toContain("渲染校验：✗ 缺章节：第二章 术语定义与业务规则")
+    expect(bar).toContain("渲染校验：✗ 缺章节：第四章 术语定义与业务规则")
   })
 
   test("reqdoc 未记录 → 提示未执行 reqdoc_check（柔性提示）", () => {

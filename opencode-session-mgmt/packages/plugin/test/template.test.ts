@@ -11,7 +11,7 @@ describe("loadReqdocTemplate（模板送达）", () => {
     expect(tpl).not.toBeNull()
     // 模板标题 + 章节标记（真实 docs/reqdoc-prd-template.md 内容）
     expect(tpl).toContain("# 业务需求说明书模板")
-    expect(tpl).toContain("## 一、项目信息")
+    expect(tpl).toContain("## 第一章 项目信息")
   })
 
   test("返回的是全文且已去除首尾空白", () => {

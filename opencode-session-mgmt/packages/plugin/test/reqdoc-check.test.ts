@@ -24,19 +24,19 @@ afterEach(() => {
 /** 一份结构齐全的单功能点 PRD md（映射字段全标来源）。 */
 function goodMd(): string {
   return (
-    `## 一、项目信息\n` +
-    `## 二、文档变更过程\n` +
-    `## 第一章 需求概述\n### 1.1 需求类型\n### 1.2 属于流程优化项目\n### 1.3 涉及跨部门项目\n### 1.4 涉及总行开发\n### 1.5 希望完成时间\n### 1.6 需求提出原因及功能概述\n` +
-    `## 第二章 术语定义与业务规则\n### 2.1 术语定义\n### 2.2 业务规则\n` +
-    `## 第三章 需求功能详述\n` +
+    `## 第一章 项目信息\n` +
+    `## 第二章 文档变更过程\n` +
+    `## 第三章 需求概述\n### 3.1 需求类型\n### 3.2 属于流程优化项目\n### 3.3 涉及跨部门项目\n### 3.4 涉及总行开发\n### 3.5 希望完成时间\n### 3.6 需求提出原因及功能概述\n` +
+    `## 第四章 术语定义与业务规则\n### 4.1 术语定义\n### 4.2 业务规则\n` +
+    `## 第五章 需求功能详述\n` +
     `### 功能点 1\n` +
     `#### 1. 功能点输入要素\n##### 1.1 简要概述 [文档]\n##### 1.2 控制要求 [文档]\n` +
     `#### 2. 功能点处理要求\n` +
     `##### 2.1 输入要素的检查 [文档]\n##### 2.2 系统处理过程 [文档]\n##### 2.3 异常处理要求 [文档]\n` +
     `##### 2.4 提示信息 [文档]\n##### 2.5 其他要求 [文档]\n##### 2.6 清算处理 [文档]\n` +
     `##### 2.7 差错处理 [文档]\n##### 2.8 交易安全性 [文档]\n##### 2.9 数据存贮和清理 [文档]\n##### 2.10 附件 [文档]\n` +
-    `## 第四章 非功能需求\n### 4.1 性能与容量\n### 4.2 可用性与可靠性\n### 4.3 安全与信创\n### 4.4 数据主权与合规\n` +
-    `## 第五章 验收标准\n### 5.1 功能点验收指标\n### 5.2 量化验收口径\n`
+    `## 第六章 非功能需求\n### 6.1 性能与容量\n### 6.2 可用性与可靠性\n### 6.3 安全与信创\n### 6.4 数据主权与合规\n` +
+    `## 第七章 验收标准\n### 7.1 功能点验收指标\n### 7.2 量化验收口径\n`
   )
 }
 
@@ -154,13 +154,13 @@ describe("reqdoc_check", () => {
   test("P3.9 连续失败计数：两次违规累加，合规后清零", async () => {
     const { store, worktree } = setupReqdoc(1)
     const rel = "06_需求规格产出/1_测试/需求规格书.md"
-    const bad = goodMd().replace(/## 第四章[\s\S]*$/, "")
+    const bad = goodMd().replace(/## 第六章[\s\S]*$/, "")
     const tools = createReqdocCheckTools(store)
     const ctx = { sessionID: "r1", worktree } as never
     writeMd(worktree, rel, goodMd()) // 首次合规 → 0
     await tools.reqdoc_check!.execute({ source: rel } as never, ctx)
     expect(store.get("r1")!.workflow!.renderCheckFails).toBe(0)
-    writeMd(worktree, rel, bad) // 缺 第四章/第五章
+    writeMd(worktree, rel, bad) // 缺 第六章/第七章
     await tools.reqdoc_check!.execute({ source: rel } as never, ctx)
     await tools.reqdoc_check!.execute({ source: rel } as never, ctx)
     expect(store.get("r1")!.workflow!.renderCheckFails).toBe(2)
@@ -173,7 +173,7 @@ describe("reqdoc_check", () => {
   test("P3.9 连续失败≥3 → 卡片提示人工介入与格式诊断", async () => {
     const { store, worktree } = setupReqdoc(1)
     const rel = "06_需求规格产出/1_测试/需求规格书.md"
-    const bad = goodMd().replace(/## 第四章[\s\S]*$/, "")
+    const bad = goodMd().replace(/## 第六章[\s\S]*$/, "")
     const tools = createReqdocCheckTools(store)
     const ctx = { sessionID: "r1", worktree } as never
     let out = ""
