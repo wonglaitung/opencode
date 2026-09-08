@@ -7,6 +7,8 @@ import { describe, expect, test } from "bun:test"
 import {
   REQDOC_TEMPLATE_CHAPTERS,
   REQDOC_TEMPLATE_FIELDS,
+  consistencyViolations,
+  missingDefaultReasonViolations,
   noDocumentSupportViolation,
   parseRenderStructure,
   renderGapViolations,
@@ -35,7 +37,9 @@ function fullPrd(): string {
 ##### ${b}.7 差错处理 [文档]
 ##### ${b}.8 交易安全性 [文档]
 ##### ${b}.9 数据存贮和清理 [文档]
-##### ${b}.10 附件 [文档]\n`
+##### ${b}.10 附件 [文档]
+##### ${b}.11 接口与数据源 [文档]
+##### ${b}.12 权限与最小授权 [文档]\n`
   }
   return (
     `## 第一章 项目信息\n` +
@@ -52,7 +56,7 @@ function fullPrd(): string {
 /** 构造带 expectedFeatures 的 ReqdocRender（violations/gaps 测试直接构造，不依赖 md 解析）。 */
 function renderOf(partial: Partial<ReqdocRender>): ReqdocRender {
   return {
-    source: "06_需求规格产出/1_测试/需求规格书.md",
+    source: "07_需求规格产出/1_测试/需求规格书.md",
     checkedAt: 1000,
     expectedFeatures: 1,
     ok: true,
@@ -323,5 +327,48 @@ describe("renderGapViolations", () => {
   test("无 render 或无 score → 空（柔性放行）", () => {
     expect(renderGapViolations(undefined, score(30))).toEqual([])
     expect(renderGapViolations(renderOf({}), undefined)).toEqual([])
+  })
+})
+
+describe("missingDefaultReasonViolations（完整性门禁）", () => {
+  test("裸 [缺省]（defaults 有计数）→ 违规", () => {
+    const r = renderOf({ defaults: { ...renderOf({}).defaults, "2.11": 1, "2.12": 1 } })
+    const v = missingDefaultReasonViolations(r)
+    expect(v.length).toBe(2)
+    expect(v.join("；")).toContain("2.11 接口与数据源")
+    expect(v.join("；")).toContain("2.12 权限与最小授权")
+  })
+
+  test("[缺省：理由] 不计入裸 [缺省] → 无违规", () => {
+    // 解析器对 [缺省：理由] 不计入 [缺省] 标签，故 defaults 全 0
+    const r = renderOf({ defaults: { ...renderOf({}).defaults } })
+    expect(missingDefaultReasonViolations(r)).toEqual([])
+  })
+
+  test("无 render → 空（柔性放行）", () => {
+    expect(missingDefaultReasonViolations(undefined)).toEqual([])
+  })
+})
+
+describe("consistencyViolations（一致性门禁）", () => {
+  const changePrd = (overview: string) =>
+    `## 第三章 需求概述\n### 3.1 需求类型\n- ● 更改功能　○ 新增功能\n### 3.6 需求提出原因及功能概述\n${overview}\n` +
+    `## 第四章 术语定义与业务规则\n### 4.1 术语定义\n### 4.2 业务规则\n`
+
+  test("更改功能但概述未点明改造 → 违规", () => {
+    const md = changePrd("本需求为新增一类业务查询，支持客户自助查看余额。")
+    const v = consistencyViolations(md)
+    expect(v.length).toBe(1)
+    expect(v[0]).toContain("更改功能")
+  })
+
+  test("更改功能且概述点明改造 → 无违规", () => {
+    const md = changePrd("在现有余额查询功能基础上改造，新增客户自助渠道，调整原有授权校验逻辑。")
+    expect(consistencyViolations(md)).toEqual([])
+  })
+
+  test("新增功能 → 不查概述（跳过）", () => {
+    const md = `## 第三章 需求概述\n### 3.1 需求类型\n- ○ 更改功能　● 新增功能\n### 3.6 需求提出原因及功能概述\n新增一类查询。\n`
+    expect(consistencyViolations(md)).toEqual([])
   })
 })

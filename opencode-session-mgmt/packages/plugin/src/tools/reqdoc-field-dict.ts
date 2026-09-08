@@ -1,7 +1,7 @@
 /**
  * reqdoc 字段定义工具（质量飞轮 P2.5 数据字典）。
  * reqdoc_field_dict —— 进 prd 渲染前，对每个功能点输入字段逐一定义（名称/类型/长度/必填/取值/来源系统），
- * 记录进 workflow.fieldDict，并写入 06_需求规格产出/数据字典与库表设计/数据字典.md。
+ * 记录进 workflow.fieldDict，并写入 07_需求规格产出/数据字典与库表设计/数据字典.md。
  * 逐字段与业务确认后才调用；字段定义是 material 维度（真实字段/接口证据）的直接来源。
  * 仅 reqdoc 工作流有效（规则 reqdoc-r31）。
  */
@@ -15,7 +15,7 @@ import { projectRoot, resolveWithinWorktree } from "../fs-safe"
 
 const z = tool.schema
 
-const DICT_REL = "06_需求规格产出/数据字典与库表设计/数据字典.md"
+const DICT_REL = "07_需求规格产出/数据字典与库表设计/数据字典.md"
 
 function dictMarkdown(fields: ReqdocFieldDef[]): string {
   const byFeature = new Map<string, ReqdocFieldDef[]>()
@@ -42,7 +42,7 @@ export function createReqdocFieldDictTools(store: Store): Record<string, ToolDef
   const reqdoc_field_dict = tool({
     description:
       "reqdoc 字段定义（数据字典，P2.5）：进 prd 渲染前，对每个功能点输入字段逐一定义——字段名、类型、长度/精度、是否必填、取值域/约束、来源系统/接口——" +
-      "与业务确认后调用，记录进 workflow.fieldDict 并写入 06_需求规格产出/数据字典与库表设计/数据字典.md。" +
+      "与业务确认后调用，记录进 workflow.fieldDict 并写入 07_需求规格产出/数据字典与库表设计/数据字典.md。" +
       "字段定义是 material 维度（真实字段/接口证据）的直接来源，缺失则对应维度扣分。已确认功能点较多时可分批提交，服务端按 feature 合并。" +
       "仅 reqdoc 工作流有效。",
     args: {

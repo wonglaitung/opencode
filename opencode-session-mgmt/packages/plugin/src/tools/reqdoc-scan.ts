@@ -1,7 +1,7 @@
 /**
  * reqdoc 文档扫描工具（设计文档 workflow-reqdoc.md 3 章、8 章）。
  * reqdoc_scan —— 按目录扫描需求资料并提取文本（单目录参数，AI 分阶段调用）：
- *   goal→01_背景与目标、rules→03_流程与数据、edge→02_制度与合规/04_角色与权限（可选 07_系统现状与能力）、prd→06_需求规格产出。
+ *   goal→01_背景与目标、rules→02_流程与数据、edge→03_制度与合规/04_角色与权限（可选 05_系统现状与能力）、prd→07_需求规格产出。
  * 解析范围：docx（jszip 解 document.xml）、pdf（pdfjs 文本层）、xlsx（exceljs）、
  * txt/md/json/csv 等纯文本。图像/未知格式显式降级——qwen3.6 无多模态，杜绝 AI 空承诺看图。
  */
@@ -76,8 +76,8 @@ async function readXlsx(file: string): Promise<string> {
   return rows.join("\n").slice(0, MAX_CHARS_PER_FILE)
 }
 
-/** 单个文件的提取结果：成功文本或降级说明。 */
-async function extractFile(file: string): Promise<string> {
+/** 单个文件的提取结果：成功文本或降级说明（reqdoc_import 复用）。 */
+export async function extractFile(file: string): Promise<string> {
   const ext = extname(file).toLowerCase()
   if (TEXT_EXTS.has(ext)) return readTextFile(file)
   if (ext === ".docx") return readDocx(file)
@@ -94,14 +94,14 @@ export function createReqdocScanTool(): Record<string, ToolDefinition> {
   const reqdoc_scan = tool({
     description:
       "reqdoc 需求资料扫描：列出指定需求资料目录下的文件，解析并提取文本内容供分析。" +
-      "单目录参数，按阶段分步调用：goal→01_背景与目标、rules→03_流程与数据、" +
-      "edge→02_制度与合规 与 04_角色与权限（可选 07_系统现状与能力）、prd→06_需求规格产出（检查已有产出）。" +
+      "单目录参数，按阶段分步调用：goal→01_背景与目标、rules→02_流程与数据、" +
+      "edge→03_制度与合规 与 04_角色与权限（可选 05_系统现状与能力）、prd→07_需求规格产出（检查已有产出）。" +
       "支持 docx/pdf/xlsx/txt/md/json/csv 等文本类；图像与不支持格式会明确提示降级，请让业务补文字说明。",
     args: {
       directory: z
         .string()
         .describe(
-          "需求资料目录名（01_背景与目标 / 02_制度与合规 / 03_流程与数据 / 04_角色与权限 / 06_需求规格产出 / 07_系统现状与能力（可选））",
+          "需求资料目录名（01_背景与目标 / 03_制度与合规 / 02_流程与数据 / 04_角色与权限 / 07_需求规格产出 / 05_系统现状与能力（可选））",
         ),
     },
     async execute(args, context) {
@@ -110,11 +110,11 @@ export function createReqdocScanTool(): Record<string, ToolDefinition> {
       try {
         names = await readdir(dir)
       } catch {
-        throw new Error(`目录 ${args.directory} 不存在或不可读，请先确认业务已创建该目录（可调用 reqdoc_init 搭建 01~06 骨架，见 reqdoc-r8 目录就绪检查）`)
+        throw new Error(`目录 ${args.directory} 不存在或不可读，请先确认业务已创建该目录（可调用 reqdoc_init 搭建 00~07 骨架，见 reqdoc-r8 目录就绪检查）`)
       }
       const files = names.filter((n) => !n.startsWith(".")).sort()
       if (files.length === 0) {
-        return `目录 ${args.directory} 为空，未扫描到任何资料。可引导业务补充材料（放入 01~04 对应目录）后重新调用 reqdoc_scan 扫描，或直接通过对话收集。`
+        return `目录 ${args.directory} 为空，未扫描到任何资料。可引导业务补充材料（放入 01~05 对应目录）后重新调用 reqdoc_scan 扫描，或直接通过对话收集。`
       }
       const parts: string[] = [`📂 ${args.directory}（${files.length} 个文件）`]
       let total = 0

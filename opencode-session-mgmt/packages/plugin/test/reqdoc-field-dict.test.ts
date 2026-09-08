@@ -27,7 +27,7 @@ function setup(type: "reqdoc" | "sdlc") {
   return { store, worktree, ctx }
 }
 
-const DICT_REL = "06_需求规格产出/数据字典与库表设计/数据字典.md"
+const DICT_REL = "07_需求规格产出/数据字典与库表设计/数据字典.md"
 
 describe("reqdoc_field_dict", () => {
   test("记录字段进 workflow.fieldDict，并按 feature+name 合并去重", async () => {

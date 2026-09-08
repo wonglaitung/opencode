@@ -290,7 +290,7 @@ describe("reqdoc review_submit 来源真实性门禁（reqdoc-r30）", () => {
         `${a}.1 简要概述`, `${a}.2 控制要求`,
         `${b}.1 输入要素的检查`, `${b}.2 系统处理过程`, `${b}.3 异常处理要求`, `${b}.4 提示信息`,
         `${b}.5 其他要求`, `${b}.6 清算处理`, `${b}.7 差错处理`, `${b}.8 交易安全性`,
-        `${b}.9 数据存贮和清理`, `${b}.10 附件`,
+        `${b}.9 数据存贮和清理`, `${b}.10 附件`, `${b}.11 接口与数据源`, `${b}.12 权限与最小授权`,
       ]
       for (const sub of subs) body += `##### ${sub} ${tag}\n`
     }
@@ -349,7 +349,7 @@ describe("reqdoc review_submit 来源真实性门禁（reqdoc-r30）", () => {
 
   test("全 [问答] 无 [文档] 且未确认口述 → 拦截", async () => {
     const store = Store.memory(() => "reqdoc")
-    const source = "06_需求规格产出/PRD.md"
+    const source = "07_需求规格产出/PRD.md"
     const worktree = writePrd(source, "[问答]", 1)
     approveAll(store, source, 1, 0, 0, 12)
     const tools = createReviewTools(store)
@@ -361,7 +361,7 @@ describe("reqdoc review_submit 来源真实性门禁（reqdoc-r30）", () => {
 
   test("未确认口述但 no_document_confirmed=true → 放行", async () => {
     const store = Store.memory(() => "reqdoc")
-    const source = "06_需求规格产出/PRD.md"
+    const source = "07_需求规格产出/PRD.md"
     const worktree = writePrd(source, "[问答]", 1)
     approveAll(store, source, 1, 0, 0, 12)
     const tools = createReviewTools(store)
@@ -372,7 +372,7 @@ describe("reqdoc review_submit 来源真实性门禁（reqdoc-r30）", () => {
 
   test("≥2 功能点有 [文档] 支撑 → 放行", async () => {
     const store = Store.memory(() => "reqdoc")
-    const source = "06_需求规格产出/PRD.md"
+    const source = "07_需求规格产出/PRD.md"
     const worktree = writePrd(source, "[文档]", 2)
     approveAll(store, source, 2, 2, 24, 0)
     const tools = createReviewTools(store)

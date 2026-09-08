@@ -22,6 +22,7 @@ import { STARTUP_DELAY_MS, deferredStartup } from "./startup"
 import { createIterationCounter } from "./tools/quality"
 import { createReviewTools } from "./tools/review"
 import { createWorkflowTools } from "./tools/workflow"
+import { createWorkflowStartTools } from "./tools/workflow-start"
 import { createReqdocScanTool } from "./tools/reqdoc-scan"
 import { createReqdocInitTool } from "./tools/reqdoc-dirs"
 import { createReqdocFeatureTools } from "./tools/reqdoc-features"
@@ -30,6 +31,8 @@ import { createReqdocProbeTools } from "./tools/reqdoc-probe"
 import { createReqdocCheckTools } from "./tools/reqdoc-check"
 import { createReqdocExportTool } from "./tools/reqdoc-export"
 import { createReqdocFieldDictTools } from "./tools/reqdoc-field-dict"
+import { createReqdocImportTool } from "./tools/reqdoc-import"
+import { createReqdocConventionReviewTool } from "./tools/reqdoc-review-conventions"
 import { makeSubagentChecker } from "./subagent"
 import { loadIdeConfig } from "./open-ide/config"
 import { createLockRegistry } from "./open-ide/lock"
@@ -124,6 +127,7 @@ const SessionMgmtPlugin: Plugin = async (input) => {
 
     tool: {
       ...createWorkflowTools(store),
+      ...createWorkflowStartTools(store),
       ...createReviewTools(store),
       ...createReqdocScanTool(),
       ...createReqdocInitTool(),
@@ -131,9 +135,11 @@ const SessionMgmtPlugin: Plugin = async (input) => {
       ...createReqdocScoreTools(store),
       ...createReqdocProbeTools(store),
       ...createReqdocCheckTools(store),
-      ...createReqdocExportTool(),
-      ...createReqdocFieldDictTools(store),
-      open_ide: createOpenIdeTool(entries, registry),
+       ...createReqdocExportTool(),
+       ...createReqdocFieldDictTools(store),
+       ...createReqdocImportTool(),
+       ...createReqdocConventionReviewTool(),
+       open_ide: createOpenIdeTool(entries, registry),
       ...createLockTools(registry),
     },
 

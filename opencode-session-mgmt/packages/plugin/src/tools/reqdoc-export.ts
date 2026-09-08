@@ -1,6 +1,6 @@
 /**
  * reqdoc Word 导出工具（设计文档 workflow-reqdoc.md 8 章，实施方案「标准 PRD (Markdown/Word)」）。
- * reqdoc_export —— 将已渲染的 PRD Markdown（06_需求规格产出 下）转换为 Word（.docx）
+ * reqdoc_export —— 将已渲染的 PRD Markdown（07_需求规格产出 下）转换为 Word（.docx）
  * 交付件，与源 md 同目录归档，供行方交付。仅 reqdoc 工作流使用（规则 reqdoc-r14 在
  * PRD 定稿后调用）。
  *
@@ -178,10 +178,10 @@ export function createReqdocExportTool(): Record<string, ToolDefinition> {
   const reqdoc_export = tool({
     description:
       "reqdoc Word 导出：将已渲染的 PRD Markdown 导出为 Word（.docx）交付件，与源 md 同目录归档。" +
-      "在 reqdoc-r14 完成 PRD 渲染（write 到 06_需求规格产出）并定稿后调用；" +
-      "source 填 PRD Markdown 相对项目根路径（如 06_需求规格产出/N_名称/xxx.md）。",
+      "在 reqdoc-r14 完成 PRD 渲染（write 到 07_需求规格产出）并定稿后调用；" +
+      "source 填 PRD Markdown 相对项目根路径（如 07_需求规格产出/N_名称/xxx.md）。",
     args: {
-      source: z.string().describe("PRD Markdown 相对项目根路径（06_需求规格产出/N_名称/xxx.md）"),
+      source: z.string().describe("PRD Markdown 相对项目根路径（07_需求规格产出/N_名称/xxx.md）"),
     },
     async execute(args, context) {
       if (extname(args.source).toLowerCase() !== ".md") {
@@ -192,7 +192,7 @@ export function createReqdocExportTool(): Record<string, ToolDefinition> {
       try {
         md = await Bun.file(mdPath).text()
       } catch {
-        throw new Error(`源文件不存在或不可读：${args.source}。请先完成 PRD 渲染（write 到 06_需求规格产出）再调用导出。`)
+        throw new Error(`源文件不存在或不可读：${args.source}。请先完成 PRD 渲染（write 到 07_需求规格产出）再调用导出。`)
       }
       const buf = await mdToDocx(md)
       const outPath = mdPath.replace(/\.md$/i, ".docx")

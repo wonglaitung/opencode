@@ -39,10 +39,10 @@ describe("reqdoc_scan", () => {
 
   test("纯文本文件提取内容", async () => {
     const { dir, ctx } = makeWorktree()
-    mkdirSync(join(dir, "03_流程与数据"))
-    writeFileSync(join(dir, "03_流程与数据", "字段表.txt"), "客户号|必填|数字\n姓名|必填|中文")
+    mkdirSync(join(dir, "02_流程与数据"))
+    writeFileSync(join(dir, "02_流程与数据", "字段表.txt"), "客户号|必填|数字\n姓名|必填|中文")
     const tool = createReqdocScanTool().reqdoc_scan!
-    const out = await tool.execute({ directory: "03_流程与数据" } as never, ctx)
+    const out = await tool.execute({ directory: "02_流程与数据" } as never, ctx)
     expect(String(out)).toContain("客户号")
     expect(String(out)).toContain("姓名")
   })

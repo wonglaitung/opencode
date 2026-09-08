@@ -12,7 +12,7 @@ describe("resolveWithinWorktree", () => {
   })
 
   test("含反斜杠的相对路径仍收敛在工作区内（Windows 风格分隔符）", () => {
-    const full = resolveWithinWorktree(wt, "06_需求规格产出\\1_测试\\prd.md")
+    const full = resolveWithinWorktree(wt, "07_需求规格产出\\1_测试\\prd.md")
     expect(full.startsWith("/project/req/")).toBe(true)
   })
 

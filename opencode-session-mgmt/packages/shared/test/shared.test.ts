@@ -250,9 +250,9 @@ describe("WorkflowDefinition 注册表（3.2）", () => {
     ])
     expect(REQDOC.rules.some((r) => r.stage === "goal" && r.text.includes("workflow_baseline"))).toBe(true)
     expect(REQDOC.rules.some((r) => r.stage === "review" && r.text.includes("comprehension_confirm"))).toBe(true)
-    // 需求资料目录契约（7.5 重构：材料区 01~04 + AI 工作区 05/06）
+    // 需求资料目录契约（7.5 重构：材料区 01~05 + AI 工作区 05/06）
     expect(REQDOC.rules.some((r) => r.text.includes("01_背景与目标"))).toBe(true)
-    expect(REQDOC.rules.some((r) => r.text.includes("06_需求规格产出"))).toBe(true)
+    expect(REQDOC.rules.some((r) => r.text.includes("07_需求规格产出"))).toBe(true)
     // 投放引导（partial 友好）：r8 须展示绝对路径、接受部分投放、并显式二选一逼出选择
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r8" && r.text.includes("绝对路径") && r.text.includes("有多少投多少") && r.text.includes("直接口述"))).toBe(true)
     // 双通道：文档扫描工具 + 功能点拆解确认工具（重构核心）
@@ -277,7 +277,7 @@ describe("WorkflowDefinition 注册表（3.2）", () => {
     expect(SDLC.stagePurpose?.review).toBe("开发者理解确认代码")
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r20" && r.text.includes("渲染铁律") && r.text.includes("字段映射"))).toBe(true)
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r21" && r.stage === "edge" && r.text.includes("reqdoc_score"))).toBe(true)
-    // 实施方案 01~06 产出：03→数据字典与库表设计（r10），04→RBAC 矩阵与审批流（r12），落盘进 r14/r20
+    // 实施方案 00~07 产出：03→数据字典与库表设计（r10），04→RBAC 矩阵与审批流（r12），落盘进 r14/r20
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r10" && r.text.includes("数据字典") && r.text.includes("库表设计") && r.text.includes("纯文本步骤") && r.text.includes("flowchart TD"))).toBe(true)
     // 追问 3 轮上限须逐条列出未澄清探针并说明业务可选项（质量飞轮 P1：缺口可见 + 可行动）
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r11" && r.text.includes("3 轮上限") && r.text.includes("未澄清探针") && r.text.includes("将扣分数") && r.text.includes("可选项") && r.text.includes("开新会话"))).toBe(true)

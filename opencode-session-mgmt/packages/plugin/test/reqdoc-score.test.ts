@@ -66,7 +66,7 @@ describe("reqdoc_score", () => {
       {
         dims: [
           ...passingDims().slice(0, 3),
-          { key: "compliance", score: 16, deductions: [{ reason: "缺审计留痕", points: 5, evidence: "03_流程与数据/清分.md:12" }] },
+          { key: "compliance", score: 16, deductions: [{ reason: "缺审计留痕", points: 5, evidence: "02_流程与数据/清分.md:12" }] },
           { key: "authority", score: 8 },
           { key: "material", score: 8 },
           { key: "nfr", score: 2 },
@@ -82,7 +82,7 @@ describe("reqdoc_score", () => {
       key: "compliance",
       points: 5,
       reason: "缺审计留痕",
-      evidence: "03_流程与数据/清分.md:12",
+      evidence: "02_流程与数据/清分.md:12",
     })
     store.close()
   })

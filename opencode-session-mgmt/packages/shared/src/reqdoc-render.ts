@@ -93,6 +93,10 @@ export const REQDOC_TEMPLATE_FIELDS: readonly ReqdocTemplateField[] = [
   // 脱敏规则（手机号/身份证遮罩）→ 2.8 交易安全性/2.9 数据存贮和清理
   { key: "2.8", title: "交易安全性", dims: ["compliance"] },
   { key: "2.9", title: "数据存贮和清理", dims: ["compliance"] },
+  // 接口与数据源（外部系统对接/数据来源）→ 2.11 接口与数据源（material 维度：真实接口/字段证据）
+  { key: "2.11", title: "接口与数据源", dims: ["material"] },
+  // 权限与最小授权 → 2.12 权限与最小授权（authority 数据边界/岗位权限 + compliance 合规）
+  { key: "2.12", title: "权限与最小授权", dims: ["authority", "compliance"] },
 ]
 
 /**
@@ -121,6 +125,8 @@ export const FEATURE_SUB_SECTIONS: readonly FeatureSubSection[] = [
   { group: 2, sub: 8, title: "交易安全性" },
   { group: 2, sub: 9, title: "数据存贮和清理" },
   { group: 2, sub: 10, title: "附件" },
+  { group: 2, sub: 11, title: "接口与数据源" },
+  { group: 2, sub: 12, title: "权限与最小授权" },
 ]
 
 /** 第 bi 个功能点块（0 起）内某相对分组 sub 的绝对编号（如块 0 的 group2.sub1 → "2.1"，块 1 的 → "4.1"）。 */
@@ -235,7 +241,7 @@ export function parseRenderStructure(md: string): RenderStructure {
    // 3) 功能点块切分（### 起，到下一个该行或 EOF 止）。
    // 标题兼容两种约定（模型常把名称写进标题，且功能点名称经 reqdoc_confirm_features 记录为 N_名称）：
    //   - 「### 功能点 N」或「### 功能点 N：名称」「### 功能点 N 名称」
-   //   - 「### N_名称」（与系统建档目录 05_功能点/N_名称 一致的编号_名称 形式，如「### 1_故障应急智能检索」）
+   //   - 「### N_名称」（与系统建档目录 06_功能点/N_名称 一致的编号_名称 形式，如「### 1_故障应急智能检索」）
    //   - 「### N. 名称」（点号后接空格/非数字，例如「### 1. 故障应急智能检索」）
    // 须三级标题（###）；排除章内小节「### N.M …」（点号后接数字，如 1.1 需求类型）以免误计数。
    // 排除「### N. 功能点…」（块内主小节，点号后接「功能点」字样），避免与功能点块误并；保留「### N. 名称」。
@@ -377,9 +383,70 @@ export function renderGapViolations(
 }
 
 /**
+ * 完整性门禁（29148 对齐）：渲染中裸 `[缺省]`（未带不适用理由）即违规。
+ * 解析器对 `[缺省：理由]` 不计入 `[缺省]` 标签（SOURCE_TAG_RE 仅匹配裸 `[缺省]`），
+ * 故 render.defaults 中计数的即裸 `[缺省]`——任一映射字段出现即说明完整性缺口未解释，定稿拦截。
+ * 无 render 返回空（柔性：未记录 render 则不放行此门禁）。
+ */
+export function missingDefaultReasonViolations(render: ReqdocRender | undefined): string[] {
+  if (!render) return []
+  const v: string[] = []
+  for (const f of REQDOC_TEMPLATE_FIELDS) {
+    const n = render.defaults[f.key] ?? 0
+    if (n > 0) {
+      v.push(`字段 ${f.key} ${f.title} 有 ${n} 个功能点标裸 [缺省]（未写「[缺省：不适用理由]」），完整性门禁拦截：请改为 [缺省：理由] 或补 [文档]/[问答]`)
+    }
+  }
+  return v
+}
+
+/** 取某三级小节（num + title）正文：从标题行到下个三级/二级标题止。 */
+function extractSubsection(md: string, num: string, title: string): string {
+  const lines = md.split(/\r?\n/)
+  let start = -1
+  for (let i = 0; i < lines.length; i++) {
+    const h = headingAt(lines[i])
+    if (h && h.level === 3 && norm(h.text) === norm(`${num} ${title}`)) {
+      start = i
+      break
+    }
+  }
+  if (start < 0) return ""
+  const out: string[] = []
+  for (let i = start + 1; i < lines.length; i++) {
+    const h = headingAt(lines[i])
+    if (h && h.level <= 3) break
+    out.push(lines[i])
+  }
+  return out.join("\n")
+}
+
+/**
+ * 一致性门禁（29148 对齐）：需求类型（3.1 新增/更改）与功能概述（3.6）须自洽。
+ * 选「更改功能」但 3.6 未点明对现有功能/系统的改造、变更或调整 = 矛盾，定稿拦截。
+ * 纯 md 解析，无 render 也适用（直接吃渲染源 md）。
+ */
+export function consistencyViolations(md: string | undefined): string[] {
+  if (!md) return []
+  const typeText = extractSubsection(md, "3.1", "需求类型")
+  const overview = extractSubsection(md, "3.6", "需求提出原因及功能概述")
+  if (!typeText || !overview) return []
+  const isChange = /●\s*更改功能/.test(typeText)
+  const isNew = /●\s*新增功能/.test(typeText)
+  if (!isChange && !isNew) return []
+  const changeWords = /(改造|变更|调整|升级|重构|迁移|优化|现有系统|沿用|复用|在现有|对接现有|针对现有|基于现有|现有功能)/
+  if (isChange && !changeWords.test(overview)) {
+    return [
+      "需求类型选「更改功能」，但 3.6 需求提出原因及功能概述未说明对现有功能/系统的改造、变更或调整范围（一致性缺口：更改类需求须点明改造对象与变更边界）",
+    ]
+  }
+  return []
+}
+
+/**
  * 来源真实性门禁（防全[问答]兜底，reqdoc-r30）：PRD 定稿须有一定书面材料支撑。
  * 放行条件（两者较松即放行）：[文档] 来源占比 ≥30%，或至少 2 个功能点含 ≥1 处 [文档] 支撑。
- * 均不满足则视为书面材料依据不足，返回违规——须业务补充 01~04 材料重扫，或明确确认「无书面材料可引用」。
+ * 均不满足则视为书面材料依据不足，返回违规——须业务补充 01~05 材料重扫，或明确确认「无书面材料可引用」。
  * 无 render 返回空（柔性：未记录 render 则不放行此门禁，与 P2 复核一致）。
  */
 export function noDocumentSupportViolation(render: ReqdocRender | undefined): string[] {
@@ -393,7 +460,7 @@ export function noDocumentSupportViolation(render: ReqdocRender | undefined): st
   const pct = total > 0 ? Math.round(ratio * 100) : 0
   return [
     `PRD 书面材料支撑不足：[文档] 来源占比 ${pct}%（<30%），且仅有 ${render.docBlocks} 个功能点含 [文档] 支撑（需 ≥2）。` +
-      "请业务向 01~04 目录补充书面材料后重扫 reqdoc_scan 提取，或经业务明确确认「无书面材料可引用」(no_document_confirmed=true) 后再定稿。",
+      "请业务向 01~05 目录补充书面材料后重扫 reqdoc_scan 提取，或经业务明确确认「无书面材料可引用」(no_document_confirmed=true) 后再定稿。",
   ]
 }
 
@@ -410,6 +477,7 @@ export function renderCheckRubric(): string {
     `功能点块标题：每个功能点须用三级标题（###）起头、带序号，形如「### 功能点 N」或「### N_功能点名称」（例：「### 1_故障应急智能检索」）；校验器按此类标题计数功能点块数，缺序号或非三级标题（##/####）不被识别为块。\n` +
     `块内固定小节（标题编号+名称须齐全，层级不拘——三级/四级/五级标题均可，不强制四级或五级）：主分组标题「(2k-1). 功能点输入要素」（含 (2k-1).1 简要概述、(2k-1).2 控制要求）与「(2k). 功能点处理要求」（含 (2k).1~(2k).10）为可选分组标签，模型常写为纯文本或省略，其下子项齐全即视为完整；小节标题须含编号与名称（如「4.1 输入要素的检查」），来源标签可包全角括号（如「4.1 输入要素的检查（[问答]）」）。\n` +
     `映射字段须逐功能点标来源 [文档]/[问答]/[缺省]（标在标题行或该小节正文内均可）：1.2 控制要求、2.1 输入要素的检查、2.3 异常处理要求、2.6 清算处理、2.7 差错处理、2.8 交易安全性、2.9 数据存贮和清理。\n必填字段（逐功能点须标来源 [文档]/[问答]/[缺省]，同 reqdoc-r14/r20）：${fields}。\n` +
-    `[缺省] 字段对应打分卡维度打满分 = 渲染缺口与自评矛盾，review_submit 定稿会被拦。`
+    `[缺省] 字段对应打分卡维度打满分 = 渲染缺口与自评矛盾，review_submit 定稿会被拦。\n` +
+    `[缺省] 须写成 [缺省：不适用理由]（如 [缺省：本次无外部系统对接]），禁止裸 [缺省]——裸 [缺省] 触发完整性门禁（review_submit 定稿拦截）。`
   )
 }

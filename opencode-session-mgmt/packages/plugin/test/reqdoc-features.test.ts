@@ -1,6 +1,6 @@
 /**
  * reqdoc_confirm_features 功能点拆解工具测试（重构核心：prd 前置功能点拆解确认）。
- * 覆盖：记录 features 到 workflow、建 05_功能点 子目录、仅 reqdoc 可用、参数校验。
+ * 覆盖：记录 features 到 workflow、建 06_功能点 子目录、仅 reqdoc 可用、参数校验。
  */
 import { mkdtempSync } from "node:fs"
 import { readdirSync, readFileSync } from "node:fs"
@@ -34,18 +34,18 @@ describe("reqdoc_confirm_features", () => {
     store.close()
   })
 
-  test("为每个功能点在 05_功能点 下建子目录与来源摘录", async () => {
+  test("为每个功能点在 06_功能点 下建子目录与来源摘录", async () => {
     const worktree = mkdtempSync(join(tmpdir(), "reqdoc-feat-"))
     const { store, tools, ctx } = setup(worktree)
     await tools.reqdoc_confirm_features!.execute(
       { features: [{ name: "名单排查", priority: "high" }] } as never,
       ctx,
     )
-    const dir = join(worktree, "05_功能点", "1_名单排查")
+    const dir = join(worktree, "06_功能点", "1_名单排查")
     expect(readdirSync(dir)).toContain("来源摘录.md")
     expect(readFileSync(join(dir, "来源摘录.md"), "utf8")).toContain("功能点 1")
-    // 重构：同时预建 06_需求规格产出/N_名称/（模板外成果落盘位，reqdoc-r20 归档要求）
-    expect(readdirSync(join(worktree, "06_需求规格产出", "1_名单排查"))).toEqual([])
+    // 重构：同时预建 07_需求规格产出/N_名称/（模板外成果落盘位，reqdoc-r20 归档要求）
+    expect(readdirSync(join(worktree, "07_需求规格产出", "1_名单排查"))).toEqual([])
     store.close()
   })
 

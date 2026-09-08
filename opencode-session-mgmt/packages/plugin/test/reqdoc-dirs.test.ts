@@ -38,7 +38,7 @@ describe("sanitizeDirName", () => {
 })
 
 describe("reqdoc_init 目录骨架 + README", () => {
-  test("为每个 01~06 目录写入 README.md，并附根目录总览", async () => {
+  test("为每个 00~07 目录写入 README.md，并附根目录总览", async () => {
     const root = mkdtempSync(join(tmpdir(), "reqdoc-init-"))
     const tools = createReqdocInitTool()
     const out = await tools.reqdoc_init!.execute({} as never, { directory: root, sessionID: "s1" } as never)

@@ -666,7 +666,7 @@ describe("reqdoc 渲染定稿复核门禁（质量飞轮 P2）", () => {
 
   /** 结构齐全的单功能点 PRD（映射字段全标来源；2.3 默认 [文档]，不触发缺省↔满分）。 */
   const goodMd = (): string =>
-    `## 第一章 项目信息\n## 第二章 文档变更过程\n## 第三章 需求概述\n### 3.1 需求类型\n### 3.2 属于流程优化项目\n### 3.3 涉及跨部门项目\n### 3.4 涉及总行开发\n### 3.5 希望完成时间\n### 3.6 需求提出原因及功能概述\n## 第四章 术语定义与业务规则\n### 4.1 术语定义\n### 4.2 业务规则\n## 第五章 需求功能详述\n### 功能点 1\n#### 1. 功能点输入要素\n##### 1.1 简要概述 [文档]\n##### 1.2 控制要求 [文档]\n#### 2. 功能点处理要求\n##### 2.1 输入要素的检查 [文档]\n##### 2.2 系统处理过程 [文档]\n##### 2.3 异常处理要求 [文档]\n##### 2.4 提示信息 [文档]\n##### 2.5 其他要求 [文档]\n##### 2.6 清算处理 [文档]\n##### 2.7 差错处理 [文档]\n##### 2.8 交易安全性 [文档]\n##### 2.9 数据存贮和清理 [文档]\n##### 2.10 附件 [文档]\n` +
+    `## 第一章 项目信息\n## 第二章 文档变更过程\n## 第三章 需求概述\n### 3.1 需求类型\n### 3.2 属于流程优化项目\n### 3.3 涉及跨部门项目\n### 3.4 涉及总行开发\n### 3.5 希望完成时间\n### 3.6 需求提出原因及功能概述\n## 第四章 术语定义与业务规则\n### 4.1 术语定义\n### 4.2 业务规则\n## 第五章 需求功能详述\n### 功能点 1\n#### 1. 功能点输入要素\n##### 1.1 简要概述 [文档]\n##### 1.2 控制要求 [文档]\n#### 2. 功能点处理要求\n##### 2.1 输入要素的检查 [文档]\n##### 2.2 系统处理过程 [文档]\n##### 2.3 异常处理要求 [文档]\n##### 2.4 提示信息 [文档]\n##### 2.5 其他要求 [文档]\n##### 2.6 清算处理 [文档]\n##### 2.7 差错处理 [文档]\n##### 2.8 交易安全性 [文档]\n##### 2.9 数据存贮和清理 [文档]\n##### 2.10 附件 [文档]\n##### 2.11 接口与数据源 [文档]\n##### 2.12 权限与最小授权 [文档]\n` +
     `## 第六章 非功能需求\n### 6.1 性能与容量\n### 6.2 可用性与可靠性\n### 6.3 安全与信创\n### 6.4 数据主权与合规\n## 第七章 验收标准\n### 7.1 功能点验收指标\n### 7.2 量化验收口径\n`
 
   /** reqdoc 定稿前置：前序阶段 approved + 1 个已确认功能点 + 达标已确认打分（edgeControl 默认 30/30）。 */
@@ -679,7 +679,7 @@ describe("reqdoc 渲染定稿复核门禁（质量飞轮 P2）", () => {
     })
     setReqdocScore(store, "r1")
     const worktree = tempDir()
-    const rel = "06_需求规格产出/1_公告发布/需求规格书.md"
+    const rel = "07_需求规格产出/1_公告发布/需求规格书.md"
     return { store, worktree, ctx: { sessionID: "r1", worktree } as never, rel }
   }
 
@@ -716,6 +716,53 @@ describe("reqdoc 渲染定稿复核门禁（质量飞轮 P2）", () => {
     await expect(
       createReviewTools(store).review_submit!.execute(reviewArgs, ctx),
     ).rejects.toThrow(/渲染定稿复核未通过.*2\.3 异常处理要求.*edgeControl/)
+    store.close()
+  })
+
+  test("完整性门禁：2.11 标裸 [缺省]（无理由）→ 拒定稿", async () => {
+    const { store, worktree, ctx, rel } = setupReqdoc()
+    writeMd(worktree, rel, goodMd().replace("##### 2.11 接口与数据源 [文档]", "##### 2.11 接口与数据源 [缺省]"))
+    const checkTools = createReqdocCheckTools(store)
+    await checkTools.reqdoc_check!.execute({ source: rel } as never, ctx)
+    await expect(
+      createReviewTools(store).review_submit!.execute(reviewArgs, ctx),
+    ).rejects.toThrow(/2\.11 接口与数据源.*完整性门禁/)
+    store.close()
+  })
+
+  test("一致性门禁：3.1 更改功能但 3.6 未点明改造 → 拒定稿", async () => {
+    const { store, worktree, ctx, rel } = setupReqdoc()
+    const md = goodMd()
+      .replace(
+        "### 3.1 需求类型\n### 3.2 属于流程优化项目",
+        "### 3.1 需求类型\n- ● 更改功能　○ 新增功能\n### 3.2 属于流程优化项目",
+      )
+      .replace(
+        "### 3.6 需求提出原因及功能概述\n",
+        "### 3.6 需求提出原因及功能概述\n本需求为新增一类业务查询，支持客户自助查看。\n",
+      )
+    writeMd(worktree, rel, md)
+    const checkTools = createReqdocCheckTools(store)
+    await checkTools.reqdoc_check!.execute({ source: rel } as never, ctx)
+    await expect(
+      createReviewTools(store).review_submit!.execute(reviewArgs, ctx),
+    ).rejects.toThrow(/一致性.*更改功能|更改功能.*改造/)
+    store.close()
+  })
+
+  test("定稿通过 → 自动填充文档变更过程（1.0 初始定稿）", async () => {
+    const { store, worktree, ctx, rel } = setupReqdoc()
+    // 不让 review 预先 approved（否则变更记录写入被 preApproved 守卫跳过），本次 submit 才走定稿
+    store.mutateWorkflow("r1", (w) => {
+      w.stages.review.status = "in_progress"
+    })
+    writeMd(worktree, rel, goodMd())
+    const checkTools = createReqdocCheckTools(store)
+    await checkTools.reqdoc_check!.execute({ source: rel } as never, ctx)
+    await createReviewTools(store).review_submit!.execute(reviewArgs, ctx)
+    const md = readFileSync(join(worktree, rel), "utf8")
+    expect(md).toContain("1.0")
+    expect(md).toContain("初始定稿")
     store.close()
   })
 
@@ -756,7 +803,7 @@ describe("reqdoc 渲染定稿复核门禁（质量飞轮 P2）", () => {
 
   test("非 git 项目 context.directory ≠ worktree 时定稿复核按 directory 读源（regression: 源文件不可读）", async () => {
     // 复现真实卡死：Windows 非 git 项目 context.worktree 被解析到守护进程启动目录，
-    // 而 01~06 骨架落在 context.directory（项目根）。reqdoc_check/export 经 projectRoot 用
+    // 而 00~07 骨架落在 context.directory（项目根）。reqdoc_check/export 经 projectRoot 用
     // directory 读；review_submit 旧代码用 worktree 拼接 → 源文件不可读。修复后统一 projectRoot。
     const store = Store.memory(() => "reqdoc" as const)
     store.mutateWorkflow("r1", (w) => {
@@ -767,7 +814,7 @@ describe("reqdoc 渲染定稿复核门禁（质量飞轮 P2）", () => {
     setReqdocScore(store, "r1")
     const directory = tempDir() // 项目根：文件落在此
     const worktree = tempDir() // 守护进程启动目录：与 directory 不同，且为空
-    const rel = "06_需求规格产出/1_公告发布/需求规格书.md"
+    const rel = "07_需求规格产出/1_公告发布/需求规格书.md"
     writeMd(directory, rel, goodMd())
     const ctx = { sessionID: "r1", directory, worktree } as never
     const checkTools = createReqdocCheckTools(store)
@@ -829,7 +876,7 @@ describe("P2.5 字段定义门禁 / P3.10 溯源写回", () => {
     const store = Store.memory(() => "reqdoc" as const)
     const tools = createReviewTools(store)
     const worktree = mkdtempSync(join(tmpdir(), "sm-srcback-"))
-    const rel = "06_需求规格产出/1_测试/需求规格书.md"
+    const rel = "07_需求规格产出/1_测试/需求规格书.md"
     mkdirSync(dirname(join(worktree, rel)), { recursive: true })
     const md0 = "## 第三章 需求概述\n### 3.1 需求类型\n"
     writeFileSync(join(worktree, rel), md0, "utf8")

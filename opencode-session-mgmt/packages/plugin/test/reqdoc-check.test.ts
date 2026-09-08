@@ -34,7 +34,7 @@ function goodMd(): string {
     `#### 2. 功能点处理要求\n` +
     `##### 2.1 输入要素的检查 [文档]\n##### 2.2 系统处理过程 [文档]\n##### 2.3 异常处理要求 [文档]\n` +
     `##### 2.4 提示信息 [文档]\n##### 2.5 其他要求 [文档]\n##### 2.6 清算处理 [文档]\n` +
-    `##### 2.7 差错处理 [文档]\n##### 2.8 交易安全性 [文档]\n##### 2.9 数据存贮和清理 [文档]\n##### 2.10 附件 [文档]\n` +
+    `##### 2.7 差错处理 [文档]\n##### 2.8 交易安全性 [文档]\n##### 2.9 数据存贮和清理 [文档]\n##### 2.10 附件 [文档]\n##### 2.11 接口与数据源 [文档]\n##### 2.12 权限与最小授权 [文档]\n` +
     `## 第六章 非功能需求\n### 6.1 性能与容量\n### 6.2 可用性与可靠性\n### 6.3 安全与信创\n### 6.4 数据主权与合规\n` +
     `## 第七章 验收标准\n### 7.1 功能点验收指标\n### 7.2 量化验收口径\n`
   )
@@ -62,7 +62,7 @@ const writeMd = (worktree: string, rel: string, md: string) => {
 describe("reqdoc_check", () => {
   test("结构合规：写入 render（source/expectedFeatures/covered 齐全）且卡片无违规", async () => {
     const { store, worktree } = setupReqdoc(1)
-    const rel = "06_需求规格产出/1_测试/需求规格书.md"
+    const rel = "07_需求规格产出/1_测试/需求规格书.md"
     writeMd(worktree, rel, goodMd())
     const tools = createReqdocCheckTools(store)
     const out = String(
@@ -86,7 +86,7 @@ describe("reqdoc_check", () => {
 
   test("结构违规：缺章节 + 功能点块数与已确认数不符 → 卡片列违规", async () => {
     const { store, worktree } = setupReqdoc(2) // 已确认 2 个功能点
-    const rel = "06_需求规格产出/1_测试/需求规格书.md"
+    const rel = "07_需求规格产出/1_测试/需求规格书.md"
     writeMd(worktree, rel, goodMd()) // 但渲染只有 1 个功能点块
     const tools = createReqdocCheckTools(store)
     const out = String(
@@ -103,7 +103,7 @@ describe("reqdoc_check", () => {
   test("仅 reqdoc 工作流可用（sdlc 拒绝且不写 render）", async () => {
     const store = Store.memory(() => "sdlc")
     const worktree = tempDir()
-    const rel = "06_需求规格产出/1_测试/需求规格书.md"
+    const rel = "07_需求规格产出/1_测试/需求规格书.md"
     writeMd(worktree, rel, goodMd())
     const tools = createReqdocCheckTools(store)
     await expect(
@@ -118,7 +118,7 @@ describe("reqdoc_check", () => {
     const tools = createReqdocCheckTools(store)
     await expect(
       tools.reqdoc_check!.execute(
-        { source: "06_需求规格产出/不存在/需求规格书.md" } as never,
+        { source: "07_需求规格产出/不存在/需求规格书.md" } as never,
         { sessionID: "r1", worktree } as never,
       ),
     ).rejects.toThrow(/源文件不存在或不可读/)
@@ -128,7 +128,7 @@ describe("reqdoc_check", () => {
 
   test("P3.7 增量诊断：feature=1 齐全 → 期望 vs 实际无缺失", async () => {
     const { store, worktree } = setupReqdoc(1)
-    const rel = "06_需求规格产出/1_测试/需求规格书.md"
+    const rel = "07_需求规格产出/1_测试/需求规格书.md"
     writeMd(worktree, rel, goodMd())
     const tools = createReqdocCheckTools(store)
     const out = String(
@@ -141,7 +141,7 @@ describe("reqdoc_check", () => {
 
   test("P3.7 增量诊断：feature=1 缺 2.3 → 列出缺失子小节", async () => {
     const { store, worktree } = setupReqdoc(1)
-    const rel = "06_需求规格产出/1_测试/需求规格书.md"
+    const rel = "07_需求规格产出/1_测试/需求规格书.md"
     writeMd(worktree, rel, goodMd().replace("##### 2.3 异常处理要求 [文档]\n", ""))
     const tools = createReqdocCheckTools(store)
     const out = String(
@@ -153,7 +153,7 @@ describe("reqdoc_check", () => {
 
   test("P3.9 连续失败计数：两次违规累加，合规后清零", async () => {
     const { store, worktree } = setupReqdoc(1)
-    const rel = "06_需求规格产出/1_测试/需求规格书.md"
+    const rel = "07_需求规格产出/1_测试/需求规格书.md"
     const bad = goodMd().replace(/## 第六章[\s\S]*$/, "")
     const tools = createReqdocCheckTools(store)
     const ctx = { sessionID: "r1", worktree } as never
@@ -172,7 +172,7 @@ describe("reqdoc_check", () => {
 
   test("P3.9 连续失败≥3 → 卡片提示人工介入与格式诊断", async () => {
     const { store, worktree } = setupReqdoc(1)
-    const rel = "06_需求规格产出/1_测试/需求规格书.md"
+    const rel = "07_需求规格产出/1_测试/需求规格书.md"
     const bad = goodMd().replace(/## 第六章[\s\S]*$/, "")
     const tools = createReqdocCheckTools(store)
     const ctx = { sessionID: "r1", worktree } as never

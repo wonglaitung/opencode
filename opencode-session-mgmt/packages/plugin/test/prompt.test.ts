@@ -263,7 +263,7 @@ describe("buildSystemFragment", () => {
 describe("buildStateBar 渲染校验行（质量飞轮 P2）", () => {
   /** 结构合规的单功能点 render 记录。 */
   const okRender = (): ReqdocRender => ({
-    source: "06_需求规格产出/1_测试/需求规格书.md",
+    source: "07_需求规格产出/1_测试/需求规格书.md",
     checkedAt: 1000,
     expectedFeatures: 1,
     ok: true,
@@ -274,8 +274,8 @@ describe("buildStateBar 渲染校验行（质量飞轮 P2）", () => {
     featureCount: 1,
     featureOk: true,
     missingFeatureSections: [],
-    covered: { "1.2": 1, "2.1": 1, "2.3": 1, "2.6": 1, "2.7": 1, "2.8": 1, "2.9": 1 },
-    defaults: { "1.2": 0, "2.1": 0, "2.3": 0, "2.6": 0, "2.7": 0, "2.8": 0, "2.9": 0 },
+    covered: { "1.2": 1, "2.1": 1, "2.3": 1, "2.6": 1, "2.7": 1, "2.8": 1, "2.9": 1, "2.11": 1, "2.12": 1 },
+    defaults: { "1.2": 0, "2.1": 0, "2.3": 0, "2.6": 0, "2.7": 0, "2.8": 0, "2.9": 0, "2.11": 0, "2.12": 0 },
     docBlocks: 1,
     docCount: 7,
     qaCount: 0,

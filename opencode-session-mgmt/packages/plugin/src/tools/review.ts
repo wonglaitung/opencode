@@ -21,6 +21,8 @@ import {
   scoreDimZeroViolations,
   renderGapViolations,
   renderStructureViolations,
+  consistencyViolations,
+  missingDefaultReasonViolations,
   reviewRecord,
   type ComprehensionRecord,
   type ReqdocRender,
@@ -267,9 +269,11 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
       const preRender = store.ensure(context.sessionID).workflow?.render
       let renderErrors: string[] = []
       let liveRender: ReqdocRender | undefined
+      let mdText: string | undefined
       if (preRender) {
         try {
-          const md = await Bun.file(resolveWithinWorktree(projectRoot(context), preRender.source)).text()
+          mdText = await Bun.file(resolveWithinWorktree(projectRoot(context), preRender.source)).text()
+          const md = mdText
           const live = parseRenderStructure(md)
           liveRender = {
             ...live,
@@ -281,11 +285,16 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
           renderErrors = [
             ...renderStructureViolations(liveRender),
             ...renderGapViolations(liveRender, preScore),
+            ...missingDefaultReasonViolations(liveRender),
+            ...consistencyViolations(md),
           ]
         } catch {
           renderErrors = [`PRD 渲染源文件不可读或已删除：${preRender.source}，定稿复核无法执行`]
         }
       }
+      // 是否首次定稿（幂等：重复 review_submit 不再重复写变更记录行）
+      const preWf = store.ensure(context.sessionID).workflow
+      const preApproved = preWf ? preWf.stages[getDefinition(preWf.type).reviewStage!]?.status === "approved" : false
       const saved = store.mutateWorkflow(context.sessionID, (workflow) => {
         const def = getDefinition(workflow.type)
         const review = reviewRecord(workflow)
@@ -415,6 +424,11 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
         }
         recomputeCommit(workflow)
       })
+      // 变更记录自动填充（含迭代）：reqdoc 首次定稿通过后把本次定稿写入「文档变更过程」表（best-effort）。
+      // revision 0 = 初始定稿（1.0）；revisit 重做后定稿 = 修订行（1.<revision>），使重做轨迹可追溯。
+      if (saved.type === "reqdoc" && !preApproved && saved.render?.source) {
+        await appendChangeRecordToPrd(projectRoot(context), saved.render.source, saved.stages[getDefinition(saved.type).reviewStage!].revision ?? 0)
+      }
       const review = reviewRecord(saved)
       const total = review.comprehension.length
       const rate = saved.quality.firstPassRate
@@ -422,7 +436,7 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
       // 惰性确认软提示（reqdoc-r27）：业务连续默认轮次偏高时，定稿通过仍提醒补材料/实例
       const lazyNote =
         (saved.probes?.defaultRounds ?? 0) >= 2
-          ? `\n⚠ 业务全程选默认轮次 ${saved.probes!.defaultRounds} 轮（需求真实性偏低）：建议补充 01~04 书面材料或真实实例，重跑 edge 追问提升可实施性。`
+          ? `\n⚠ 业务全程选默认轮次 ${saved.probes!.defaultRounds} 轮（需求真实性偏低）：建议补充 01~05 书面材料或真实实例，重跑 edge 追问提升可实施性。`
           : ""
       // 审查是最后阶段：通过即全部阶段 approved → 完成。此时在工具返回直接带出 /new 提醒
       // （弱模型未必等到下一轮注入片段才行动，完成瞬间的工具结果是最稳的触发点）。
@@ -463,6 +477,41 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
       await Bun.write(abs, out)
     } catch {
       // 写盘失败不影响确认本身（溯源仍存在于 record）
+    }
+  }
+
+  /** 变更记录自动填充（best-effort）：把本次定稿写入 PRD「第二章 文档变更过程」表。
+   * 已有表则在分隔行后插一行；缺表则于章节内建表（表头 + 分隔 + 首行）。 */
+  async function appendChangeRecordToPrd(root: string, rel: string, revision: number): Promise<void> {
+    try {
+      const abs = resolveWithinWorktree(root, rel)
+      const md = await Bun.file(abs).text()
+      const header = "## 第二章 文档变更过程"
+      const sectionIdx = md.indexOf(header)
+      if (sectionIdx === -1) return
+      const version = `1.${revision}`
+      const date = new Date().toISOString().slice(0, 10)
+      const content = revision === 0 ? "初始定稿" : "重做后修订定稿"
+      const row = `| ${version} | ${content} | ${date} | 业务+AI 代笔 | |`
+      const lines = md.split(/\r?\n/)
+      // 已有变更记录表：在分隔行后插一行
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].includes("版本号")) {
+          const sepIdx = i + 1
+          if (sepIdx < lines.length && /^\|[\s\-:|]+\|$/.test(lines[sepIdx])) {
+            lines.splice(sepIdx + 1, 0, row)
+            await Bun.write(abs, lines.join("\n"))
+            return
+          }
+        }
+      }
+      // 缺表：于本章节内（下一章之前）建表
+      const nextSectionIdx = md.indexOf("\n## ", sectionIdx)
+      const insertAt = nextSectionIdx === -1 ? md.length : nextSectionIdx
+      const table = `\n| 版本号 | 变更说明 | 日期 | 编制 | 复核 |\n| --- | --- | --- | --- | --- |\n${row}\n`
+      await Bun.write(abs, md.slice(0, insertAt) + table + md.slice(insertAt))
+    } catch {
+      // 写盘失败不影响定稿本身（变更记录仍存于 WorkflowState）
     }
   }
 

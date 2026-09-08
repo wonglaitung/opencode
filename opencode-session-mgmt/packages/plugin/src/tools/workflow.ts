@@ -17,8 +17,8 @@ const z = tool.schema
  * workflow_advance 进入/完成某阶段后，显式列出下一阶段的前置条件，让业务在动手前看到"须满足什么"。
  */
 const REQDOC_STAGE_PREREQS: Record<string, string[]> = {
-  rules: ["需求资料目录（01~04）已建", "业务已选择投放材料或确认直接口述", "已扫描提取已投放材料"],
-  edge: ["已明确投放/口述方式", "02_制度与合规 / 04_角色与权限 已投且扫描（或确认口述）", "基线工时已录入（workflow_baseline）"],
+  rules: ["需求资料目录（01~05）已建", "业务已选择投放材料或确认直接口述", "已扫描提取已投放材料"],
+  edge: ["已明确投放/口述方式", "03_制度与合规 / 04_角色与权限 已投且扫描（或确认口述）", "基线工时已录入（workflow_baseline）"],
   prd: [
     "已调用 reqdoc_probe 记录追问探针（P0.1 前置，未记录即拦截）",
     "功能点清单已拆分并经业务确认（reqdoc_confirm_features）",
@@ -27,7 +27,7 @@ const REQDOC_STAGE_PREREQS: Record<string, string[]> = {
     "追问缺口已如实扣分，无缺口+满分矛盾",
   ],
   review: [
-    "PRD 已按模板渲染并写入 06_需求规格产出",
+    "PRD 已按模板渲染并写入 07_需求规格产出",
     "已 reqdoc_check 结构合规（章节齐全/功能点块/字段来源）",
     "来源真实性达标（[文档] 占比 ≥30% 或 ≥2 功能点含文档支撑），或业务确认无书面材料",
     "已登记理解确认要点且逐条回填来源证据（comprehension_confirm 的 sourceLabel/sourceQuote）",
@@ -90,14 +90,14 @@ export function createWorkflowTools(store: Store): Record<string, ToolDefinition
             )
           }
           // P0.1 实例探针硬约束：main_flow/exception 探针仍记录缺口 = 业务未提供真实案例（无实例空转）。
-          // 卡在 prd 入口，须业务投放 01~04 或提供真实实例后重调 reqdoc_probe 澄清，方可进入渲染（不往下走）。
+          // 卡在 prd 入口，须业务投放 01~05 或提供真实实例后重调 reqdoc_probe 澄清，方可进入渲染（不往下走）。
           if (
             workflow.probes &&
             (workflow.probes.gaps.includes("main_flow") || workflow.probes.gaps.includes("exception"))
           ) {
             throw new WorkflowOpError(
               "核心流程/异常缺真实实例（P0.1）：main_flow 或 exception 探针仍记录缺口，说明业务未提供真实案例。" +
-                "请业务向 01~04 补充书面材料后重扫 reqdoc_scan，或由业务提供真实实例后重调 reqdoc_probe 澄清，方可进入 prd 渲染。",
+                "请业务向 01~05 补充书面材料后重扫 reqdoc_scan，或由业务提供真实实例后重调 reqdoc_probe 澄清，方可进入 prd 渲染。",
             )
           }
           // 柔性一致校验（质量飞轮 P1）：缺口探针对应维度不得打满分（报缺口却打满分 = 自评不诚实）。

@@ -1,6 +1,6 @@
 /**
  * reqdoc 渲染结构校验工具（质量飞轮 P2「渲染可测化」，设计文档 workflow-reqdoc.md 7 章、10 章）。
- * reqdoc_check —— PRD 渲染完成并写入 06_需求规格产出 后调用，对照模板结构 schema
+ * reqdoc_check —— PRD 渲染完成并写入 07_需求规格产出 后调用，对照模板结构 schema
  * （REQDOC_TEMPLATE_CHAPTERS / REQDOC_TEMPLATE_FIELDS，同源 renderCheckRubric）做渲染 diff 校验：
  * 章节齐全/顺序、功能点块数与已确认功能点一致、映射字段逐功能点带来源标注。
  * 校验结果写入 workflow.render；review_submit 定稿时重读源 md 复核（柔性：不调用则放行）。
@@ -26,11 +26,11 @@ const z = tool.schema
 export function createReqdocCheckTools(store: Store): Record<string, ToolDefinition> {
   const reqdoc_check = tool({
     description:
-      `reqdoc 渲染校验：PRD 渲染完成并写入 06_需求规格产出 后，对照模板结构 schema 校验渲染 diff（章节齐全/顺序、功能点块数、必填字段来源标注）：\n${renderCheckRubric()}\n` +
-      "source 填 PRD Markdown 相对项目根路径（如 06_需求规格产出/N_名称/xxx.md）。" +
+      `reqdoc 渲染校验：PRD 渲染完成并写入 07_需求规格产出 后，对照模板结构 schema 校验渲染 diff（章节齐全/顺序、功能点块数、必填字段来源标注）：\n${renderCheckRubric()}\n` +
+      "source 填 PRD Markdown 相对项目根路径（如 07_需求规格产出/N_名称/xxx.md）。" +
       "校验有违规须修正后重调复查；结构合规后再 review_submit 定稿。仅 reqdoc 工作流有效。",
     args: {
-      source: z.string().describe("PRD Markdown 相对项目根路径（06_需求规格产出/N_名称/xxx.md）"),
+      source: z.string().describe("PRD Markdown 相对项目根路径（07_需求规格产出/N_名称/xxx.md）"),
       feature: z
         .string()
         .optional()
@@ -51,7 +51,7 @@ export function createReqdocCheckTools(store: Store): Record<string, ToolDefinit
       try {
         md = await Bun.file(mdPath).text()
       } catch {
-        throw new WorkflowOpError(`源文件不存在或不可读：${args.source}。请先完成 PRD 渲染（write 到 06_需求规格产出）再调用校验。`)
+        throw new WorkflowOpError(`源文件不存在或不可读：${args.source}。请先完成 PRD 渲染（write 到 07_需求规格产出）再调用校验。`)
       }
       const structure = parseRenderStructure(md)
       const render: ReqdocRender = {

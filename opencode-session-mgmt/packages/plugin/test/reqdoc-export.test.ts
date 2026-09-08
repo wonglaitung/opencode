@@ -84,7 +84,7 @@ describe("reqdoc_export", () => {
 
   test("工具把 .docx 写到源 md 同目录并返回路径", async () => {
     const worktree = tempDir()
-    const rel = "06_需求规格产出/1_名单排查/需求规格书.md"
+    const rel = "07_需求规格产出/1_名单排查/需求规格书.md"
     mkdirSync(dirname(join(worktree, rel)), { recursive: true })
     writeFileSync(join(worktree, rel), SAMPLE_MD, "utf8")
     const tools = createReqdocExportTool()
@@ -92,7 +92,7 @@ describe("reqdoc_export", () => {
       await tools.reqdoc_export!.execute({ source: rel } as never, { worktree } as never),
     )
     expect(out).toContain("已导出 Word 版交付件：需求规格书.docx")
-    const outPath = join(worktree, "06_需求规格产出/1_名单排查/需求规格书.docx")
+    const outPath = join(worktree, "07_需求规格产出/1_名单排查/需求规格书.docx")
     expect(existsSync(outPath)).toBe(true)
     await assertDocx(Buffer.from(await Bun.file(outPath).arrayBuffer()), ["内部工单系统"])
   })
@@ -101,7 +101,7 @@ describe("reqdoc_export", () => {
     const worktree = tempDir()
     const tools = createReqdocExportTool()
     await expect(
-      tools.reqdoc_export!.execute({ source: "06_需求规格产出/需求规格书.docx" } as never, { worktree } as never),
+      tools.reqdoc_export!.execute({ source: "07_需求规格产出/需求规格书.docx" } as never, { worktree } as never),
     ).rejects.toThrow(/必须指向 .md/)
   })
 
@@ -109,7 +109,7 @@ describe("reqdoc_export", () => {
     const worktree = tempDir()
     const tools = createReqdocExportTool()
     await expect(
-      tools.reqdoc_export!.execute({ source: "06_需求规格产出/不存在/需求规格书.md" } as never, { worktree } as never),
+      tools.reqdoc_export!.execute({ source: "07_需求规格产出/不存在/需求规格书.md" } as never, { worktree } as never),
     ).rejects.toThrow(/源文件不存在或不可读/)
   })
 })
