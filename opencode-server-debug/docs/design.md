@@ -109,4 +109,4 @@ flowchart LR
 - **D2 连接信息仅存内存**：用户明确要求「退出 OpenCode 即忘记、不能落盘」，故不引 config.json/sqlite，全部存于插件闭包，dispose 兜底清空。
 - **D3 错误搜索本地聚类**：远端仅 `tail` 拉取，聚类/过滤在本地（logs.ts 纯函数）完成，便于单测与降噪，避免远端 grep 上下文丢失堆栈。
 - **D4 分析增强(阶段 2)**：`analyze_server_errors` 在本地聚类基础上增加时间分桶（分钟/小时，按跨度自适应，保留服务器本地时区）、根因排序（计数优先、末次出现次之）、模块（component）维度与下一步 `get_log_context` 建议；全部走 logs.ts 纯函数，零远端开销。
-- **D5 打包分发(阶段 2)**：`pack:bundle` 镜像 edge-debug 脚本，hoisted 模式打含 node_modules 的可移植 tarball，`setup` 校验 ssh 客户端（而非 Edge）；本工程以 AGENTS.md 为权威文档（无 CLAUDE.md）。
+- **D5 打包分发(阶段 2)**：`pack:bundle` 镜像 edge-debug 脚本，hoisted 模式打含 node_modules 的可移植 tarball，`setup` 校验 `node_modules/ssh2`（而非系统 ssh 客户端）；本工程以 AGENTS.md 为权威文档（无 CLAUDE.md）。

@@ -1,7 +1,7 @@
 # opencode-server-debug
 
 OpenCode 按需远程服务器日志调试插件：用自然语言让 Agent 经 SSH 连接远端 Linux 服务器、拉取日志文件、聚类错误、查看错误上下文并汇总分析。
-**零运行时依赖**（SSH 走系统 OpenSSH 客户端 + bun 原生 spawn）、**对 OpenCode 上游零修改**（比照 opencode-edge-debug）。
+**对 OpenCode 上游零修改**（比照 opencode-edge-debug），SSH 由 `ssh2` 库在进程内完成（随依赖安装，无需本地 ssh 客户端）。
 
 ## 功能
 

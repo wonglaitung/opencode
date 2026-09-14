@@ -1,6 +1,6 @@
 # opencode-server-debug
 
-OpenCode 按需远程服务器日志调试插件：自然语言经 SSH 拉取/分析远端 Linux 日志文件，零运行时依赖、对上游零修改，以便持续同步上游更新。
+OpenCode 按需远程服务器日志调试插件：自然语言经 SSH 拉取/分析远端 Linux 日志文件，对上游零修改，以便持续同步上游更新。SSH 由 `ssh2` 库在进程内完成（运行时依赖仅 `ssh2`）。
 
 ## 铁律（破坏则同步上游必冲突）
 
@@ -16,7 +16,7 @@ OpenCode 按需远程服务器日志调试插件：自然语言经 SSH 拉取/�
 - **错误搜索在本地聚类**：远端仅 `tail` 拉取最近窗口（`ERROR_SEARCH_WINDOW=2000`），聚类/过滤在本地完成（设计文档 3.3）。
 - **无外部进程**：SSH 在进程内完成（ssh2），不再 spawn ssh、无控制台交互提示风险；命令 stderr 截断后仅随错误消息本地呈现，不泄到上游 TUI。
 - **D4 分析增强(阶段 2)**：analyze 增加时间分桶(标尖峰)、根因排序、模块维度、get_log_context 建议，全部 logs.ts 纯函数。
-- **D5 打包分发(阶段 2)**：pack:bundle 镜像 edge-debug，hoisted 打可移植 tarball，setup 校验 ssh(而非 Edge)；以 AGENTS.md 为权威文档。
+- **D5 打包分发(阶段 2)**：pack:bundle 镜像 edge-debug，hoisted 打可移植 tarball，setup 校验 `node_modules/ssh2`(而非系统 ssh)；以 AGENTS.md 为权威文档。
 
 ## 结构
 
