@@ -158,7 +158,7 @@ sdlc 的审查清单（`ReviewChecklist`）由 `WorkflowDefinition.checklist` �
 
 ## 6. 提交门禁与强制提交
 
-提交门禁机制（`WorkflowDefinition.hasCommitGate` 驱动、`tool.execute.before` 硬拦截、`commit_force_unlock` 强制提交逃生口）见 session-management.md 3.4。sdlc 是 `hasCommitGate=true` 的工作流，因此 `commit_gate_check` / `commit_force_unlock` 工具对 sdlc 会话启用（reqdoc 不启用）。**手工修改走 open_ide 锁定**（sdlc-r12，软提示 + 硬拦截，机制详见 session-management.md 8.7）：锁持久化进 SQLite `file_lock` 表，SDLC 完结时完成态注入解锁提示（仅 sdlc）。
+提交门禁机制（`WorkflowDefinition.hasCommitGate` 驱动、`tool.execute.before` 硬拦截、未录入基线预估工时亦阻断、`commit_force_unlock` 强制提交逃生口）见 session-management.md 3.4。sdlc 是 `hasCommitGate=true` 的工作流，因此 `commit_gate_check` / `commit_force_unlock` 工具对 sdlc 会话启用（reqdoc 不启用）。**手工修改走 open_ide 锁定**（sdlc-r12，软提示 + 硬拦截，机制详见 session-management.md 8.7）：锁持久化进 SQLite `file_lock` 表，SDLC 完结时完成态注入解锁提示（仅 sdlc）。
 
 ## 7. sdlc 专属统计口径
 

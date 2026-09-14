@@ -527,7 +527,7 @@ export function resolveWorkflowType(v: unknown): WorkflowType   // 未知值回�
 
 **BaselineEstimate — 基线预估人工工时（6.3）**：
 
-`baseline` 记录项目经理在需求创建时给出的**预估人工工时**（`estimatedHours`，小时、可小数），`setAt` 为录入时间戳。它给出实际周期的参照系：会话结束后，系统按 `（预估工时 − 实际周期）÷ 预估工时` 计算 **AI 提效百分比**。字段可选（无基线的会话提效率为 N/A），可随时重设（幂等覆盖、记最新值，录入规则见 workflow-sdlc.md 3 章 sdlc-r6 / workflow-reqdoc.md 4 章 reqdoc-r7）；录入由开发者在 TUI 对话中转述项目经理的预估（见 8.3 `workflow_baseline`）。
+`baseline` 记录项目经理在需求创建时给出的**预估人工工时**（`estimatedHours`，小时、可小数），`setAt` 为录入时间戳。它给出实际周期的参照系：会话结束后，系统按 `（预估工时 − 实际周期）÷ 预估工时` 计算 **AI 提效百分比**。字段可选（无基线的会话提效率为 N/A），可随时重设（幂等覆盖、记最新值，录入规则见 workflow-sdlc.md 3 章 sdlc-r6 / workflow-reqdoc.md 4 章 reqdoc-r7）；录入由开发者在 TUI 对话中转述项目经理的预估（见 8.3 `workflow_baseline`）。对含提交门禁的工作流（sdlc，`hasCommitGate=true`），**未录入基线会被提交门禁一并阻断**（见 3.4）——因此 sdlc 在允许 `git commit` 前实际已要求完成基线录入，这一点弱模型在提交前必然被门禁提示并补录。
 
 **reqdoc 专属数据（已移至 workflow-reqdoc.md，本文件不重复定义）**：PRD 质量打分卡 `ReqdocScore`（`score` 字段语义、服务端算分、两处硬门禁、≥85 达标）与评分标准 `REQDOC_SCORE_DIMS`（8 维判定规则 + 扣分标准表）见 **workflow-reqdoc.md 5 章**；追问探针清单 `REQDOC_PROBES`（7 条，与打分卡维度一一映射）与柔性一致校验见 **workflow-reqdoc.md 6 章**；渲染结构 schema `REQDOC_TEMPLATE_CHAPTERS`/`REQDOC_TEMPLATE_FIELDS` 与 `parseRenderStructure` 见 **workflow-reqdoc.md 7 章**。
 
@@ -700,14 +700,18 @@ stateDiagram-v2
 
 提交门禁由 `WorkflowDefinition.hasCommitGate` 驱动：仅 `hasCommitGate=true` 的工作流（sdlc）启用，reqdoc 定稿无 git 提交门禁、`commit_gate_*` 工具不启用。下图以 sdlc 五阶段为例：
 
+提交门禁除校验五个阶段是否全部 approved 外，对 `hasCommitGate=true` 的工作流（sdlc）还校验**基线预估工时是否已录入**（`workflow.baseline`）；未录入则一并纳入 `commit.blocked_by`，与未完成阶段同等阻断 `git commit`，迫使弱模型在提交前主动询问开发者并调用 `workflow_baseline` 录入（见 6.3）。reqdoc（`hasCommitGate=false`）不受影响。
+
 ```mermaid
 flowchart TD
     DEV["开发者请求提交"] --> CHECK{"检查 workflow"}
-    CHECK --> REQ{"requirements<br/>approved?"}
-    CHECK --> DES{"design<br/>approved?"}
-    CHECK --> IMP{"implementation<br/>approved?"}
-    CHECK --> TST{"testing<br/>approved?"}
-    CHECK --> RV{"review<br/>approved?"}
+    CHECK --> BASE{"基线预估工时\n已录入?"}
+    BASE -->|✗| BLOCK
+    BASE -->|✓| REQ{"requirements\napproved?"}
+    BASE --> DES{"design\napproved?"}
+    BASE --> IMP{"implementation\napproved?"}
+    BASE --> TST{"testing\napproved?"}
+    BASE --> RV{"review\napproved?"}
 
     REQ -->|✓| ALL
     REQ -->|✗| BLOCK
@@ -723,9 +727,9 @@ flowchart TD
     ALL{"全部通过?"}
     ALL -->|是| ALLOW["✓ 允许提交"]
     ALL -->|否| BLOCK["✗ 阻止提交"]
-    BLOCK --> LIST["列出未完成的阶段"]
+    BLOCK --> LIST["列出未完成的阶段 / 缺失基线"]
     LIST --> ASK{"强制提交?"}
-    ASK -->|是| FORCE["⚠ 强制提交<br/>（需填写原因）"]
+    ASK -->|是| FORCE["⚠ 强制提交\n（需填写原因）"]
     ASK -->|否| WAIT["继续工作"]
 ```
 
@@ -1074,7 +1078,7 @@ sequenceDiagram
 | `comprehension_rewrite` | AI 按意见重写后回到待审查 | 须处于 `rejected`；`rewrites++`，feedback 并入 explanation |
 | `comprehension_manual` | 开发者自己处理该片段/要点（自己写/删除） | 须处于 `rejected`；`resolution` 必填；进入终态 `manual` |
 | `review_submit` | 提交审查清单结果（从 `def.checklist` 生成具名参数） | 由 `def.checklist` 生成具名输入参数（非 auto 项布尔，auto 项插件置真）；**前序阶段须全部 `approved`（审查是最后一关）**；有片段/要点时须已 `comprehension_add` 登记、且**全部处于终态 accepted/manual，不允许 pending/rejected 悬空**；通过时自动计算 `firstPassRate`（sdlc 与 reqdoc 均适用） |
-| `commit_gate_check` | 提交前门禁检查（`def.hasCommitGate=true` 时启用） | 返回未完成阶段列表；未通过时 `tool.execute.before` 阻断 `git commit` |
+| `commit_gate_check` | 提交前门禁检查（`def.hasCommitGate=true` 时启用） | 返回未完成阶段列表 + 缺失基线预估工时（仅 `hasCommitGate` 工作流且未录入 `workflow.baseline` 时出现）；未通过时 `tool.execute.before` 阻断 `git commit` |
 | `commit_force_unlock` | 强制提交授权（`def.hasCommitGate=true` 时，3.4 逃生口） | `developer_confirmed` 必须为 true、原因必填；写入一次性授权，门禁放行一次后置 `used` 留痕 |
 | `reqdoc_scan` / `reqdoc_confirm_features` / `reqdoc_score` / `reqdoc_check` / `reqdoc_export` | reqdoc 专属工具（需求资料扫描 / 功能点拆解确认 / 八维打分卡 / 渲染结构校验 / Word 导出），仅 `def.type === "reqdoc"` 时生效 | 各工具的用途与服务端校验见 **workflow-reqdoc.md 8 章** 完整表格 |
 
