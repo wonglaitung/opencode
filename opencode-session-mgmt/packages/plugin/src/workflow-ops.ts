@@ -11,6 +11,10 @@ export class WorkflowOpError extends Error {}
 export function recomputeCommit(workflow: WorkflowState): WorkflowState {
   const def = getDefinition(workflow.type)
   const blockedBy = def.stages.filter((name) => workflow.stages[name].status !== "approved")
+  // 基线预估工时（6.3 AI 提效参照系）：仅对含提交门禁的工作流（sdlc）强约束——
+  // 未录入则连同阶段一并阻断 git commit，迫使模型在提交前主动询问并调用 workflow_baseline；
+  // 开发者若确无预估，可经 commit_force_unlock 一次性逃生口放行。reqdoc（无提交门禁）不受影响。
+  if (def.hasCommitGate && !workflow.baseline) blockedBy.push("基线预估工时")
   workflow.commit = {
     status: blockedBy.length === 0 ? "allowed" : "blocked",
     blocked_by: blockedBy,

@@ -334,6 +334,9 @@ describe("review_submit 门禁", () => {
 
   test("sdlc 审查通过 + 有锁文件 → 返回含解锁提示；reqdoc 无", async () => {
     const { store, tools } = setup()
+    store.mutateWorkflow("s1", (wf) => {
+      wf.baseline = { estimatedHours: 8, setAt: 1 }
+    })
     store.lockFile("s1", "/home/dev/project/src/A.java")
     const out = await tools.review_submit!.execute(
       { businessIntent: true, logicExplainable: true, behaviorVerifiable: true } as never,

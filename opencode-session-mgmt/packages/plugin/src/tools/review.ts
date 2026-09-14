@@ -452,8 +452,9 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
         `。\n提交门禁：${saved.commit.status}` +
         (saved.commit.blocked_by.length ? `（未完成：${saved.commit.blocked_by.join("、")}）` : "") +
         (saved.commit.status === "allowed"
-          ? `\n⚑ 工作流已完成，请提醒开发者执行 /new 开始下一个需求（保持统计隔离）。${lockedNote}`
-          : "") + lazyNote
+          ? `\n⚑ 工作流已完成，请提醒开发者执行 /new 开始下一个需求（保持统计隔离）。`
+          : "") +
+        lockedNote + lazyNote
       )
     },
   })

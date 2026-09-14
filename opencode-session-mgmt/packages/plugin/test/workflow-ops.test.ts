@@ -107,9 +107,16 @@ describe("applyTransition", () => {
     applyTransition(state, "requirements", "revisit", 3)
     expect(state.stages.review.status).toBe("in_progress")
     expect(state.stages.review.revision).toBe(1)
-    // 门禁重算：回退后 blocked
+    // 门禁重算：回退后 blocked（sdlc 未录基线，基线门禁一并计入）
     expect(state.commit.status).toBe("blocked")
-    expect(state.commit.blocked_by).toEqual(["requirements", "design", "implementation", "testing", "review"])
+    expect(state.commit.blocked_by).toEqual([
+      "requirements",
+      "design",
+      "implementation",
+      "testing",
+      "review",
+      "基线预估工时",
+    ])
   })
 
   test("reqdoc：revisit(goal) 级联回退 rules/edge/prd/review（与 sdlc 同语义）", () => {
@@ -146,7 +153,7 @@ describe("recomputeCommit", () => {
     }
     recomputeCommit(state)
     expect(state.commit.status).toBe("blocked")
-    expect(state.commit.blocked_by).toEqual(["review"])
+    expect(state.commit.blocked_by).toEqual(["review", "基线预估工时"])
   })
 
   test("重算门禁保留一次性强制提交授权", () => {

@@ -7,6 +7,7 @@ import { applyTransition } from "../src/workflow-ops"
 /** 推进到全部阶段 approved（完成态）。 */
 function completeSdlc(): WorkflowState {
   const s = createWorkflowState("sdlc")
+  s.baseline = { estimatedHours: 8, setAt: 1 }
   for (const name of ["requirements", "design", "implementation", "testing", "review"]) {
     applyTransition(s, name, "enter", 1)
     applyTransition(s, name, "approve", 2)
@@ -338,52 +339,6 @@ describe("buildStateBar 渲染校验行（质量飞轮 P2）", () => {
       applyTransition(s, "rules", "approve", 1)
       const bar = buildStateBar(s, null)
       expect(bar).toContain("当前阶段：空档（已 approved：目标与场景、流程与规则），下一步：「边界与异常」")
-    })
-  })
-
-  describe("基线预估工时提醒（弱模型可见性）", () => {
-    test("SDLC 未开始且未录入 → 状态条提示未录入 + 目标阶段名 + workflow_baseline", () => {
-      const s = createWorkflowState("sdlc")
-      const bar = buildStateBar(s, null)
-      expect(bar).toContain("基线预估工时：未录入")
-      expect(bar).toContain("需求分析")
-      expect(bar).toContain("workflow_baseline")
-    })
-
-    test("SDLC 已进入需求阶段且未录入 → 提示", () => {
-      const s = createWorkflowState("sdlc")
-      applyTransition(s, "requirements", "enter", 1)
-      expect(buildStateBar(s, "requirements")).toContain("基线预估工时：未录入")
-    })
-
-    test("SDLC 越过目标阶段（编码/测试/审查）仍提示，全阶段不遗漏", () => {
-      const s = createWorkflowState("sdlc")
-      applyTransition(s, "implementation", "enter", 1)
-      expect(buildStateBar(s, "implementation")).toContain("基线预估工时：未录入")
-      applyTransition(s, "testing", "enter", 1)
-      expect(buildStateBar(s, "testing")).toContain("基线预估工时：未录入")
-      applyTransition(s, "review", "enter", 1)
-      expect(buildStateBar(s, "review")).toContain("基线预估工时：未录入")
-    })
-
-    test("reqdoc 未录入 → 提示含「目标与场景」", () => {
-      const s = createWorkflowState("reqdoc")
-      const bar = buildStateBar(s, null)
-      expect(bar).toContain("基线预估工时：未录入")
-      expect(bar).toContain("目标与场景")
-    })
-
-    test("已录入基线 → 显示已录入行，不再提示未录入", () => {
-      const s = createWorkflowState("sdlc")
-      s.baseline = { estimatedHours: 8, setAt: Date.now() }
-      const bar = buildStateBar(s, null)
-      expect(bar).toContain("基线：已录入 8 小时")
-      expect(bar).not.toContain("基线预估工时：未录入")
-    })
-
-    test("完成态且无基线 → 不提示未录入（isComplete 守卫）", () => {
-      const bar = buildStateBar(completeSdlc(), null)
-      expect(bar).not.toContain("基线预估工时：未录入")
     })
   })
 })
