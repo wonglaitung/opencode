@@ -166,7 +166,16 @@ export function buildStateBar(workflow: WorkflowState, stage: string | null): st
       lines.push(`待确认：${pending.map((c) => `${c.id}(${c.decision})`).join("、")}`)
     }
   }
-  if (workflow.baseline) lines.push(`基线：已录入 ${workflow.baseline.estimatedHours} 小时`)
+  const baselineRule = def.rules.find((r) => r.text.includes("主动询问预估"))
+  const baselineStage = baselineRule?.stage
+  if (workflow.baseline) {
+    lines.push(`基线：已录入 ${workflow.baseline.estimatedHours} 小时`)
+  } else if (!isComplete(workflow)) {
+    const label = baselineStage ? (def.labels[baselineStage] ?? baselineStage) : "需求"
+    lines.push(
+      `基线预估工时：未录入（进入「${label}」阶段时须主动询问用户预估人工工时并调用 workflow_baseline(developer_confirmed=true) 录入；不提供不阻塞）`,
+    )
+  }
   if (workflow.score) {
     const passed = workflow.score.total >= REQDOC_SCORE_PASS
     lines.push(
