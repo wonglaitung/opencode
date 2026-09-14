@@ -1,7 +1,7 @@
 # opencode-server-debug 设计文档
 
 OpenCode 按需远程服务器日志调试插件：以自然语言驱动「连接远端 Linux → 拉取日志文件 → 聚类错误 → 查看上下文 → 汇总分析」的调试闭环。
-零运行时依赖、对上游零修改，与 opencode-edge-debug 同属独立姊妹工程。
+SSH 由 `ssh2` 库在进程内完成、对上游零修改，与 opencode-edge-debug 同属独立姊妹工程。
 
 ## 1 概述
 
@@ -10,8 +10,8 @@ flowchart LR
     A[Agent 自然语言指令] --> B[OpenCode 工具层]
     B --> C[index.ts 插件入口]
     C --> D[controller.ts 会话编排]
-    D --> E[ssh.ts SSH 执行器]
-    E -->|系统 ssh| F[远端 Linux]
+    D --> E[ssh.ts ssh2 客户端]
+    E -->|SSH 协议| F[远端 Linux]
     F -->|tail/grep/sed| E
     D --> G[logs.ts 纯函数层]
     G --> B
@@ -32,12 +32,15 @@ flowchart LR
 
 ### 3.1 SSH 执行层（ssh.ts，决策记录 D1）
 
-**零依赖**：`createBunRunner()` 用 `Bun.spawn` 调系统 `ssh`，不引入 `ssh2`/`node-ssh`。
+**进程内 SSH**：`createSshClient()` 用 `ssh2` 库建立连接与执行命令，不 spawn 系统 `ssh`。
+（原实现「spawn 系统 ssh + 管道喂密码」在 Windows 上行不通：Win32-OpenSSH 只读控制台、忽略管道 stdin，会弹密码提示并永久挂起；改为库后认证不经控制台，跨平台一致。）
 
-- `resolveSshBinary(runner)`：win32 用 `where ssh`，其余 `which ssh`；win32 经 `pickWindowsExecutable` 按扩展名优先级选 `.exe`（`.cmd`/`.bat` 兜底），跳过无后缀行（plugin-guide 7：cmd.exe 无法执行无后缀 POSIX sh 脚本，会静默失败）；缺失抛带安装指引的中文错误。
-- `buildSshArgs(conn, remoteCmd, usePassword)`：`["-o","StrictHostKeyChecking=accept-new","-o","ConnectTimeout=10","-p",port,"-i",identityFile?,"-o","PreferredAuthentications=password","-o","PubkeyAuthentication=no"?,"user@host",remoteCmd]`。
-- **密码经 stdin**：`usePassword` 时把密码写入 `proc.stdin` 后 `end()`，不进进程参数、不被记录（纵深防御 `sanitizeStderr` 去除可能的敏感片段）。
-- `createSshClient(runner)`：解析一次二进制并缓存，返回 `{ verify, run }`；`run` 在 exit!=0 时抛 `ServerDebugError`（含远端 stderr，已截断、去敏）。
+- `buildConnectConfig(conn, privateKey?)`：纯函数，组装 ssh2 `ConnectConfig`（host/port/username、`readyTimeout`、`tryKeyboard`）；密码优先、否则私钥；不设 `hostVerifier`（默认自动接受主机密钥，等价原 `StrictHostKeyChecking=accept-new`）。
+- `createSshClient()`：动态 `await import("ssh2")` 懒加载；首次 `verify`/`run` 建立连接并缓存复用，`close()` 断开。握手超时 `SSH_READY_TIMEOUT_MS=15s`，单命令超时 `SSH_EXEC_TIMEOUT_MS=30s`。
+- **密码在进程内**：经 `password` 或 `keyboard-interactive`（`tryKeyboard`）交给库，不进进程参数、不落盘、不被记录。
+- **私钥**：`identityFile` 读为文本交给 ssh2（`privateKey`）；加密私钥暂不支持（报错时提示改用未加密私钥或密码）。
+- 失败统一转中文 `ServerDebugError`（连接失败、命令退出码非 0、超时）；命令 stderr 截断后仅随错误消息本地呈现，不泄到上游 TUI。
+- 测试用 ssh2 自带 `Server` 起真实进程内 SSH 服务做零 mock 集成（密码/密钥/错误密码/退出码/缺凭证）。
 
 ### 3.2 日志解析（logs.ts，纯函数）
 
@@ -79,14 +82,14 @@ flowchart LR
 
 ## 5 健壮性与降级
 
-- 可预期失败抛 `ServerDebugError`：中文消息 + 修复路径（安装指引、重试建议），经工具 execute 抛出后呈现为工具执行错误供 Agent 决策。
-- 外部进程（ssh）调用静默化：capture stdout 入缓冲，stderr 捕获后仅本地日志、不泄到上游 TUI（plugin-guide 7）。
-- 依赖缺失（无 ssh / 远程不可达）优雅降级：解析失败抛中文错误引导；不崩溃。
+- 可预期失败抛 `ServerDebugError`：中文消息 + 修复路径（缺凭证、加密私钥、重试建议），经工具 execute 抛出后呈现为工具执行错误供 Agent 决策。
+- SSH 在进程内完成（ssh2），不再有外部 ssh 进程、无控制台交互提示风险；命令 stderr 截断后仅随错误消息本地呈现，不泄到上游 TUI。
+- 依赖缺失（远程不可达 / 认证失败 / ssh2 加载失败）优雅降级：抛中文错误引导；不崩溃、不挂起。
 
 ## 6 安全与隐私
 
-- **连接信息仅存内存**：地址/用户/密码由 `connect_server` 传入、存于闭包；`disconnect_server`/`dispose` 清空；**退出 OpenCode 即失，绝不落盘、绝不上行**。故无 `config.json`、无 sqlite（区别于 plugin-guide 6 的通用 store 规约）。
-- 密码经 stdin、不记录；密钥路径不打印。
+- **连接信息仅存内存**：地址/用户/密码/私钥由 `connect_server` 传入、存于闭包；`disconnect_server`/`dispose` 清空并 `close()` 断开；**退出 OpenCode 即失，绝不落盘、绝不上行**。故无 `config.json`、无 sqlite（区别于 plugin-guide 6 的通用 store 规约）。
+- 密码/私钥仅在进程内交给 `ssh2`、不记录、不落盘；密钥路径不打印。
 - 无外发数据，故 plugin-guide 8 的白名单投影不适用（仅返回给本地 Agent 上下文）。
 
 ## 7 v1 限制与未来扩展
@@ -96,11 +99,13 @@ flowchart LR
 - `since` 为时间前缀子串过滤，非精确时间窗。
 - 单次错误搜索拉取最近 `ERROR_SEARCH_WINDOW=2000` 行在本地聚类。
 - 输出截断上限 `MAX_TEXT_CHARS=20000`（日志文本/样例），Agent 可分段取上下文获取更完整内容。
+- 主机密钥默认自动接受（等价原 `StrictHostKeyChecking=accept-new`）；暂不提供指纹固定。
+- 暂不支持加密私钥口令，需用未加密私钥或密码认证。
 - 未来：精确时间窗（远端 `date` 比对）、多文件并行、错误趋势统计、可选落盘归档。
 
 ## 8 决策记录
 
-- **D1 零依赖 SSH 执行层**：`ssh2` 引入 crypto/stream 依赖且为 CJS；本插件所需协议面极小（spawn + stdin 喂密码），bun 原生 spawn 即可覆盖，保持零运行时依赖。
+- **D1 进程内 SSH 执行层（修订）**：原定「spawn 系统 ssh + 管道喂密码、零依赖」，但 Win32-OpenSSH 只从控制台读密码、忽略管道 stdin，导致 Windows 上弹密码提示并永久挂起。改为引入 `ssh2` 库在进程内完成 SSH（认证不经控制台、跨平台一致）；代价是新增一个运行时依赖，须以 `--omit=optional` / `bunfig.toml: optional=false` 跳过其会崩 Bun 的原生可选依赖 `cpu-features`（纯 JS 路径即可正常工作）。
 - **D2 连接信息仅存内存**：用户明确要求「退出 OpenCode 即忘记、不能落盘」，故不引 config.json/sqlite，全部存于插件闭包，dispose 兜底清空。
 - **D3 错误搜索本地聚类**：远端仅 `tail` 拉取，聚类/过滤在本地（logs.ts 纯函数）完成，便于单测与降噪，避免远端 grep 上下文丢失堆栈。
 - **D4 分析增强(阶段 2)**：`analyze_server_errors` 在本地聚类基础上增加时间分桶（分钟/小时，按跨度自适应，保留服务器本地时区）、根因排序（计数优先、末次出现次之）、模块（component）维度与下一步 `get_log_context` 建议；全部走 logs.ts 纯函数，零远端开销。

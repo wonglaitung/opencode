@@ -13,12 +13,15 @@ const ServerDebugPlugin: Plugin = async () => {
 
   const connectServer = tool({
     description:
-      "经 SSH 连接远端 Linux 服务器并建立日志调试会话(按需调试,非自动化框架)。连接信息(地址/用户/密码)仅存内存,退出 opencode 即失,不会落盘。连接后可:get_server_logs 取最近日志、search_server_errors 聚类错误、get_log_context 看错误上下文、analyze_server_errors 汇总分析,用 disconnect_server 断开。",
+      "经 SSH 连接远端 Linux 服务器并建立日志调试会话(按需调试,非自动化框架)。SSH 在进程内完成(ssh2 库),不调用系统 ssh 客户端、不接触控制台,跨平台一致。连接信息(地址/用户/密码/私钥)仅存内存,退出 opencode 即失,不会落盘。连接后可:get_server_logs 取最近日志、search_server_errors 聚类错误、get_log_context 看错误上下文、analyze_server_errors 汇总分析,用 disconnect_server 断开。",
     args: {
       host: z.string().describe("服务器地址(IP 或域名)"),
       port: z.number().optional().describe("SSH 端口,默认 22"),
       user: z.string().describe("登录用户名"),
-      password: z.string().describe("登录密码(仅存内存,退出即失,不落盘)"),
+      password: z
+        .string()
+        .optional()
+        .describe("登录密码(仅存内存,退出即失,不落盘;与 identityFile 二选一,提供 password 时优先用密码认证)"),
       logPaths: z.array(z.string()).describe("要分析的日志文件绝对路径列表,如 [\"/var/log/app/app.log\"]"),
       identityFile: z
         .string()

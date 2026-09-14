@@ -1,0 +1,5 @@
+# 插件运行在 Bun 上：ssh2 的可选原生依赖 cpu-features（依赖 nan/V8 C++ API）
+# 在 Bun 下会因缺符号崩溃，必须走纯 JS 路径。此处全局关闭可选依赖安装，
+# 使 pack-bundle 的 bun install 与目标机手工 bun install 都自动跳过。
+[install]
+optional = false

@@ -48,8 +48,8 @@ bundle_dir="dist/${bundle_name}"
 echo "==> 清理旧 node_modules"
 rm -rf node_modules
 
-echo "==> bun install（hoisted 模式）"
-bun install
+echo "==> bun install（hoisted 模式；--omit=optional 跳过 ssh2 的原生可选依赖 cpu-features，其在 Bun 下会崩溃）"
+bun install --omit=optional
 
 echo "==> 验证无符号链接"
 symlinks=$(find node_modules -type l 2>/dev/null || true)
@@ -71,6 +71,7 @@ mkdir -p "$bundle_dir"
 cp package.json "$bundle_dir/"
 cp bun.lock "$bundle_dir/"
 cp .npmrc "$bundle_dir/"
+cp bunfig.toml "$bundle_dir/"
 cp -r src "$bundle_dir/"
 cp -r test "$bundle_dir/"
 cp README.md "$bundle_dir/"
@@ -115,12 +116,12 @@ else
   echo "  如有 bun 和网络，可运行：cd $here && bun install"
 fi
 
-# 检查 ssh 客户端（本插件经系统 ssh 连远端 Linux）
-if command -v ssh &>/dev/null; then
-  echo "✓ ssh 客户端已安装"
+# 检查 ssh2 依赖（插件在进程内完成 SSH，无需系统 ssh 客户端）
+if [ -d "$here/node_modules/ssh2" ]; then
+  echo "✓ ssh2 依赖存在（进程内 SSH，无需系统 ssh 客户端）"
 else
-  echo "⚠ 未检测到 ssh 客户端。连接远端服务器前需先安装 OpenSSH 客户端。"
-  echo "  Linux: 通常随 openssh-client 提供；Windows: 设置 → 可选功能 → OpenSSH 客户端"
+  echo "⚠ 未找到 node_modules/ssh2，依赖可能不完整"
+  echo "  如有 bun 和网络：cd $here && bun install --omit=optional"
 fi
 
 echo ""
@@ -154,11 +155,12 @@ if (Test-Path "$here\node_modules\@opencode-ai\plugin") {
     Write-Host "  如有 bun 和网络：cd $here; bun install"
 }
 
-# 检查 ssh 客户端
-if (Get-Command ssh -ErrorAction SilentlyContinue) {
-    Write-Host "✓ ssh 客户端已安装"
+# 检查 ssh2 依赖（插件在进程内完成 SSH，无需系统 ssh 客户端）
+if (Test-Path "$here\node_modules\ssh2") {
+    Write-Host "✓ ssh2 依赖存在（进程内 SSH，无需系统 ssh 客户端）"
 } else {
-    Write-Host "⚠ 未检测到 ssh 客户端。请安装 Windows 可选功能中的 OpenSSH 客户端。"
+    Write-Host "⚠ 未找到 node_modules\ssh2，依赖可能不完整"
+    Write-Host "  如有 bun 和网络：cd $here; bun install --omit=optional"
 }
 
 Write-Host ""
@@ -205,14 +207,16 @@ Windows 注意：JSON 中路径用正斜杠 \`/\` 或双反斜杠 \`\\\\\`。
 本包使用 hoisted 模式安装依赖（\`node-linker=hoisted\`），所有包以真实文件形式
 存在于 node_modules 中，无符号链接、无硬链接，可直接移动目录。
 
-插件运行期对远端零依赖（经系统 OpenSSH 客户端连日志文件），node_modules 仅含编译期所需的 peer/dev 依赖。
+插件运行期依赖 \`ssh2\` 库在进程内完成 SSH（纯 JS），**无需系统 ssh 客户端**，
+也不依赖 Windows 的 OpenSSH 功能。\`bunfig.toml\` 已设 \`optional = false\`，跳过
+ssh2 的原生可选依赖 \`cpu-features\`（该原生模块在 Bun 下会崩溃）。
 
 如需重新安装依赖（例如升级版本）：
 
 \`\`\`bash
 cd <本目录>
 rm -rf node_modules
-bun install
+bun install --omit=optional
 \`\`\`
 EOF
 

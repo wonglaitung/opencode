@@ -23,7 +23,7 @@ OpenCode 按需远程服务器日志调试插件：用自然语言让 Agent 经 
 
 ## 前置条件
 
-- 本地已安装 OpenSSH 客户端：Linux/macOS 通常自带；Windows 需「设置 → 可选功能 → OpenSSH 客户端」（Win10 1809+）。
+- 无需本地安装 ssh 客户端：SSH 由 `ssh2` 库在进程内完成（纯 JS，随插件依赖安装），不用系统 `ssh`、不依赖 Windows 的 OpenSSH 功能。
 - 远端为 Linux，日志为文件（log4j 等带时间戳与级别的文本格式最佳）。
 
 ## 启用
@@ -36,19 +36,21 @@ OpenCode 按需远程服务器日志调试插件：用自然语言让 Agent 经 
 }
 ```
 
-首次使用前在本目录安装开发依赖（运行期无依赖，仅 dev 依赖）：
+首次使用前在本目录安装依赖（含运行期依赖 `ssh2`）：
 
 ```bash
 cd opencode-server-debug
-bun install
+bun install --omit=optional
 ```
+
+> `--omit=optional`（或 `bunfig.toml` 的 `optional = false`）用于跳过 ssh2 的原生可选依赖 `cpu-features`；该原生模块在 Bun 下会崩溃，纯 JS 路径即可正常工作。
 
 移除该条目即可完全卸载，不改变上游任何行为。
 
 ## 隐私与安全
 
 - **连接信息（地址/用户/密码）仅存内存**：由 `connect_server` 传入，存于插件闭包；`disconnect_server` 与插件卸载（`dispose`）即清空，**退出 OpenCode 即失，绝不落盘、绝不上行**。
-- 密码经 SSH stdin 喂入，不进进程参数、不被记录；密钥路径同理不打印。
+- 密码/私钥仅在进程内交给 `ssh2` 库，不进进程参数、不落盘、不被记录；密钥路径同理不打印。
 - 日志按需拉取，v1 不在本地持久化。
 
 ## 已知限制（v1）
@@ -57,6 +59,8 @@ bun install
 - 错误聚类为启发式（按异常类型/首消息签名去重，折叠数字与十六进制），不解析完整调用链。
 - `since` 为时间前缀子串过滤（如 `2024-01-15 10:`），非精确时间窗。
 - 单次错误搜索拉取最近 `2000` 行（见 `logs.ts` 的 `ERROR_SEARCH_WINDOW`）在本地聚类。
+- 主机密钥默认自动接受（等价原 `StrictHostKeyChecking=accept-new`）；暂不提供指纹固定。
+- 暂不支持加密私钥口令（请改用未加密私钥或密码认证）。
 
 ## 开发
 

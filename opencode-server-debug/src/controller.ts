@@ -96,6 +96,7 @@ export function createServerDebugController(opts?: {
 
     disconnect() {
       if (!conn && !client) return false
+      client?.close()
       conn = null
       client = null
       logBuffer.clear()
