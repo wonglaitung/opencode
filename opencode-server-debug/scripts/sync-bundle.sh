@@ -73,7 +73,8 @@ else
 fi
 
 echo "==> 校验：同步目录不应含符号链接（技术规范要求整包为真实文件）"
-syms=$(find "$BUNDLE" -type l 2>/dev/null || true)
+# 排除 node_modules/.bin 等命令 shim（node_modules 本就不参与同步，其内符号链接与源码无关）
+syms=$(find "$BUNDLE" -type l -not -path "*/node_modules/*" -not -path "*/dist/*" 2>/dev/null || true)
 if [ -n "$syms" ]; then
   echo "  ⚠ 发现符号链接（可能源自源码），请改为真实文件后重试：" >&2
   echo "$syms" >&2
