@@ -12,6 +12,7 @@ OpenCode 按需远程服务器日志调试插件：用自然语言让 Agent 经 
 | `get_server_logs` | 获取日志文件最近内容，可按级别/子串/时间前缀过滤（最近 2 万字符截断） |
 | `search_server_errors` | 在最近窗口内搜索 ERROR/FATAL 与异常堆栈，按错误签名聚类（去重计数、首末出现、样例） |
 | `get_log_context` | 按行号或子串定位一条日志，返回其前后若干行上下文（对标 get_browser_response_detail） |
+| `list_server_files` | 列出远端目录的文件与子目录（默认已配置日志文件所在目录），可加名称模式过滤，便于定位日志文件 |
 | `analyze_server_errors` | 汇总分析：按类型归类计数、时间分桶标出突增尖峰、根因排序（含模块与 `get_log_context` 建议）、各类型样例堆栈 |
 
 典型用法（直接在 OpenCode 会话中说）：

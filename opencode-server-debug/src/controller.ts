@@ -12,6 +12,7 @@ import {
   buildErrorSearchCommand,
   buildFindLineCommand,
   buildListFilesCommand,
+  buildLsCommand,
   buildTailCommand,
   createRingBuffer,
   groupErrors,
@@ -50,6 +51,13 @@ export interface AnalyzeInput {
   topN?: number
 }
 
+export interface ListInput {
+  /** 远端目录绝对路径;未填时默认使用已配置日志文件所在目录。 */
+  path?: string
+  /** 按名称匹配模式过滤(如 "*.log"),经 find -name 安全匹配。 */
+  pattern?: string
+}
+
 export interface ServerDebugController {
   /** 建立 SSH 连接并验证可达、列出日志文件;幂等。返回供工具回显的中文结果。 */
   connect(conn: ServerConnection): Promise<string>
@@ -60,6 +68,8 @@ export interface ServerDebugController {
   searchErrors(input: SearchInput): Promise<string>
   getContext(input: ContextInput): Promise<string>
   analyze(input: AnalyzeInput): Promise<string>
+  /** 列出远端目录文件(默认已配置日志目录),便于定位日志文件。 */
+  listFiles(input: ListInput): Promise<string>
 }
 
 export function createServerDebugController(opts?: {
@@ -80,6 +90,15 @@ export function createServerDebugController(opts?: {
     )
   }
 
+  function defaultDir(c: ServerConnection): string {
+    if (c.logPaths.length > 0) {
+      const p = c.logPaths[0]
+      const idx = p.lastIndexOf("/")
+      return idx > 0 ? p.slice(0, idx) : "/"
+    }
+    return "/var/log"
+  }
+
   return {
     async connect(input) {
       if (conn) {
@@ -91,7 +110,7 @@ export function createServerDebugController(opts?: {
       client = created
       conn = input
       const listing = await created.run(input, buildListFilesCommand(input.logPaths))
-      return `已通过 SSH 连接 ${input.user}@${input.host}:${input.port} 并建立日志调试会话。日志文件清单:\n${listing}\n可用 get_server_logs / search_server_errors / get_log_context / analyze_server_errors 进行错误分析。`
+      return `已通过 SSH 连接 ${input.user}@${input.host}:${input.port} 并建立日志调试会话。日志文件清单:\n${listing}\n可用 get_server_logs / search_server_errors / get_log_context / list_server_files / analyze_server_errors 进行错误分析。`
     },
 
     disconnect() {
@@ -200,6 +219,18 @@ export function createServerDebugController(opts?: {
         "建议下一步:挑选出现次数最多或首次出现的错误,使用 get_log_context 传入其行号/子串查看完整堆栈,再结合代码定位根因。",
       )
       return truncateText(lines.join("\n"))
+    },
+
+    async listFiles(input) {
+      if (!conn || !client) return NOT_CONNECTED
+      const dir = input.path ?? defaultDir(conn)
+      const raw = await client.run(conn, buildLsCommand(dir, input.pattern))
+      if (raw.trim() === "") {
+        return input.pattern
+          ? `在 ${dir} 下未找到匹配 "${input.pattern}" 的文件或目录。`
+          : `目录 ${dir} 为空或不存在。`
+      }
+      return truncateText(raw)
     },
   }
 }

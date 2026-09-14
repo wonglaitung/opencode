@@ -17,7 +17,7 @@ flowchart LR
     G --> B
 ```
 
-插件注册六个工具（见 4），由 `createServerDebugController` 统一编排生命周期：
+插件注册七个工具（见 4），由 `createServerDebugController` 统一编排生命周期：
 连接 → 验证可达 → 活动会话；按需拉取与聚类，断开时清空内存状态。
 
 ## 2 插件机制适配
@@ -79,6 +79,7 @@ flowchart LR
 | `search_server_errors` | `path?`,`since?`,`contextLines?`,`topN?=20` | 聚类错误，返回结构化 JSON |
 | `get_log_context` | `path`,`line?`,`match?`,`contextLines?=3` | 按行号/子串取上下文 |
 | `analyze_server_errors` | `path?`,`topN?=20` | 汇总分析:按类型归类计数、时间分桶标尖峰、根因排序(含模块与 get_log_context 建议)、各类型样例 |
+| `list_server_files` | `path?`,`pattern?` | 列出远端目录文件(默认已配置日志目录);可经 find -name 按名称模式过滤,便于定位日志文件 |
 
 ## 5 健壮性与降级
 

@@ -5,6 +5,7 @@ import {
   buildErrorSearchCommand,
   buildFindLineCommand,
   buildListFilesCommand,
+  buildLsCommand,
   buildTailCommand,
   createRingBuffer,
   detectLevel,
@@ -225,5 +226,16 @@ describe("远端命令构造", () => {
     const list = buildListFilesCommand(["/a", "/b"])
     expect(list).toContain('ls -l "/a"')
     expect(list).toContain('echo "缺失: /b"')
+  })
+
+  test("buildLsCommand 无模式与按模式过滤", () => {
+    expect(buildLsCommand("/var/log")).toBe('ls -la -- "/var/log"')
+    const withPattern = buildLsCommand("/var/log", "*.log")
+    expect(withPattern).toBe('find "/var/log" -maxdepth 1 -name "*.log" -exec ls -ld -- {} + 2>/dev/null')
+  })
+
+  test("buildLsCommand 引号防注入", () => {
+    // 目录含双引号时被转义,整体仍是一个加引号的参数,不引入额外命令段
+    expect(buildLsCommand('/a"/b"')).toBe('ls -la -- "/a\\"/b\\""')
   })
 })

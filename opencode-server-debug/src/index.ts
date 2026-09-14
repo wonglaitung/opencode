@@ -13,7 +13,7 @@ const ServerDebugPlugin: Plugin = async () => {
 
   const connectServer = tool({
     description:
-      "经 SSH 连接远端 Linux 服务器并建立日志调试会话(按需调试,非自动化框架)。SSH 在进程内完成(ssh2 库),不调用系统 ssh 客户端、不接触控制台,跨平台一致。连接信息(地址/用户/密码/私钥)仅存内存,退出 opencode 即失,不会落盘。连接后可:get_server_logs 取最近日志、search_server_errors 聚类错误、get_log_context 看错误上下文、analyze_server_errors 汇总分析,用 disconnect_server 断开。",
+      "经 SSH 连接远端 Linux 服务器并建立日志调试会话(按需调试,非自动化框架)。SSH 在进程内完成(ssh2 库),不调用系统 ssh 客户端、不接触控制台,跨平台一致。连接信息(地址/用户/密码/私钥)仅存内存,退出 opencode 即失,不会落盘。连接后可:get_server_logs 取最近日志、search_server_errors 聚类错误、get_log_context 看错误上下文、list_server_files 列出目录文件、analyze_server_errors 汇总分析,用 disconnect_server 断开。",
     args: {
       host: z.string().describe("服务器地址(IP 或域名)"),
       port: z.number().optional().describe("SSH 端口,默认 22"),
@@ -112,6 +112,21 @@ const ServerDebugPlugin: Plugin = async () => {
     },
   })
 
+  const listServerFiles = tool({
+    description:
+      "列出远端服务器目录的文件与子目录,便于定位日志文件所在位置。需先调用 connect_server。返回 ls -la 风格清单(超 2 万字符截断)。不提供 path 时默认列出已配置日志文件所在目录。",
+    args: {
+      path: z.string().optional().describe("要列出的远端目录绝对路径;未填时默认使用已配置日志文件所在目录"),
+      pattern: z.string().optional().describe('按名称匹配模式过滤(如 "*.log"),经 find -name 安全匹配,支持 shell 通配符'),
+    },
+    async execute(args) {
+      if (!controller.isConnected()) {
+        return "尚未连接服务器。请先调用 connect_server 建立连接。"
+      }
+      return await controller.listFiles({ path: args.path, pattern: args.pattern })
+    },
+  })
+
   const analyzeServerErrors = tool({
     description:
       "汇总分析远端日志最近窗口内的错误:按类型归类与计数、按时间分桶标出突增尖峰、结合计数与最近出现排序给出最可能根因(含模块与下一步 get_log_context 建议)、列出各错误类型与样例堆栈。需先调用 connect_server。",
@@ -134,6 +149,7 @@ const ServerDebugPlugin: Plugin = async () => {
       get_server_logs: getServerLogs,
       search_server_errors: searchServerErrors,
       get_log_context: getLogContext,
+      list_server_files: listServerFiles,
       analyze_server_errors: analyzeServerErrors,
     },
     dispose: async () => {

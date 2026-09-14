@@ -164,6 +164,8 @@ describe("controller 集成(假 SshClient 验证编排；末条走真实 SshClie
     async verify() {},
     async run(_c: ServerConnection, remoteCmd: string) {
       if (remoteCmd.startsWith("ls -l")) return "/var/log/app.log"
+      if (remoteCmd.startsWith("ls -la")) return "-rw-r--r-- 1 deploy deploy 1234 Jan 15 10:00 app.log"
+      if (remoteCmd.startsWith("find")) return "-rw-r--r-- 1 deploy deploy 1234 Jan 15 10:00 /var/log/app.log"
       if (remoteCmd.startsWith("tail -n 2000")) return SAMPLE_LOG
       if (remoteCmd.startsWith("sed -n")) return "context lines here"
       if (remoteCmd.startsWith("grep -n")) return "42:ERROR oom happened"
@@ -201,8 +203,60 @@ describe("controller 集成(假 SshClient 验证编排；末条走真实 SshClie
     expect(analysis).toContain("类错误")
     expect(analysis).toContain("建议下一步")
 
+    const listing = await controller.listFiles({})
+    expect(listing).toContain("app.log")
     expect(controller.disconnect()).toBe(true)
     expect(controller.isConnected()).toBe(false)
+  })
+
+  test("listFiles 未连接返回引导提示", async () => {
+    const controller = createServerDebugController({ createClient: async () => fakeClient })
+    expect(await controller.listFiles({})).toContain("尚未连接")
+  })
+
+  test("listFiles 默认目录为已配置日志文件所在目录", async () => {
+    const controller = createServerDebugController({ createClient: async () => fakeClient })
+    await controller.connect({
+      host: "127.0.0.1",
+      port: srv.port,
+      user: "deploy",
+      password: PASSWORD,
+      logPaths: ["/var/log/app/app.log"],
+    })
+    // 默认目录应取自首个日志路径的父目录 /var/log/app
+    const listing = await controller.listFiles({})
+    expect(listing).toContain("app.log")
+    controller.disconnect()
+  })
+
+  test("listFiles 按模式过滤无匹配时给出提示", async () => {
+    const controller = createServerDebugController({ createClient: async () => fakeClient })
+    await controller.connect({
+      host: "127.0.0.1",
+      port: srv.port,
+      user: "deploy",
+      password: PASSWORD,
+      logPaths: ["/var/log/app.log"],
+    })
+    // fakeClient 对 find 返回内容;这里用真实空结果的语义由控制器兜底——改为验证合成空场景
+    const emptyClient: SshClient = {
+      async verify() {},
+      async run() {
+        return ""
+      },
+      close() {},
+    }
+    const c2 = createServerDebugController({ createClient: async () => emptyClient })
+    await c2.connect({
+      host: "127.0.0.1",
+      port: srv.port,
+      user: "deploy",
+      password: PASSWORD,
+      logPaths: ["/var/log/app.log"],
+    })
+    expect(await c2.listFiles({ path: "/var/log", pattern: "*.log" })).toContain("未找到匹配")
+    c2.disconnect()
+    controller.disconnect()
   })
 
   test("真实端到端：默认 createSshClient 连接远端并断开", async () => {

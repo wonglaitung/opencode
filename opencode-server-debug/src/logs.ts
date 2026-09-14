@@ -267,3 +267,11 @@ export function buildFindLineCommand(path: string, pattern: string): string {
 export function buildListFilesCommand(paths: string[]): string {
   return paths.map((p) => `ls -l ${quote(p)} 2>/dev/null || echo "缺失: ${p}"`).join(" ; ")
 }
+
+/** 列出远端目录内容;可选按名称模式(pattern)经 find -name 安全过滤(模式整体加引号，不经 shell 展开，防注入)。目录不存在时由 run 抛 ServerDebugError。 */
+export function buildLsCommand(dir: string, pattern?: string): string {
+  if (pattern) {
+    return `find ${quote(dir)} -maxdepth 1 -name ${quote(pattern)} -exec ls -ld -- {} + 2>/dev/null`
+  }
+  return `ls -la -- ${quote(dir)}`
+}
