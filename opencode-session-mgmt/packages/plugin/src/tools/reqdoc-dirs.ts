@@ -29,7 +29,7 @@ export const REQDOC_DIRS = [
 
 /** 各目录用途与建议投放的基础材料（业务投放 00~05；06/07 为 AI 工作区）。 */
 const REQDOC_DIR_USAGE: Record<(typeof REQDOC_DIRS)[number], string> = {
-  "00_初稿需求书": "已有初稿需求书导入入口：把初稿（docx/pdf/xlsx/txt/md 等）放进本目录，调用 reqdoc_import(path) 导入并产出规约初评（待完善的原始稿，不改写初稿本身）",
+  "00_初稿需求书": "已有初稿需求书导入入口：把初稿（docx/pdf/xlsx/txt/md 等）放进本目录，调用 reqdoc_import(path) 导入并产出规约初评（待完善的原始稿，不改写初稿本身）。PRD 定稿后会自动复制到本目录（PRD_V1.md、PRD_V2.md...），供下轮迭代使用。",
   "01_背景与目标": "业务背景、上线目标、要解决的核心痛点、使用角色与业务场景（Word/Markdown/纯文本均可）",
   "02_流程与数据": "现有流程图、字段定义、数据字典、库表说明、上下游系统对接说明（xlsx/docx/md）",
   "03_制度与合规": "相关制度文件、监管/合规要求、行内规定、风控条款（docx/pdf/txt）",

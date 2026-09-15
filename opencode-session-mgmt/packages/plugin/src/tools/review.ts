@@ -10,6 +10,8 @@
  * comprehension_ask     —— 追问，问答追加到 explanation
  * review_submit         —— 提交审查清单：所有片段处于终态(accepted/manual)，通过时自动计算 firstPassRate
  */
+import { readdir, unlink } from "node:fs/promises"
+import { join } from "node:path"
 import { tool, type ToolDefinition } from "@opencode-ai/plugin"
 import {
   REQDOC_SCORE_PASS,
@@ -26,6 +28,7 @@ import {
   reviewRecord,
   type ComprehensionRecord,
   type ReqdocRender,
+  type WorkflowState,
 } from "sm-shared"
 import type { Store } from "../db"
 import { WorkflowOpError, applyTransition, recomputeCommit } from "../workflow-ops"
@@ -429,6 +432,10 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
       if (saved.type === "reqdoc" && !preApproved && saved.render?.source) {
         await appendChangeRecordToPrd(projectRoot(context), saved.render.source, saved.stages[getDefinition(saved.type).reviewStage!].revision ?? 0)
       }
+      // PRD 迭代支持：定稿后自动复制到 00_初稿需求书，供下轮迭代
+      if (saved.type === "reqdoc" && saved.render?.source) {
+        await copyPrdToIterDir(projectRoot(context), saved)
+      }
       const review = reviewRecord(saved)
       const total = review.comprehension.length
       const rate = saved.quality.firstPassRate
@@ -513,6 +520,35 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
       await Bun.write(abs, md.slice(0, insertAt) + table + md.slice(insertAt))
     } catch {
       // 写盘失败不影响定稿本身（变更记录仍存于 WorkflowState）
+    }
+  }
+
+  /** PRD 迭代支持：定稿后自动复制 PRD 到 00_初稿需求书，供下轮迭代。 */
+  async function copyPrdToIterDir(root: string, workflow: WorkflowState): Promise<void> {
+    try {
+      const srcRel = workflow.render!.source
+      const srcAbs = resolveWithinWorktree(root, srcRel)
+      const md = await Bun.file(srcAbs).text()
+
+      // 版本号：revision 0 = V1，revision 1 = V2...
+      const revision = workflow.stages.review?.revision ?? 0
+      const version = `V${revision + 1}`
+
+      const dstName = `PRD_${version}.md`
+      const dstAbs = join(root, "00_初稿需求书", dstName)
+
+      // 删除旧版本（00_初稿需求书/ 下的 PRD_V*.md）
+      const dir = join(root, "00_初稿需求书")
+      for (const f of await readdir(dir)) {
+        if (f.startsWith("PRD_V") && f.endsWith(".md") && f !== dstName) {
+          await unlink(join(dir, f))
+        }
+      }
+
+      // 写入新版本
+      await Bun.write(dstAbs, md)
+    } catch {
+      // 写盘失败不影响定稿本身
     }
   }
 
