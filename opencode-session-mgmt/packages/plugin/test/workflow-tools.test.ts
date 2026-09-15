@@ -355,7 +355,7 @@ describe("reqdoc review_submit 来源真实性门禁（reqdoc-r30）", () => {
     const tools = createReviewTools(store)
     await expect(
       tools.review_submit!.execute({ ...checklist, no_document_confirmed: false } as never, { sessionID: "s1", worktree } as never),
-    ).rejects.toThrow(/来源真实性门禁/)
+    ).rejects.toThrow(/材料来源不足/)
     store.close()
   })
 

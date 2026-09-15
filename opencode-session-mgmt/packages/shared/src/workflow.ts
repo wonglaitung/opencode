@@ -194,12 +194,12 @@ export const REQDOC_SCORE_PASS = 85
 /**
  * 打分卡评分标准文本（实施方案第三节「判定规则与扣分标准」），r21 规则文本与
  * reqdoc_score 工具描述共用同一来源，避免两份漂移。
- * 每维格式：`label(key)满分：判定规则。扣X分：条件；扣Y分：条件`
+ * 每维格式：`label满分：判定规则。扣X分：条件；扣Y分：条件`
  */
 export function reqdocScoreRubric(): string {
   return REQDOC_SCORE_DIMS.map((d) => {
     const penalties = d.deductionRules.map((p) => `扣${p.points}分：${p.condition}`).join("；")
-    return `${d.label}(${d.key})${d.max}分：${d.rule}${penalties ? `。${penalties}` : ""}`
+    return `${d.label}${d.max}分：${d.rule}${penalties ? `。${penalties}` : ""}`
   }).join("\n")
 }
 
@@ -235,7 +235,7 @@ export const REQDOC_PROBES: readonly ReqdocProbe[] = [
 
 /** 追问探针清单文本（质量飞轮 P1）：reqdoc-r11 规则文本与 reqdoc_probe 工具描述共用同一来源。 */
 export function reqdocProbeRubric(): string {
-  return REQDOC_PROBES.map((p) => `- ${p.id}（${p.label}）→${p.dim}，建议第 ${p.round} 轮：${p.question}`).join("\n")
+  return REQDOC_PROBES.map((p) => `- ${p.label}，建议第 ${p.round} 轮：${p.question}`).join("\n")
 }
 
 /** 打分卡扣分明细条目（含证据引用，本机留痕可审计）。 */

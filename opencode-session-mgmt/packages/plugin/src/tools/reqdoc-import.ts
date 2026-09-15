@@ -21,7 +21,7 @@ export function createReqdocImportTool(): Record<string, ToolDefinition> {
   const reqdoc_import = tool({
     description:
       "reqdoc 初稿导入：把业务已有的初稿需求书（文件或目录路径）解析为 [文档] 来源，落盘到 00_初稿需求书/，" +
-      "并产出「按机构规约的初评」（逐份规约列 满足/缺失/矛盾）。导入后停在起点，等待业务看初评后逐阶段走工作流补全（不自动快进）。" +
+      "并产出「按 7 项检查标准的初评」（逐项列 满足/缺失/矛盾）。导入后停在起点，等待业务看初评后逐阶段走工作流补全（不自动快进）。" +
       "path 可为文件（docx/pdf/xlsx/txt/md/json/csv）或目录（递归扫描其中文件）。仅 reqdoc 工作流有效。",
     args: {
       path: z
@@ -56,8 +56,8 @@ export function createReqdocImportTool(): Record<string, ToolDefinition> {
       return (
         `📥 已导入初稿并落盘：${join(draftDir, outName)}（解析 ${draft.length} 字，作为 [文档] 来源）。\n\n` +
         `${REQDOC_CONVENTION_REVIEW_PROMPT}\n\n` +
-        `初稿文件：${join(draftDir, outName)}\n请先阅读初稿，按上表输出逐规约结构化初评（满足/缺失/矛盾 + 引用段落 + 补全路径）。` +
-        `初评后按三类路径补全，再逐阶段走工作流（不自动快进）。`
+        `初稿文件：${join(draftDir, outName)}\n请先阅读初稿，按上表逐项输出初评（满足/缺失/矛盾 + 引用段落 + 补全路径）。` +
+        `初评后按建议路径补全，再逐阶段走工作流（不自动快进）。`
       )
     },
   })

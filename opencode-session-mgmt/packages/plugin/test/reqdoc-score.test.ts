@@ -112,7 +112,7 @@ describe("reqdoc_score", () => {
     const tools = createReqdocScoreTools(store)
     await expect(
       tools.reqdoc_score!.execute({ dims: passingDims(), business_confirmed: false } as never, ctx),
-    ).rejects.toThrow(/business_confirmed/)
+    ).rejects.toThrow(/业务明确认可/)
     expect(store.get("s1")?.workflow?.score).toBeUndefined()
     store.close()
   })

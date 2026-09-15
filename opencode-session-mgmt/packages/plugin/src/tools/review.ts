@@ -109,10 +109,10 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
           (c) => c.id === args.codeSegmentId,
         )
         if (!record) {
-          throw new WorkflowOpError(`片段/要点 ${args.codeSegmentId} 不存在，请先 comprehension_add`)
+          throw new WorkflowOpError(`片段/要点 ${args.codeSegmentId} 不存在，请先登记要点`)
         }
         if (record.decision === "manual") {
-          throw new WorkflowOpError(`片段/要点 ${args.codeSegmentId} 已 manual 终态，不可再 confirm`)
+          throw new WorkflowOpError(`片段/要点 ${args.codeSegmentId} 已处理终态，不可再确认`)
         }
         if (record.decision !== "accepted") {
           record.decision = "accepted"
@@ -165,8 +165,8 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
 
   const comprehension_reject = tool({
     description:
-      "拒绝单个片段/要点：开发者有异议或需改动，feedback 必填（作为 rewrite 的依据）。" +
-      "进入 rejected 状态，须经 rewrite 重写或由开发者 manual 自处理，不允许悬空。",
+      "拒绝单个片段/要点：开发者有异议或需改动，feedback 必填（作为修改的依据）。" +
+      "进入拒绝状态，须经重写或由开发者自行处理，不允许悬空。",
     args: {
       codeSegmentId: z.string().describe("被拒绝的片段/要点标识"),
       feedback: z.string().describe("拒绝意见：期望的改动、被误导的地方或风险点"),
@@ -180,20 +180,20 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
           throw new WorkflowOpError(`片段/要点 ${args.codeSegmentId} 不存在`)
         }
         if (record.decision !== "pending") {
-          throw new WorkflowOpError(`片段/要点 ${args.codeSegmentId} 当前为 ${record.decision}，仅 pending 可拒绝（已 accepted/manual 不可回退）`)
+          throw new WorkflowOpError(`片段/要点 ${args.codeSegmentId} 当前为 ${record.decision}，仅待定状态可拒绝（已接受/已处理不可回退）`)
         }
         record.decision = "rejected"
         record.feedback = args.feedback
         record.rejectedAt = Date.now()
       })
-      return `⚠ 已拒绝 ${args.codeSegmentId}。请按意见 comprehension_rewrite 重写，或由开发者 comprehension_manual 自处理。`
+      return `⚠ 已拒绝 ${args.codeSegmentId}。请按意见重写，或由开发者自行处理。`
     },
   })
 
   const comprehension_rewrite = tool({
     description:
-      "按拒绝意见重写：AI 依据 feedback 修改后调用，回到 pending 重新审查，rewrites++。" +
-      "仅 rejected 可重写。",
+      "按拒绝意见重写：AI 依据 feedback 修改后调用，回到待定状态重新审查。" +
+      "仅拒绝状态可重写。",
     args: {
       codeSegmentId: z.string().describe("被拒绝待重写的片段/要点标识"),
     },
@@ -207,7 +207,7 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
           throw new WorkflowOpError(`片段/要点 ${args.codeSegmentId} 不存在`)
         }
         if (record.decision !== "rejected") {
-          throw new WorkflowOpError(`片段/要点 ${args.codeSegmentId} 当前为 ${record.decision}，仅 rejected 可重写`)
+          throw new WorkflowOpError(`片段/要点 ${args.codeSegmentId} 当前为 ${record.decision}，仅拒绝状态可重写`)
         }
         record.decision = "pending"
         record.rewrites += 1
@@ -215,14 +215,14 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
         record.developerConfirmed = false
         record.confirmedAt = null
       })
-      return `🔧 ${args.codeSegmentId} 已回到 pending 重新审查（第 ${rewritesNow} 次重写）。`
+      return `🔧 ${args.codeSegmentId} 已回到待定状态重新审查（第 ${rewritesNow} 次重写）。`
     },
   })
 
   const comprehension_manual = tool({
     description:
-      "开发者自行处理被拒绝的片段/要点（大改、废弃或人工接手）：声明 resolution 结果说明，进入 manual 终态。" +
-      "manual 不进入一次通过率分子，但计入定论分母。",
+      "开发者自行处理被拒绝的片段/要点（大改、废弃或人工接手）：声明处理结果说明，进入已处理终态。" +
+      "已处理不进入一次通过率分子，但计入定论分母。",
     args: {
       codeSegmentId: z.string().describe("被拒绝、由开发者自行处理的片段/要点标识"),
       resolution: z.string().describe("处理结果说明，如『已废弃』『已人工重写』『保留但记入风险』"),
@@ -236,12 +236,12 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
           throw new WorkflowOpError(`片段/要点 ${args.codeSegmentId} 不存在`)
         }
         if (record.decision !== "rejected") {
-          throw new WorkflowOpError(`片段/要点 ${args.codeSegmentId} 当前为 ${record.decision}，仅 rejected 可由开发者 manual 处理`)
+          throw new WorkflowOpError(`片段/要点 ${args.codeSegmentId} 当前为 ${record.decision}，仅拒绝状态可由开发者处理`)
         }
         record.decision = "manual"
         record.resolution = args.resolution
       })
-      return `🖐 ${args.codeSegmentId} 已 manual 终态（${args.resolution}）。`
+      return `🖐 ${args.codeSegmentId} 已处理终态（${args.resolution}）。`
     },
   })
 
@@ -308,7 +308,7 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
           const name = def.stages[i]
           if (workflow.stages[name].status !== "approved") {
             throw new WorkflowOpError(
-              `审查前须先完成 ${def.labels[name]}（当前 ${def.labels[name]} 尚未 approved），请先推进该阶段`,
+              `审查前须先完成 ${def.labels[name]}（当前 ${def.labels[name]} 尚未完成），请先推进该阶段`,
             )
           }
         }
@@ -317,11 +317,11 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
         if (def.type === "reqdoc") {
           const score = workflow.score
           if (!score) {
-            throw new WorkflowOpError("PRD 未打分，不能定稿：请先调用 reqdoc_score 对照打分卡记录扣分明细并获业务确认")
+            throw new WorkflowOpError("PRD 未打分，不能定稿：请先完成质量打分并获业务确认")
           }
           if (score.total < REQDOC_SCORE_PASS) {
             throw new WorkflowOpError(
-              `PRD 质量未达标（${score.total}/100 < ${REQDOC_SCORE_PASS}），不能定稿：请回 edge 按扣分明细追问补缺后重打 reqdoc_score`,
+              `PRD 质量未达标（${score.total}/100 < ${REQDOC_SCORE_PASS}），不能定稿：请回到追问环节补全信息后重新打分`,
             )
           }
           if (!score.confirmed) {
@@ -331,7 +331,7 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
           const violations = probeGapViolations(workflow.probes, score)
           if (violations.length > 0) {
             throw new WorkflowOpError(
-              `追问缺口与打分自相矛盾：${violations.join("；")}。请回 edge 补齐缺口后重打 reqdoc_score 如实扣分，或去掉缺口记录（reqdoc_probe）`,
+              `追问缺口与打分自相矛盾：${violations.join("；")}。请补齐缺口后重新打分如实扣分，或去掉缺口记录`,
             )
           }
           // 可实施性门禁（P1：material/nfr/acceptability 三维度任一 0 分 = 不可照着做）。
@@ -345,8 +345,8 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
           // 未记录 = 柔性放行（评分卡 ≥85 + P0 兜底）。
           if (workflow.render && renderErrors.length > 0) {
             throw new WorkflowOpError(
-              `渲染定稿复核未通过：${renderErrors.join("；")}。` +
-                `结构问题请回 prd 修正渲染后重调 reqdoc_check 复查；[缺省]↔满分矛盾请回 edge 补缺后重打 reqdoc_score 如实扣分，或把渲染 [缺省] 改为 [文档]/[问答]`,
+              `文档结构检查未通过：${renderErrors.join("；")}。` +
+                `结构问题请修正后重新检查；信息不完整请回到追问环节补全后重新打分`,
             )
           }
           // 来源真实性门禁（reqdoc-r30，防全[问答]兜底）：记录了 render 且书面材料支撑不足时拦截，
@@ -355,8 +355,8 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
             const v = noDocumentSupportViolation(liveRender)
             if (v.length > 0) {
               throw new WorkflowOpError(
-                `来源真实性门禁未通过：${v.join("；")}。` +
-                  `如确无书面材料可引用，请业务明确确认后重试 review_submit(no_document_confirmed=true)。`,
+                `材料来源不足：${v.join("；")}。` +
+                  `如确无书面材料可引用，请业务明确确认后重新提交。`,
               )
             }
           }
@@ -368,7 +368,7 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
           )
           if (noSource.length > 0) {
             throw new WorkflowOpError(
-              `确认溯源缺失：${noSource.map((c) => c.id).join("、")} 已确认但未回填来源证据（comprehension_confirm 的 sourceLabel/sourceQuote）。` +
+              `确认溯源缺失：${noSource.map((c) => c.id).join("、")} 已确认但未回填来源证据。` +
                 `请对每处确认补充来源标签与引用原文后再定稿。`,
             )
           }
@@ -378,8 +378,8 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
         if (def.type === "reqdoc" && !args.skip_field_dict) {
           if (!workflow.fieldDict || workflow.fieldDict.length === 0) {
             throw new WorkflowOpError(
-              "字段定义缺失：进 prd 渲染前须逐字段与业务确认（名称/类型/长度/必填/取值/来源系统）并调用 reqdoc_field_dict 生成数据字典。" +
-                "如本需求确无结构化输入字段，可 review_submit(skip_field_dict=true) 跳过此门禁。",
+              "字段定义缺失：进 PRD 渲染前须逐字段与业务确认（名称/类型/长度/必填/取值/来源系统）并生成数据字典。" +
+                "如本需求确无结构化输入字段，可跳过此门禁。",
             )
           }
         }
@@ -387,7 +387,7 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
         const hadCodeEdits = (workflow.quality.iterationCount ?? 0) > 0
         // 有 AI 代码编辑就必须登记理解确认片段；纯讨论会话（无代码）可无片段通过
         if (hadCodeEdits && total === 0) {
-          throw new WorkflowOpError("本会话存在 AI 代码编辑，但未登记任何理解确认片段，请先 comprehension_add")
+          throw new WorkflowOpError("本会话存在 AI 代码编辑，但未登记任何理解确认片段，请先登记要点")
         }
         // 评审闭环：所有片段必须定论（accepted/manual），不允许 pending/rejected 悬空
         const hanging = review.comprehension.filter(
@@ -396,8 +396,7 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
         if (hanging.length > 0) {
           const ids = hanging.map((c) => c.id).join("、")
           throw new WorkflowOpError(
-            `仍有 ${hanging.length} 个片段/要点未定论（${ids}）。请 comprehension_confirm 接受、` +
-              `comprehension_reject 拒绝后 rewrite/manual，使其进入终态（accepted/manual）`,
+            `仍有 ${hanging.length} 个片段/要点未定论（${ids}）。请确认接受或拒绝后处理，使其进入终态`,
           )
         }
         // 清单逐项写入：非 auto 取具名参数，auto 项（如 designRationale）置真（3.2 def 驱动）
@@ -443,7 +442,7 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
       // 惰性确认软提示（reqdoc-r27）：业务连续默认轮次偏高时，定稿通过仍提醒补材料/实例
       const lazyNote =
         (saved.probes?.defaultRounds ?? 0) >= 2
-          ? `\n⚠ 业务全程选默认轮次 ${saved.probes!.defaultRounds} 轮（需求真实性偏低）：建议补充 01~05 书面材料或真实实例，重跑 edge 追问提升可实施性。`
+          ? `\n⚠ 业务全程选默认轮次 ${saved.probes!.defaultRounds} 轮（需求真实性偏低）：建议补充 01~05 书面材料或真实实例，重新追问提升可实施性。`
           : ""
       // 审查是最后阶段：通过即全部阶段 approved → 完成。此时在工具返回直接带出 /new 提醒
       // （弱模型未必等到下一轮注入片段才行动，完成瞬间的工具结果是最稳的触发点）。

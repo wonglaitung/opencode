@@ -706,7 +706,7 @@ describe("reqdoc 渲染定稿复核门禁（质量飞轮 P2）", () => {
     await checkTools.reqdoc_check!.execute({ source: rel } as never, ctx)
     await expect(
       createReviewTools(store).review_submit!.execute(reviewArgs, ctx),
-    ).rejects.toThrow(/渲染定稿复核未通过.*缺章节.*第四章 术语定义与业务规则/)
+    ).rejects.toThrow(/文档结构检查未通过.*缺章节.*第四章 术语定义与业务规则/)
     store.close()
   })
 
@@ -718,7 +718,7 @@ describe("reqdoc 渲染定稿复核门禁（质量飞轮 P2）", () => {
     await checkTools.reqdoc_check!.execute({ source: rel } as never, ctx)
     await expect(
       createReviewTools(store).review_submit!.execute(reviewArgs, ctx),
-    ).rejects.toThrow(/渲染定稿复核未通过.*2\.3 异常处理要求.*edgeControl/)
+    ).rejects.toThrow(/文档结构检查未通过.*2\.3 异常处理要求/)
     store.close()
   })
 
@@ -779,7 +779,7 @@ describe("reqdoc 渲染定稿复核门禁（质量飞轮 P2）", () => {
     writeMd(worktree, rel, goodMd().replace("## 第五章 需求功能详述", "## 第五章 需求功能详述（仅标题）"))
     await expect(
       createReviewTools(store).review_submit!.execute(reviewArgs, ctx),
-    ).rejects.toThrow(/渲染定稿复核未通过.*缺章节.*第五章 需求功能详述/)
+    ).rejects.toThrow(/文档结构检查未通过.*缺章节.*第五章 需求功能详述/)
     store.close()
   })
 
@@ -800,7 +800,7 @@ describe("reqdoc 渲染定稿复核门禁（质量飞轮 P2）", () => {
     rmSync(join(worktree, rel)) // 记录后源文件被删
     await expect(
       createReviewTools(store).review_submit!.execute(reviewArgs, ctx),
-    ).rejects.toThrow(/渲染定稿复核未通过.*不可读或已删除/)
+    ).rejects.toThrow(/文档结构检查未通过.*不可读或已删除/)
     store.close()
   })
 

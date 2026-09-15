@@ -14,7 +14,7 @@ describe("reqdoc_import（基于初稿完善）", () => {
     const tools = createReqdocImportTool()
     const out = await tools.reqdoc_import!.execute({ path: "初稿.txt" } as never, { sessionID: "s1", worktree } as never)
     expect(out).toContain("已导入初稿")
-    expect(out).toContain("7 份机构规约")
+    expect(out).toContain("7 项检查标准")
     const draftDir = join(worktree, "00_初稿需求书")
     expect(existsSync(draftDir)).toBe(true)
     const files = readdirSync(draftDir).filter((f) => f.startsWith("初稿_"))

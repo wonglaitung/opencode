@@ -20,7 +20,7 @@ describe("reqdoc_review_conventions（规约初评）", () => {
     writeFileSync(join(worktree, "00_初稿需求书", "初稿.md"), "原需求内容", "utf8")
     const tools = createReqdocConventionReviewTool()
     const out = await tools.reqdoc_review_conventions!.execute({} as never, { sessionID: "s1", worktree } as never)
-    expect(out).toContain("7 份机构规约")
+    expect(out).toContain("7 项检查标准")
     expect(out).toContain("初稿.md")
   })
 })

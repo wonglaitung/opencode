@@ -26,9 +26,9 @@ export function createReqdocScoreTools(store: Store): Record<string, ToolDefinit
   const reqdoc_score = tool({
     description:
       `reqdoc 打分卡：AI 对照评分标准逐维打分，评分标准（满分 100）：\n${reqdocScoreRubric()}\n` +
-      "必须先向业务展示各维得分与扣分明细，业务明确认可后才调用本工具记录；total 由服务端计算。" +
-      "**prd 门禁：workflow_advance(stage=prd, action=enter) 之前必须先调用本工具并获业务确认（business_confirmed=true），total≥85 才可推进**。" +
-      "仅 reqdoc 工作流有效；<85 分可按扣分明细回 edge 追问补缺后重打覆盖。",
+      "必须先向业务展示各维得分与扣分明细，业务明确认可后才调用本工具记录；总分自动计算。" +
+      "**prd 门禁：进入需求规格书阶段之前必须先调用本工具并获业务确认，总分≥85 才可推进**。" +
+      "仅 reqdoc 工作流有效；<85 分可按扣分明细回到追问环节补全信息后重新打分覆盖。",
     args: {
        dims: z
         .array(
@@ -59,7 +59,7 @@ export function createReqdocScoreTools(store: Store): Record<string, ToolDefinit
     },
     async execute(args, context) {
       if (args.business_confirmed !== true) {
-        throw new WorkflowOpError("打分结果须业务明确认可：business_confirmed 必须为 true（先向业务展示扣分明细，再请其确认）")
+        throw new WorkflowOpError("打分结果须业务明确认可：请先向业务展示扣分明细，再请其确认")
       }
       const saved = store.mutateWorkflow(context.sessionID, (workflow) => {
         const def = getDefinition(workflow.type)
@@ -108,10 +108,10 @@ function formatScoreCard(score: ReqdocScore): string {
   const dimLines = REQDOC_SCORE_DIMS.map((dim) => {
     // 兜底：工具恒写 8 维，但防御旧/异常数据不致渲染崩溃
     const d = score.dims[dim.key] ?? { score: 0, max: dim.max }
-    return `  ${dim.label}(${dim.key})：${d.score}/${d.max}${d.score < dim.max ? `（扣 ${dim.max - d.score}）` : ""}`
+    return `  ${dim.label}：${d.score}/${d.max}${d.score < dim.max ? `（扣 ${dim.max - d.score}）` : ""}`
   }).join("\n")
   const deductionLines = score.deductions.length
-    ? score.deductions.map((d) => `  - ${d.key}：-${d.points} ${d.reason}${d.evidence ? `（证据：${d.evidence}）` : ""}`).join("\n")
+    ? score.deductions.map((d) => `  - ${d.reason}${d.evidence ? `（证据：${d.evidence}）` : ""}`).join("\n")
     : "  （无扣分明细）"
   const passed = score.total >= REQDOC_SCORE_PASS
   // 质量得分进度条（实施方案第四节：如 [▓▓▓▓▓░░░░░ 50%]；10 格，进度直观反映达标）
@@ -120,8 +120,8 @@ function formatScoreCard(score: ReqdocScore): string {
   const filled = Math.round((score.total / totalMax) * barLen)
   const bar = "▓".repeat(filled) + "░".repeat(barLen - filled)
   return (
-    `📊 已记录 PRD 质量打分（业务已确认，total 由服务端计算）：\n${dimLines}\n` +
+    `📊 已记录 PRD 质量打分（业务已确认，总分自动计算）：\n${dimLines}\n` +
     `扣分明细：\n${deductionLines}\n质量得分进度：[${bar}] ${Math.round((score.total / totalMax) * 100)}%（${score.total}/${totalMax}）\n` +
-    `→ ${passed ? `达标（≥${REQDOC_SCORE_PASS}）✓，可 workflow_advance(stage=prd, action=enter) 进入渲染。` : `未达标（<${REQDOC_SCORE_PASS}）✗，请按扣分明细回 edge 追问补缺后重打 reqdoc_score。`}`
+    `→ ${passed ? `达标（≥${REQDOC_SCORE_PASS}）✓，可进入下一步（需求规格书渲染）。` : `未达标（<${REQDOC_SCORE_PASS}）✗，请按扣分明细回到追问环节补全信息后重新打分。`}`
   )
 }
