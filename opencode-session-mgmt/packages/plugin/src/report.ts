@@ -72,13 +72,14 @@ export function createReporter(
           })
           if (!res.ok) {
             if (res.status >= 400 && res.status < 500) {
-              // 4xx 为永久失败，重试无益：丢弃以免堵塞后续汇报
+              // 4xx 为客户端问题（鉴权/payload），标记 failed 保留待重试
+              // 修复配置后下次 flushOutbox 会重新尝试
               const hint =
                 res.status === 401 || res.status === 403
-                  ? "（鉴权失败，请核对 identity.json 的 collector_url）"
+                  ? "（鉴权失败，请核对 identity.json）"
                   : "（payload 非法）"
-              console.warn(`[session-mgmt] 汇报被收集服务拒绝 HTTP ${res.status}${hint}，丢弃 outbox#${item.id}`)
-              store.markSent(item.id)
+              console.warn(`[session-mgmt] 汇报被拒绝 HTTP ${res.status}${hint}，标记 failed outbox#${item.id}`)
+              store.markFailed(item.id)
               continue
             }
             break // 5xx：服务异常，留待下次补推

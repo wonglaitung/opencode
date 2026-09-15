@@ -195,7 +195,8 @@ export class Store {
 
   enqueueReport(report: SessionReport): void {
     // 同一会话仅保留最新一条待发送汇报（幂等去重，避免每消息堆积，2.4）
-    this.db.query("DELETE FROM outbox WHERE session_id = ? AND sent = 0").run(report.sessionID)
+    // 同时删除 failed 状态的旧记录（用新内容替换）
+    this.db.query("DELETE FROM outbox WHERE session_id = ? AND sent IN (0, 2)").run(report.sessionID)
     this.db
       .query("INSERT INTO outbox (session_id, payload, created_at, sent) VALUES (?, ?, ?, 0)")
       .run(report.sessionID, JSON.stringify(report), Date.now())
@@ -203,12 +204,17 @@ export class Store {
 
   pendingReports(): OutboxRow[] {
     return this.db
-      .query("SELECT id, payload, created_at, sent FROM outbox WHERE sent = 0 ORDER BY id ASC")
+      .query("SELECT id, payload, created_at, sent, last_attempt_at FROM outbox WHERE sent IN (0, 2) ORDER BY id ASC")
       .all() as OutboxRow[]
   }
 
   markSent(id: number): void {
     this.db.query("DELETE FROM outbox WHERE id = ?").run(id)
+  }
+
+  /** 标记汇报为 failed（4xx 拒绝），保留记录待下次重试。 */
+  markFailed(id: number): void {
+    this.db.query("UPDATE outbox SET sent = 2, last_attempt_at = ? WHERE id = ?").run(Date.now(), id)
   }
 
   // ---- 人工文件锁（open-ide 合并，5）----

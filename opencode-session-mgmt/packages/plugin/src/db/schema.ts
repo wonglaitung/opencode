@@ -19,7 +19,8 @@ export interface OutboxRow {
   id: number
   payload: string
   created_at: number
-  sent: number // 0 未送达 / 1 已送达
+  sent: number // 0 未送达 / 1 已送达 / 2 被拒绝（保留待重试）
+  last_attempt_at: number | null
 }
 
 /** 数据库中存储的原始行（JSON 字段为字符串）。 */
@@ -60,6 +61,8 @@ export const MIGRATIONS: string[] = [
     file_path TEXT NOT NULL,
     PRIMARY KEY (session_id, file_path)
   );`,
+  // v5：outbox 增 last_attempt_at 列——记录最后一次尝试时间（4xx 拒绝后保留待重试）
+  `ALTER TABLE outbox ADD COLUMN last_attempt_at INTEGER;`,
 ]
 
 export const SCHEMA_VERSION = MIGRATIONS.length
