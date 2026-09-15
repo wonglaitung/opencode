@@ -121,7 +121,7 @@ export function createReqdocInitTool(): Record<string, ToolDefinition> {
         .join("\n")
       const nextStep =
         `\n\n👉 下一步（投放多少算多少，不强制一次备齐）：\n` +
-        `  ① 投放材料：把你能提供的文件放进上方 01~05 对应目录（已附 README 说明），有多少投多少；放好后告诉我，我对这些目录调 reqdoc_scan 逐目录扫描提取（建议顺序 01 → 02 → 03 → 04 → 05），没投放的目录我们口述补全。\n` +
+        `  ① 投放材料：把你能提供的文件放进上方 01~05 对应目录（已附 README 说明），有多少投多少；放好后告诉我，我对 00~05 所有目录检查并扫描提取（建议顺序 00 → 01 → 02 → 03 → 04 → 05），没投放的目录我们口述补全。**特别注意：请先检查 00_初稿需求书/ 目录是否有初稿文件（docx/pdf/xlsx/txt/md 等），如有则调用 reqdoc_import(path) 导入并产出规约初评。**\n` +
         `  ② 先口述：说「直接口述」，我从痛点聊起按阶段追问补全（全程 [问答] 来源，定稿时需你确认「无书面材料」）。\n` +
         `  ③ 已有初稿：把初稿放进 00_初稿需求书/ 后调 reqdoc_import(path) 导入并产出规约初评，再逐阶段补全。`
       return (
@@ -131,6 +131,7 @@ export function createReqdocInitTool(): Record<string, ToolDefinition> {
         list +
         nextStep +
         `\n\n你手头有哪些材料？放进对应目录后告诉我（我扫描提取），或说「先口述」我们从痛点聊起？` +
+        `\n**提示：如果 00_初稿需求书/ 目录已有初稿文件，请先告诉我，我会调用 reqdoc_import 导入并产出规约初评。**` +
         (existed.length ? `\n（其中 ${existed.length} 个目录原本已存在，已保留其内部材料与 README.md，未覆盖。）` : "")
       )
     },
