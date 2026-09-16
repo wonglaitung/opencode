@@ -114,7 +114,7 @@ describe("评审状态机（reject/rewrite/manual）", () => {
     await tools.comprehension_confirm!.execute({ codeSegmentId: "a" } as never, ctx)
     await expect(
       tools.comprehension_reject!.execute({ codeSegmentId: "a", feedback: "x" } as never, ctx),
-    ).rejects.toThrow(/仅 pending 可拒绝/)
+    ).rejects.toThrow(/仅待定状态可拒绝/)
     store.close()
   })
 
@@ -140,7 +140,7 @@ describe("评审状态机（reject/rewrite/manual）", () => {
       ctx,
     )
     await expect(tools.comprehension_rewrite!.execute({ codeSegmentId: "a" } as never, ctx)).rejects.toThrow(
-      /仅 rejected 可重写/,
+      /仅拒绝状态可重写/,
     )
     store.close()
   })
@@ -167,7 +167,7 @@ describe("评审状态机（reject/rewrite/manual）", () => {
     )
     await expect(
       tools.comprehension_manual!.execute({ codeSegmentId: "a", resolution: "r" } as never, ctx),
-    ).rejects.toThrow(/仅 rejected 可由开发者 manual 处理/)
+    ).rejects.toThrow(/仅拒绝状态可由开发者处理/)
     store.close()
   })
 
@@ -192,7 +192,7 @@ describe("评审状态机（reject/rewrite/manual）", () => {
     await tools.comprehension_reject!.execute({ codeSegmentId: "a", feedback: "f" } as never, ctx)
     await tools.comprehension_manual!.execute({ codeSegmentId: "a", resolution: "r" } as never, ctx)
     await expect(tools.comprehension_confirm!.execute({ codeSegmentId: "a" } as never, ctx)).rejects.toThrow(
-      /已 manual 终态/,
+      /已处理终态/,
     )
     store.close()
   })
@@ -667,9 +667,9 @@ describe("reqdoc 渲染定稿复核门禁（质量飞轮 P2）", () => {
     writeFileSync(join(worktree, rel), md, "utf8")
   }
 
-  /** 结构齐全的单功能点 PRD（映射字段全标来源；2.3 默认 [文档]，不触发缺省↔满分）。 */
+  /** 结构齐全的单功能点 PRD（映射字段全标来源；5.1.2.3 默认 [文档]，不触发缺省↔满分）。 */
   const goodMd = (): string =>
-    `## 第一章 项目信息\n## 第二章 文档变更过程\n## 第三章 需求概述\n### 3.1 需求类型\n### 3.2 属于流程优化项目\n### 3.3 涉及跨部门项目\n### 3.4 涉及总行开发\n### 3.5 希望完成时间\n### 3.6 需求提出原因及功能概述\n## 第四章 术语定义与业务规则\n### 4.1 术语定义\n### 4.2 业务规则\n## 第五章 需求功能详述\n### 功能点 1\n#### 1. 功能点输入要素\n##### 1.1 简要概述 [文档]\n##### 1.2 控制要求 [文档]\n#### 2. 功能点处理要求\n##### 2.1 输入要素的检查 [文档]\n##### 2.2 系统处理过程 [文档]\n##### 2.3 异常处理要求 [文档]\n##### 2.4 提示信息 [文档]\n##### 2.5 其他要求 [文档]\n##### 2.6 清算处理 [文档]\n##### 2.7 差错处理 [文档]\n##### 2.8 交易安全性 [文档]\n##### 2.9 数据存贮和清理 [文档]\n##### 2.10 附件 [文档]\n##### 2.11 接口与数据源 [文档]\n##### 2.12 权限与最小授权 [文档]\n` +
+    `## 第一章 项目信息\n## 第二章 文档变更过程\n## 第三章 需求概述\n### 3.1 需求类型\n### 3.2 属于流程优化项目\n### 3.3 涉及跨部门项目\n### 3.4 涉及总行开发\n### 3.5 希望完成时间\n### 3.6 需求提出原因及功能概述\n## 第四章 术语定义与业务规则\n### 4.1 术语定义\n### 4.2 业务规则\n## 第五章 需求功能详述\n### 5.1 功能点1\n#### 5.1.1 功能点输入要素\n##### 5.1.1.1 简要概述 [文档]\n##### 5.1.1.2 控制要求 [文档]\n#### 5.1.2 功能点处理要求\n##### 5.1.2.1 输入要素的检查 [文档]\n##### 5.1.2.2 系统处理过程 [文档]\n##### 5.1.2.3 异常处理要求 [文档]\n##### 5.1.2.4 提示信息 [文档]\n##### 5.1.2.5 其他要求 [文档]\n##### 5.1.2.6 清算处理 [文档]\n##### 5.1.2.7 差错处理 [文档]\n##### 5.1.2.8 交易安全性 [文档]\n##### 5.1.2.9 数据存贮和清理 [文档]\n##### 5.1.2.10 附件 [文档]\n##### 5.1.2.11 接口与数据源 [文档]\n##### 5.1.2.12 权限与最小授权 [文档]\n` +
     `## 第六章 非功能需求\n### 6.1 性能与容量\n### 6.2 可用性与可靠性\n### 6.3 安全与信创\n### 6.4 数据主权与合规\n## 第七章 验收标准\n### 7.1 功能点验收指标\n### 7.2 量化验收口径\n`
 
   /** reqdoc 定稿前置：前序阶段 approved + 1 个已确认功能点 + 达标已确认打分（edgeControl 默认 30/30）。 */
@@ -712,8 +712,8 @@ describe("reqdoc 渲染定稿复核门禁（质量飞轮 P2）", () => {
 
   test("[缺省]↔满分矛盾拒定稿：缺省字段对应维度打满分被拦", async () => {
     const { store, worktree, ctx, rel } = setupReqdoc()
-    // 2.3 异常处理要求标 [缺省]，但 edgeControl 已打满分 30/30（setReqdocScore 默认）——自评矛盾
-    writeMd(worktree, rel, goodMd().replace("##### 2.3 异常处理要求 [文档]", "##### 2.3 异常处理要求 [缺省]"))
+    // 5.1.2.3 异常处理要求标 [缺省]，但 edgeControl 已打满分 30/30（setReqdocScore 默认）——自评矛盾
+    writeMd(worktree, rel, goodMd().replace("##### 5.1.2.3 异常处理要求 [文档]", "##### 5.1.2.3 异常处理要求 [缺省]"))
     const checkTools = createReqdocCheckTools(store)
     await checkTools.reqdoc_check!.execute({ source: rel } as never, ctx)
     await expect(
@@ -722,9 +722,9 @@ describe("reqdoc 渲染定稿复核门禁（质量飞轮 P2）", () => {
     store.close()
   })
 
-  test("完整性门禁：2.11 标裸 [缺省]（无理由）→ 拒定稿", async () => {
+  test("完整性门禁：5.1.2.11 标裸 [缺省]（无理由）→ 拒定稿", async () => {
     const { store, worktree, ctx, rel } = setupReqdoc()
-    writeMd(worktree, rel, goodMd().replace("##### 2.11 接口与数据源 [文档]", "##### 2.11 接口与数据源 [缺省]"))
+    writeMd(worktree, rel, goodMd().replace("##### 5.1.2.11 接口与数据源 [文档]", "##### 5.1.2.11 接口与数据源 [缺省]"))
     const checkTools = createReqdocCheckTools(store)
     await checkTools.reqdoc_check!.execute({ source: rel } as never, ctx)
     await expect(

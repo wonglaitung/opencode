@@ -17,29 +17,27 @@ import {
 } from "../src/reqdoc-render"
 import type { ReqdocScore } from "../src/workflow"
 
-/** 一份结构齐全的 PRD md：7 章、第三章 3.1-3.6、第四章 4.1/4.2、2 个功能点块（连续编号：功能点1 用 1./2.，功能点2 用 3./4.）、映射字段全标来源。 */
+/** 一份结构齐全的 PRD md：7 章、第三章 3.1-3.6、第四章 4.1/4.2、2 个功能点块（新格式：5.1/5.2）、映射字段全标来源。 */
 function fullPrd(): string {
   const block = (k: number) => {
-    const a = 2 * k - 1 // 输入要素组号（功能点 k）
-    const b = 2 * k // 处理要求组号
     return `
-### 功能点 ${k}
-#### ${a}. 功能点输入要素
-##### ${a}.1 简要概述 [文档]
-##### ${a}.2 控制要求 [文档]
-#### ${b}. 功能点处理要求
-##### ${b}.1 输入要素的检查 [文档]
-##### ${b}.2 系统处理过程 [文档]
-##### ${b}.3 异常处理要求 [文档]
-##### ${b}.4 提示信息 [文档]
-##### ${b}.5 其他要求 [文档]
-##### ${b}.6 清算处理 [文档]
-##### ${b}.7 差错处理 [文档]
-##### ${b}.8 交易安全性 [文档]
-##### ${b}.9 数据存贮和清理 [文档]
-##### ${b}.10 附件 [文档]
-##### ${b}.11 接口与数据源 [文档]
-##### ${b}.12 权限与最小授权 [文档]\n`
+### 5.${k} 功能点${k}
+#### 5.${k}.1 功能点输入要素
+##### 5.${k}.1.1 简要概述 [文档]
+##### 5.${k}.1.2 控制要求 [文档]
+#### 5.${k}.2 功能点处理要求
+##### 5.${k}.2.1 输入要素的检查 [文档]
+##### 5.${k}.2.2 系统处理过程 [文档]
+##### 5.${k}.2.3 异常处理要求 [文档]
+##### 5.${k}.2.4 提示信息 [文档]
+##### 5.${k}.2.5 其他要求 [文档]
+##### 5.${k}.2.6 清算处理 [文档]
+##### 5.${k}.2.7 差错处理 [文档]
+##### 5.${k}.2.8 交易安全性 [文档]
+##### 5.${k}.2.9 数据存贮和清理 [文档]
+##### 5.${k}.2.10 附件 [文档]
+##### 5.${k}.2.11 接口与数据源 [文档]
+##### 5.${k}.2.12 权限与最小授权 [文档]\n`
   }
   return (
     `## 第一章 项目信息\n` +
@@ -115,22 +113,22 @@ describe("parseRenderStructure", () => {
     expect(s.ok).toBe(false)
   })
 
-  test("功能点块子小节缺失：去掉块 1 的 2.3，missingFeatureSections 含「功能点 1 缺 2.3 异常处理要求」", () => {
-    const md = fullPrd().replace("##### 2.3 异常处理要求 [文档]\n", "")
+  test("功能点块子小节缺失：去掉块 1 的 5.1.2.3，missingFeatureSections 含「功能点 1 缺 5.1.2.3 异常处理要求」", () => {
+    const md = fullPrd().replace("##### 5.1.2.3 异常处理要求 [文档]\n", "")
     const s = parseRenderStructure(md)
-    expect(s.missingFeatureSections).toContain("功能点 1 缺 2.3 异常处理要求")
+    expect(s.missingFeatureSections).toContain("功能点 1 缺 5.1.2.3 异常处理要求")
     expect(s.featureOk).toBe(false)
   })
 
-  test("功能点块数 = ### 功能点 N 标题数", () => {
+  test("功能点块数 = ### 5.N 标题数", () => {
     const s = parseRenderStructure(fullPrd())
     expect(s.featureCount).toBe(2)
   })
 
   test("功能点标题带名称也能识别（r13/r14 渲染编号/名称，模型常写名称进标题）", () => {
     const md = fullPrd()
-      .replace("### 功能点 1", "### 功能点 1：名单排查")
-      .replace("### 功能点 2", "### 功能点 2 额度管控")
+      .replace("### 5.1 功能点1", "### 5.1 功能点1：名单排查")
+      .replace("### 5.2 功能点2", "### 5.2 功能点2 额度管控")
     const s = parseRenderStructure(md)
     expect(s.featureCount).toBe(2)
     expect(s.featureOk).toBe(true)
@@ -139,8 +137,8 @@ describe("parseRenderStructure", () => {
 
   test("功能点标题用 N_名称 目录约定也能识别（与 reqdoc_confirm_features 建档名一致）", () => {
     const md = fullPrd()
-      .replace("### 功能点 1", "### 1_故障应急智能检索（双入口）")
-      .replace("### 功能点 2", "### 2_额度管控与熔断")
+      .replace("### 5.1 功能点1", "### 1_故障应急智能检索（双入口）")
+      .replace("### 5.2 功能点2", "### 2_额度管控与熔断")
     const s = parseRenderStructure(md)
     expect(s.featureCount).toBe(2)
     expect(s.featureOk).toBe(true)
@@ -148,28 +146,28 @@ describe("parseRenderStructure", () => {
   })
 
   test("功能点标题带序号和点号（### 1. 名称）也能识别", () => {
-    const md = fullPrd().replace("### 功能点 1", "### 1. 故障应急智能检索")
+    const md = fullPrd().replace("### 5.1 功能点1", "### 1. 故障应急智能检索")
     const s = parseRenderStructure(md)
     expect(s.featureCount).toBe(2)
   })
 
   test("非三级标题或非 N_/功能点 前缀不识别为块", () => {
-    const md = fullPrd().replace("### 功能点 1", "## 功能点 1").replace("### 功能点 2", "#### 2_额度管控")
+    const md = fullPrd().replace("### 5.1 功能点1", "## 功能点 1").replace("### 5.2 功能点2", "#### 2_额度管控")
     const s = parseRenderStructure(md)
     expect(s.featureCount).toBe(0)
   })
 
   test("来源标注在标题下内容里也能提取（模板规范写法）", () => {
     const md = fullPrd()
-      .replace("##### 2.1 输入要素的检查 [文档]\n", "##### 2.1 输入要素的检查\n\n校验卡号与余额 [文档]\n")
-      .replace("##### 1.2 控制要求 [文档]\n", "##### 1.2 控制要求\n\n留痕双人复核 [问答]\n")
+      .replace("##### 5.1.2.1 输入要素的检查 [文档]\n", "##### 5.1.2.1 输入要素的检查\n\n校验卡号与余额 [文档]\n")
+      .replace("##### 5.1.1.2 控制要求 [文档]\n", "##### 5.1.1.2 控制要求\n\n留痕双人复核 [问答]\n")
     const s = parseRenderStructure(md)
     expect(s.covered["2.1"]).toBe(2)
     expect(s.covered["1.2"]).toBe(2)
   })
 
   test("[缺省] 提取：某字段标缺省则 defaults 计数，且仍计入 covered（[缺省] 也是来源标注）", () => {
-    const md = fullPrd().replace("##### 2.3 异常处理要求 [文档]\n", "##### 2.3 异常处理要求 [缺省]\n")
+    const md = fullPrd().replace("##### 5.1.2.3 异常处理要求 [文档]\n", "##### 5.1.2.3 异常处理要求 [缺省]\n")
     const s = parseRenderStructure(md)
     expect(s.defaults["2.3"]).toBe(1)
     expect(s.covered["2.3"]).toBe(2)
@@ -185,12 +183,12 @@ describe("parseRenderStructure", () => {
     for (const f of REQDOC_TEMPLATE_FIELDS) expect(s.covered[f.key]).toBe(2)
   })
 
-  test("来源标签包全角括号（### 2.1 输入要素的检查（[问答]））也能识别——修复 0/42 主因", () => {
+  test("来源标签包全角括号（### 5.1.2.1 输入要素的检查（[问答]））也能识别——修复 0/42 主因", () => {
     // 弱模型常把 [文档]/[问答] 用全角括号包裹；归一化须剥 【】 才能命中小节标题。
     const md = fullPrd()
-      .replace("##### 2.1 输入要素的检查 [文档]", "##### 2.1 输入要素的检查（[文档]）")
-      .replace("##### 1.2 控制要求 [文档]", "##### 1.2 控制要求（[问答]）")
-      .replace("##### 2.3 异常处理要求 [文档]", "##### 2.3 异常处理要求（[文档]+[问答]）")
+      .replace("##### 5.1.2.1 输入要素的检查 [文档]", "##### 5.1.2.1 输入要素的检查（[文档]）")
+      .replace("##### 5.1.1.2 控制要求 [文档]", "##### 5.1.1.2 控制要求（[问答]）")
+      .replace("##### 5.1.2.3 异常处理要求 [文档]", "##### 5.1.2.3 异常处理要求（[文档]+[问答]）")
     const s = parseRenderStructure(md)
     expect(s.featureOk).toBe(true)
     expect(s.covered["2.1"]).toBe(2)
@@ -199,10 +197,10 @@ describe("parseRenderStructure", () => {
   })
 
   test("主分组标题为纯文本（无 #）亦可——修复弱模型写为普通文字", () => {
-    // 弱模型把「1. 功能点输入要素」「2. 功能点处理要求」写成普通文字而非标题；主分组为可选分组标签。
+    // 弱模型把「5.1.1 功能点输入要素」「5.1.2 功能点处理要求」写成普通文字而非标题；主分组为可选分组标签。
     const md = fullPrd()
-      .replace("#### 1. 功能点输入要素", "1. 功能点输入要素")
-      .replace("#### 2. 功能点处理要求", "2. 功能点处理要求")
+      .replace("#### 5.1.1 功能点输入要素", "5.1.1 功能点输入要素")
+      .replace("#### 5.1.2 功能点处理要求", "5.1.2 功能点处理要求")
     const s = parseRenderStructure(md)
     expect(s.featureOk).toBe(true)
     expect(s.missingFeatureSections).toEqual([])
@@ -276,7 +274,7 @@ describe("renderStructureViolations", () => {
   })
 
   test("映射字段漏标来源 → 违规（逐字段条数）", () => {
-    const s = parseRenderStructure(fullPrd().replaceAll("##### 2.8 交易安全性 [文档]\n", "##### 2.8 交易安全性\n"))
+    const s = parseRenderStructure(fullPrd().replaceAll("##### 5.1.2.8 交易安全性 [文档]\n", "##### 5.1.2.8 交易安全性\n"))
     const r = renderOf({ ...s, expectedFeatures: 2 })
     const v = renderStructureViolations(r)
     expect(v.some((x) => x.includes("字段 2.8 交易安全性"))).toBe(true)

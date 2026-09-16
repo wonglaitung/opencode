@@ -141,7 +141,7 @@ describe("reqdoc 打分卡门禁（进入 prd 阶段前）", () => {
     store.mutateWorkflow("s1", (w) => {
       w.score = setScore(90)
       w.probes = { asked: ["main_flow", "exception"], gaps: [], round: 2, updatedAt: 1000 }
-      w.fieldDict = [{ feature: "功能点 1", name: "客户号", type: "字符串", required: true }]
+      w.fieldDict = [{ feature: "功能点1", name: "客户号", type: "字符串", required: true }]
     })
     const out = await tools.workflow_advance!.execute({ stage: "prd", action: "enter", developer_confirmed: false } as never, ctx)
     expect(String(out)).toContain("需求规格书")
@@ -168,7 +168,7 @@ describe("reqdoc 打分卡门禁（进入 prd 阶段前）", () => {
     store.mutateWorkflow("s1", (w) => {
       w.score = setScore(90)
       w.probes = { asked: ["main_flow", "exception"], gaps: [], round: 2, updatedAt: 1000 }
-      w.fieldDict = [{ feature: "功能点 1", name: "客户号", type: "字符串", required: true }]
+      w.fieldDict = [{ feature: "功能点1", name: "客户号", type: "字符串", required: true }]
     })
     const out = await tools.workflow_advance!.execute({ stage: "prd", action: "enter", developer_confirmed: false } as never, ctx)
     expect(String(out)).toContain("需求规格书")
@@ -181,7 +181,7 @@ describe("reqdoc 打分卡门禁（进入 prd 阶段前）", () => {
     store.mutateWorkflow("s1", (w) => {
       w.score = setScore(90)
       // 无 probes：P0.1 强制前置拦截，不再柔性放行
-      w.fieldDict = [{ feature: "功能点 1", name: "客户号", type: "字符串", required: true }]
+      w.fieldDict = [{ feature: "功能点1", name: "客户号", type: "字符串", required: true }]
     })
     await expect(
       tools.workflow_advance!.execute({ stage: "prd", action: "enter", developer_confirmed: false } as never, ctx),
@@ -225,7 +225,7 @@ describe("reqdoc 打分卡门禁（进入 prd 阶段前）", () => {
     store.mutateWorkflow("s1", (w) => {
       w.score = setScore(90)
       w.probes = { asked: ["main_flow", "exception"], gaps: [], round: 2, updatedAt: 1000 }
-      w.fieldDict = [{ feature: "功能点 1", name: "客户号", type: "字符串", required: true }]
+      w.fieldDict = [{ feature: "功能点1", name: "客户号", type: "字符串", required: true }]
     })
     const out = String(await tools.workflow_advance!.execute({ stage: "prd", action: "enter", developer_confirmed: false } as never, ctx))
     expect(out).toContain("下一阶段")
@@ -256,7 +256,7 @@ describe("reqdoc 打分卡门禁（进入 prd 阶段前）", () => {
       w.stages.edge.status = "in_progress"
       w.score = setScore(90)
       w.probes = { asked: ["main_flow", "exception"], gaps: [], round: 2, updatedAt: 1000 }
-      w.fieldDict = [{ feature: "功能点 1", name: "客户号", type: "字符串", required: true }]
+      w.fieldDict = [{ feature: "功能点1", name: "客户号", type: "字符串", required: true }]
     })
     await tools.workflow_advance!.execute({ stage: "prd", action: "enter", developer_confirmed: false } as never, ctx)
     const wf = store.get("s1")!.workflow!
@@ -283,23 +283,30 @@ describe("reqdoc review_submit 来源真实性门禁（reqdoc-r30）", () => {
     body += `## 第六章 非功能需求\n### 6.1 性能与容量\n### 6.2 可用性与可靠性\n### 6.3 安全与信创\n### 6.4 数据主权与合规\n`
     body += `## 第七章 验收标准\n### 7.1 功能点验收指标\n### 7.2 量化验收口径\n`
     for (let k = 1; k <= blocks; k++) {
-      const a = 2 * k - 1
-      const b = 2 * k
-      body += `### 功能点 ${k}\n`
-      const subs = [
-        `${a}.1 简要概述`, `${a}.2 控制要求`,
-        `${b}.1 输入要素的检查`, `${b}.2 系统处理过程`, `${b}.3 异常处理要求`, `${b}.4 提示信息`,
-        `${b}.5 其他要求`, `${b}.6 清算处理`, `${b}.7 差错处理`, `${b}.8 交易安全性`,
-        `${b}.9 数据存贮和清理`, `${b}.10 附件`, `${b}.11 接口与数据源`, `${b}.12 权限与最小授权`,
-      ]
-      for (const sub of subs) body += `##### ${sub} ${tag}\n`
+      body += `### 5.${k} 功能点${k}\n`
+      body += `#### 5.${k}.1 功能点输入要素\n`
+      body += `##### 5.${k}.1.1 简要概述 ${tag}\n`
+      body += `##### 5.${k}.1.2 控制要求 ${tag}\n`
+      body += `#### 5.${k}.2 功能点处理要求\n`
+      body += `##### 5.${k}.2.1 输入要素的检查 ${tag}\n`
+      body += `##### 5.${k}.2.2 系统处理过程 ${tag}\n`
+      body += `##### 5.${k}.2.3 异常处理要求 ${tag}\n`
+      body += `##### 5.${k}.2.4 提示信息 ${tag}\n`
+      body += `##### 5.${k}.2.5 其他要求 ${tag}\n`
+      body += `##### 5.${k}.2.6 清算处理 ${tag}\n`
+      body += `##### 5.${k}.2.7 差错处理 ${tag}\n`
+      body += `##### 5.${k}.2.8 交易安全性 ${tag}\n`
+      body += `##### 5.${k}.2.9 数据存贮和清理 ${tag}\n`
+      body += `##### 5.${k}.2.10 附件 ${tag}\n`
+      body += `##### 5.${k}.2.11 接口与数据源 ${tag}\n`
+      body += `##### 5.${k}.2.12 权限与最小授权 ${tag}\n`
     }
     return body
   }
   function approveAll(store: Store, source: string, features: number, docBlocks: number, docCount: number, qaCount: number) {
     store.mutateWorkflow("s1", (w) => {
       for (const st of ["goal", "rules", "edge", "prd", "review"]) w.stages[st].status = "approved"
-      w.fieldDict = [{ feature: "功能点 1", name: "客户号", type: "字符串", required: true }]
+      w.fieldDict = [{ feature: "功能点1", name: "客户号", type: "字符串", required: true }]
       w.score = {
         dims: {
           businessValue: { score: 15, max: 15 },
