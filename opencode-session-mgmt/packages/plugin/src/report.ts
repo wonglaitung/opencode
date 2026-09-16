@@ -73,17 +73,21 @@ export function createReporter(
           if (!res.ok) {
             if (res.status >= 400 && res.status < 500) {
               if ((item.retry_count ?? 0) >= 10) {
-                console.error(`[session-mgmt] outbox#${item.id} 重试 ${item.retry_count} 次仍失败，停试，需修复 identity.json`)
+                if (options?.exit) {
+                  console.error(`[session-mgmt] outbox#${item.id} 重试 ${item.retry_count} 次仍失败，停试，需修复 ~/.config/opencode/session-mgmt/identity.json`)
+                }
                 store.markFailed(item.id)
                 continue
               }
               // 4xx 为客户端问题（鉴权/payload），标记 failed 保留待重试
               // 修复配置后下次 flushOutbox 会重新尝试
-              const hint =
-                res.status === 401 || res.status === 403
-                  ? "（鉴权失败，请核对 identity.json）"
-                  : "（payload 非法）"
-              console.warn(`[session-mgmt] 汇报被拒绝 HTTP ${res.status}${hint}，标记 failed outbox#${item.id}`)
+              if (options?.exit) {
+                const hint =
+                  res.status === 401 || res.status === 403
+                    ? "（鉴权失败，请核对 ~/.config/opencode/session-mgmt/identity.json）"
+                    : "（payload 非法）"
+                console.warn(`[session-mgmt] 汇报被拒绝 HTTP ${res.status}${hint}，标记 failed outbox#${item.id}`)
+              }
               store.markFailed(item.id)
               continue
             }
@@ -92,12 +96,9 @@ export function createReporter(
           store.markSent(item.id)
           sent++
         } catch (e) {
-          const msg = `[session-mgmt] flushOutbox 网络异常，保留待补推: ${e instanceof Error ? e.message : e}`
-          const hint = "提示：报告已本地缓冲，恢复后自动补推。如持续失败请检查 ~/.config/opencode/session-mgmt/identity.json 收集服务地址与网络连通性。"
           if (options?.exit) {
-            console.warn(`${msg}\n${hint}`)
-          } else {
-            console.debug(msg)
+            const hint = "提示：报告已本地缓冲，恢复后自动补推。如持续失败请检查 ~/.config/opencode/session-mgmt/identity.json 收集服务地址与网络连通性。"
+            console.warn(`[session-mgmt] flushOutbox 网络异常，保留待补推: ${e instanceof Error ? e.message : e}\n${hint}`)
           }
           store.touchAttempt(item.id)
           break // 网络不可达，保留 outbox 待恢复补推
