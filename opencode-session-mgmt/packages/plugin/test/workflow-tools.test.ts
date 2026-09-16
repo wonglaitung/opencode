@@ -300,6 +300,7 @@ describe("reqdoc review_submit 来源真实性门禁（reqdoc-r30）", () => {
       body += `##### 5.${k}.2.10 附件 ${tag}\n`
       body += `##### 5.${k}.2.11 接口与数据源 ${tag}\n`
       body += `##### 5.${k}.2.12 权限与最小授权 ${tag}\n`
+      body += `##### 5.${k}.2.13 流程图 ${tag}\n`
     }
     return body
   }

@@ -127,6 +127,7 @@ export const FEATURE_SUB_SECTIONS: readonly FeatureSubSection[] = [
   { group: 2, sub: 10, title: "附件" },
   { group: 2, sub: 11, title: "接口与数据源" },
   { group: 2, sub: 12, title: "权限与最小授权" },
+  { group: 2, sub: 13, title: "流程图" },
 ]
 
 /** 第 bi 个功能点块（0 起）内某相对分组 sub 的绝对编号（如块 0 的 group1.sub1 → "5.1.1.1"，块 1 的 → "5.2.1.1"）。 */
@@ -481,4 +482,157 @@ export function renderCheckRubric(): string {
     `[缺省] 字段对应打分卡维度打满分 = 渲染缺口与自评矛盾，review_submit 定稿会被拦。\n` +
     `[缺省] 须写成 [缺省：不适用理由]（如 [缺省：本次无外部系统对接]），禁止裸 [缺省]——裸 [缺省] 触发完整性门禁（review_submit 定稿拦截）。`
   )
+}
+
+// ---- 增量更新：功能点块提取与替换 ----
+
+/** 功能点标题正则（复用 parseRenderStructure 同一规则，保持一致）。 */
+const FEATURE_HEADING_RE = /^###\s+(?:5\.(\d+)\s+|(?:功能点\s*)?(\d+)(?:[：:_\s].*|\.(?!\s*功能点)[^\d].*|)$)/
+
+/** 从功能点标题行解析序号（1-based）。返回 0 表示无法解析。 */
+function parseFeatureNumber(heading: string): number {
+  const m = heading.match(FEATURE_HEADING_RE)
+  if (!m) return 0
+  return parseInt(m[1] ?? m[2] ?? "0", 10)
+}
+
+export interface FeatureBlock {
+  /** 功能点序号（1-based） */
+  number: number
+  /** 标题行文本（如 "### 5.1 功能点1"） */
+  heading: string
+  /** 功能点块完整 markdown（含标题行） */
+  block: string
+  /** 起始行号（0-based，含标题行） */
+  startLine: number
+  /** 结束行号（0-based，不含下一块起始或 EOF） */
+  endLine: number
+}
+
+export interface ExtractResult {
+  /** 请求的功能点块 */
+  feature: FeatureBlock
+  /** 前一个功能点块的最后若干行（上下文衔接用）；首个功能点则为空 */
+  prevContext: string
+  /** 后一个功能点块的前若干行（上下文衔接用）；最后一个功能点则为空 */
+  nextContext: string
+}
+
+/** 功能点块上下文行数（提取前后各 N 行供 AI 参考衔接）。 */
+const CONTEXT_LINES = 5
+
+/**
+ * 从 PRD markdown 中提取指定功能点的完整块 + 行号范围 + 前后上下文。
+ * 供增量更新时 AI 参考当前内容并重写。
+ */
+export function extractFeatureBlock(md: string, featureN: number): ExtractResult | string {
+  const lines = md.split(/\r?\n/)
+  const blocks: FeatureBlock[] = []
+
+  let cur: string[] | null = null
+  let curStart = 0
+  let curNum = 0
+  let curHeading = ""
+
+  const flush = () => {
+    if (cur) {
+      blocks.push({
+        number: curNum,
+        heading: curHeading,
+        block: cur.join("\n"),
+        startLine: curStart,
+        endLine: curStart + cur.length,
+      })
+    }
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    if (FEATURE_HEADING_RE.test(lines[i]!)) {
+      flush()
+      const num = parseFeatureNumber(lines[i]!)
+      cur = [lines[i]!]
+      curStart = i
+      curNum = num
+      curHeading = lines[i]!
+    } else if (cur) {
+      cur.push(lines[i]!)
+    }
+  }
+  flush()
+
+  const target = blocks.find((b) => b.number === featureN)
+  if (!target) {
+    const found = blocks.map((b) => b.number)
+    return `未找到功能点 ${featureN}（已有功能点：${found.length > 0 ? found.join(", ") : "无"}）`
+  }
+
+  const targetIdx = blocks.indexOf(target)
+  const prevBlock = targetIdx > 0 ? blocks[targetIdx - 1] : null
+  const nextBlock = targetIdx < blocks.length - 1 ? blocks[targetIdx + 1] : null
+
+  const prevContext = prevBlock
+    ? lines.slice(Math.max(prevBlock.endLine - CONTEXT_LINES, prevBlock.startLine), prevBlock.endLine).join("\n")
+    : ""
+  const nextContext = nextBlock
+    ? lines.slice(nextBlock.startLine, Math.min(nextBlock.startLine + CONTEXT_LINES, nextBlock.endLine)).join("\n")
+    : ""
+
+  return { feature: target, prevContext, nextContext }
+}
+
+/**
+ * 替换 PRD markdown 中指定功能点的块。
+ * 写入后自动校验该块结构，不合规则拒绝写入并返回错误。
+ */
+export function replaceFeatureBlock(md: string, featureN: number, newBlock: string): { ok: boolean; md: string; error?: string } {
+  const lines = md.split(/\r?\n/)
+
+  // 定位目标块的行范围
+  const blocks: { num: number; start: number; end: number }[] = []
+  let curStart = -1
+  let curNum = 0
+
+  const flush = () => {
+    if (curStart >= 0) {
+      blocks.push({ num: curNum, start: curStart, end: lines.length })
+    }
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    if (FEATURE_HEADING_RE.test(lines[i]!)) {
+      if (curStart >= 0) {
+        blocks[blocks.length - 1]!.end = i
+      }
+      curNum = parseFeatureNumber(lines[i]!)
+      curStart = i
+      blocks.push({ num: curNum, start: i, end: lines.length })
+    }
+  }
+
+  const targetIdx = blocks.findIndex((b) => b.num === featureN)
+  if (targetIdx < 0) {
+    const found = blocks.map((b) => b.num)
+    return { ok: false, md, error: `未找到功能点 ${featureN}（已有功能点：${found.length > 0 ? found.join(", ") : "无"}）` }
+  }
+
+  const target = blocks[targetIdx]!
+
+  // 校验新块结构
+  const newStructure = parseRenderStructure(newBlock)
+  if (!newStructure.featureOk) {
+    const missing = newStructure.missingFeatureSections.filter((s) => s.startsWith(`功能点 1 缺`))
+    return {
+      ok: false,
+      md,
+      error: `新功能点块结构不完整：${missing.join("、")}。请补充缺失子小节后重试。`,
+    }
+  }
+
+  // 替换：保留原块之前和之后的内容，插入新块
+  const before = lines.slice(0, target.start)
+  const after = lines.slice(target.end)
+  const newLines = newBlock.split(/\r?\n/)
+  const result = [...before, ...newLines, ...after].join("\n")
+
+  return { ok: true, md: result }
 }

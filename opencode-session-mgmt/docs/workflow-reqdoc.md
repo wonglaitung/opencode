@@ -281,6 +281,7 @@ P3 不新增规则维度，而是在 P0~P2 之上做工程化加固，让校验�
 - **P3.8 门禁前置暴露**：`workflow_advance` 进入/完成某阶段后，显式列出下一阶段的**前置条件清单**（`REQDOC_STAGE_PREREQS`，同源 r13/r14/r21/r23/r30），让业务在动手前看到"进下一阶段前必须满足什么"，避免中途才发现缺料返工。
 - **P3.9 迭代上限提示**：`reqdoc_check` 累计连续失败次数（`WorkflowState.renderCheckFails`，合规即清零）；连续 ≥3 次校验不通过时，校验卡片提示人工介入与格式诊断（章节标题层级、功能点块须 ### 起头带序号等），避免模型在错误结构上反复打磨。
 - **P3.10 确认溯源**：`comprehension_confirm` 新增可选 `sourceLabel`/`sourceQuote`（来源标签 + 引用原文/编号）；reqdoc 定稿时，已接受要点若未回填来源证据则 `review_submit` 被拦截（防"凭空认可"），确认记录可回溯到出处；溯源同时**写回 PRD 交付件末尾「确认溯源」章节**（best-effort，使交付物本身可追溯）。
+- **P3.11 增量更新（局部重渲染）**：迭代过程中业务仅改了部分材料时，无需全量重渲染整个 PRD，可只更新受影响的功能点块。新增 `reqdoc_extract_feature`（提取指定功能点块 + 前后上下文）与 `reqdoc_replace_feature`（替换功能点块 + 自动结构校验）两个工具，配合 `parseRenderStructure` 的功能点块切分能力实现精确替换。AI 工作流：① `reqdoc_extract_feature(source, feature=N)` 获取当前内容 → ② 读取变更材料 + 来源摘录 → ③ 按模板规则重写该功能点块 → ④ `reqdoc_replace_feature(source, feature=N, newBlock=新内容)` 写回（结构不合规则拒绝写入）→ ⑤ `reqdoc_check(source, feature="功能点 N")` 验证。材料→功能点的映射由 AI 语义判断（基于 06_功能点/N_名称/ 来源摘录反向索引）。
 - **P2.5 字段定义环节（数据字典）**：进 prd 渲染前置新增 `reqdoc_field_dict(fields)` 工具（规则 reqdoc-r31），逐字段与业务确认名称/类型/长度/必填/取值/来源系统，记录进 `WorkflowState.fieldDict` 并写入 `07_需求规格产出/数据字典与库表设计/数据字典.md`；字段定义是 material 维度（真实字段/接口证据）的直接来源。**`workflow_advance(enter prd)` 与 `review_submit` 两处强制要求 `fieldDict` 非空**（缺字段定义视为未做字段级梳理被拦截，需求确无结构化字段可 `skip_field_dict=true` 豁免）。
 
 ## 8. 专属工具
@@ -297,6 +298,8 @@ reqdoc 无 git 提交门禁（`hasCommitGate=false`），`commit_gate_*` 工具�
 | `reqdoc_field_dict` | reqdoc 字段定义（数据字典，P2.5）：进 prd 渲染前逐字段定义名称/类型/长度/必填/取值/来源系统，记录进 `WorkflowState.fieldDict` 并写入 `07_需求规格产出/数据字典与库表设计/数据字典.md` | 仅 reqdoc；`fields` 可分批提交，服务端按 feature+name 合并 |
 | `reqdoc_import` | reqdoc 基于初稿完善入口：把业务已有初稿（docx/pdf/txt 等）落盘 `00_初稿需求书/`、解析为 `[文档]` 来源，并产出「规约初评」（按 7 份机构规约逐条点评 + 三类补全路径） | 仅 reqdoc；不自动 approve 任何阶段、不自动快进；规约初评只诊断不改写初稿 |
 | `reqdoc_review_conventions` | reqdoc 规约初评：读取 `00_初稿需求书/` 下的初稿，按 7 份机构规约输出「满足/缺失/矛盾 + 引用段落 + 补全路径」结构化初评 | 仅 reqdoc；无初稿时提示先 reqdoc_import；初评是诊断，不改写初稿 |
+| `reqdoc_extract_feature` | 增量更新辅助：从 PRD 中提取指定功能点的完整 markdown 块 + 行号范围 + 前后上下文，供 AI 参考当前内容后重写该功能点 | 仅 reqdoc；`source` 为 PRD md 路径，`feature` 为功能点序号；返回块内容与上下文 |
+| `reqdoc_replace_feature` | 增量更新写回：将 AI 重写后的新功能点块精确替换回 PRD 原位置，其他内容不动 | 仅 reqdoc；写入后自动调 `parseRenderStructure` 校验该块结构，不合规则拒绝写入 |
 
 ## 9. 实际效果：业务确认（场景五）
 

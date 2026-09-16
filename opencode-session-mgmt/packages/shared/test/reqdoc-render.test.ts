@@ -8,9 +8,11 @@ import {
   REQDOC_TEMPLATE_CHAPTERS,
   REQDOC_TEMPLATE_FIELDS,
   consistencyViolations,
+  extractFeatureBlock,
   missingDefaultReasonViolations,
   noDocumentSupportViolation,
   parseRenderStructure,
+  replaceFeatureBlock,
   renderGapViolations,
   renderStructureViolations,
   type ReqdocRender,
@@ -37,7 +39,8 @@ function fullPrd(): string {
 ##### 5.${k}.2.9 数据存贮和清理 [文档]
 ##### 5.${k}.2.10 附件 [文档]
 ##### 5.${k}.2.11 接口与数据源 [文档]
-##### 5.${k}.2.12 权限与最小授权 [文档]\n`
+##### 5.${k}.2.12 权限与最小授权 [文档]
+##### 5.${k}.2.13 流程图 [文档]\n`
   }
   return (
     `## 第一章 项目信息\n` +
@@ -368,5 +371,123 @@ describe("consistencyViolations（一致性门禁）", () => {
   test("新增功能 → 不查概述（跳过）", () => {
     const md = `## 第三章 需求概述\n### 3.1 需求类型\n- ○ 更改功能　● 新增功能\n### 3.6 需求提出原因及功能概述\n新增一类查询。\n`
     expect(consistencyViolations(md)).toEqual([])
+  })
+})
+
+describe("extractFeatureBlock", () => {
+  test("提取单功能点 PRD 的功能点 1", () => {
+    const md = fullPrd()
+    const result = extractFeatureBlock(md, 1)
+    expect(typeof result).not.toBe("string")
+    if (typeof result === "string") return
+    expect(result.feature.number).toBe(1)
+    expect(result.feature.heading).toContain("### 5.1")
+    expect(result.feature.block).toContain("5.1.1.1 简要概述")
+    expect(result.feature.block).toContain("5.1.2.12 权限与最小授权")
+    expect(result.feature.startLine).toBeGreaterThanOrEqual(0)
+    expect(result.feature.endLine).toBeGreaterThan(result.feature.startLine)
+  })
+
+  test("提取双功能点 PRD 的功能点 2", () => {
+    const md = fullPrd()
+    const result = extractFeatureBlock(md, 2)
+    expect(typeof result).not.toBe("string")
+    if (typeof result === "string") return
+    expect(result.feature.number).toBe(2)
+    expect(result.feature.heading).toContain("### 5.2")
+    expect(result.feature.block).toContain("5.2.1.1 简要概述")
+  })
+
+  test("功能点 1 有后文上下文", () => {
+    const md = fullPrd()
+    const result = extractFeatureBlock(md, 1)
+    expect(typeof result).not.toBe("string")
+    if (typeof result === "string") return
+    expect(result.prevContext).toBe("")
+    expect(result.nextContext).toContain("### 5.2")
+  })
+
+  test("功能点 2 有前文上下文", () => {
+    const md = fullPrd()
+    const result = extractFeatureBlock(md, 2)
+    expect(typeof result).not.toBe("string")
+    if (typeof result === "string") return
+    expect(result.prevContext).toContain("5.1.2.12")
+    expect(result.nextContext).toBe("")
+  })
+
+  test("不存在的功能点返回错误", () => {
+    const md = fullPrd()
+    const result = extractFeatureBlock(md, 99)
+    expect(typeof result).toBe("string")
+  })
+})
+
+describe("replaceFeatureBlock", () => {
+  function newBlock1(): string {
+    return [
+      "### 5.1 更新后功能点1",
+      "#### 5.1.1 功能点输入要素",
+      "##### 5.1.1.1 简要概述 [问答]",
+      "##### 5.1.1.2 控制要求 [问答]",
+      "#### 5.1.2 功能点处理要求",
+      "##### 5.1.2.1 输入要素的检查 [问答]",
+      "##### 5.1.2.2 系统处理过程 [问答]",
+      "##### 5.1.2.3 异常处理要求 [问答]",
+      "##### 5.1.2.4 提示信息 [问答]",
+      "##### 5.1.2.5 其他要求 [问答]",
+      "##### 5.1.2.6 清算处理 [问答]",
+      "##### 5.1.2.7 差错处理 [问答]",
+      "##### 5.1.2.8 交易安全性 [问答]",
+      "##### 5.1.2.9 数据存贮和清理 [问答]",
+      "##### 5.1.2.10 附件 [问答]",
+      "##### 5.1.2.11 接口与数据源 [问答]",
+      "##### 5.1.2.12 权限与最小授权 [问答]",
+      "##### 5.1.2.13 流程图 [问答]",
+    ].join("\n")
+  }
+
+  test("替换功能点 1 成功", () => {
+    const md = fullPrd()
+    const result = replaceFeatureBlock(md, 1, newBlock1())
+    expect(result.ok).toBe(true)
+    expect(result.error).toBeUndefined()
+    expect(result.md).toContain("### 5.1 更新后功能点1")
+    expect(result.md).toContain("### 5.2 功能点2")
+    expect(result.md).toContain("5.1.1.1 简要概述 [问答]")
+  })
+
+  test("替换后功能点 2 不受影响", () => {
+    const md = fullPrd()
+    const result = replaceFeatureBlock(md, 1, newBlock1())
+    expect(result.ok).toBe(true)
+    expect(result.md).toContain("### 5.2 功能点2")
+    expect(result.md).toContain("5.2.1.1 简要概述 [文档]")
+  })
+
+  test("替换后章节结构保持完整", () => {
+    const md = fullPrd()
+    const result = replaceFeatureBlock(md, 1, newBlock1())
+    expect(result.ok).toBe(true)
+    expect(result.md).toContain("## 第一章 项目信息")
+    expect(result.md).toContain("## 第六章 非功能需求")
+    expect(result.md).toContain("## 第七章 验收标准")
+  })
+
+  test("结构不完整的新块被拒绝", () => {
+    const md = fullPrd()
+    const badBlock = "### 5.1 坏块\n##### 5.1.1.1 简要概述 [问答]\n"
+    const result = replaceFeatureBlock(md, 1, badBlock)
+    expect(result.ok).toBe(false)
+    expect(result.error).toContain("结构不完整")
+    // 原 md 不变
+    expect(result.md).toBe(md)
+  })
+
+  test("不存在的功能点返回错误", () => {
+    const md = fullPrd()
+    const result = replaceFeatureBlock(md, 99, newBlock1())
+    expect(result.ok).toBe(false)
+    expect(result.error).toContain("未找到功能点 99")
   })
 })

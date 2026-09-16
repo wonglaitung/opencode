@@ -5,14 +5,17 @@
  * PRD 定稿后调用）。
  *
  * 转换覆盖模板渲染实际用到的标记：标题（#~#####）、表格（|…|）、无序列表（-）、
- * 引用（>）、代码块（```）与行内加粗（**…**）/反引号（`…`）。PRD 为文字件，
- * 图片/图表不走模板正文（模板外成果按 reqdoc-r20 单独落盘），故不解析二进制。
+ * 引用（>）、代码块（```）与行内加粗（**…**）/反引号（`…`）。Mermaid 流程图
+ * （```mermaid）渲染为 PNG 嵌入 Word（降级：mmdc 不可用时输出源码+提示）。
  */
-import { basename, dirname, extname } from "node:path"
+import { basename, dirname, extname, join } from "node:path"
+import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
 import { tool, type ToolDefinition } from "@opencode-ai/plugin"
 import {
   Document,
   HeadingLevel,
+  ImageRun,
   Packer,
   Paragraph,
   ShadingType,
@@ -69,6 +72,26 @@ function isSeparatorRow(row: string): boolean {
   )
 }
 
+/** 尝试用 mermaid-cli (mmdc) 把 Mermaid 源码渲染为 PNG；失败返回 null。 */
+async function renderMermaidToPng(mermaidSrc: string): Promise<Buffer | null> {
+  try {
+    const dir = await mkdtemp(join(tmpdir(), "mermaid-"))
+    const inPath = join(dir, "input.mmd")
+    const outPath = join(dir, "output.png")
+    await writeFile(inPath, mermaidSrc, "utf8")
+    const { execSync } = await import("node:child_process")
+    execSync(
+      `npx --yes @mermaid-js/mermaid-cli -i "${inPath}" -o "${outPath}" -b transparent -s 2 --puppeteerConfig '{"args":["--no-sandbox"]}'`,
+      { timeout: 30_000, stdio: "pipe" },
+    )
+    const buf = await readFile(outPath)
+    await rm(dir, { recursive: true, force: true })
+    return buf
+  } catch {
+    return null
+  }
+}
+
 /** 解析 Markdown 表格（首行表头 + 分隔行 + 数据行）为 docx 表格。 */
 function parseTable(lines: string[]): Table {
   const cellsOf = (row: string) => row.split("|").slice(1, -1).map((c) => c.trim())
@@ -99,8 +122,9 @@ export async function mdToDocx(md: string): Promise<Buffer> {
   let i = 0
   while (i < lines.length) {
     const trimmed = lines[i].trim()
-    // 代码块（模板源标注用 ```…``` 包额外说明）
+    // 代码块：检测 mermaid 围栏，渲染为 PNG 嵌入
     if (trimmed.startsWith("```")) {
+      const lang = trimmed.slice(3).trim().toLowerCase()
       const code: string[] = []
       i++
       while (i < lines.length && !lines[i].trim().startsWith("```")) {
@@ -108,6 +132,32 @@ export async function mdToDocx(md: string): Promise<Buffer> {
         i++
       }
       i++ // 跳过结束围栏
+      if (lang === "mermaid") {
+        const png = await renderMermaidToPng(code.join("\n"))
+        if (png) {
+          children.push(
+            new Paragraph({
+              children: [new ImageRun({ data: png, transformation: { width: 500, height: 300 }, type: "png" })],
+              spacing: { before: 120, after: 120 },
+            }),
+          )
+          continue
+        }
+        // 降级：mmdc 不可用，输出源码 + 提示
+        children.push(
+          new Paragraph({
+            children: [
+              new TextRun({ text: "[流程图源码（需安装 @mermaid-js/mermaid-cli 渲染）]", italics: true, color: "999999" }),
+            ],
+            spacing: { before: 60, after: 60 },
+          }),
+        )
+        children.push(
+          new Paragraph({ children: [new TextRun({ text: code.join("\n"), font: "Consolas", size: 18 })] }),
+        )
+        continue
+      }
+      // 普通代码块
       children.push(
         new Paragraph({ children: [new TextRun({ text: code.join("\n"), font: "Consolas", size: 18 })] }),
       )

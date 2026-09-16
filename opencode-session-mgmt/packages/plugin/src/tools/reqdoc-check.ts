@@ -15,6 +15,8 @@ import {
   parseRenderStructure,
   renderCheckRubric,
   renderStructureViolations,
+  extractFeatureBlock,
+  replaceFeatureBlock,
   type ReqdocRender,
 } from "sm-shared"
 import type { Store } from "../db"
@@ -74,7 +76,88 @@ export function createReqdocCheckTools(store: Store): Record<string, ToolDefinit
     },
   })
 
-  return { reqdoc_check }
+  const reqdoc_extract_feature = tool({
+    description:
+      "增量更新辅助：从 PRD 中提取指定功能点的完整 markdown 块 + 行号范围 + 前后上下文。" +
+      "供 AI 参考当前内容后重写该功能点，配合 reqdoc_replace_feature 写回。仅 reqdoc 工作流有效。",
+    args: {
+      source: z.string().describe("PRD Markdown 相对项目根路径"),
+      feature: z.string().describe("功能点序号（如 '1' 或 '功能点 1'）"),
+    },
+    async execute(args, context) {
+      const def = getDefinition("reqdoc")
+      if (def.type !== "reqdoc") throw new WorkflowOpError("仅 reqdoc 工作流有效")
+      const mdPath = resolveWithinWorktree(projectRoot(context), args.source)
+      let md: string
+      try {
+        md = await Bun.file(mdPath).text()
+      } catch {
+        throw new WorkflowOpError(`源文件不存在或不可读：${args.source}`)
+      }
+      const m = args.feature.match(/(\d+)/)
+      if (!m) throw new WorkflowOpError(`未解析到功能点序号：${args.feature}（请填 '1' 或 '功能点 1'）`)
+      const featureN = parseInt(m[1], 10)
+      const result = extractFeatureBlock(md, featureN)
+      if (typeof result === "string") throw new WorkflowOpError(result)
+      return (
+        `📄 功能点 ${featureN} 提取（${args.source}，行 ${result.feature.startLine + 1}-${result.feature.endLine}）：\n` +
+        (result.prevContext ? `--- 前文上下文 ---\n${result.prevContext}\n--- 当前功能点 ---\n` : "") +
+        `${result.feature.block}\n` +
+        (result.nextContext ? `--- 后文上下文 ---\n${result.nextContext}` : "") +
+        `\n\n💡 编辑后调用 reqdoc_replace_feature(source="${args.source}", feature="${args.feature}", newBlock=新内容) 写回。`
+      )
+    },
+  })
+
+  const reqdoc_replace_feature = tool({
+    description:
+      "增量更新：将 AI 重写后的新功能点块写回 PRD，精确替换原位置，其他内容不动。" +
+      "写入后自动校验该块结构，不合规则拒绝写入。仅 reqdoc 工作流有效。",
+    args: {
+      source: z.string().describe("PRD Markdown 相对项目根路径"),
+      feature: z.string().describe("功能点序号（如 '1' 或 '功能点 1'）"),
+      newBlock: z.string().describe("新的功能点 markdown 块（含 ### 5.N 标题，完整 14 个子小节）"),
+    },
+    async execute(args, context) {
+      const def = getDefinition("reqdoc")
+      if (def.type !== "reqdoc") throw new WorkflowOpError("仅 reqdoc 工作流有效")
+      const mdPath = resolveWithinWorktree(projectRoot(context), args.source)
+      let md: string
+      try {
+        md = await Bun.file(mdPath).text()
+      } catch {
+        throw new WorkflowOpError(`源文件不存在或不可读：${args.source}`)
+      }
+      const m = args.feature.match(/(\d+)/)
+      if (!m) throw new WorkflowOpError(`未解析到功能点序号：${args.feature}（请填 '1' 或 '功能点 1'）`)
+      const featureN = parseInt(m[1], 10)
+      const result = replaceFeatureBlock(md, featureN, args.newBlock)
+      if (!result.ok) throw new WorkflowOpError(result.error!)
+      // 写回文件
+      await Bun.write(mdPath, result.md)
+      // 自动校验
+      const structure = parseRenderStructure(result.md)
+      const render: ReqdocRender = {
+        ...structure,
+        source: args.source,
+        checkedAt: Date.now(),
+        expectedFeatures: 0,
+      }
+      store.mutateWorkflow(context.sessionID, (workflow) => {
+        render.expectedFeatures = workflow.features?.length ?? 0
+        workflow.render = render
+      })
+      const violations = renderStructureViolations(render)
+      return (
+        `✅ 功能点 ${featureN} 已替换并写回（${args.source}）。\n` +
+        (violations.length > 0
+          ? `⚠ 结构校验有 ${violations.length} 项违规：\n  - ${violations.join("\n  - ")}\n→ 请修正后重调 reqdoc_check 复查。`
+          : "✓ 结构校验通过。")
+      )
+    },
+  })
+
+  return { reqdoc_check, reqdoc_extract_feature, reqdoc_replace_feature }
 }
 
 /** 增量诊断（P3.7）：把某功能点的期望子小节与实际情况逐项对比，输出缺失清单。 */
