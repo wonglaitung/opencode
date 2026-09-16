@@ -204,7 +204,7 @@ export class Store {
 
   pendingReports(): OutboxRow[] {
     return this.db
-      .query("SELECT id, payload, created_at, sent, last_attempt_at FROM outbox WHERE sent IN (0, 2) ORDER BY id ASC")
+      .query("SELECT id, payload, created_at, sent, last_attempt_at, retry_count FROM outbox WHERE sent IN (0, 2) ORDER BY id ASC")
       .all() as OutboxRow[]
   }
 
@@ -212,9 +212,14 @@ export class Store {
     this.db.query("DELETE FROM outbox WHERE id = ?").run(id)
   }
 
-  /** 标记汇报为 failed（4xx 拒绝），保留记录待下次重试。 */
+  /** 标记汇报为 failed（4xx 拒绝），保留记录待下次重试；同时递增 retry_count。 */
   markFailed(id: number): void {
-    this.db.query("UPDATE outbox SET sent = 2, last_attempt_at = ? WHERE id = ?").run(Date.now(), id)
+    this.db.query("UPDATE outbox SET sent = 2, last_attempt_at = ?, retry_count = retry_count + 1 WHERE id = ?").run(Date.now(), id)
+  }
+
+  /** 记录尝试时间（网络异常等非 4xx 失败时调用，保留 outbox 待下次补推）。 */
+  touchAttempt(id: number): void {
+    this.db.query("UPDATE outbox SET last_attempt_at = ? WHERE id = ?").run(Date.now(), id)
   }
 
   // ---- 人工文件锁（open-ide 合并，5）----

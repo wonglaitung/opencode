@@ -54,13 +54,31 @@ describe("flushOutbox 补推策略", () => {
     expect(store.pendingReports().length).toBe(1)
   })
 
-  test("4xx 丢弃坏汇报，不堵塞队列", async () => {
+  test("4xx 标记 failed 保留待重试（retry_count 未超限）", async () => {
     const store = Store.memory()
     store.enqueueReport(report)
     stubFetch(400)
     const sent = await createReporter(store, () => identity, noUsage).flushOutbox()
     expect(sent).toBe(0)
-    expect(store.pendingReports().length).toBe(0) // 永久失败，已丢弃
+    const pending = store.pendingReports()
+    expect(pending.length).toBe(1)
+    expect(pending[0]!.sent).toBe(2)
+    expect(pending[0]!.retry_count).toBe(1)
+  })
+
+  test("4xx 重试超限后仍保留但停试（需人工修复）", async () => {
+    const store = Store.memory()
+    store.enqueueReport(report)
+    // 模拟已重试 10 次：直接设 retry_count=10
+    store.markFailed(store.pendingReports()[0]!.id) // +1 → retry_count=1
+    for (let i = 1; i < 10; i++) store.markFailed(store.pendingReports()[0]!.id)
+    // 现在 retry_count=10，再次 4xx 应仍保留但不再额外计数
+    stubFetch(400)
+    const sent = await createReporter(store, () => identity, noUsage).flushOutbox()
+    expect(sent).toBe(0)
+    const pending = store.pendingReports()
+    expect(pending.length).toBe(1)
+    expect(pending[0]!.retry_count).toBe(11) // markFailed 仍被调用（继续计数）
   })
 
   test("无 collector_url 时退化为本机（不推送）", async () => {

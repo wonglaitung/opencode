@@ -72,6 +72,11 @@ export function createReporter(
           })
           if (!res.ok) {
             if (res.status >= 400 && res.status < 500) {
+              if ((item.retry_count ?? 0) >= 10) {
+                console.error(`[session-mgmt] outbox#${item.id} 重试 ${item.retry_count} 次仍失败，停试，需修复 identity.json`)
+                store.markFailed(item.id)
+                continue
+              }
               // 4xx 为客户端问题（鉴权/payload），标记 failed 保留待重试
               // 修复配置后下次 flushOutbox 会重新尝试
               const hint =
@@ -86,7 +91,9 @@ export function createReporter(
           }
           store.markSent(item.id)
           sent++
-        } catch {
+        } catch (e) {
+          console.warn(`[session-mgmt] flushOutbox 网络异常，保留待补推:`, e instanceof Error ? e.message : e)
+          store.touchAttempt(item.id)
           break // 网络不可达，保留 outbox 待恢复补推
         }
       }

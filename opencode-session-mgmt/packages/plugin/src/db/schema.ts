@@ -21,6 +21,7 @@ export interface OutboxRow {
   created_at: number
   sent: number // 0 未送达 / 1 已送达 / 2 被拒绝（保留待重试）
   last_attempt_at: number | null
+  retry_count: number
 }
 
 /** 数据库中存储的原始行（JSON 字段为字符串）。 */
@@ -63,6 +64,8 @@ export const MIGRATIONS: string[] = [
   );`,
   // v5：outbox 增 last_attempt_at 列——记录最后一次尝试时间（4xx 拒绝后保留待重试）
   `ALTER TABLE outbox ADD COLUMN last_attempt_at INTEGER;`,
+  // v6：outbox 增 retry_count 列——记录 4xx 重试次数，超过阈值后停试（避免配置错误时无限刷日志）
+  `ALTER TABLE outbox ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 0;`,
 ]
 
 export const SCHEMA_VERSION = MIGRATIONS.length
