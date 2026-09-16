@@ -34,8 +34,8 @@ export function buildReport(row: WorkflowSessionRow, apiKeyHash: string, usage: 
 export interface Reporter {
   /** 组装并入队一条汇报；无身份/无工作流时静默跳过。 */
   enqueueReport(sessionID: string): Promise<void>
-  /** 将 outbox 中未送达汇报推送到收集服务；失败则保留待下次补推。返回成功条数。 */
-  flushOutbox(): Promise<number>
+  /** 将 outbox 中未送达汇报推送到收集服务；失败则保留待下次补推。返回成功条数。exit 为 true 时输出警告（退出时），否则静默。 */
+  flushOutbox(options?: { exit?: boolean }): Promise<number>
 }
 
 export function createReporter(
@@ -55,7 +55,7 @@ export function createReporter(
       if (report) store.enqueueReport(report)
     },
 
-    async flushOutbox() {
+    async flushOutbox(options?: { exit?: boolean }) {
       const identity = getIdentity()
       if (!identity || !identity.collector_url) return 0 // 退化为仅本机统计（12）
       const pending = store.pendingReports()
@@ -92,7 +92,13 @@ export function createReporter(
           store.markSent(item.id)
           sent++
         } catch (e) {
-          console.warn(`[session-mgmt] flushOutbox 网络异常，保留待补推:`, e instanceof Error ? e.message : e)
+          const msg = `[session-mgmt] flushOutbox 网络异常，保留待补推: ${e instanceof Error ? e.message : e}`
+          const hint = "提示：报告已本地缓冲，恢复后自动补推。如持续失败请检查 ~/.config/opencode/session-mgmt/identity.json 收集服务地址与网络连通性。"
+          if (options?.exit) {
+            console.warn(`${msg}\n${hint}`)
+          } else {
+            console.debug(msg)
+          }
           store.touchAttempt(item.id)
           break // 网络不可达，保留 outbox 待恢复补推
         }

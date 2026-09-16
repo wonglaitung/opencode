@@ -161,7 +161,7 @@ const SessionMgmtPlugin: Plugin = async (input) => {
     dispose: async () => {
       clearTimeout(startup)
       clearInterval(timer)
-      await reporter.flushOutbox()
+      await reporter.flushOutbox({ exit: true })
       store.close()
     },
   }
