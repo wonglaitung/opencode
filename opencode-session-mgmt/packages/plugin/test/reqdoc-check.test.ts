@@ -68,12 +68,12 @@ describe("reqdoc_check", () => {
     const out = String(
       await tools.reqdoc_check!.execute({ source: rel } as never, { sessionID: "r1", worktree } as never),
     )
-    expect(out).toContain("已校验 PRD 渲染结构")
-    expect(out).toContain("章节骨架 ✓")
-    expect(out).toContain("功能点块：1/1")
+    expect(out).toContain("已校验文档结构")
+    expect(out).toContain("章节结构 ✓")
+    expect(out).toContain("功能点：1/1")
     expect(out).toContain("覆盖进度")
-    expect(out).toContain("✓ 结构合规，可 review_submit 定稿")
-    expect(out).toContain("期望骨架")
+    expect(out).toContain("✓ 结构合规，可提交最终确认")
+    expect(out).toContain("期望结构")
     const render = store.get("r1")!.workflow!.render!
     expect(render.source).toBe(rel)
     expect(render.expectedFeatures).toBe(1)
@@ -92,7 +92,7 @@ describe("reqdoc_check", () => {
     const out = String(
       await tools.reqdoc_check!.execute({ source: rel } as never, { sessionID: "r1", worktree } as never),
     )
-    expect(out).toContain("⚠ 渲染违规")
+    expect(out).toContain("⚠ 文档结构有")
     expect(out).toContain("功能点块数 1 ≠ 已确认功能点 2")
     const render = store.get("r1")!.workflow!.render!
     expect(render.featureCount).toBe(1)

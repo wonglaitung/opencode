@@ -244,7 +244,7 @@ describe("reqdoc 打分卡门禁（进入 prd 阶段前）", () => {
     const out = String(await tools.workflow_advance!.execute({ stage: "edge", action: "enter", developer_confirmed: false } as never, ctx))
     expect(out).toContain("下一阶段")
     expect(out).toContain("前置条件")
-    expect(out).toContain("打分卡")
+    expect(out).toContain("质量评分")
     store.close()
   })
 

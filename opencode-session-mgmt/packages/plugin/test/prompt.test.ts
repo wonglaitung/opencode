@@ -68,7 +68,7 @@ describe("buildSystemFragment", () => {
     expect(text).toContain("workflow_revisit") // 完成态也给「改本需求」路径
     expect(text).not.toContain("尚未开始")
     expect(text).not.toContain("初始化工作流")
-    expect(text).toContain("提交门禁：allowed")
+    expect(text).toContain("提交状态：allowed")
   })
 
   test("reqdoc 完成：提示 /new + revisit，无 git 门禁相关文案", () => {
@@ -133,7 +133,7 @@ describe("buildSystemFragment", () => {
       updatedAt: 1000,
     }
     const text = buildSystemFragment(s)
-    expect(text).toContain("PRD 评分：90/100")
+    expect(text).toContain("质量评分：90/100")
     expect(text).toContain("达标")
     expect(text).toContain("业务确认：已")
   })
@@ -141,7 +141,9 @@ describe("buildSystemFragment", () => {
   test("reqdoc 未打分 → 状态条不含 PRD 评分行；低分未确认标注清晰", () => {
     const s = createWorkflowState("reqdoc")
     applyTransition(s, "edge", "enter", 1)
-    expect(buildSystemFragment(s)).not.toContain("PRD 评分")
+    const text = buildSystemFragment(s)
+    // 规约文本含"质量评分：85/100"示例，用正则排除引号内的示例
+    expect(text).not.toMatch(/[^"“]质量评分：\d/)
     s.score = {
       dims: {
         businessValue: { score: 15, max: 15 },
@@ -159,16 +161,17 @@ describe("buildSystemFragment", () => {
       confirmedAt: null,
       updatedAt: 1000,
     }
-    const text = buildSystemFragment(s)
-    expect(text).toContain("PRD 评分：75/100")
-    expect(text).toContain("未达标")
-    expect(text).toContain("业务确认：未")
+    const text2 = buildSystemFragment(s)
+    expect(text2).toContain("质量评分：75/100")
+    expect(text2).toContain("未达标")
+    expect(text2).toContain("业务确认：未")
   })
 
   test("sdlc 恒无 PRD 评分行（打分卡仅 reqdoc）", () => {
     const s = createWorkflowState("sdlc")
     applyTransition(s, "implementation", "enter", 1)
-    expect(buildSystemFragment(s)).not.toContain("PRD 评分")
+    const text = buildSystemFragment(s)
+    expect(text).not.toMatch(/[^"“]质量评分：\d/)
   })
 
   describe("模板送达（reqdoc prd 阶段注入模板全文）", () => {
@@ -286,20 +289,20 @@ describe("buildStateBar 渲染校验行（质量飞轮 P2）", () => {
     const s = createWorkflowState("reqdoc")
     s.render = okRender()
     const bar = buildStateBar(s, "prd")
-    expect(bar).toContain("渲染校验：✓ 结构合规（1 功能点）")
+    expect(bar).toContain("文档校验：✓ 结构合规（1 功能点）")
   })
 
   test("reqdoc 记录过但有违规 → ✗ 缺章节等明细", () => {
     const s = createWorkflowState("reqdoc")
     s.render = { ...okRender(), missing: ["第四章 术语定义与业务规则"], ok: false, chaptersPresent: okRender().chaptersPresent.filter((c) => c !== "第四章 术语定义与业务规则") }
     const bar = buildStateBar(s, "prd")
-    expect(bar).toContain("渲染校验：✗ 缺章节：第四章 术语定义与业务规则")
+    expect(bar).toContain("文档校验：✗ 缺章节：第四章 术语定义与业务规则")
   })
 
   test("reqdoc 未记录 → 提示未执行 reqdoc_check（柔性提示）", () => {
     const s = createWorkflowState("reqdoc")
     const bar = buildStateBar(s, "prd")
-    expect(bar).toContain("渲染校验：未执行 reqdoc_check")
+    expect(bar).toContain("文档校验：未执行")
   })
 
   test("sdlc → 不出现渲染校验行（仅 reqdoc 提示，不打扰）", () => {

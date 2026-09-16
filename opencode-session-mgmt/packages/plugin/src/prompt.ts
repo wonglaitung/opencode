@@ -145,7 +145,7 @@ export function buildStateBar(workflow: WorkflowState, stage: string | null): st
     }
   }
   const bar = def.stages
-    .map((name) => `${def.labels[name] ?? name}(${name})[${workflow.stages[name].status}]`)
+    .map((name) => `${def.labels[name] ?? name}[${workflow.stages[name].status}]`)
     .join(" → ")
   const lines = ["## 当前工作流", header, bar]
 
@@ -170,38 +170,38 @@ export function buildStateBar(workflow: WorkflowState, stage: string | null): st
   if (workflow.score) {
     const passed = workflow.score.total >= REQDOC_SCORE_PASS
     lines.push(
-      `PRD 评分：${workflow.score.total}/100（${passed ? "达标 ✓" : `未达标，需 ≥${REQDOC_SCORE_PASS} 才可进入渲染/定稿`}）；业务确认：${workflow.score.confirmed ? "已" : "未"}`,
+      `质量评分：${workflow.score.total}/100（${passed ? "达标 ✓" : `未达标，需 ≥${REQDOC_SCORE_PASS} 才可生成文档/最终确认`}）；业务确认：${workflow.score.confirmed ? "已" : "未"}`,
     )
   }
-  // 追问探针覆盖（质量飞轮 P1）：reqdoc 记录过探针才展示（柔性：未记录不打扰）
+  // 信息覆盖（质量飞轮 P1）：reqdoc 记录过覆盖才展示（柔性：未记录不打扰）
   if (workflow.probes) {
     const total = REQDOC_PROBES.length
     const gapNames = workflow.probes.gaps
       .map((id) => REQDOC_PROBES.find((p) => p.id === id)?.label ?? id)
       .join("、")
     lines.push(
-      `追问覆盖：已问 ${workflow.probes.asked.length}/${total} 探针；缺口：${gapNames || "无"}；轮次 ${workflow.probes.round}`,
+      `信息覆盖：已确认 ${workflow.probes.asked.length}/${total} 项；缺口：${gapNames || "无"}；轮次 ${workflow.probes.round}`,
     )
   }
-  // 渲染结构校验（质量飞轮 P2）：reqdoc_check 记录过才展示明细；reqdoc 未记录则提示未执行（柔性，不打扰 sdlc）
+  // 文档校验（质量飞轮 P2）：reqdoc_check 记录过才展示明细；reqdoc 未记录则提示未执行（柔性，不打扰 sdlc）
   if (workflow.render) {
     const rv = renderStructureViolations(workflow.render)
     lines.push(
       rv.length === 0
-        ? `渲染校验：✓ 结构合规（${workflow.render.featureCount} 功能点）`
-        : `渲染校验：✗ ${rv[0]}${rv.length > 1 ? ` 等 ${rv.length} 项` : ""}；功能点 ${workflow.render.featureCount}/${workflow.render.expectedFeatures}`,
+        ? `文档校验：✓ 结构合规（${workflow.render.featureCount} 功能点）`
+        : `文档校验：✗ ${rv[0]}${rv.length > 1 ? ` 等 ${rv.length} 项` : ""}；功能点 ${workflow.render.featureCount}/${workflow.render.expectedFeatures}`,
     )
-    // 来源覆盖（X 软提示）：展示 [文档]/[问答] 标注占比，提醒全 [问答] 缺书面依据
+    // 来源覆盖：展示 [文档]/[问答] 标注占比，提醒全 [问答] 缺书面依据
     const doc = workflow.render.docBlocks
     const total = workflow.render.featureCount || 1
     const docPct = Math.round((doc / total) * 100)
     lines.push(
       `来源覆盖：文档支撑 ${doc}/${workflow.render.featureCount} 功能点（${docPct}%）` +
         `、标注 [文档] ${workflow.render.docCount} 处 / [问答] ${workflow.render.qaCount} 处` +
-        (doc === 0 ? `；⚠ 全 [问答] 无 [文档] 支撑，定稿需先补材料或业务确认无书面材料` : ""),
+        (doc === 0 ? `；⚠ 全 [问答] 无 [文档] 支撑，最终确认需先补材料或业务确认无书面材料` : ""),
     )
   } else if (getDefinition(workflow.type).type === "reqdoc") {
-    lines.push(`渲染校验：未执行 reqdoc_check（定稿不复核，需评分卡 ≥${REQDOC_SCORE_PASS} 兜底）`)
+    lines.push(`文档校验：未执行（最终确认不复核，需质量评分 ≥${REQDOC_SCORE_PASS} 兜底）`)
   }
   const iteration = workflow.quality.iterationCount ?? 0
   if (iteration > 0) {
@@ -210,7 +210,7 @@ export function buildStateBar(workflow: WorkflowState, stage: string | null): st
     lines.push(`迭代轮次：${iteration}${hottest ? `（最热文件 ${hottest[0]} ×${hottest[1]}）` : ""}`)
   }
   lines.push(
-    `提交门禁：${workflow.commit.status}${
+    `提交状态：${workflow.commit.status}${
       workflow.commit.blocked_by.length > 0 ? `（未完成：${workflow.commit.blocked_by.join("、")}）` : ""
     }`,
   )

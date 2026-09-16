@@ -69,25 +69,25 @@ export function createReqdocProbeTools(store: Store): Record<string, ToolDefinit
   return { reqdoc_probe }
 }
 
-/** 把探针覆盖记录格式化为工具返回文本：已问 X/Y、缺口→对应维度、轮次、10 格覆盖进度条（弱模型直接可见）。 */
+/** 把覆盖记录格式化为工具返回文本：已确认 X/Y、缺口、轮次、10 格覆盖进度条。 */
 function formatProbeCard(probes: ReqdocProbes): string {
   const total = REQDOC_PROBES.length
   const askedLabels = REQDOC_PROBES.filter((p) => probes.asked.includes(p.id))
-    .map((p) => `${p.id}(${p.label})`)
+    .map((p) => p.label)
     .join("、")
   const gapLines = probes.gaps.length
     ? REQDOC_PROBES.filter((p) => probes.gaps.includes(p.id))
-        .map((p) => `  - ${p.id}（${p.label}）→${p.dim} 维度，须在 reqdoc_score 中如实扣分`)
+        .map((p) => `  - ${p.label}`)
         .join("\n")
     : "  （无缺口）"
   const barLen = 10
   const filled = Math.round((probes.asked.length / total) * barLen)
   const bar = "▓".repeat(filled) + "░".repeat(barLen - filled)
   return (
-    `🛠 已记录追问探针覆盖（第 ${probes.round} 轮）：\n` +
-    `已问 ${probes.asked.length}/${total} 探针：${askedLabels || "（无）"}\n` +
-    `缺口探针：\n${gapLines}\n` +
+    `📋 已记录信息覆盖（第 ${probes.round} 轮）：\n` +
+    `已确认 ${probes.asked.length}/${total} 项：${askedLabels || "（无）"}\n` +
+    `缺口项：\n${gapLines}\n` +
     `覆盖进度：[${bar}] ${Math.round((probes.asked.length / total) * 100)}%\n` +
-    `→ 缺口须在 reqdoc_score 中如实扣分（缺口+满分会被门禁拒绝）；补齐缺口后可重打 reqdoc_score，达标后 workflow_advance(stage=prd, action=enter) 进入渲染。`
+    `→ 缺口项需在质量评分中如实扣分；补齐缺口后可重新评分，达标后可进入需求规格书阶段。`
   )
 }

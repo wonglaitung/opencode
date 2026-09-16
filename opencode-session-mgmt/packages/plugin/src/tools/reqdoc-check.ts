@@ -183,7 +183,7 @@ function expectedSkeleton(): string {
   )
 }
 
-/** 把渲染校验记录格式化为工具返回文本：章节/功能点骨架、必填字段来源覆盖、10 格进度条（弱模型直接可见）。 */
+/** 把文档校验记录格式化为工具返回文本：章节/功能点骨架、必填字段来源覆盖、10 格进度条。 */
 function formatRenderCard(
   render: ReqdocRender,
   violations: string[],
@@ -198,8 +198,8 @@ function formatRenderCard(
   const filled = totalFields > 0 ? Math.round((coveredCount / totalFields) * barLen) : barLen
   const bar = "▓".repeat(filled) + "░".repeat(barLen - filled)
   const chapterLine = chapterOk
-    ? `章节骨架 ✓ 齐全且顺序正确（${render.chaptersPresent.length}/${REQDOC_TEMPLATE_CHAPTERS.length} 章）`
-    : `章节骨架 ✗ ${[render.missing.map((t) => `缺 ${t}`), render.outOfOrder.map((t) => `乱序 ${t}`)].flat().join("、")}`
+    ? `章节结构 ✓ 齐全且顺序正确（${render.chaptersPresent.length}/${REQDOC_TEMPLATE_CHAPTERS.length} 章）`
+    : `章节结构 ✗ ${[render.missing.map((t) => `缺 ${t}`), render.outOfOrder.map((t) => `乱序 ${t}`)].flat().join("、")}`
   const focusedBlock =
     focused === undefined
       ? ""
@@ -208,19 +208,19 @@ function formatRenderCard(
         : `\n🔍 增量诊断（${focused.label} 期望 vs 实际）：\n  期望子小节：${FEATURE_SUB_SECTIONS.map((s) => `${s.group}.${s.sub} ${s.title}`).join("、")}\n  ✓ 已具备：${focused.present.join("、") || "（无）"}\n  ✗ 缺失：${focused.missing.join("、") || "（无）"}`
   const iterateNote =
     fails >= 3
-      ? `\n⚠ 已连续 ${fails} 次校验不通过：建议人工介入核对模板格式/结构（章节标题须为 ##/###、功能点块须 ### 起头带序号），或请业务补充材料后重渲染，避免模型在错误结构上反复打磨。`
+      ? `\n⚠ 已连续 ${fails} 次校验不通过：建议人工介入核对文档格式/结构，或请业务补充材料后重新生成，避免反复修改。`
       : ""
   return (
-    `📐 已校验 PRD 渲染结构（${render.source}）：\n` +
+    `📐 已校验文档结构（${render.source}）：\n` +
     `${chapterLine}\n` +
-    `功能点块：${render.featureCount}/${render.expectedFeatures}（已确认功能点数）${featureOk ? " ✓" : " ✗ 骨架不完整"}\n` +
+    `功能点：${render.featureCount}/${render.expectedFeatures}（已确认功能点数）${featureOk ? " ✓" : " ✗ 结构不完整"}\n` +
     `必填字段来源覆盖：${coveredCount}/${totalFields} 处\n` +
-    `期望骨架：${expectedSkeleton()}\n` +
+    `期望结构：${expectedSkeleton()}\n` +
     `覆盖进度：[${bar}] ${totalFields > 0 ? Math.round((coveredCount / totalFields) * 100) : 100}%\n` +
     focusedBlock +
     (violations.length > 0
-      ? `\n⚠ 渲染违规 ${violations.length} 项：\n  - ${violations.join("\n  - ")}\n→ 请修正后重调 reqdoc_check 复查；[缺省] 字段须在 reqdoc_score 对应维度如实扣分。`
-      : `\n✓ 结构合规，可 review_submit 定稿（渲染校验记录已在定稿时复核）。`) +
+      ? `\n⚠ 文档结构有 ${violations.length} 项问题：\n  - ${violations.join("\n  - ")}\n→ 请修正后重新校验；[缺省] 字段需在质量评分中如实扣分。`
+      : `\n✓ 结构合规，可提交最终确认。`) +
     iterateNote
   )
 }

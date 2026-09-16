@@ -27,8 +27,10 @@ describe("loadWorkflowConventions（按工作流类型 + 阶段门控）", () =>
     expect(text).not.toContain("术语须引用原文")
   })
 
-  test("reqdoc null（未开始/完成态）→ 无 global 规约，返回 null", () => {
-    expect(loadWorkflowConventions("reqdoc", null, emptyRoot())).toBeNull()
+  test("reqdoc null（未开始/完成态）→ 注入 global 规约（07-业务口语.md）", () => {
+    const text = loadWorkflowConventions("reqdoc", null, emptyRoot())
+    expect(text).not.toBeNull()
+    expect(text).toContain("业务口语规约")
   })
 
   test("sdlc implementation 阶段：注入 global(提交信息) + implementation(代码期)，不混入 design/reqdoc", () => {

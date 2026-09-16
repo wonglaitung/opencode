@@ -18,8 +18,9 @@ describe("reqdoc_probe", () => {
       ctx,
     )
     expect(String(out)).toContain("第 1 轮")
-    expect(String(out)).toContain("已问 2/7 探针")
-    expect(String(out)).toContain("authority（权限与机构隔离）→authority 维度")
+    expect(String(out)).toContain("已确认 2/7 项")
+    expect(String(out)).toContain("缺口项：")
+    expect(String(out)).toContain("权限与机构隔离")
     const probes = store.get("s1")!.workflow!.probes!
     expect(probes.asked).toEqual(["main_flow", "exception"])
     expect(probes.gaps).toEqual(["authority"])
@@ -85,7 +86,7 @@ describe("reqdoc_probe", () => {
       { asked: ["main_flow", "flow_trigger", "exception", "reverse", "desensitize", "audit", "authority"], gaps: [] } as never,
       ctx,
     )
-    expect(String(out)).toContain("已问 7/7 探针")
+    expect(String(out)).toContain("已确认 7/7 项")
     expect(String(out)).toContain("无缺口")
     expect(String(out)).toContain("[▓▓▓▓▓▓▓▓▓▓] 100%")
     store.close()

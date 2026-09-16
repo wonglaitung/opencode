@@ -103,7 +103,7 @@ export function createReqdocScoreTools(store: Store): Record<string, ToolDefinit
   return { reqdoc_score }
 }
 
-/** 把打分卡格式化为工具返回文本：各维得分 + 扣分明细 + 总分 + 达标/门禁提示（弱模型直接可见）。 */
+/** 把打分卡格式化为工具返回文本：各维得分 + 扣分明细 + 总分 + 达标提示。 */
 function formatScoreCard(score: ReqdocScore): string {
   const dimLines = REQDOC_SCORE_DIMS.map((dim) => {
     // 兜底：工具恒写 8 维，但防御旧/异常数据不致渲染崩溃
@@ -114,14 +114,13 @@ function formatScoreCard(score: ReqdocScore): string {
     ? score.deductions.map((d) => `  - ${d.reason}${d.evidence ? `（证据：${d.evidence}）` : ""}`).join("\n")
     : "  （无扣分明细）"
   const passed = score.total >= REQDOC_SCORE_PASS
-  // 质量得分进度条（实施方案第四节：如 [▓▓▓▓▓░░░░░ 50%]；10 格，进度直观反映达标）
   const barLen = 10
   const totalMax = REQDOC_SCORE_DIMS.reduce((s, d) => s + d.max, 0)
   const filled = Math.round((score.total / totalMax) * barLen)
   const bar = "▓".repeat(filled) + "░".repeat(barLen - filled)
   return (
-    `📊 已记录 PRD 质量打分（业务已确认，总分自动计算）：\n${dimLines}\n` +
-    `扣分明细：\n${deductionLines}\n质量得分进度：[${bar}] ${Math.round((score.total / totalMax) * 100)}%（${score.total}/${totalMax}）\n` +
-    `→ ${passed ? `达标（≥${REQDOC_SCORE_PASS}）✓，可进入下一步（需求规格书渲染）。` : `未达标（<${REQDOC_SCORE_PASS}）✗，请按扣分明细回到追问环节补全信息后重新打分。`}`
+    `📊 已记录质量评分（业务已确认，总分自动计算）：\n${dimLines}\n` +
+    `扣分明细：\n${deductionLines}\n质量进度：[${bar}] ${Math.round((score.total / totalMax) * 100)}%（${score.total}/${totalMax}）\n` +
+    `→ ${passed ? `达标（≥${REQDOC_SCORE_PASS}）✓，可进入下一步（生成需求规格书）。` : `未达标（<${REQDOC_SCORE_PASS}）✗，请按扣分明细补全信息后重新评分。`}`
   )
 }

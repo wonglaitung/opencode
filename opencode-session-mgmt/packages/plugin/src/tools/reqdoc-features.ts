@@ -65,7 +65,7 @@ export function createReqdocFeatureTools(store: Store): Record<string, ToolDefin
       const list = (saved.features ?? [])
         .map((f) => `  ${f.no}. ${f.name}（${f.priority === "high" ? "高" : f.priority === "medium" ? "中" : "低"}）`)
         .join("\n")
-      return `✅ 已确认 ${created} 个功能点（写入 06_功能点 目录，并预建 07_需求规格产出 同名子目录）：\n${list}\n接下来按《业务需求说明书》模板逐功能点渲染，内容来源标注 [文档]/[问答]/[缺省]。`
+      return `✅ 已确认 ${created} 个功能点（写入 06_功能点 目录，并预建 07_需求规格产出 同名子目录）：\n${list}\n接下来按《业务需求说明书》模板逐功能点生成文档，内容来源标注 [文档]/[问答]/[缺省]。`
     },
   })
 

@@ -18,19 +18,19 @@ const z = tool.schema
  */
 const REQDOC_STAGE_PREREQS: Record<string, string[]> = {
   rules: ["需求资料目录（01~05）已建", "业务已选择投放材料或确认直接口述", "已扫描提取已投放材料"],
-  edge: ["已明确投放/口述方式", "03_制度与合规 / 04_角色与权限 已投且扫描（或确认口述）", "基线工时已录入（workflow_baseline）"],
+  edge: ["已明确投放/口述方式", "03_制度与合规 / 04_角色与权限 已投且扫描（或确认口述）", "基线工时已录入"],
   prd: [
-    "已调用 reqdoc_probe 记录追问探针（P0.1 前置，未记录即拦截）",
-    "功能点清单已拆分并经业务确认（reqdoc_confirm_features）",
-    "打分卡 ≥85 且业务确认（reqdoc_score，business_confirmed=true）",
-    "字段定义已落库（reqdoc_field_dict 数据字典，确无结构化字段可 skip_field_dict=true 豁免）",
-    "追问缺口已如实扣分，无缺口+满分矛盾",
+    "已记录信息覆盖（未记录即拦截）",
+    "功能点清单已拆分并经业务确认",
+    "质量评分 ≥85 且业务确认",
+    "字段定义已落库（确无结构化字段可跳过）",
+    "信息缺口已如实扣分，无缺口+满分矛盾",
   ],
   review: [
-    "PRD 已按模板渲染并写入 07_需求规格产出",
-    "已 reqdoc_check 结构合规（章节齐全/功能点块/字段来源）",
+    "文档已按模板生成并写入 07_需求规格产出",
+    "文档结构校验合规（章节齐全/功能点/字段来源）",
     "来源真实性达标（[文档] 占比 ≥30% 或 ≥2 功能点含文档支撑），或业务确认无书面材料",
-    "已登记理解确认要点且逐条回填来源证据（comprehension_confirm 的 sourceLabel/sourceQuote）",
+    "已登记理解确认要点且逐条回填来源证据",
   ],
 }
 
@@ -154,7 +154,7 @@ export function createWorkflowTools(store: Store): Record<string, ToolDefinition
           : ""
       return (
         `✅ ${def.labels[args.stage] ?? args.stage} → ${stage.status}\n` +
-        `提交门禁：${saved.commit.status}` +
+        `提交状态：${saved.commit.status}` +
         (saved.commit.blocked_by.length ? `（未完成：${saved.commit.blocked_by.join("、")}）` : "") +
         prereqLines
       )
