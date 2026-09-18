@@ -21,6 +21,7 @@
 | [leadership-brief-reqdoc.md](leadership-brief-reqdoc.md) | 设计文档 | **reqdoc 汇报材料**（给管理层）：需求书工作流价值、退出风险/ROI 回应、质量飞轮三支柱、兼容现状、决策请求（技术细节见 workflow-reqdoc.md）；与 leadership-brief.md 并列、同一七节骨架 | 无入站引用 | 可 |
 | [reqdoc-prd-template.md](reqdoc-prd-template.md) | 运行时资源 | reqdoc PRD 模板的 **md 渲染载体与权威源**（prd 阶段由插件注入） | **代码硬引用**：[template.ts](../packages/plugin/src/template.ts)（`TEMPLATE_FILENAME` 常量拼接候选路径）、[workflow.ts](../packages/shared/src/workflow.ts)（r14/r20 规则文本）、[pack-bundle.sh](../scripts/pack-bundle.sh)（拷 docs/ 到 bundle 根）、[template.test.ts](../packages/plugin/test/template.test.ts) | **不可改名 / 不可移出 docs/ 根**（模板送达机制按 `docs/<此文件名>` 解析，移动即破坏） |
 | [qwen3.6-27b.chat-template.jinja](qwen3.6-27b.chat-template.jinja) | 部署参考 | 部署模型 qwen3.6-27b 的 chat template（vLLM 部署用） | [deployment.md](deployment.md) | 可（同步 deployment.md） |
+| [deploy-sync.md](deploy-sync.md) | 部署参考 | **部署同步指南**：三个插件 + CLI 同步到 Windows 目标的步骤 | 无入站引用 | 可 |
 
 ## 关键约束速览
 
