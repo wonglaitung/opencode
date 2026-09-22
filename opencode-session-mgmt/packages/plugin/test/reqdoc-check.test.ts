@@ -4,7 +4,7 @@
  * 仅 reqdoc 可用（sdlc 拒绝）、源文件缺失报错。
  */
 import { afterEach, describe, expect, test } from "bun:test"
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { REQDOC_TEMPLATE_CHAPTERS } from "sm-shared"
@@ -183,6 +183,55 @@ describe("reqdoc_check", () => {
     }
     expect(out).toContain("已连续 3 次校验不通过")
     expect(out).toContain("人工介入")
+    store.close()
+  })
+})
+
+describe("reqdoc_render_skeleton / reqdoc_patch（P1/P2 服务端骨架与增量填充）", () => {
+  test("生成骨架并写入，含全部章节与已确认功能点块", async () => {
+    const { store, worktree } = setupReqdoc(2)
+    const rel = "07_需求规格产出/1_测试/需求规格书.md"
+    const tools = createReqdocCheckTools(store)
+    const ctx = { sessionID: "r1", worktree } as never
+    const out = String(await tools.reqdoc_render_skeleton!.execute({ source: rel } as never, ctx))
+    expect(out).toContain("已生成 PRD 骨架")
+    const md = readFileSync(join(worktree, rel), "utf8")
+    expect(md).toContain("## 第一章 项目信息")
+    expect(md).toContain("## 第七章 验收标准")
+    expect(md).toContain("### 5.1 功能点 1")
+    expect(md).toContain("### 5.2 功能点 2")
+    expect(store.get("r1")!.workflow!.render!.expectedFeatures).toBe(2)
+    store.close()
+  })
+
+  test("reqdoc_patch 填充功能点子小节：保留标题、写入正文", async () => {
+    const { store, worktree } = setupReqdoc(1)
+    const rel = "07_需求规格产出/1_测试/需求规格书.md"
+    const tools = createReqdocCheckTools(store)
+    const ctx = { sessionID: "r1", worktree } as never
+    await tools.reqdoc_render_skeleton!.execute({ source: rel } as never, ctx)
+    const out = String(
+      await tools.reqdoc_patch!.execute(
+        { source: rel, target: "5.1.2.3", content: "- 网络超时重试 3 次 [文档]" } as never,
+        ctx,
+      ),
+    )
+    expect(out).toContain("已填充小节 5.1.2.3")
+    const md = readFileSync(join(worktree, rel), "utf8")
+    expect(md).toContain("##### 5.1.2.3 异常处理要求")
+    expect(md).toContain("网络超时重试 3 次 [文档]")
+    store.close()
+  })
+
+  test("reqdoc_patch 源文件不存在 → 报错提示先生成骨架", async () => {
+    const { store, worktree } = setupReqdoc(1)
+    const tools = createReqdocCheckTools(store)
+    await expect(
+      tools.reqdoc_patch!.execute(
+        { source: "07_需求规格产出/无/需求规格书.md", target: "3.1", content: "x" } as never,
+        { sessionID: "r1", worktree } as never,
+      ),
+    ).rejects.toThrow(/源文件不存在或不可读/)
     store.close()
   })
 })

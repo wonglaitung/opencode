@@ -10,7 +10,6 @@ import {
   REQDOC_SCORE_DIMS,
   REQDOC_SCORE_PASS,
   getDefinition,
-  reqdocScoreRubric,
   type ReqdocScore,
   type ReqdocScoreDeduction,
   type ReqdocScoreDimKey,
@@ -25,7 +24,7 @@ const dimKeys = REQDOC_SCORE_DIMS.map((d) => d.key) as [ReqdocScoreDimKey, ...Re
 export function createReqdocScoreTools(store: Store): Record<string, ToolDefinition> {
   const reqdoc_score = tool({
     description:
-      `reqdoc 打分卡：AI 对照评分标准逐维打分，评分标准（满分 100）：\n${reqdocScoreRubric()}\n` +
+      "reqdoc 打分卡：AI 对照评分标准逐维打分（评分标准与逐条扣分口径同 reqdoc-r21，满分 100，单点事实源）。" +
       "必须先向业务展示各维得分与扣分明细，业务明确认可后才调用本工具记录；总分自动计算。" +
       "**prd 门禁：进入需求规格书阶段之前必须先调用本工具并获业务确认，总分≥85 才可推进**。" +
       "仅 reqdoc 工作流有效；<85 分可按扣分明细回到追问环节补全信息后重新打分覆盖。",

@@ -8,7 +8,7 @@
  *   与评测 render 判定类共用同一函数（同源，避免两份漂移）。
  * 模板演进须同步本文件 schema（workflow-reqdoc.md 10 章已承诺），docs/reqdoc-prd-template.md 本身不动。
  */
-import type { ReqdocScore, ReqdocScoreDimKey } from "./workflow"
+import type { ReqdocFeature, ReqdocScore, ReqdocScoreDimKey } from "./workflow"
 
 /** 模板章节（骨架，渲染 diff 校验用）：meta 章只查出现，sections 章查子小节齐全。 */
 export interface ReqdocTemplateSection {
@@ -484,155 +484,133 @@ export function renderCheckRubric(): string {
   )
 }
 
-// ---- 增量更新：功能点块提取与替换 ----
-
-/** 功能点标题正则（复用 parseRenderStructure 同一规则，保持一致）。 */
-const FEATURE_HEADING_RE = /^###\s+(?:5\.(\d+)\s+|(?:功能点\s*)?(\d+)(?:[：:_\s].*|\.(?!\s*功能点)[^\d].*|)$)/
-
-/** 从功能点标题行解析序号（1-based）。返回 0 表示无法解析。 */
-function parseFeatureNumber(heading: string): number {
-  const m = heading.match(FEATURE_HEADING_RE)
-  if (!m) return 0
-  return parseInt(m[1] ?? m[2] ?? "0", 10)
-}
-
-export interface FeatureBlock {
-  /** 功能点序号（1-based） */
-  number: number
-  /** 标题行文本（如 "### 5.1 功能点1"） */
-  heading: string
-  /** 功能点块完整 markdown（含标题行） */
-  block: string
-  /** 起始行号（0-based，含标题行） */
-  startLine: number
-  /** 结束行号（0-based，不含下一块起始或 EOF） */
-  endLine: number
-}
-
-export interface ExtractResult {
-  /** 请求的功能点块 */
-  feature: FeatureBlock
-  /** 前一个功能点块的最后若干行（上下文衔接用）；首个功能点则为空 */
-  prevContext: string
-  /** 后一个功能点块的前若干行（上下文衔接用）；最后一个功能点则为空 */
-  nextContext: string
-}
-
-/** 功能点块上下文行数（提取前后各 N 行供 AI 参考衔接）。 */
-const CONTEXT_LINES = 5
+// ---- 渲染目标结构摘要（P3 上下文瘦身：替代模板全文注入） ----
 
 /**
- * 从 PRD markdown 中提取指定功能点的完整块 + 行号范围 + 前后上下文。
- * 供增量更新时 AI 参考当前内容并重写。
+ * 渲染目标结构摘要：由结构 schema 生成（约 1k 字符），替代模板全文（7.6k）注入系统提示。
+ * 模型据此与 reqdoc_patch 的小节键填充骨架；模板逐字落实由服务端 reqdoc_render_skeleton 保证。
  */
-export function extractFeatureBlock(md: string, featureN: number): ExtractResult | string {
-  const lines = md.split(/\r?\n/)
-  const blocks: FeatureBlock[] = []
+export function renderTargetDigest(): string {
+  const chapters = REQDOC_TEMPLATE_CHAPTERS.map((c) =>
+    c.sections?.length ? `${c.title}（${c.sections.map((s) => `${s.key} ${s.title}`).join("、")}）` : c.title,
+  ).join("；")
+  const subs = FEATURE_SUB_SECTIONS.map((s) => `${s.group}.${s.sub} ${s.title}`).join("、")
+  const fields = REQDOC_TEMPLATE_FIELDS.map((f) => `${f.key} ${f.title}`).join("、")
+  return (
+    `章节骨架：${chapters}。\n` +
+    `功能点块（### 5.k 名称，k=功能点序号）：含子小节 ${subs}（编号全局连续）。\n` +
+    `映射字段须逐功能点标来源 [文档]/[问答]/[缺省：理由]：${fields}。`
+  )
+}
 
-  let cur: string[] | null = null
-  let curStart = 0
-  let curNum = 0
-  let curHeading = ""
+// ---- 骨架生成（P1 服务端生成，消除模型巨型 write） ----
 
-  const flush = () => {
-    if (cur) {
-      blocks.push({
-        number: curNum,
-        heading: curHeading,
-        block: cur.join("\n"),
-        startLine: curStart,
-        endLine: curStart + cur.length,
-      })
-    }
-  }
-
-  for (let i = 0; i < lines.length; i++) {
-    if (FEATURE_HEADING_RE.test(lines[i]!)) {
-      flush()
-      const num = parseFeatureNumber(lines[i]!)
-      cur = [lines[i]!]
-      curStart = i
-      curNum = num
-      curHeading = lines[i]!
-    } else if (cur) {
-      cur.push(lines[i]!)
-    }
-  }
-  flush()
-
-  const target = blocks.find((b) => b.number === featureN)
-  if (!target) {
-    const found = blocks.map((b) => b.number)
-    return `未找到功能点 ${featureN}（已有功能点：${found.length > 0 ? found.join(", ") : "无"}）`
-  }
-
-  const targetIdx = blocks.indexOf(target)
-  const prevBlock = targetIdx > 0 ? blocks[targetIdx - 1] : null
-  const nextBlock = targetIdx < blocks.length - 1 ? blocks[targetIdx + 1] : null
-
-  const prevContext = prevBlock
-    ? lines.slice(Math.max(prevBlock.endLine - CONTEXT_LINES, prevBlock.startLine), prevBlock.endLine).join("\n")
-    : ""
-  const nextContext = nextBlock
-    ? lines.slice(nextBlock.startLine, Math.min(nextBlock.startLine + CONTEXT_LINES, nextBlock.endLine)).join("\n")
-    : ""
-
-  return { feature: target, prevContext, nextContext }
+/** 优先级勾选行（与模板 5.k 块一致）。 */
+function priorityLine(p: ReqdocFeature["priority"]): string {
+  const hit = p === "high" ? "高" : p === "low" ? "低" : "中"
+  return `- 优先级：${["高", "中", "低"].map((x) => `${x === hit ? "●" : "○"} ${x}`).join("　")}`
 }
 
 /**
- * 替换 PRD markdown 中指定功能点的块。
- * 写入后自动校验该块结构，不合规则拒绝写入并返回错误。
+ * 服务端生成 PRD 骨架（P1）：第 1~4、6、7 章逐字取自模板正文，第五章按已确认功能点生成 N 个块
+ * （以模板 5.1 块为骨架，替换编号/名称/优先级）。模型不再手写整篇骨架，避免单次输出过长被截断。
+ * templateText 为 null（模板读不到）或功能点为空时返回 null，调用方退化为模型 write。
  */
-export function replaceFeatureBlock(md: string, featureN: number, newBlock: string): { ok: boolean; md: string; error?: string } {
+export function buildPrdSkeleton(templateText: string | null, features: readonly ReqdocFeature[]): string | null {
+  if (!templateText || features.length === 0) return null
+  const lines = templateText.split(/\r?\n/)
+  const findLine = (prefix: string, from = 0): number => {
+    for (let i = from; i < lines.length; i++) if (lines[i]!.startsWith(prefix)) return i
+    return -1
+  }
+  const ch1 = findLine("## 第一章")
+  const ch5 = findLine("## 第五章")
+  const ch6 = findLine("## 第六章")
+  if (ch1 < 0 || ch5 < 0 || ch6 < 0) return null
+  const isFeatureHeading = (l: string) => /^###\s+5\.\d+\s/.test(l)
+  const firstFeat = lines.findIndex(isFeatureHeading)
+  const secondFeat = firstFeat < 0 ? -1 : lines.findIndex((l, i) => i > firstFeat && isFeatureHeading(l))
+  if (firstFeat < 0 || secondFeat < 0) return null
+
+  // 封面：章一之前、跳过开头说明性引用与文档标题后的行（项目名 / 业务需求说明书 / 日期）
+  const cover: string[] = []
+  for (let i = ch1 - 1; i >= 0; i--) {
+    const l = lines[i]!
+    if (l.startsWith(">") || l.startsWith("# ")) break
+    cover.unshift(l)
+  }
+  while (cover.length > 0 && cover[0]!.trim() === "") cover.shift()
+  while (cover.length > 0 && cover[cover.length - 1]!.trim() === "") cover.pop()
+
+  const blockTemplate = lines.slice(firstFeat, secondFeat).join("\n")
+  const blocks = features.flatMap((f, idx) => {
+    const k = idx + 1
+    const block = blockTemplate
+      .replace(/5\.1/g, `5.${k}`)
+      .replace(/^(### 5\.\d+\s+)功能点名称\s*$/m, (_m, p1: string) => `${p1}${f.name}`)
+      .replace(/功能点编号：\s*\d+/, `功能点编号：${k}`)
+      .replace(/功能名称：\s*X+/, () => `功能名称：${f.name}`)
+      .replace(/^- 优先级：.*$/m, priorityLine(f.priority))
+    return [...block.split("\n"), ""]
+  })
+
+  return [
+    ...cover,
+    "",
+    ...lines.slice(ch1, ch5),
+    ...lines.slice(ch5, firstFeat),
+    ...blocks,
+    ...lines.slice(ch6),
+  ].join("\n")
+}
+
+// ---- 增量填充（P2 服务端按编号定位，模型只产出内容） ----
+
+/** 小节键可用范围提示（patchSectionBody 报错用）。 */
+function sectionKeyHint(): string {
+  return "可用键：3.1~3.6、4.1/4.2、6.1~6.4、7.1/7.2，功能点子小节 5.k.1.1、5.k.1.2、5.k.2.1~5.k.2.13（k=功能点序号）"
+}
+
+/** 合法小节键：章内小节（REQDOC_TEMPLATE_CHAPTERS.sections）或功能点子小节（5.k.{1|2}.n）。 */
+function isKnownSectionKey(key: string): boolean {
+  if (REQDOC_TEMPLATE_CHAPTERS.some((c) => c.sections?.some((s) => s.key === key))) return true
+  return /^5\.\d+\.[12]\.\d+$/.test(key)
+}
+
+/**
+ * 替换指定小节正文（P2）：按编号定位标题（如 3.6 / 5.1.2.3），保留标题行、替换其正文到
+ * 下一个同级或更高级标题。模型只产出各小节内容，编号与标题由服务端骨架保证，故结构不会出错。
+ */
+export function patchSectionBody(md: string, key: string, content: string): { ok: boolean; md: string; error?: string } {
+  const k = key.trim()
+  if (!/^[0-9]+(\.[0-9]+)*$/.test(k) || !isKnownSectionKey(k)) {
+    return { ok: false, md, error: `未知小节键 ${key}。${sectionKeyHint()}` }
+  }
   const lines = md.split(/\r?\n/)
-
-  // 定位目标块的行范围
-  const blocks: { num: number; start: number; end: number }[] = []
-  let curStart = -1
-  let curNum = 0
-
-  const flush = () => {
-    if (curStart >= 0) {
-      blocks.push({ num: curNum, start: curStart, end: lines.length })
-    }
-  }
-
+  let start = -1
+  let level = 0
   for (let i = 0; i < lines.length; i++) {
-    if (FEATURE_HEADING_RE.test(lines[i]!)) {
-      if (curStart >= 0) {
-        blocks[blocks.length - 1]!.end = i
-      }
-      curNum = parseFeatureNumber(lines[i]!)
-      curStart = i
-      blocks.push({ num: curNum, start: i, end: lines.length })
+    const h = headingAt(lines[i]!)
+    if (!h) continue
+    if (h.text === k || h.text.startsWith(`${k} `)) {
+      start = i
+      level = h.level
+      break
     }
   }
-
-  const targetIdx = blocks.findIndex((b) => b.num === featureN)
-  if (targetIdx < 0) {
-    const found = blocks.map((b) => b.num)
-    return { ok: false, md, error: `未找到功能点 ${featureN}（已有功能点：${found.length > 0 ? found.join(", ") : "无"}）` }
+  if (start < 0) {
+    return { ok: false, md, error: `未找到小节 ${k}（请先用 reqdoc_render_skeleton 生成骨架）。${sectionKeyHint()}` }
   }
-
-  const target = blocks[targetIdx]!
-
-  // 校验新块结构
-  const newStructure = parseRenderStructure(newBlock)
-  if (!newStructure.featureOk) {
-    const missing = newStructure.missingFeatureSections.filter((s) => s.startsWith(`功能点 1 缺`))
-    return {
-      ok: false,
-      md,
-      error: `新功能点块结构不完整：${missing.join("、")}。请补充缺失子小节后重试。`,
+  let end = lines.length
+  for (let i = start + 1; i < lines.length; i++) {
+    const h = headingAt(lines[i]!)
+    if (h && h.level <= level) {
+      end = i
+      break
     }
   }
-
-  // 替换：保留原块之前和之后的内容，插入新块
-  const before = lines.slice(0, target.start)
-  const after = lines.slice(target.end)
-  const newLines = newBlock.split(/\r?\n/)
-  const result = [...before, ...newLines, ...after].join("\n")
-
-  return { ok: true, md: result }
+  const body = content.replace(/\r?\n+$/, "")
+  const newLines = body.length > 0 ? body.split(/\r?\n/) : []
+  const result = [...lines.slice(0, start + 1), ...newLines, ...lines.slice(end)]
+  return { ok: true, md: result.join("\n") }
 }

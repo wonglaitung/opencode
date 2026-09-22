@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { createWorkflowState, type ReqdocRender, type WorkflowState } from "sm-shared"
 import { buildStateBar, buildSystemFragment } from "../src/prompt"
-import { loadReqdocTemplate } from "../src/template"
 import { applyTransition } from "../src/workflow-ops"
 
 /** 推进到全部阶段 approved（完成态）。 */
@@ -174,7 +173,8 @@ describe("buildSystemFragment", () => {
     expect(text).not.toMatch(/[^"“]质量评分：\d/)
   })
 
-  describe("模板送达（reqdoc prd 阶段注入模板全文）", () => {
+  describe("渲染目标结构注入（P3：reqdoc prd 阶段注入结构摘要，不注入模板全文）", () => {
+    const NO_OVERLAY = "/tmp/opencode-sm-conv-not-exist"
     /** 推进 reqdoc 至 prd 进行中（goal/rules/edge 均已 approve）。 */
     function reqdocAtPrd(): WorkflowState {
       const s = createWorkflowState("reqdoc")
@@ -186,35 +186,30 @@ describe("buildSystemFragment", () => {
       return s
     }
 
-    test("reqdoc prd 阶段：注入真实模板全文（送达）", () => {
-      const text = buildSystemFragment(reqdocAtPrd(), {}, [], loadReqdocTemplate())
-      // 注入块头部标记（规则文本无此字样，可精确区分）
-      expect(text).toContain("# 《业务需求说明书》模板全文（插件自动送达")
-      expect(text).toContain("# 业务需求说明书模板") // 模板正文首行
-      expect(text).toContain("## 第一章 项目信息")
+    test("reqdoc prd 阶段：注入结构摘要（章节骨架 + 子小节 + 映射字段）", () => {
+      const text = buildSystemFragment(reqdocAtPrd(), {}, [], NO_OVERLAY)
+      expect(text).toContain("# 渲染目标结构")
+      expect(text).toContain("章节骨架")
+      expect(text).toContain("2.13 流程图")
+      expect(text).toContain("映射字段须逐功能点标来源")
+      // 不再注入模板全文（首行标题）
+      expect(text).not.toContain("# 业务需求说明书模板")
     })
 
-    test("reqdoc prd 阶段 + 模板读不到（null）→ 不注入，退内联骨架", () => {
-      const text = buildSystemFragment(reqdocAtPrd(), {}, [], null)
-      expect(text).not.toContain("插件自动送达")
-    })
-
-    test("reqdoc 非 prd 阶段 → 不注入模板", () => {
+    test("reqdoc 非 prd 阶段 → 不注入结构摘要", () => {
       const s = createWorkflowState("reqdoc")
       applyTransition(s, "edge", "enter", 1)
-      const text = buildSystemFragment(s, {}, [], loadReqdocTemplate())
-      expect(text).not.toContain("插件自动送达")
+      expect(buildSystemFragment(s, {}, [], NO_OVERLAY)).not.toContain("# 渲染目标结构")
     })
 
-    test("reqdoc 完成态 → 不注入模板", () => {
-      const text = buildSystemFragment(completeReqdoc(), {}, [], loadReqdocTemplate())
-      expect(text).not.toContain("插件自动送达")
+    test("reqdoc 完成态 → 不注入结构摘要", () => {
+      expect(buildSystemFragment(completeReqdoc(), {}, [], NO_OVERLAY)).not.toContain("# 渲染目标结构")
     })
 
-    test("sdlc → 恒不注入模板（模板送达仅 reqdoc）", () => {
+    test("sdlc → 恒不注入结构摘要（仅 reqdoc）", () => {
       const s = createWorkflowState("sdlc")
       applyTransition(s, "implementation", "enter", 1)
-      expect(buildSystemFragment(s, {}, [], loadReqdocTemplate())).not.toContain("插件自动送达")
+      expect(buildSystemFragment(s, {}, [], NO_OVERLAY)).not.toContain("# 渲染目标结构")
     })
   })
 
@@ -225,7 +220,7 @@ describe("buildSystemFragment", () => {
     test("reqdoc goal 阶段 → 注入 goal 规约，不含 rules 阶段规约", () => {
       const s = createWorkflowState("reqdoc")
       applyTransition(s, "goal", "enter", 1)
-      const text = buildSystemFragment(s, {}, [], null, NO_OVERLAY)
+      const text = buildSystemFragment(s, {}, [], NO_OVERLAY)
       expect(text).toContain("《reqdoc 编写规约》自遵循清单")
       expect(text).toContain("显式 in scope") // goal 阶段：范围与边界
       expect(text).not.toContain("术语须引用原文") // rules 阶段：不注入
@@ -234,7 +229,7 @@ describe("buildSystemFragment", () => {
     test("sdlc implementation 阶段 → 注入 global + implementation(代码期)，不含 design/reqdoc", () => {
       const s = createWorkflowState("sdlc")
       applyTransition(s, "implementation", "enter", 1)
-      const text = buildSystemFragment(s, {}, [], null, NO_OVERLAY)
+      const text = buildSystemFragment(s, {}, [], NO_OVERLAY)
       expect(text).toContain("《sdlc 编写规约》自遵循清单")
       expect(text).toContain("复杂度与代码异味") // implementation（安全-代码期）
       expect(text).toContain("AI 编写代码须带 [AI] 标记") // global
@@ -246,7 +241,7 @@ describe("buildSystemFragment", () => {
     test("sdlc design 阶段 → 注入 global + design(安全设计/并发/日志)，不含代码期指标", () => {
       const s = createWorkflowState("sdlc")
       applyTransition(s, "design", "enter", 1)
-      const text = buildSystemFragment(s, {}, [], null, NO_OVERLAY)
+      const text = buildSystemFragment(s, {}, [], NO_OVERLAY)
       expect(text).toContain("《sdlc 编写规约》自遵循清单")
       expect(text).toContain("凭证与密钥") // 安全-设计
       expect(text).toContain("避免竞态") // 并发-设计
@@ -257,7 +252,7 @@ describe("buildSystemFragment", () => {
     })
 
     test("sdlc 完成态 → 仅注入 global 提交信息规约，不含 implementation", () => {
-      const text = buildSystemFragment(completeSdlc(), {}, [], null, NO_OVERLAY)
+      const text = buildSystemFragment(completeSdlc(), {}, [], NO_OVERLAY)
       expect(text).toContain("AI 编写代码须带 [AI] 标记") // global 提交信息规约（提交发生在完成态）
       expect(text).not.toContain("凭证与密钥") // implementation 阶段规约不注入
     })

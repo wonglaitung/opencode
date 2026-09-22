@@ -1,34 +1,35 @@
 /**
- * reqdoc 渲染结构校验工具（质量飞轮 P2「渲染可测化」，设计文档 workflow-reqdoc.md 7 章、10 章）。
- * reqdoc_check —— PRD 渲染完成并写入 07_需求规格产出 后调用，对照模板结构 schema
- * （REQDOC_TEMPLATE_CHAPTERS / REQDOC_TEMPLATE_FIELDS，同源 renderCheckRubric）做渲染 diff 校验：
- * 章节齐全/顺序、功能点块数与已确认功能点一致、映射字段逐功能点带来源标注。
- * 校验结果写入 workflow.render；review_submit 定稿时重读源 md 复核（柔性：不调用则放行）。
- * 仅 reqdoc 工作流有效。
+ * reqdoc 渲染工具（质量飞轮 P2「渲染可测化」+ P1/P2 服务端骨架与增量填充，设计文档 workflow-reqdoc.md 7 章、10 章）。
+ * reqdoc_render_skeleton —— 服务端按模板逐字生成 PRD 骨架（消除模型巨型 write）。
+ * reqdoc_patch          —— 按小节编号填充正文（服务端定位标题、保证编号，模型只产出内容）。
+ * reqdoc_check          —— PRD 写入后对照模板结构 schema（REQDOC_TEMPLATE_CHAPTERS / REQDOC_TEMPLATE_FIELDS）
+ *                          做渲染 diff 校验：章节齐全/顺序、功能点块数、映射字段来源标注。
+ * 校验结果写入 workflow.render；review_submit 定稿时重读源 md 复核（柔性：不调用则放行）。仅 reqdoc 工作流有效。
  */
 import { tool, type ToolDefinition } from "@opencode-ai/plugin"
 import {
   REQDOC_TEMPLATE_CHAPTERS,
   REQDOC_TEMPLATE_FIELDS,
   FEATURE_SUB_SECTIONS,
+  buildPrdSkeleton,
   getDefinition,
   parseRenderStructure,
-  renderCheckRubric,
+  patchSectionBody,
   renderStructureViolations,
-  extractFeatureBlock,
-  replaceFeatureBlock,
+  type ReqdocFeature,
   type ReqdocRender,
 } from "sm-shared"
 import type { Store } from "../db"
 import { WorkflowOpError } from "../workflow-ops"
 import { resolveWithinWorktree, projectRoot } from "../fs-safe"
+import { loadReqdocTemplate } from "../template"
 
 const z = tool.schema
 
 export function createReqdocCheckTools(store: Store): Record<string, ToolDefinition> {
   const reqdoc_check = tool({
     description:
-      `reqdoc 渲染校验：PRD 渲染完成并写入 07_需求规格产出 后，对照模板结构 schema 校验渲染 diff（章节齐全/顺序、功能点块数、必填字段来源标注）：\n${renderCheckRubric()}\n` +
+      "reqdoc 渲染校验：PRD 渲染完成并写入 07_需求规格产出 后，对照模板结构 schema 校验渲染 diff（章节齐全/顺序、功能点块数、必填字段来源标注；结构口径同 reqdoc-r23）。" +
       "source 填 PRD Markdown 相对项目根路径（如 07_需求规格产出/N_名称/xxx.md）。" +
       "校验有违规须修正后重调复查；结构合规后再 review_submit 定稿。仅 reqdoc 工作流有效。",
     args: {
@@ -76,66 +77,80 @@ export function createReqdocCheckTools(store: Store): Record<string, ToolDefinit
     },
   })
 
-  const reqdoc_extract_feature = tool({
+  const reqdoc_render_skeleton = tool({
     description:
-      "增量更新辅助：从 PRD 中提取指定功能点的完整 markdown 块 + 行号范围 + 前后上下文。" +
-      "供 AI 参考当前内容后重写该功能点，配合 reqdoc_replace_feature 写回。仅 reqdoc 工作流有效。",
+      "reqdoc PRD 骨架生成：服务端按《业务需求说明书》模板逐字生成骨架（章节 1~7 + 第五章按已确认功能点的空块）并写入指定路径，" +
+      "免去模型手写整篇骨架（避免单次输出过长被截断）。须先经 reqdoc_confirm_features 确认功能点。" +
+      "生成后用 reqdoc_patch 逐小节填充内容。仅 reqdoc 工作流有效。",
     args: {
-      source: z.string().describe("PRD Markdown 相对项目根路径"),
-      feature: z.string().describe("功能点序号（如 '1' 或 '功能点 1'）"),
+      source: z.string().describe("PRD Markdown 相对项目根路径（07_需求规格产出/N_名称/xxx.md）"),
     },
     async execute(args, context) {
-      const def = getDefinition("reqdoc")
-      if (def.type !== "reqdoc") throw new WorkflowOpError("仅 reqdoc 工作流有效")
-      const mdPath = resolveWithinWorktree(projectRoot(context), args.source)
-      let md: string
-      try {
-        md = await Bun.file(mdPath).text()
-      } catch {
-        throw new WorkflowOpError(`源文件不存在或不可读：${args.source}`)
+      let features: ReqdocFeature[] = []
+      store.mutateWorkflow(context.sessionID, (workflow) => {
+        const def = getDefinition(workflow.type)
+        if (def.type !== "reqdoc") {
+          throw new WorkflowOpError(`reqdoc_render_skeleton 仅用于 reqdoc 工作流（当前为 ${def.type}）`)
+        }
+        features = workflow.features ?? []
+      })
+      if (features.length === 0) {
+        throw new WorkflowOpError("尚无已确认功能点：请先拆解功能点清单并经业务确认后调用 reqdoc_confirm_features")
       }
-      const m = args.feature.match(/(\d+)/)
-      if (!m) throw new WorkflowOpError(`未解析到功能点序号：${args.feature}（请填 '1' 或 '功能点 1'）`)
-      const featureN = parseInt(m[1], 10)
-      const result = extractFeatureBlock(md, featureN)
-      if (typeof result === "string") throw new WorkflowOpError(result)
+      const skeleton = buildPrdSkeleton(loadReqdocTemplate(), features)
+      if (skeleton === null) {
+        throw new WorkflowOpError("模板不可用或功能点为空，无法生成骨架：请改用 write 按 reqdoc-r14 内联骨架写入")
+      }
+      const mdPath = resolveWithinWorktree(projectRoot(context), args.source)
+      await Bun.write(mdPath, skeleton)
+      const structure = parseRenderStructure(skeleton)
+      const render: ReqdocRender = {
+        ...structure,
+        source: args.source,
+        checkedAt: Date.now(),
+        expectedFeatures: features.length,
+      }
+      store.mutateWorkflow(context.sessionID, (workflow) => {
+        workflow.render = render
+      })
+      const structOk = structure.ok && structure.featureCount === features.length
       return (
-        `📄 功能点 ${featureN} 提取（${args.source}，行 ${result.feature.startLine + 1}-${result.feature.endLine}）：\n` +
-        (result.prevContext ? `--- 前文上下文 ---\n${result.prevContext}\n--- 当前功能点 ---\n` : "") +
-        `${result.feature.block}\n` +
-        (result.nextContext ? `--- 后文上下文 ---\n${result.nextContext}` : "") +
-        `\n\n💡 编辑后调用 reqdoc_replace_feature(source="${args.source}", feature="${args.feature}", newBlock=新内容) 写回。`
+        `🏗 已生成 PRD 骨架（${args.source}，${features.length} 个功能点）。\n` +
+        (structOk
+          ? "✓ 章节与功能点骨架齐全。"
+          : `⚠ 骨架结构异常（请检查模板）：缺章节 ${structure.missing.join("、") || "无"}；缺小节 ${structure.missingSections.join("、") || "无"}；功能点块 ${structure.featureCount}/${features.length}。）`) +
+        `\n下一步：用 reqdoc_patch(source="${args.source}", target=<小节编号>, content=<内容>) 逐小节填充。`
       )
     },
   })
 
-  const reqdoc_replace_feature = tool({
+  const reqdoc_patch = tool({
     description:
-      "增量更新：将 AI 重写后的新功能点块写回 PRD，精确替换原位置，其他内容不动。" +
-      "写入后自动校验该块结构，不合规则拒绝写入。仅 reqdoc 工作流有效。",
+      "reqdoc PRD 小节填充：按编号把小节正文写入骨架（服务端定位标题、保留标题行，仅替换正文），模型只产出内容，编号与结构由服务端保证。" +
+      "target 支持章内小节（3.1~3.6、4.1/4.2、6.1~6.4、7.1/7.2）与功能点子小节（5.k.1.1 简要概述、5.k.1.2 控制要求、5.k.2.1~5.k.2.13，k=功能点序号）。" +
+      "content 为小节正文（不含标题行），逐字段标来源 [文档]/[问答]/[缺省：理由]。每次只填 1~3 个小节。仅 reqdoc 工作流有效。",
     args: {
       source: z.string().describe("PRD Markdown 相对项目根路径"),
-      feature: z.string().describe("功能点序号（如 '1' 或 '功能点 1'）"),
-      newBlock: z.string().describe("新的功能点 markdown 块（含 ### 5.N 标题，完整 14 个子小节）"),
+      target: z.string().describe("小节编号（如 3.6、4.1、5.1.2.3、6.1、7.1）"),
+      content: z.string().describe("小节正文（不含标题行）"),
     },
     async execute(args, context) {
-      const def = getDefinition("reqdoc")
-      if (def.type !== "reqdoc") throw new WorkflowOpError("仅 reqdoc 工作流有效")
+      store.mutateWorkflow(context.sessionID, (workflow) => {
+        const def = getDefinition(workflow.type)
+        if (def.type !== "reqdoc") {
+          throw new WorkflowOpError(`reqdoc_patch 仅用于 reqdoc 工作流（当前为 ${def.type}）`)
+        }
+      })
       const mdPath = resolveWithinWorktree(projectRoot(context), args.source)
       let md: string
       try {
         md = await Bun.file(mdPath).text()
       } catch {
-        throw new WorkflowOpError(`源文件不存在或不可读：${args.source}`)
+        throw new WorkflowOpError(`源文件不存在或不可读：${args.source}。请先用 reqdoc_render_skeleton 生成骨架。`)
       }
-      const m = args.feature.match(/(\d+)/)
-      if (!m) throw new WorkflowOpError(`未解析到功能点序号：${args.feature}（请填 '1' 或 '功能点 1'）`)
-      const featureN = parseInt(m[1], 10)
-      const result = replaceFeatureBlock(md, featureN, args.newBlock)
+      const result = patchSectionBody(md, args.target, args.content)
       if (!result.ok) throw new WorkflowOpError(result.error!)
-      // 写回文件
       await Bun.write(mdPath, result.md)
-      // 自动校验
       const structure = parseRenderStructure(result.md)
       const render: ReqdocRender = {
         ...structure,
@@ -147,17 +162,11 @@ export function createReqdocCheckTools(store: Store): Record<string, ToolDefinit
         render.expectedFeatures = workflow.features?.length ?? 0
         workflow.render = render
       })
-      const violations = renderStructureViolations(render)
-      return (
-        `✅ 功能点 ${featureN} 已替换并写回（${args.source}）。\n` +
-        (violations.length > 0
-          ? `⚠ 结构校验有 ${violations.length} 项违规：\n  - ${violations.join("\n  - ")}\n→ 请修正后重调 reqdoc_check 复查。`
-          : "✓ 结构校验通过。")
-      )
+      return `✏ 已填充小节 ${args.target}（${args.source}）。`
     },
   })
 
-  return { reqdoc_check, reqdoc_extract_feature, reqdoc_replace_feature }
+  return { reqdoc_check, reqdoc_render_skeleton, reqdoc_patch }
 }
 
 /** 增量诊断（P3.7）：把某功能点的期望子小节与实际情况逐项对比，输出缺失清单。 */

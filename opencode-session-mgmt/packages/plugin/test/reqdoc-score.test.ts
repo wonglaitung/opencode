@@ -48,14 +48,13 @@ describe("reqdoc_score", () => {
     store.close()
   })
 
-  test("工具描述携带完整评分标准（单一事实源 reqdocScoreRubric，含逐维扣分标准）", () => {
+  test("工具描述不再内嵌评分标准全文（单点事实源转 reqdoc-r21）", () => {
     const store = Store.memory(() => "reqdoc")
     const tools = createReqdocScoreTools(store)
     const description = tools.reqdoc_score!.description
-    expect(description).toContain("评分标准（满分 100）")
-    expect(description).toContain("扣22分：未提及任何异常")
-    expect(description).toContain("网络超时")
-    expect(description).toContain("扣10分：缺失使用角色")
+    expect(description).toContain("reqdoc-r21")
+    expect(description).not.toContain("扣22分：未提及任何异常")
+    expect(description).not.toContain("扣10分：缺失使用角色")
     store.close()
   })
 

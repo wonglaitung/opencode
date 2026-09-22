@@ -19,7 +19,7 @@ export type OpenAITool = {
   }
 }
 
-import { REQDOC_PROBES, reqdocProbeRubric, reqdocScoreRubric } from "sm-shared"
+import { REQDOC_PROBES } from "sm-shared"
 
 /** 探针 id 枚举（与 packages/plugin/src/tools/reqdoc-probe.ts 同源；改 REQDOC_PROBES 时同步此处手写）。 */
 const PROBE_IDS = REQDOC_PROBES.map((p) => p.id)
@@ -298,7 +298,7 @@ export const EVAL_TOOLS: OpenAITool[] = [
     function: {
       name: "reqdoc_score",
       description:
-        `reqdoc 打分卡：AI 对照评分标准逐维打分，评分标准（满分 100）：\n${reqdocScoreRubric()}\n` +
+        "reqdoc 打分卡：AI 对照评分标准逐维打分（评分标准与逐条扣分口径同 reqdoc-r21，满分 100，单点事实源）。" +
         "必须先向业务展示各维得分与扣分明细，业务明确认可后才调用本工具记录；total 由服务端计算。**prd 门禁：workflow_advance(stage=prd, action=enter) 之前必须先调用本工具并获业务确认（business_confirmed=true），total≥85 才可推进**。仅 reqdoc 工作流有效；<85 分可按扣分明细回 edge 追问补缺后重打覆盖。",
       parameters: {
         type: "object",
@@ -339,7 +339,7 @@ export const EVAL_TOOLS: OpenAITool[] = [
     function: {
       name: "reqdoc_probe",
       description:
-        `reqdoc 追问探针：每轮追问结束后调用，记录本轮问过与仍缺口的探针（探针清单，同源 r11）：\n${reqdocProbeRubric()}\n` +
+        "reqdoc 追问探针：每轮追问结束后调用，记录本轮问过与仍缺口的探针（探针清单与追问口径同 reqdoc-r11，单点事实源）。" +
         "asked = 本轮新问的探针 id；gaps = 问过后仍缺口的探针 id；round = 本轮次(1-3)。" +
         "材料已全覆盖、无追问时可调用一次(asked/gaps 可为空)；**进入 prd 前必须已调用本工具记录探针(P0.1 强制前置，workflow_advance(enter prd) 未记录即拦截)**。仅 reqdoc 工作流有效。",
       parameters: {

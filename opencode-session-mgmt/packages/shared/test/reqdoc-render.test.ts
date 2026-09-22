@@ -7,17 +7,18 @@ import { describe, expect, test } from "bun:test"
 import {
   REQDOC_TEMPLATE_CHAPTERS,
   REQDOC_TEMPLATE_FIELDS,
+  buildPrdSkeleton,
   consistencyViolations,
-  extractFeatureBlock,
   missingDefaultReasonViolations,
   noDocumentSupportViolation,
   parseRenderStructure,
-  replaceFeatureBlock,
+  patchSectionBody,
   renderGapViolations,
   renderStructureViolations,
+  renderTargetDigest,
   type ReqdocRender,
 } from "../src/reqdoc-render"
-import type { ReqdocScore } from "../src/workflow"
+import type { ReqdocFeature, ReqdocScore } from "../src/workflow"
 
 /** 一份结构齐全的 PRD md：7 章、第三章 3.1-3.6、第四章 4.1/4.2、2 个功能点块（新格式：5.1/5.2）、映射字段全标来源。 */
 function fullPrd(): string {
@@ -374,120 +375,165 @@ describe("consistencyViolations（一致性门禁）", () => {
   })
 })
 
-describe("extractFeatureBlock", () => {
-  test("提取单功能点 PRD 的功能点 1", () => {
-    const md = fullPrd()
-    const result = extractFeatureBlock(md, 1)
-    expect(typeof result).not.toBe("string")
-    if (typeof result === "string") return
-    expect(result.feature.number).toBe(1)
-    expect(result.feature.heading).toContain("### 5.1")
-    expect(result.feature.block).toContain("5.1.1.1 简要概述")
-    expect(result.feature.block).toContain("5.1.2.12 权限与最小授权")
-    expect(result.feature.startLine).toBeGreaterThanOrEqual(0)
-    expect(result.feature.endLine).toBeGreaterThan(result.feature.startLine)
+// ---- P1 骨架生成 / P2 增量填充 / P3 结构摘要 ----
+
+/** 最小模板（含 buildPrdSkeleton 所需锚点：封面 / 第一章 / 第三章 / 第五章 5.1 块 / 第六章）。 */
+function miniTemplate(): string {
+  const subs = [
+    "##### 5.1.1.1 简要概述",
+    "XXXX",
+    "##### 5.1.1.2 控制要求",
+    "- ○ 涉及　● 不涉及",
+    "##### 5.1.2.1 输入要素的检查",
+    "- ○ 涉及　● 不涉及",
+    "##### 5.1.2.2 系统处理过程",
+    "- ○ 涉及　● 不涉及",
+    "##### 5.1.2.3 异常处理要求",
+    "- ○ 适用　● 不适用",
+    "##### 5.1.2.4 提示信息",
+    "- ○ 适用　● 不适用",
+    "##### 5.1.2.5 其他要求",
+    "- ○ 适用　● 不适用",
+    "##### 5.1.2.6 清算处理",
+    "- ○ 适用　● 不适用",
+    "##### 5.1.2.7 差错处理",
+    "- ○ 适用　● 不适用",
+    "##### 5.1.2.8 交易安全性",
+    "- ○ 适用　● 不适用",
+    "##### 5.1.2.9 数据存贮和清理",
+    "- ○ 适用　● 不适用",
+    "##### 5.1.2.10 附件",
+    "- ○ 涉及　● 不涉及",
+    "##### 5.1.2.11 接口与数据源",
+    "- ○ 涉及　● 不涉及",
+    "##### 5.1.2.12 权限与最小授权",
+    "- ○ 涉及　● 不涉及",
+    "##### 5.1.2.13 流程图",
+    "- ○ 涉及　● 不涉及",
+  ]
+  return [
+    "# 业务需求说明书模板",
+    "> 说明行（不应进入 PRD 正文）",
+    "",
+    "XXXX（项目全称）",
+    "业务需求说明书",
+    "",
+    "日期：YYYY-MM",
+    "",
+    "## 第一章 项目信息",
+    "| 标题 |  |",
+    "",
+    "## 第二章 文档变更过程",
+    "| 版本号 | 修改内容 |",
+    "",
+    "## 第三章 需求概述",
+    "### 3.1 需求类型",
+    "- ● 新增功能　○ 更改功能",
+    "### 3.2 属于流程优化项目",
+    "- ○ 是　● 否",
+    "",
+    "## 第四章 术语定义与业务规则",
+    "### 4.1 术语定义",
+    "- ○ 涉及　● 不涉及",
+    "### 4.2 业务规则",
+    "- ○ 涉及　● 不涉及",
+    "",
+    "## 第五章 需求功能详述",
+    "> 编号规则：功能点 k 的标题为 ### 5.k。",
+    "",
+    "### 5.1 功能点名称",
+    "- 功能点编号：1",
+    "- 功能名称：XXXX",
+    "- 优先级：○ 高　○ 中　● 低",
+    "",
+    ...subs,
+    "",
+    "### 5.2 功能点名称",
+    "- 功能点编号：2",
+    "",
+    "## 第六章 非功能需求",
+    "### 6.1 性能与容量",
+    "XXXX",
+    "",
+    "## 第七章 验收标准",
+    "### 7.1 功能点验收指标",
+    "XXXX",
+  ].join("\n")
+}
+
+const features = (names: string[], priority: ReqdocFeature["priority"] = "high"): ReqdocFeature[] =>
+  names.map((name, i) => ({ no: i + 1, name, priority, confirmedAt: 1 }))
+
+describe("buildPrdSkeleton（P1 服务端生成骨架）", () => {
+  test("生成含封面/章节/功能点块的骨架，且结构合规", () => {
+    const md = buildPrdSkeleton(miniTemplate(), features(["知识入库管理", "报表导出"]))
+    expect(md).not.toBeNull()
+    const text = md!
+    expect(text).toContain("XXXX（项目全称）") // 封面
+    expect(text).toContain("## 第一章 项目信息")
+    expect(text).toContain("## 第三章 需求概述")
+    expect(text).toContain("## 第五章 需求功能详述")
+    expect(text).toContain("## 第六章 非功能需求")
+    expect(text).toContain("## 第七章 验收标准")
+    expect(text).toContain("### 5.1 知识入库管理")
+    expect(text).toContain("### 5.2 报表导出")
+    // 编号全局连续：功能点 2 的末子小节为 5.2.2.13
+    expect(text).toContain("##### 5.2.2.13 流程图")
+    expect(text).toContain("功能点编号：2")
+    expect(text).toContain("● 高")
+    // 说明性引用不进正文
+    expect(text).not.toContain("说明行（不应进入 PRD 正文）")
+    const structure = parseRenderStructure(text)
+    expect(structure.missing).toEqual([])
+    expect(structure.outOfOrder).toEqual([])
+    expect(structure.featureOk).toBe(true)
+    expect(structure.featureCount).toBe(2)
   })
 
-  test("提取双功能点 PRD 的功能点 2", () => {
-    const md = fullPrd()
-    const result = extractFeatureBlock(md, 2)
-    expect(typeof result).not.toBe("string")
-    if (typeof result === "string") return
-    expect(result.feature.number).toBe(2)
-    expect(result.feature.heading).toContain("### 5.2")
-    expect(result.feature.block).toContain("5.2.1.1 简要概述")
-  })
-
-  test("功能点 1 有后文上下文", () => {
-    const md = fullPrd()
-    const result = extractFeatureBlock(md, 1)
-    expect(typeof result).not.toBe("string")
-    if (typeof result === "string") return
-    expect(result.prevContext).toBe("")
-    expect(result.nextContext).toContain("### 5.2")
-  })
-
-  test("功能点 2 有前文上下文", () => {
-    const md = fullPrd()
-    const result = extractFeatureBlock(md, 2)
-    expect(typeof result).not.toBe("string")
-    if (typeof result === "string") return
-    expect(result.prevContext).toContain("5.1.2.12")
-    expect(result.nextContext).toBe("")
-  })
-
-  test("不存在的功能点返回错误", () => {
-    const md = fullPrd()
-    const result = extractFeatureBlock(md, 99)
-    expect(typeof result).toBe("string")
+  test("模板为 null 或功能点为空 → null", () => {
+    expect(buildPrdSkeleton(null, features(["A"]))).toBeNull()
+    expect(buildPrdSkeleton(miniTemplate(), [])).toBeNull()
   })
 })
 
-describe("replaceFeatureBlock", () => {
-  function newBlock1(): string {
-    return [
-      "### 5.1 更新后功能点1",
-      "#### 5.1.1 功能点输入要素",
-      "##### 5.1.1.1 简要概述 [问答]",
-      "##### 5.1.1.2 控制要求 [问答]",
-      "#### 5.1.2 功能点处理要求",
-      "##### 5.1.2.1 输入要素的检查 [问答]",
-      "##### 5.1.2.2 系统处理过程 [问答]",
-      "##### 5.1.2.3 异常处理要求 [问答]",
-      "##### 5.1.2.4 提示信息 [问答]",
-      "##### 5.1.2.5 其他要求 [问答]",
-      "##### 5.1.2.6 清算处理 [问答]",
-      "##### 5.1.2.7 差错处理 [问答]",
-      "##### 5.1.2.8 交易安全性 [问答]",
-      "##### 5.1.2.9 数据存贮和清理 [问答]",
-      "##### 5.1.2.10 附件 [问答]",
-      "##### 5.1.2.11 接口与数据源 [问答]",
-      "##### 5.1.2.12 权限与最小授权 [问答]",
-      "##### 5.1.2.13 流程图 [问答]",
-    ].join("\n")
-  }
-
-  test("替换功能点 1 成功", () => {
-    const md = fullPrd()
-    const result = replaceFeatureBlock(md, 1, newBlock1())
+describe("patchSectionBody（P2 服务端按编号填充）", () => {
+  test("填充功能点子小节：保留标题、替换正文、其它小节不动", () => {
+    const md = buildPrdSkeleton(miniTemplate(), features(["知识入库管理"]))!
+    const result = patchSectionBody(md, "5.1.2.3", "- 网络超时重试 3 次 [文档]\n- 重复提交幂等去重 [问答]")
     expect(result.ok).toBe(true)
-    expect(result.error).toBeUndefined()
-    expect(result.md).toContain("### 5.1 更新后功能点1")
-    expect(result.md).toContain("### 5.2 功能点2")
-    expect(result.md).toContain("5.1.1.1 简要概述 [问答]")
+    expect(result.md).toContain("##### 5.1.2.3 异常处理要求")
+    expect(result.md).toContain("网络超时重试 3 次 [文档]")
+    expect(result.md).toContain("##### 5.1.2.4 提示信息") // 下一小节标题保留
+    expect(result.md).toContain("##### 5.1.2.2 系统处理过程") // 上一小节标题保留
   })
 
-  test("替换后功能点 2 不受影响", () => {
-    const md = fullPrd()
-    const result = replaceFeatureBlock(md, 1, newBlock1())
+  test("填充章内小节 3.1：替换到下一同级标题前", () => {
+    const md = buildPrdSkeleton(miniTemplate(), features(["知识入库管理"]))!
+    const result = patchSectionBody(md, "3.1", "- ● 新增功能　○ 更改功能 [问答]")
     expect(result.ok).toBe(true)
-    expect(result.md).toContain("### 5.2 功能点2")
-    expect(result.md).toContain("5.2.1.1 简要概述 [文档]")
+    expect(result.md).toContain("### 3.1 需求类型")
+    expect(result.md).toContain("[问答]")
+    expect(result.md).toContain("### 3.2 属于流程优化项目")
   })
 
-  test("替换后章节结构保持完整", () => {
-    const md = fullPrd()
-    const result = replaceFeatureBlock(md, 1, newBlock1())
-    expect(result.ok).toBe(true)
-    expect(result.md).toContain("## 第一章 项目信息")
-    expect(result.md).toContain("## 第六章 非功能需求")
-    expect(result.md).toContain("## 第七章 验收标准")
+  test("未知小节键 / 未找到标题 → 报错且不改动 md", () => {
+    const md = buildPrdSkeleton(miniTemplate(), features(["知识入库管理"]))!
+    const bad = patchSectionBody(md, "5.1", "x")
+    expect(bad.ok).toBe(false)
+    expect(bad.error).toContain("未知小节键")
+    expect(bad.md).toBe(md)
+    const missing = patchSectionBody(md, "3.6", "x")
+    expect(missing.ok).toBe(false)
+    expect(missing.error).toContain("未找到小节 3.6")
   })
+})
 
-  test("结构不完整的新块被拒绝", () => {
-    const md = fullPrd()
-    const badBlock = "### 5.1 坏块\n##### 5.1.1.1 简要概述 [问答]\n"
-    const result = replaceFeatureBlock(md, 1, badBlock)
-    expect(result.ok).toBe(false)
-    expect(result.error).toContain("结构不完整")
-    // 原 md 不变
-    expect(result.md).toBe(md)
-  })
-
-  test("不存在的功能点返回错误", () => {
-    const md = fullPrd()
-    const result = replaceFeatureBlock(md, 99, newBlock1())
-    expect(result.ok).toBe(false)
-    expect(result.error).toContain("未找到功能点 99")
+describe("renderTargetDigest（P3 结构摘要）", () => {
+  test("含章节骨架 / 子小节 / 映射字段，且远小于模板全文", () => {
+    const digest = renderTargetDigest()
+    expect(digest).toContain("章节骨架")
+    expect(digest).toContain("2.13 流程图")
+    expect(digest).toContain("映射字段须逐功能点标来源")
+    expect(digest.length).toBeLessThan(miniTemplate().length)
   })
 })
