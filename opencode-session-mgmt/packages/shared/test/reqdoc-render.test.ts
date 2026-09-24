@@ -7,8 +7,12 @@ import { describe, expect, test } from "bun:test"
 import {
   REQDOC_TEMPLATE_CHAPTERS,
   REQDOC_TEMPLATE_FIELDS,
+  MAPPED_FIELD_KEYS,
   buildPrdSkeleton,
+  canonicalSourceTag,
   consistencyViolations,
+  coverageFromProvenance,
+  isMappedFieldSection,
   missingDefaultReasonViolations,
   noDocumentSupportViolation,
   parseRenderStructure,
@@ -17,6 +21,7 @@ import {
   renderStructureViolations,
   renderTargetDigest,
   type ReqdocRender,
+  type ReqdocProvenance,
 } from "../src/reqdoc-render"
 import type { ReqdocFeature, ReqdocScore } from "../src/workflow"
 
@@ -535,5 +540,155 @@ describe("renderTargetDigest（P3 结构摘要）", () => {
     expect(digest).toContain("2.13 流程图")
     expect(digest).toContain("映射字段须逐功能点标来源")
     expect(digest.length).toBeLessThan(miniTemplate().length)
+  })
+})
+
+// ---- Option A: 来源记账（P3.10）----
+
+describe("canonicalSourceTag", () => {
+  test("文档 → [文档]", () => {
+    expect(canonicalSourceTag("文档")).toBe("[文档]")
+  })
+
+  test("问答 → [问答]", () => {
+    expect(canonicalSourceTag("问答")).toBe("[问答]")
+  })
+
+  test("缺省 + reason → [缺省：理由]", () => {
+    expect(canonicalSourceTag("缺省", "本次无清算处理")).toBe("[缺省：本次无清算处理]")
+  })
+
+  test("缺省无 reason → [缺省]", () => {
+    expect(canonicalSourceTag("缺省")).toBe("[缺省]")
+  })
+})
+
+describe("isMappedFieldSection", () => {
+  test("5.1.1.2 控制要求 → true", () => {
+    expect(isMappedFieldSection("5.1.1.2")).toBe(true)
+  })
+
+  test("5.1.2.1 输入要素的检查 → true", () => {
+    expect(isMappedFieldSection("5.1.2.1")).toBe(true)
+  })
+
+  test("5.1.2.13 流程图 → true", () => {
+    expect(isMappedFieldSection("5.1.2.13")).toBe(true)
+  })
+
+  test("3.1 需求类型 → false（非功能点小节）", () => {
+    expect(isMappedFieldSection("3.1")).toBe(false)
+  })
+
+  test("5.1.2.2 系统处理过程 → false（不在 MAPPED_FIELD_KEYS 中）", () => {
+    expect(isMappedFieldSection("5.1.2.2")).toBe(false)
+  })
+
+  test("5.1.2.4 提示信息 → false（不在 MAPPED_FIELD_KEYS 中）", () => {
+    expect(isMappedFieldSection("5.1.2.4")).toBe(false)
+  })
+})
+
+describe("coverageFromProvenance", () => {
+  test("全 [文档] → docCount>0, qaCount=0, defaults 全 0", () => {
+    const prov: Record<string, ReqdocProvenance> = {}
+    for (const f of REQDOC_TEMPLATE_FIELDS) {
+      prov[`5.1.${f.key}`] = { tag: "文档", at: 1000 }
+    }
+    const cov = coverageFromProvenance(prov, 1)
+    expect(cov.docCount).toBe(REQDOC_TEMPLATE_FIELDS.length)
+    expect(cov.qaCount).toBe(0)
+    for (const f of REQDOC_TEMPLATE_FIELDS) {
+      expect(cov.defaults[f.key]).toBe(0)
+    }
+  })
+
+  test("全 [缺省：理由] → defaults 全 1", () => {
+    const prov: Record<string, ReqdocProvenance> = {}
+    for (const f of REQDOC_TEMPLATE_FIELDS) {
+      prov[`5.1.${f.key}`] = { tag: "缺省", reason: "不适用", at: 1000 }
+    }
+    const cov = coverageFromProvenance(prov, 1)
+    for (const f of REQDOC_TEMPLATE_FIELDS) {
+      expect(cov.defaults[f.key]).toBe(1)
+    }
+  })
+
+  test("混合 → docCount/qaCount/defaults 各计其数", () => {
+    const prov: Record<string, ReqdocProvenance> = {
+      "5.1.1.2": { tag: "文档", at: 1000 },
+      "5.1.2.1": { tag: "问答", at: 1000 },
+      "5.1.2.3": { tag: "缺省", reason: "不适用", at: 1000 },
+    }
+    const cov = coverageFromProvenance(prov, 1)
+    expect(cov.docCount).toBe(1)
+    expect(cov.qaCount).toBe(1)
+    expect(cov.defaults["2.3"]).toBe(1)
+    expect(cov.defaults["1.2"]).toBe(0)
+  })
+
+  test("空记账 → 全 0", () => {
+    const cov = coverageFromProvenance({}, 1)
+    expect(cov.docCount).toBe(0)
+    expect(cov.qaCount).toBe(0)
+    for (const f of REQDOC_TEMPLATE_FIELDS) {
+      expect(cov.defaults[f.key]).toBe(0)
+    }
+  })
+})
+
+describe("parseRenderStructure（[缺省：理由] 标签解析）", () => {
+  test("[缺省：理由] → 计入 covered 不计入 defaults（非裸缺省）", () => {
+    const md = fullPrd().replace("##### 5.1.2.3 异常处理要求 [文档]\n", "##### 5.1.2.3 异常处理要求 [缺省：本次无异常]\n")
+    const s = parseRenderStructure(md)
+    expect(s.covered["2.3"]).toBe(2)
+    expect(s.defaults["2.3"]).toBe(0) // 不是裸 [缺省]
+  })
+
+  test("[缺省：理由] 全角冒号 → 同样不计入 defaults", () => {
+    const md = fullPrd().replace("##### 5.1.2.3 异常处理要求 [文档]\n", "##### 5.1.2.3 异常处理要求 [缺省：本次无异常]\n")
+    const s = parseRenderStructure(md)
+    expect(s.defaults["2.3"]).toBe(0)
+  })
+
+  test("半角括号 () 包裹的 [文档] → 仍计入 covered", () => {
+    const md = fullPrd()
+      .replace("##### 5.1.2.1 输入要素的检查 [文档]", "##### 5.1.2.1 输入要素的检查 ([文档])")
+      .replace("##### 5.1.1.2 控制要求 [文档]", "##### 5.1.1.2 控制要求 ([文档])")
+    const s = parseRenderStructure(md)
+    expect(s.covered["2.1"]).toBe(2)
+    expect(s.covered["1.2"]).toBe(2)
+  })
+})
+
+describe("patchSectionBody（source_tag 写入标题行）", () => {
+  test("写入 [文档] → 标题行出现 [文档]", () => {
+    const md = buildPrdSkeleton(miniTemplate(), features(["测试"]))!
+    const result = patchSectionBody(md, "5.1.2.3", "- 测试内容", "文档")
+    expect(result.ok).toBe(true)
+    expect(result.md).toContain("##### 5.1.2.3 异常处理要求 [文档]")
+    expect(result.md).toContain("- 测试内容")
+  })
+
+  test("写入 [缺省：理由] → 标题行出现 [缺省：理由]", () => {
+    const md = buildPrdSkeleton(miniTemplate(), features(["测试"]))!
+    const result = patchSectionBody(md, "5.1.2.3", "- 不适用", "缺省", "本次无异常")
+    expect(result.ok).toBe(true)
+    expect(result.md).toContain("##### 5.1.2.3 异常处理要求 [缺省：本次无异常]")
+  })
+
+  test("保留标题行原始空白（cleanHeading 不丢空格）", () => {
+    const md = buildPrdSkeleton(miniTemplate(), features(["测试"]))!
+    const result = patchSectionBody(md, "5.1.2.3", "- 内容", "文档")
+    expect(result.ok).toBe(true)
+    // 标题编号与名称之间有空格
+    expect(result.md).toContain("##### 5.1.2.3 异常处理要求 [文档]")
+  })
+
+  test("content 含 Markdown 标题行 → 拒绝", () => {
+    const md = buildPrdSkeleton(miniTemplate(), features(["测试"]))!
+    const result = patchSectionBody(md, "5.1.2.3", "### 注入标题\n- 内容", "文档")
+    expect(result.ok).toBe(false)
+    expect(result.error).toContain("content 不得包含 Markdown 标题行")
   })
 })

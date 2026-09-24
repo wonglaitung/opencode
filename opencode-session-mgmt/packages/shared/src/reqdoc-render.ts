@@ -135,8 +135,18 @@ function featureSubKey(bi: number, s: FeatureSubSection): string {
   return `5.${bi + 1}.${s.group}.${s.sub}`
 }
 
-/** 来源标注标签（渲染时逐字段标来源，同 reqdoc-r14/r20）：「补」= 模板无对应字段的补充内容。 */
-const SOURCE_TAG_RE = /(\[文档\]|\[问答\]|\[缺省\]|「补」)/g
+/**
+ * 来源标注标签（规范形 + 兜底归一化）。
+ * - 规范形：服务端写入 [文档]/[问答]/[缺省：理由]，有界匹配；
+ * - 兜底：覆盖 write 路径/人工编辑的装饰变体（全/半角括号、空格等）。
+ */
+const SOURCE_TAG_RE = /\[文档\]|\[问答\]|\[缺省(?:\s*[：:][^\]]*)?\]|「补」/g
+
+/** 裸 [缺省]（含空理由 [缺省：] / [缺省:]）：仅此触发完整性门禁（render.defaults 计数）。 */
+const NAKED_DEFAULT_RE = /\[缺省\s*(?:[：:]\s*)?\]/g
+
+/** 10 个映射字段的相对键（须逐功能点标来源，reqdoc-r20）：5.k.1.2, 5.k.2.1/.3/.6/.7/.8/.9/.11/.12/.13。 */
+export const MAPPED_FIELD_KEYS = ["1.2", "2.1", "2.3", "2.6", "2.7", "2.8", "2.9", "2.11", "2.12", "2.13"] as readonly string[]
 
 /** 渲染结构解析产物（parseRenderStructure 返回，运行时与评测共用）。 */
 export interface RenderStructure {
@@ -176,9 +186,41 @@ export interface ReqdocRender extends RenderStructure {
   expectedFeatures: number
 }
 
+/** 渲染来源记账（P3.10）：绝对小节键 → 服务端写入的来源标签（服务端规范写入 + 记账，covered/defaults 读记录）。 */
+export interface ReqdocProvenance {
+  tag: "文档" | "问答" | "缺省"
+  reason?: string
+  at: number
+}
+
+/** 服务端写入的规范来源标签（标题行写入）。 */
+export function canonicalSourceTag(tag: "文档" | "问答" | "缺省", reason?: string): string {
+  if (tag === "缺省" && reason?.trim()) return `[缺省：${reason.trim()}]`
+  if (tag === "缺省") return "[缺省]"
+  return tag === "文档" ? "[文档]" : "[问答]"
+}
+
+/** 该绝对键是否为 10 个映射字段之一（须逐功能点标来源）。 */
+export function isMappedFieldSection(absKey: string): boolean {
+  const m = absKey.match(/^5\.\d+\.(\d+)\.(\d+)$/)
+  if (!m) return false
+  return MAPPED_FIELD_KEYS.includes(`${m[1]}.${m[2]}`)
+}
+
+/** 第 bi 个功能点块某相对字段键的绝对键（如 bi=0, "2.3" → "5.1.2.3"）。 */
+export function absoluteFieldKey(bi: number, fieldKey: string): string {
+  const [g, s] = fieldKey.split(".")
+  return `5.${bi + 1}.${g}.${s}`
+}
+
 /** 标题归一化：忽略所有空白差异（模型渲染时空白/全角空格可能有出入）。 */
 function norm(s: string): string {
   return s.replace(/\s+/g, "").trim()
+}
+
+/** 标题归一化：剥来源标签（含 [缺省：理由]）、全/半角括号与连接符，忽略空白。用于标题匹配。 */
+function cleanHeading(s: string): string {
+  return norm(s.replace(SOURCE_TAG_RE, "").replace(/[（）()\[\]【】［］「」『』+、，,]/g, ""))
 }
 
 /** 解析一行 Markdown 标题；非标题返回 null。 */
@@ -232,8 +274,8 @@ export function parseRenderStructure(md: string): RenderStructure {
     for (const s of ch.sections) {
       const present = block.some((l) => {
         const h = headingAt(l)
-        // 标题行可能带来源标注（弱模型常写成「### 1.1 需求类型 [文档]」），匹配时剥掉
-        return !!h && h.level === 3 && norm(h.text.replace(SOURCE_TAG_RE, "")) === norm(`${s.key} ${s.title}`)
+        // 标题行可能带来源标注（弱模型常写成「### 1.1 需求类型 [文档]」），匹配时归一化
+        return !!h && h.level === 3 && cleanHeading(h.text) === cleanHeading(`${s.key} ${s.title}`)
       })
       if (!present) missingSections.push(`${ch.title} ${s.key} ${s.title}`)
     }
@@ -275,12 +317,10 @@ export function parseRenderStructure(md: string): RenderStructure {
    blocks.forEach((blockLines, bi) => {
       const label = `功能点 ${bi + 1}`
       // 块内小节层级不拘：弱模型渲染常用三级/四级/五级标题皆可，故按 maxLevel 匹配（不强制四级/五级）。
-      // 标题归一化：剥来源标签 [文档]/[问答]/[缺省]/「补」与全角括号包裹（弱模型常写「### 2.1 …（[问答]）」），
-      // 并清掉标签间的连接符（+、、，），否则「2.1 输入要素的检查（[文档]+[问答]）」≠「2.1 输入要素的检查」导致子项 0 命中。
-      const clean = (s: string) => norm(s.replace(SOURCE_TAG_RE, "").replace(/[（）+、，]/g, ""))
+      // 标题归一化：剥来源标签（含 [缺省：理由]）与全/半角括号包裹，确保「2.1 检查（[文档]+[问答]）」命中。
       const matchHeading = (l: string, maxLevel: number, text: string) => {
         const h = headingAt(l)
-        return !!h && h.level <= maxLevel && clean(h.text) === clean(text)
+        return !!h && h.level <= maxLevel && cleanHeading(h.text) === cleanHeading(text)
       }
       // 主分组标题「1. 功能点输入要素」/「2. 功能点处理要求」为可选分组标签（模型常写为纯文本或省略），
       // 其下子项（1.1/1.2 与 2.1~2.10）齐全即视为结构完整，故不再硬要求。编号全局连续：
@@ -300,18 +340,19 @@ export function parseRenderStructure(md: string): RenderStructure {
         const absKey = `5.${bi + 1}.${fg}.${fs}`
         const fi = blockLines.findIndex((l) => matchHeading(l, 5, `${absKey} ${f.title}`))
         if (fi < 0) continue // 结构缺失已在上报
-       // 来源标注可能在标题行上（「##### 2.1 … [文档]」）或标题下内容里，两者都算；到下一级 ≤5 标题止
-       let body = blockLines[fi] + "\n"
-       for (let j = fi + 1; j < blockLines.length; j++) {
-         const h = headingAt(blockLines[j])
-         if (h && h.level <= 5) break
-         body += blockLines[j] + "\n"
-       }
-       const tags: string[] = body.match(SOURCE_TAG_RE) ?? []
-       if (tags.length > 0) covered[f.key] += 1
-       if (tags.includes("[缺省]")) defaults[f.key] += 1
-       if (tags.includes("[文档]")) docCount += 1
-       if (tags.includes("[问答]")) qaCount += 1
+        // 来源标注可能在标题行上（「##### 2.1 … [文档]」）或标题下内容里，两者都算；到下一级 ≤5 标题止
+        let body = blockLines[fi] + "\n"
+        for (let j = fi + 1; j < blockLines.length; j++) {
+          const h = headingAt(blockLines[j])
+          if (h && h.level <= 5) break
+          body += blockLines[j] + "\n"
+        }
+        const tags: string[] = body.match(SOURCE_TAG_RE) ?? []
+        if (tags.length > 0) covered[f.key] += 1
+        // 裸 [缺省]（无理由）触发完整性门禁；[缺省：理由] 是规范形、不计为裸缺省
+        if ((body.match(NAKED_DEFAULT_RE) ?? []).length > 0) defaults[f.key] += 1
+        if (tags.includes("[文档]")) docCount += 1
+        if (tags.includes("[问答]")) qaCount += 1
      }
    })
 
@@ -386,8 +427,8 @@ export function renderGapViolations(
 
 /**
  * 完整性门禁（29148 对齐）：渲染中裸 `[缺省]`（未带不适用理由）即违规。
- * 解析器对 `[缺省：理由]` 不计入 `[缺省]` 标签（SOURCE_TAG_RE 仅匹配裸 `[缺省]`），
- * 故 render.defaults 中计数的即裸 `[缺省]`——任一映射字段出现即说明完整性缺口未解释，定稿拦截。
+ * render.defaults 由 NAKED_DEFAULT_RE 计数（仅匹配裸 `[缺省]` / `[缺省：]` / `[缺省:]`），
+ * `[缺省：理由]`（服务端规范形）不计入裸缺省——任一映射字段出现裸缺省即说明完整性缺口未解释，定稿拦截。
  * 无 render 返回空（柔性：未记录 render 则不放行此门禁）。
  */
 export function missingDefaultReasonViolations(render: ReqdocRender | undefined): string[] {
@@ -408,7 +449,7 @@ function extractSubsection(md: string, num: string, title: string): string {
   let start = -1
   for (let i = 0; i < lines.length; i++) {
     const h = headingAt(lines[i])
-    if (h && h.level === 3 && norm(h.text) === norm(`${num} ${title}`)) {
+    if (h && h.level === 3 && cleanHeading(h.text) === cleanHeading(`${num} ${title}`)) {
       start = i
       break
     }
@@ -477,11 +518,46 @@ export function renderCheckRubric(): string {
     `第四章 术语定义与业务规则（4.1 术语定义/4.2 业务规则）；第五章 需求功能详述（每功能点：输入要素 5.k.1.1/5.k.1.2，` +
     `处理要求 5.k.2.1 输入要素的检查~5.k.2.10 附件，k=功能点序号，编号全局连续不重复）；第六章 非功能需求（6.1 性能与容量~6.4 数据主权与合规）；第七章 验收标准（7.1 功能点验收指标/7.2 量化验收口径）。\n` +
     `功能点块标题：每个功能点须用三级标题（###）起头、带序号，形如「### 5.N 功能点名称」（例：「### 5.1 知识入库管理」）；校验器按此类标题计数功能点块数，缺序号或非三级标题（##/####）不被识别为块。兼容旧格式「### 功能点 N」或「### N_功能点名称」。\n` +
-    `块内固定小节（标题编号+名称须齐全，层级不拘——三级/四级/五级标题均可，不强制四级或五级）：主分组标题「5.k.1 功能点输入要素」（含 5.k.1.1 简要概述、5.k.1.2 控制要求）与「5.k.2 功能点处理要求」（含 5.k.2.1~5.k.2.12）为可选分组标签，模型常写为纯文本或省略，其下子项齐全即视为完整；小节标题须含编号与名称（如「5.1.2.1 输入要素的检查」），来源标签可包全角括号（如「5.1.2.1 输入要素的检查（[问答]）」）。\n` +
-    `映射字段须逐功能点标来源 [文档]/[问答]/[缺省]（标在标题行或该小节正文内均可）：1.2 控制要求、2.1 输入要素的检查、2.3 异常处理要求、2.6 清算处理、2.7 差错处理、2.8 交易安全性、2.9 数据存贮和清理。\n必填字段（逐功能点须标来源 [文档]/[问答]/[缺省]，同 reqdoc-r14/r20）：${fields}。\n` +
+    `块内固定小节（标题编号+名称须齐全，层级不拘——三级/四级/五级标题均可，不强制四级或五级）：主分组标题「5.k.1 功能点输入要素」（含 5.k.1.1 简要概述、5.k.1.2 控制要求）与「5.k.2 功能点处理要求」（含 5.k.2.1~5.k.2.12）为可选分组标签，模型常写为纯文本或省略，其下子项齐全即视为完整；小节标题须含编号与名称（如「5.1.2.1 输入要素的检查」），来源标签由服务端规范写入标题行（如「5.1.2.1 输入要素的检查 [文档]」或「5.1.2.3 异常处理要求 [缺省：本次无异常]」）。\n` +
+    `映射字段须逐功能点标来源 [文档]/[问答]/[缺省：理由]（服务端 reqdoc_patch 的 source_tag 参数写入标题行，content 不含标签）：${fields}。\n` +
     `[缺省] 字段对应打分卡维度打满分 = 渲染缺口与自评矛盾，review_submit 定稿会被拦。\n` +
-    `[缺省] 须写成 [缺省：不适用理由]（如 [缺省：本次无外部系统对接]），禁止裸 [缺省]——裸 [缺省] 触发完整性门禁（review_submit 定稿拦截）。`
+    `[缺省] 必须附不适用理由（source_tag="[缺省]" + reason 参数），服务端写入规范形 [缺省：理由]，禁止裸 [缺省]——裸 [缺省] 触发完整性门禁（review_submit 定稿拦截）。`
   )
+}
+
+/**
+ * 由记账记录（renderProvenance）计算覆盖指标：covered/defaults/docBlocks/docCount/qaCount。
+ * 服务端规范写入保证有界匹配，无需从自由文本解析。
+ */
+export function coverageFromProvenance(
+  provenance: Record<string, ReqdocProvenance>,
+  featureCount: number,
+): { covered: Record<string, number>; defaults: Record<string, number>; docBlocks: number; docCount: number; qaCount: number } {
+  const covered: Record<string, number> = {}
+  const defaults: Record<string, number> = {}
+  for (const f of REQDOC_TEMPLATE_FIELDS) {
+    covered[f.key] = 0
+    defaults[f.key] = 0
+  }
+  let docBlocks = 0
+  let docCount = 0
+  let qaCount = 0
+
+  for (let bi = 0; bi < featureCount; bi++) {
+    let blockHasDoc = false
+    for (const f of REQDOC_TEMPLATE_FIELDS) {
+      const abs = absoluteFieldKey(bi, f.key)
+      const prov = provenance[abs]
+      if (!prov) continue
+      covered[f.key] += 1
+      if (prov.tag === "缺省") defaults[f.key] += 1
+      if (prov.tag === "文档") { docCount += 1; blockHasDoc = true }
+      if (prov.tag === "问答") qaCount += 1
+    }
+    if (blockHasDoc) docBlocks += 1
+  }
+
+  return { covered, defaults, docBlocks, docCount, qaCount }
 }
 
 // ---- 渲染目标结构摘要（P3 上下文瘦身：替代模板全文注入） ----
@@ -578,13 +654,27 @@ function isKnownSectionKey(key: string): boolean {
 }
 
 /**
- * 替换指定小节正文（P2）：按编号定位标题（如 3.6 / 5.1.2.3），保留标题行、替换其正文到
- * 下一个同级或更高级标题。模型只产出各小节内容，编号与标题由服务端骨架保证，故结构不会出错。
+ * 替换指定小节正文 + 标题行来源标签（P2/P3.10）：按编号定位标题（如 3.6 / 5.1.2.3），
+ * 保留标题行（可选写入规范来源标签）、替换正文到下一个同级或更高级标题。
+ * content 不得含 Markdown 标题行（防结构注入）。
  */
-export function patchSectionBody(md: string, key: string, content: string): { ok: boolean; md: string; error?: string } {
+export function patchSectionBody(
+  md: string,
+  key: string,
+  content: string,
+  tag?: "文档" | "问答" | "缺省",
+  reason?: string,
+): { ok: boolean; md: string; error?: string } {
   const k = key.trim()
   if (!/^[0-9]+(\.[0-9]+)*$/.test(k) || !isKnownSectionKey(k)) {
     return { ok: false, md, error: `未知小节键 ${key}。${sectionKeyHint()}` }
+  }
+  if (tag && isMappedFieldSection(k) && tag === "缺省" && (!reason || !reason.trim())) {
+    return { ok: false, md, error: `[缺省] 必须附不适用理由（如 [缺省：本次无清算处理]）。` }
+  }
+  const headingInContent = content.split(/\r?\n/).some((l) => /^#{1,6}\s/.test(l))
+  if (headingInContent) {
+    return { ok: false, md, error: `content 不得包含 Markdown 标题行（防止结构注入）。` }
   }
   const lines = md.split(/\r?\n/)
   let start = -1
@@ -592,7 +682,7 @@ export function patchSectionBody(md: string, key: string, content: string): { ok
   for (let i = 0; i < lines.length; i++) {
     const h = headingAt(lines[i]!)
     if (!h) continue
-    if (h.text === k || h.text.startsWith(`${k} `)) {
+    if (cleanHeading(h.text) === cleanHeading(k) || h.text.startsWith(`${k} `)) {
       start = i
       level = h.level
       break
@@ -609,8 +699,19 @@ export function patchSectionBody(md: string, key: string, content: string): { ok
       break
     }
   }
+  // 写入标题行来源标签：先剥掉已有的来源标签和全/半角括号包裹，再追加规范标签
+  let headingLine = lines[start]!
+  if (tag) {
+    const h = headingAt(headingLine)
+    if (h) {
+      // 剥来源标签但保留原始空白（cleanHeading 会 norm() 掉所有空白，不适用于重建标题）
+      const bare = h.text.replace(SOURCE_TAG_RE, "").replace(/[\[\]（）()【】「」《》：:·,，。]/g, "").trim()
+      const prefix = "#".repeat(h.level)
+      headingLine = `${prefix} ${bare} ${canonicalSourceTag(tag, reason)}`
+    }
+  }
   const body = content.replace(/\r?\n+$/, "")
   const newLines = body.length > 0 ? body.split(/\r?\n/) : []
-  const result = [...lines.slice(0, start + 1), ...newLines, ...lines.slice(end)]
+  const result = [...lines.slice(0, start), headingLine, ...newLines, ...lines.slice(end)]
   return { ok: true, md: result.join("\n") }
 }

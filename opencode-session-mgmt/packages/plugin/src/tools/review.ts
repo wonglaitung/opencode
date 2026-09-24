@@ -18,6 +18,7 @@ import {
   WORKFLOW_DEFINITIONS,
   getDefinition,
   noDocumentSupportViolation,
+  coverageFromProvenance,
   parseRenderStructure,
   probeGapViolations,
   scoreDimZeroViolations,
@@ -273,6 +274,7 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
       let renderErrors: string[] = []
       let liveRender: ReqdocRender | undefined
       let mdText: string | undefined
+      let bypassNote: string[] = []
       if (preRender) {
         try {
           mdText = await Bun.file(resolveWithinWorktree(projectRoot(context), preRender.source)).text()
@@ -285,12 +287,39 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
             expectedFeatures: preRender.expectedFeatures,
           }
           const preScore = store.ensure(context.sessionID).workflow?.score
+          // 覆盖指标：有记账读记账（有界匹配），无记账回退解析
+          const provenance = store.ensure(context.sessionID).workflow?.renderProvenance
+          const hasProvenance = provenance && Object.keys(provenance).length > 0
+          if (hasProvenance) {
+            const cov = coverageFromProvenance(provenance!, preRender.expectedFeatures)
+            liveRender.covered = cov.covered
+            liveRender.defaults = cov.defaults
+            liveRender.docBlocks = cov.docBlocks
+            liveRender.docCount = cov.docCount
+            liveRender.qaCount = cov.qaCount
+          }
+          // 篡改检测：记账中的标签在 live 文件中应存在
+          if (hasProvenance) {
+            for (const [absKey, prov] of Object.entries(provenance!)) {
+              const canonicalTag = prov.tag === "缺省" ? `[缺省：${prov.reason}]` : `[${prov.tag}]`
+              // 检查对应标题行是否仍含规范标签（用 cleanHeading 去标签后比对）
+              const tagRemoved = md.includes(`${absKey}`) && !md.split("\n").some((l) => l.includes(absKey) && l.includes(canonicalTag))
+              if (!tagRemoved) continue
+              // 标题存在但标签不在 → 可能被篡改
+              renderErrors.push(`来源篡改：小节 ${absKey} 的记账标签 [${prov.tag}] 在源文件中未找到（标签可能被手动删除或修改）`)
+            }
+          }
           renderErrors = [
+            ...renderErrors,
             ...renderStructureViolations(liveRender),
             ...renderGapViolations(liveRender, preScore),
             ...missingDefaultReasonViolations(liveRender),
             ...consistencyViolations(md),
           ]
+          // 绕过检测：有 render 记录但无记账 → 模型绕过 reqdoc_patch 整篇 write（软提示，不拦截）
+          const bypassNote = !hasProvenance
+            ? ["⚠ 来源记账为空（renderProvenance）：覆盖指标由文件解析，未经服务端规范写入。建议使用 reqdoc_patch 的 source_tag 参数。"]
+            : []
         } catch {
           renderErrors = [`PRD 渲染源文件不可读或已删除：${preRender.source}，定稿复核无法执行`]
         }
@@ -348,6 +377,10 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
               `文档结构检查未通过：${renderErrors.join("；")}。` +
                 `结构问题请修正后重新检查；信息不完整请回到追问环节补全后重新打分`,
             )
+          }
+          // 绕过提示（软提示，不拦截）：有 render 但无记账时提示使用 source_tag
+          if (bypassNote.length > 0) {
+            renderErrors.push(...bypassNote)
           }
           // 来源真实性门禁（reqdoc-r30，防全[问答]兜底）：记录了 render 且书面材料支撑不足时拦截，
           // 除非业务已明确确认「无书面材料可引用」（no_document_confirmed=true）。柔性：未记录 render 则放行。

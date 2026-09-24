@@ -1,9 +1,10 @@
 /**
- * reqdoc 渲染工具（质量飞轮 P2「渲染可测化」+ P1/P2 服务端骨架与增量填充，设计文档 workflow-reqdoc.md 7 章、10 章）。
+ * reqdoc 渲染工具（质量飞轮 P2「渲染可测化」+ P1/P2 服务端骨架与增量填充 + P3.10 来源记账，设计文档 workflow-reqdoc.md 7 章、10 章）。
  * reqdoc_render_skeleton —— 服务端按模板逐字生成 PRD 骨架（消除模型巨型 write）。
- * reqdoc_patch          —— 按小节编号填充正文（服务端定位标题、保证编号，模型只产出内容）。
+ * reqdoc_patch          —— 按小节编号填充正文 + 写入规范来源标签（source_tag 参数，标题行）+ 记账（renderProvenance）。
  * reqdoc_check          —— PRD 写入后对照模板结构 schema（REQDOC_TEMPLATE_CHAPTERS / REQDOC_TEMPLATE_FIELDS）
  *                          做渲染 diff 校验：章节齐全/顺序、功能点块数、映射字段来源标注。
+ * 覆盖指标优先从 renderProvenance（有界匹配）读取，无记账时回退解析（write 兜底/人工编辑路径）。
  * 校验结果写入 workflow.render；review_submit 定稿时重读源 md 复核（柔性：不调用则放行）。仅 reqdoc 工作流有效。
  */
 import { tool, type ToolDefinition } from "@opencode-ai/plugin"
@@ -12,12 +13,16 @@ import {
   REQDOC_TEMPLATE_FIELDS,
   FEATURE_SUB_SECTIONS,
   buildPrdSkeleton,
+  canonicalSourceTag,
+  coverageFromProvenance,
   getDefinition,
+  isMappedFieldSection,
   parseRenderStructure,
   patchSectionBody,
   renderStructureViolations,
   type ReqdocFeature,
   type ReqdocRender,
+  type ReqdocProvenance,
 } from "sm-shared"
 import type { Store } from "../db"
 import { WorkflowOpError } from "../workflow-ops"
@@ -42,12 +47,14 @@ export function createReqdocCheckTools(store: Store): Record<string, ToolDefinit
     async execute(args, context) {
       // 仅 reqdoc + 已确认功能点数（异步文件读取在 mutateWorkflow 回调外，回调同步约束）
       let expectedFeatures = 0
+      let provenance: Record<string, ReqdocProvenance> | undefined
       store.mutateWorkflow(context.sessionID, (workflow) => {
         const def = getDefinition(workflow.type)
         if (def.type !== "reqdoc") {
           throw new WorkflowOpError(`reqdoc_check 仅用于 reqdoc 工作流（当前为 ${def.type}）`)
         }
         expectedFeatures = workflow.features?.length ?? 0
+        provenance = workflow.renderProvenance
       })
       const mdPath = resolveWithinWorktree(projectRoot(context), args.source)
       let md: string
@@ -57,8 +64,18 @@ export function createReqdocCheckTools(store: Store): Record<string, ToolDefinit
         throw new WorkflowOpError(`源文件不存在或不可读：${args.source}。请先完成 PRD 渲染（write 到 07_需求规格产出）再调用校验。`)
       }
       const structure = parseRenderStructure(md)
+      // 覆盖指标：有记账读记账（有界匹配），无记账回退解析（write 兜底 / 人工编辑）
+      const hasProvenance = provenance && Object.keys(provenance).length > 0
+      const cov = hasProvenance
+        ? coverageFromProvenance(provenance!, expectedFeatures)
+        : { covered: structure.covered, defaults: structure.defaults, docBlocks: structure.docBlocks, docCount: structure.docCount, qaCount: structure.qaCount }
       const render: ReqdocRender = {
         ...structure,
+        covered: cov.covered,
+        defaults: cov.defaults,
+        docBlocks: cov.docBlocks,
+        docCount: cov.docCount,
+        qaCount: cov.qaCount,
         source: args.source,
         checkedAt: Date.now(),
         expectedFeatures,
@@ -73,7 +90,8 @@ export function createReqdocCheckTools(store: Store): Record<string, ToolDefinit
         workflow.renderCheckFails = fails
       })
       const focused = args.feature ? focusFeatureDiff(render, args.feature) : undefined
-      return formatRenderCard(render, violations, fails, focused)
+      const provenanceNote = hasProvenance ? "" : "\n⚠ 无来源记账（renderProvenance 为空）：覆盖指标由文件解析回退，准确性取决于格式规范。建议使用 reqdoc_patch 的 source_tag 参数写入规范来源标签。"
+      return formatRenderCard(render, violations, fails, focused) + provenanceNote
     },
   })
 
@@ -112,6 +130,7 @@ export function createReqdocCheckTools(store: Store): Record<string, ToolDefinit
       }
       store.mutateWorkflow(context.sessionID, (workflow) => {
         workflow.render = render
+        workflow.renderProvenance = {} // 重置记账（骨架重生成即作废旧记账）
       })
       const structOk = structure.ok && structure.featureCount === features.length
       return (
@@ -119,20 +138,29 @@ export function createReqdocCheckTools(store: Store): Record<string, ToolDefinit
         (structOk
           ? "✓ 章节与功能点骨架齐全。"
           : `⚠ 骨架结构异常（请检查模板）：缺章节 ${structure.missing.join("、") || "无"}；缺小节 ${structure.missingSections.join("、") || "无"}；功能点块 ${structure.featureCount}/${features.length}。）`) +
-        `\n下一步：用 reqdoc_patch(source="${args.source}", target=<小节编号>, content=<内容>) 逐小节填充。`
+        `\n下一步：用 reqdoc_patch(source="${args.source}", target=<小节编号>, content=<内容>, source_tag=<标签>) 逐小节填充。映射字段小节必填 source_tag。`
       )
     },
   })
 
   const reqdoc_patch = tool({
     description:
-      "reqdoc PRD 小节填充：按编号把小节正文写入骨架（服务端定位标题、保留标题行，仅替换正文），模型只产出内容，编号与结构由服务端保证。" +
+      "reqdoc PRD 小节填充：按编号把小节正文写入骨架（服务端定位标题、写入规范来源标签、保留标题行，仅替换正文），模型只产出内容，编号与结构由服务端保证。" +
       "target 支持章内小节（3.1~3.6、4.1/4.2、6.1~6.4、7.1/7.2）与功能点子小节（5.k.1.1 简要概述、5.k.1.2 控制要求、5.k.2.1~5.k.2.13，k=功能点序号）。" +
-      "content 为小节正文（不含标题行），逐字段标来源 [文档]/[问答]/[缺省：理由]。每次只填 1~3 个小节。仅 reqdoc 工作流有效。",
+      "映射字段小节（5.k.1.2、5.k.2.1/.3/.6/.7/.8/.9/.11/.12）必填 source_tag（\"[文档]\"/\"[问答]\"/\"[缺省]\"）；source_tag=\"[缺省]\" 时须附 reason。" +
+      "content 为小节正文（不含标题行、不含来源标签）。每次只填 1~3 个小节。仅 reqdoc 工作流有效。",
     args: {
       source: z.string().describe("PRD Markdown 相对项目根路径"),
       target: z.string().describe("小节编号（如 3.6、4.1、5.1.2.3、6.1、7.1）"),
-      content: z.string().describe("小节正文（不含标题行）"),
+      content: z.string().describe("小节正文（不含标题行、不含来源标签）"),
+      source_tag: z
+        .enum(["[文档]", "[问答]", "[缺省]"])
+        .optional()
+        .describe("来源标签（映射字段小节必填；其他小节可选）。服务端写入标题行。"),
+      reason: z
+        .string()
+        .optional()
+        .describe("缺省理由（source_tag=\"[缺省]\" 时必填，如「本次无外部系统对接」）"),
     },
     async execute(args, context) {
       store.mutateWorkflow(context.sessionID, (workflow) => {
@@ -141,6 +169,14 @@ export function createReqdocCheckTools(store: Store): Record<string, ToolDefinit
           throw new WorkflowOpError(`reqdoc_patch 仅用于 reqdoc 工作流（当前为 ${def.type}）`)
         }
       })
+      const isMapped = isMappedFieldSection(args.target)
+      const tagArg = args.source_tag?.replace(/[\[\]]/g, "") as "文档" | "问答" | "缺省" | undefined
+      if (isMapped && !tagArg) {
+        throw new WorkflowOpError(`映射字段小节 ${args.target} 必填 source_tag（"[文档]"/"[问答]"/"[缺省]"）。`)
+      }
+      if (tagArg === "缺省" && (!args.reason || !args.reason.trim())) {
+        throw new WorkflowOpError(`[缺省] 必须附不适用理由（reason 参数，如「本次无清算处理」）。`)
+      }
       const mdPath = resolveWithinWorktree(projectRoot(context), args.source)
       let md: string
       try {
@@ -148,7 +184,7 @@ export function createReqdocCheckTools(store: Store): Record<string, ToolDefinit
       } catch {
         throw new WorkflowOpError(`源文件不存在或不可读：${args.source}。请先用 reqdoc_render_skeleton 生成骨架。`)
       }
-      const result = patchSectionBody(md, args.target, args.content)
+      const result = patchSectionBody(md, args.target, args.content, tagArg, args.reason)
       if (!result.ok) throw new WorkflowOpError(result.error!)
       await Bun.write(mdPath, result.md)
       const structure = parseRenderStructure(result.md)
@@ -158,11 +194,31 @@ export function createReqdocCheckTools(store: Store): Record<string, ToolDefinit
         checkedAt: Date.now(),
         expectedFeatures: 0,
       }
+      // 记账：写入 renderProvenance（last-write wins）
+      const now = Date.now()
+      let provenance: Record<string, ReqdocProvenance> | undefined
       store.mutateWorkflow(context.sessionID, (workflow) => {
         render.expectedFeatures = workflow.features?.length ?? 0
         workflow.render = render
+        if (tagArg) {
+          if (!workflow.renderProvenance) workflow.renderProvenance = {}
+          workflow.renderProvenance[args.target] = { tag: tagArg, reason: args.reason, at: now }
+          provenance = workflow.renderProvenance
+        }
       })
-      return `✏ 已填充小节 ${args.target}（${args.source}）。`
+      // 覆盖指标用记账重算（有界匹配）
+      if (provenance && tagArg) {
+        const cov = coverageFromProvenance(provenance, render.expectedFeatures)
+        render.covered = cov.covered
+        render.defaults = cov.defaults
+        render.docBlocks = cov.docBlocks
+        render.docCount = cov.docCount
+        render.qaCount = cov.qaCount
+        store.mutateWorkflow(context.sessionID, (workflow) => {
+          workflow.render = render
+        })
+      }
+      return `✏ 已填充小节 ${args.target}（${args.source}）${tagArg ? `，来源标签 [${tagArg}${tagArg === "缺省" ? `：${args.reason}` : ""}] 已写入标题行` : ""}。`
     },
   })
 
@@ -188,7 +244,7 @@ function expectedSkeleton(): string {
   const fields = REQDOC_TEMPLATE_FIELDS.map((f) => `${f.key} ${f.title}`).join("、")
   return (
     `期望每功能点块：${subs}；主分组标题「(2k-1). 功能点输入要素」「(2k). 功能点处理要求」（k=功能点序号，编号全局连续）为可选分组标签（可纯文本/省略），` +
-    `小节层级 3~5 均可，标题须含编号+名称；映射字段须逐功能点标来源 [文档]/[问答]/[缺省]（可包全角括号，如「2.1 输入要素的检查（[问答]）」）：${fields}。`
+    `小节层级 3~5 均可，标题须含编号+名称；映射字段须逐功能点标来源（服务端 reqdoc_patch 的 source_tag 参数写入标题行，如「2.1 输入要素的检查 [文档]」或「2.3 异常处理要求 [缺省：本次无异常]」）：${fields}。`
   )
 }
 

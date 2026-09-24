@@ -212,14 +212,14 @@ describe("reqdoc_render_skeleton / reqdoc_patch（P1/P2 服务端骨架与增量
     await tools.reqdoc_render_skeleton!.execute({ source: rel } as never, ctx)
     const out = String(
       await tools.reqdoc_patch!.execute(
-        { source: rel, target: "5.1.2.3", content: "- 网络超时重试 3 次 [文档]" } as never,
+        { source: rel, target: "5.1.2.3", content: "- 网络超时重试 3 次", source_tag: "[文档]" } as never,
         ctx,
       ),
     )
     expect(out).toContain("已填充小节 5.1.2.3")
     const md = readFileSync(join(worktree, rel), "utf8")
-    expect(md).toContain("##### 5.1.2.3 异常处理要求")
-    expect(md).toContain("网络超时重试 3 次 [文档]")
+    expect(md).toContain("##### 5.1.2.3 异常处理要求 [文档]")
+    expect(md).toContain("网络超时重试 3 次")
     store.close()
   })
 
@@ -232,6 +232,90 @@ describe("reqdoc_render_skeleton / reqdoc_patch（P1/P2 服务端骨架与增量
         { sessionID: "r1", worktree } as never,
       ),
     ).rejects.toThrow(/源文件不存在或不可读/)
+    store.close()
+  })
+
+  test("reqdoc_patch 映射字段小节缺 source_tag → 拒绝", async () => {
+    const { store, worktree } = setupReqdoc(1)
+    const rel = "07_需求规格产出/1_测试/需求规格书.md"
+    const tools = createReqdocCheckTools(store)
+    const ctx = { sessionID: "r1", worktree } as never
+    await tools.reqdoc_render_skeleton!.execute({ source: rel } as never, ctx)
+    await expect(
+      tools.reqdoc_patch!.execute({ source: rel, target: "5.1.1.2", content: "- 控制内容" } as never, ctx),
+    ).rejects.toThrow(/必填 source_tag/)
+    store.close()
+  })
+
+  test("reqdoc_patch [缺省] 缺 reason → 拒绝", async () => {
+    const { store, worktree } = setupReqdoc(1)
+    const rel = "07_需求规格产出/1_测试/需求规格书.md"
+    const tools = createReqdocCheckTools(store)
+    const ctx = { sessionID: "r1", worktree } as never
+    await tools.reqdoc_render_skeleton!.execute({ source: rel } as never, ctx)
+    await expect(
+      tools.reqdoc_patch!.execute({ source: rel, target: "5.1.2.3", content: "- 不适用", source_tag: "[缺省]" } as never, ctx),
+    ).rejects.toThrow(/必须附不适用理由/)
+    store.close()
+  })
+
+  test("reqdoc_patch [缺省：理由] → 标题行写入规范标签 + 记账", async () => {
+    const { store, worktree } = setupReqdoc(1)
+    const rel = "07_需求规格产出/1_测试/需求规格书.md"
+    const tools = createReqdocCheckTools(store)
+    const ctx = { sessionID: "r1", worktree } as never
+    await tools.reqdoc_render_skeleton!.execute({ source: rel } as never, ctx)
+    await tools.reqdoc_patch!.execute(
+      { source: rel, target: "5.1.2.3", content: "- 不适用", source_tag: "[缺省]", reason: "本次无异常" } as never,
+      ctx,
+    )
+    const md = readFileSync(join(worktree, rel), "utf8")
+    expect(md).toContain("##### 5.1.2.3 异常处理要求 [缺省：本次无异常]")
+    const prov = store.get("r1")!.workflow!.renderProvenance!
+    expect(prov["5.1.2.3"]).toEqual({ tag: "缺省", reason: "本次无异常", at: expect.any(Number) })
+    store.close()
+  })
+
+  test("reqdoc_render_skeleton 重置 renderProvenance", async () => {
+    const { store, worktree } = setupReqdoc(1)
+    const rel = "07_需求规格产出/1_测试/需求规格书.md"
+    const tools = createReqdocCheckTools(store)
+    const ctx = { sessionID: "r1", worktree } as never
+    // 先 patch 一个记账
+    await tools.reqdoc_render_skeleton!.execute({ source: rel } as never, ctx)
+    await tools.reqdoc_patch!.execute(
+      { source: rel, target: "5.1.2.3", content: "- x", source_tag: "[文档]" } as never,
+      ctx,
+    )
+    expect(Object.keys(store.get("r1")!.workflow!.renderProvenance!)).toHaveLength(1)
+    // 重新生成骨架 → 记账清空
+    await tools.reqdoc_render_skeleton!.execute({ source: rel } as never, ctx)
+    expect(Object.keys(store.get("r1")!.workflow!.renderProvenance!)).toHaveLength(0)
+    store.close()
+  })
+
+  test("reqdoc_check 有记账时用记账计算覆盖", async () => {
+    const { store, worktree } = setupReqdoc(1)
+    const rel = "07_需求规格产出/1_测试/需求规格书.md"
+    const tools = createReqdocCheckTools(store)
+    const ctx = { sessionID: "r1", worktree } as never
+    await tools.reqdoc_render_skeleton!.execute({ source: rel } as never, ctx)
+    // 写入几个带 source_tag 的小节
+    await tools.reqdoc_patch!.execute(
+      { source: rel, target: "5.1.1.2", content: "- 控制", source_tag: "[文档]" } as never,
+      ctx,
+    )
+    await tools.reqdoc_patch!.execute(
+      { source: rel, target: "5.1.2.1", content: "- 检查", source_tag: "[问答]" } as never,
+      ctx,
+    )
+    // 然后直接用 write 写入完整 goodMd 到同路径（模拟 write 绕过）
+    writeMd(worktree, rel, goodMd())
+    const out = String(
+      await tools.reqdoc_check!.execute({ source: rel } as never, ctx),
+    )
+    // 有记账时覆盖指标从记账算（部分有记账）
+    expect(out).toContain("已校验文档结构")
     store.close()
   })
 })
