@@ -78,11 +78,14 @@ async function renderMermaidToPng(mermaidSrc: string): Promise<Buffer | null> {
     const dir = await mkdtemp(join(tmpdir(), "mermaid-"))
     const inPath = join(dir, "input.mmd")
     const outPath = join(dir, "output.png")
+    // mermaid-cli v12 的 -p 接受 JSON 配置文件路径（非内联 JSON），写入临时文件
+    const cfgPath = join(dir, "puppeteer.json")
     await writeFile(inPath, mermaidSrc, "utf8")
+    await writeFile(cfgPath, JSON.stringify({ args: ["--no-sandbox", "--disable-setuid-sandbox"] }), "utf8")
     const { execSync } = await import("node:child_process")
     execSync(
-      `npx --yes @mermaid-js/mermaid-cli -i "${inPath}" -o "${outPath}" -b transparent -s 2 --puppeteerConfig '{"args":["--no-sandbox"]}'`,
-      { timeout: 30_000, stdio: "pipe" },
+      `npx --yes @mermaid-js/mermaid-cli -i "${inPath}" -o "${outPath}" -b transparent -s 2 -p "${cfgPath}"`,
+      { timeout: 60_000, stdio: "pipe" },
     )
     const buf = await readFile(outPath)
     await rm(dir, { recursive: true, force: true })
