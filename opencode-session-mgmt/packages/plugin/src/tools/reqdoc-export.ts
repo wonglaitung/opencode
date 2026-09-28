@@ -6,9 +6,11 @@
  *
  * 转换覆盖模板渲染实际用到的标记：标题（#~#####）、表格（|…|）、无序列表（-）、
  * 引用（>）、代码块（```）与行内加粗（**…**）/反引号（`…`）。Mermaid 流程图
- * （```mermaid）渲染为 PNG 嵌入 Word（降级：mmdc 不可用时输出源码+提示）。
+ * （```mermaid）渲染为 PNG 嵌入 Word（优先 bundle 预装 vendor 的 mermaid-cli + 系统
+ * Edge/Chrome，回退 npx；均不可用时降级输出源码+提示）。
  */
 import { basename, dirname, extname, join } from "node:path"
+import { existsSync } from "node:fs"
 import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { tool, type ToolDefinition } from "@opencode-ai/plugin"
@@ -72,6 +74,44 @@ function isSeparatorRow(row: string): boolean {
   )
 }
 
+/** vendor 内 mermaid-cli 入口（bin: mmdc → src/cli.js；index.js 是纯库入口，直接跑静默退出）相对 bundle 根的路径（离线预装，见 sync-bundle.sh / pack-bundle.sh）。 */
+const VENDOR_MMDC_ENTRY = join("vendor", "mermaid-cli", "node_modules", "@mermaid-js", "mermaid-cli", "src", "cli.js")
+
+/** 从 start 向上查找已预装 mermaid-cli 的 bundle 根（插件可能从 packages/ 或 node_modules/ 加载，上溯容错）。 */
+function findVendorBundleRoot(start: string): string | null {
+  let dir = start
+  for (let i = 0; i < 6; i++) {
+    if (existsSync(join(dir, VENDOR_MMDC_ENTRY))) return dir
+    const parent = dirname(dir)
+    if (parent === dir) break
+    dir = parent
+  }
+  return null
+}
+
+/** Windows 系统浏览器（Edge 必带，Chrome 次选）；非 win32 返回 null，走 puppeteer 自带缓存。 */
+function systemBrowser(): string | null {
+  if (process.platform !== "win32") return null
+  const pf = process.env["ProgramFiles"] ?? "C:\\Program Files"
+  const pf86 = process.env["ProgramFiles(x86)"] ?? "C:\\Program Files (x86)"
+  const candidates = [
+    join(pf86, "Microsoft", "Edge", "Application", "msedge.exe"),
+    join(pf, "Microsoft", "Edge", "Application", "msedge.exe"),
+    join(pf, "Google", "Chrome", "Application", "chrome.exe"),
+    join(pf86, "Google", "Chrome", "Application", "chrome.exe"),
+  ]
+  return candidates.find((p) => existsSync(p)) ?? null
+}
+
+/** vendor 调用用的 node：优先 bundle 同级的便携 node.exe，其次 PATH 上的 node。 */
+function vendorNode(bundleRoot: string): string {
+  if (process.platform === "win32") {
+    const sibling = join(bundleRoot, "..", "node.exe")
+    if (existsSync(sibling)) return sibling
+  }
+  return "node"
+}
+
 /** 尝试用 mermaid-cli (mmdc) 把 Mermaid 源码渲染为 PNG；失败返回 null。 */
 async function renderMermaidToPng(mermaidSrc: string): Promise<Buffer | null> {
   try {
@@ -81,12 +121,22 @@ async function renderMermaidToPng(mermaidSrc: string): Promise<Buffer | null> {
     // mermaid-cli v12 的 -p 接受 JSON 配置文件路径（非内联 JSON），写入临时文件
     const cfgPath = join(dir, "puppeteer.json")
     await writeFile(inPath, mermaidSrc, "utf8")
-    await writeFile(cfgPath, JSON.stringify({ args: ["--no-sandbox", "--disable-setuid-sandbox"] }), "utf8")
+    const cfg: Record<string, unknown> = { args: ["--no-sandbox", "--disable-setuid-sandbox"] }
+    const browser = systemBrowser()
+    if (browser) {
+      // 离线机不预装 chrome-headless-shell：指向系统浏览器，并覆盖 mermaid-cli 默认
+      // headless:"shell"（shell 模式只认 headless-shell 二进制），改用完整浏览器新无头模式
+      cfg.executablePath = browser
+      cfg.headless = true
+    }
+    await writeFile(cfgPath, JSON.stringify(cfg), "utf8")
+    const bundleRoot = findVendorBundleRoot(import.meta.dir)
+    const args = `-i "${inPath}" -o "${outPath}" -b transparent -s 2 -p "${cfgPath}"`
+    const command = bundleRoot
+      ? `"${vendorNode(bundleRoot)}" "${join(bundleRoot, VENDOR_MMDC_ENTRY)}" ${args}`
+      : `npx --yes @mermaid-js/mermaid-cli ${args}`
     const { execSync } = await import("node:child_process")
-    execSync(
-      `npx --yes @mermaid-js/mermaid-cli -i "${inPath}" -o "${outPath}" -b transparent -s 2 -p "${cfgPath}"`,
-      { timeout: 60_000, stdio: "pipe" },
-    )
+    execSync(command, { timeout: 60_000, stdio: "pipe" })
     const buf = await readFile(outPath)
     await rm(dir, { recursive: true, force: true })
     return buf

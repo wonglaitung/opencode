@@ -537,6 +537,11 @@ setup.cmd seed D:\你的项目  # 每个要用插件的项目各跑一次：种�
 3. **插件无原生模块**：插件不带自己的原生模块（`bun:sqlite` 是 bun 内置），workspace 软链是相对路径、随 tar 走；只要 `opencode.json` 的 `plugin` 路径指对即可加载。
 4. **内网必须种依赖种子**：Windows 内网机对每个项目跑一次 `setup.cmd seed <项目目录>`（自动一并种全局），否则 opencode 每次启动联网装 `@opencode-ai/plugin` 卡 1-2 分钟；Linux/macOS 内网机同理，手动把包内 `seed/` 拷进 `~/.config/opencode/` 与各项目 `.opencode` 即可。
 
+**Mermaid 流程图离线渲染（`vendor/mermaid-cli`）**：`reqdoc_export` 导出 Word 时要把 ` ```mermaid ` 代码块渲染成 PNG，需要 mermaid-cli + 浏览器。`pack:bundle` 打包时会自动在打包机用 **Windows npm** 把 `@mermaid-js/mermaid-cli` 预装进包内 `vendor/mermaid-cli`（独立 package.json、不与 bun 的 node_modules 混用；含 puppeteer 库、经 `PUPPETEER_SKIP_DOWNLOAD=1` 不下载浏览器）。插件运行时优先用 vendor，浏览器直接走系统 Edge/Chrome（Windows 必带，零下载零联网）。要点：
+- 含 vendor 的包是 **Windows 专用**（平台二进制）；打 Linux 包用 `SKIP_VENDOR=1` 跳过。
+- 已解压的 bundle 增量更新用 `bash scripts/sync-bundle.sh`，它会幂等补装 vendor（`FORCE_VENDOR=1` 强制重装，首装需联网）。
+- vendor 缺失时插件回退 `npx @mermaid-js/mermaid-cli`（需 npx 缓存或网络），两者都不可用则 Word 中降级为流程图源码文本。
+
 > 注意：
 > - **tarball 不含 OpenCode 本体**——本体在第 1 步单独搬入；**也不含 bun 运行时**，目标机若还没有 bun（前置条件，见第 1 章），同样从联网机带一份对应平台的 bun 二进制装入（单文件，放进 PATH 即可）。
 > - **模型后端 tar 不进来**——软件搬进去 ≠ 能对话，内网仍须把 OpenCode 指向内部模型网关（见 9.3 节）。

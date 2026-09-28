@@ -167,6 +167,12 @@ EOF
 
 echo "  ✓ seed/ 生成完毕（@opencode-ai/plugin@${sdk_version}）"
 
+# ---- vendor/mermaid-cli（离线 Mermaid 渲染） ----
+# reqdoc_export 渲染流程图需要 mermaid-cli；离线机无法 npx 拉包，故打进包内。
+# 用 Windows npm 装（平台二进制要 win32 版），因此产物为 Windows 专用；
+# 打 Linux 包时用 SKIP_VENDOR=1 跳过。详见 scripts/install-vendor-mermaid.sh。
+bash scripts/install-vendor-mermaid.sh "$bundle_dir"
+
 # ---- 生成 setup.sh（Linux/macOS） ----
 cat > "$bundle_dir/setup.sh" <<'SETUP_SH'
 #!/usr/bin/env bash
@@ -309,6 +315,10 @@ Windows 注意：JSON 中路径用正斜杠 \`/\` 或双反斜杠 \`\\\\\`。
 
 本包使用 hoisted 模式安装依赖（\`node-linker=hoisted\`），所有包以真实文件形式
 存在于 node_modules 中，无符号链接、无硬链接，可直接移动目录。
+
+Mermaid 流程图离线渲染：\`vendor/mermaid-cli\` 预装了 \`@mermaid-js/mermaid-cli\`
+（含 puppeteer，无浏览器二进制）。reqdoc_export 导出 Word 时优先用它，浏览器走
+系统 Edge/Chrome（无需联网）；vendor 缺失时回退 npx（需缓存或网络）。
 
 reqdoc 工作流的《业务需求说明书》模板（\`docs/reqdoc-prd-template.md\` 与源
 \`docs/模版.docx\`）已随包分发到解压目录 \`docs/\`，插件在 prd 阶段自动读取全文并

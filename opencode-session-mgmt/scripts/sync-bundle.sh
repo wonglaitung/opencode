@@ -11,7 +11,9 @@
 #
 # 用法：
 #   bash scripts/sync-bundle.sh
-#   BUNDLE="/mnt/c/其它路径/opencode-sm-bundle-0.1.0" bash scripts/sync-bundle.sh
+#   BUNDLE="/mnt/d/其它路径/opencode-sm-bundle-0.1.0" bash scripts/sync-bundle.sh
+# 环境变量：
+#   FORCE_VENDOR=1   强制重装 vendor/mermaid-cli（离线 Mermaid 渲染依赖）
 #
 # 改完请重启 opencode 守护进程（关闭再开）让插件重新加载。
 #
@@ -21,8 +23,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 REPO="$(pwd)"
 
-# 默认指向 Windows 测试 bundle（WSL 下 C:\ 挂在 /mnt/c）
-BUNDLE="${BUNDLE:-/mnt/c/Users/User/Documents/My Tools/node-v22.23.2-win-x64/opencode-sm-bundle-0.1.0}"
+# 默认指向 Windows 便携 runtime 内的 bundle（WSL 下 D:\ 挂在 /mnt/d）
+BUNDLE="${BUNDLE:-/mnt/d/Tools/node-v22.23.2-win-x64/opencode-sm-bundle-0.1.0}"
 
 if [ ! -d "$REPO/packages" ]; then
   echo "错误：找不到 \$REPO/packages（$REPO）" >&2
@@ -85,6 +87,9 @@ else
 fi
 check_dirs+=("$BUNDLE/docs")
 echo "  ✓ docs/"
+
+echo "==> vendor/mermaid-cli（离线 Mermaid 渲染，幂等安装）"
+bash "$REPO/scripts/install-vendor-mermaid.sh" "$BUNDLE"
 
 echo "==> 校验：同步目录不应含符号链接（技术规范要求整包为真实文件）"
 syms=$(find "${check_dirs[@]}" -type l 2>/dev/null || true)
