@@ -24,8 +24,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 REPO="$(pwd)"
 
-# 默认指向 Windows 测试 bundle（WSL 下 C:\ 挂在 /mnt/c）
-BUNDLE="${BUNDLE:-/mnt/c/Users/User/Documents/My Tools/node-v22.23.2-win-x64/opencode-server-debug-bundle-0.0.1}"
+# 默认指向 Windows 便携 runtime 内的 bundle（WSL 下 D:\ 挂在 /mnt/d）
+BUNDLE="${BUNDLE:-/mnt/d/Tools/node-v22.23.2-win-x64/opencode-server-debug-bundle-0.0.1}"
 
 if [ ! -d "$REPO/src" ]; then
   echo "错误：找不到 \$REPO/src（$REPO）" >&2
