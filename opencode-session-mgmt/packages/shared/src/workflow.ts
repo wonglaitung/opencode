@@ -408,6 +408,29 @@ export interface WorkflowState {
    * 一旦 success=true 清零；≥3 时 review_submit 提示人工介入 + 格式诊断。sdlc 恒缺省。
    */
   renderCheckFails?: number
+  /**
+   * reqdoc 需求知识库（重构阶段 2a：Slot-filling KB，权威状态）。
+   * 与上方旧字段（score/probes/render/renderProvenance/fieldDict）在 2b/2c 期间**并存**——
+   * 旧字段仍写仍读但不再作为门禁依据，2c 才删除（见设计文档 12 章阶段 2b/2c）。
+   * 可选字段：首次 ingest 前缺省；sdlc 恒缺省。
+   */
+  kb?: ReqdocKbState
+}
+
+/**
+ * reqdoc 知识库状态（槽位 + 功能点 + 追问轮次）。
+ * slots 是唯一事实源——PRD 文档是它的投影（`assembleDoc`），二者不一致即视为构建产物过期。
+ */
+export interface ReqdocKbState {
+  /** 全部槽位（含 draft/confirmed/conflict/retired） */
+  slots: import("./reqdoc-slots").ReqdocSlot[]
+  /** 已确认功能点（决定必填槽位集合，见 reqdoc-slots.requiredSlots） */
+  features: ReqdocFeature[]
+  /** 容器声明（可为空通道）：地址 → { required, reason } */
+  containers?: Record<string, import("./reqdoc-slots").ContainerDecl>
+  /** 地址 → 已连续出现在开放项的轮次（6.3 停问；按轮次计不按调用计） */
+  askCounts?: Record<string, number>
+  updatedAt: number
 }
 
 /** reqdoc 字段定义（P2.5 数据字典一项）：逐功能点输入字段的元数据。 */

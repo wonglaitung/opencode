@@ -1,0 +1,300 @@
+/**
+ * reqdoc 知识库工具组（重构阶段 2a「先立后破」：只加不删）。
+ *
+ * 三个工具对应模型在槽位模型下的两种职责（设计 2.5）：
+ * 1. `reqdoc_ingest` —— 批量提交从材料提取的槽位（模型只填被指定的地址）
+ * 2. `reqdoc_answer` —— 逐项填补派生开放项
+ * 3. `reqdoc_assemble` —— 由槽位投影生成整篇 PRD（服务器负责结构，模型不碰文档）
+ *
+ * **阶段 2a 边界**：本组不接任何门禁（`workflow.ts` 的 prd 门禁与 `review.ts` 定稿门禁
+ * 在 2b 才改读 `kbGate`）。此阶段旧工具与旧状态字段全部保留、两套并存，
+ * 便于对照与回退（见设计文档 12 章阶段 2a/2b/2c）。
+ */
+import { mkdir, writeFile } from "node:fs/promises"
+import { join } from "node:path"
+import { tool, type ToolDefinition } from "@opencode-ai/plugin"
+import {
+  QUESTIONS_PER_TURN,
+  assembleDoc,
+  STOP_ASK_AFTER,
+  advanceAskCounts,
+  deriveQuestions,
+  getDefinition,
+  requiredSlots,
+  type ContainerDecl,
+  type MemoryFact,
+  type MemoryTerm,
+  type ReqdocKbState,
+  type ReqdocSlot,
+  type ReqdocScoreDimKey,
+} from "sm-shared"
+import type { Store } from "../db"
+import { WorkflowOpError } from "../workflow-ops"
+import { loadReqdocTemplate } from "../template"
+import { projectRoot } from "../fs-safe"
+
+const z = tool.schema
+
+/** KB 目录名（设计第 5 章：独立顶层目录，不占用 00~07 编号、不混入业务投料区）。 */
+const KB_DIR = "需求知识库"
+const KB_MD = "知识库.md"
+const KB_JSON = ".kb.json"
+
+function requireReqdoc(workflow: { type: string }, toolName: string) {
+  const def = getDefinition(workflow.type as never)
+  if (def.type !== "reqdoc") {
+    throw new WorkflowOpError(`${toolName} 仅用于 reqdoc 工作流（当前为 ${def.type}）`)
+  }
+}
+
+/** 取当前 KB 状态；未初始化时返回空壳（功能点来自旧 features 字段，保证必填集可派生）。 */
+function readKb(workflow: {
+  kb?: ReqdocKbState
+  features?: { no: number; name: string; priority: "high" | "medium" | "low"; confirmedAt: number }[]
+}): ReqdocKbState {
+  return (
+    workflow.kb ?? {
+      slots: [],
+      features: workflow.features ?? [],
+      containers: {},
+      askCounts: {},
+      updatedAt: 0,
+    }
+  )
+}
+
+/** 写知识库双文件（`.kb.json` 机器态 + `知识库.md` 人可读账本）。 */
+async function writeKbFiles(root: string, kb: ReqdocKbState): Promise<void> {
+  const dir = join(root, KB_DIR)
+  await mkdir(dir, { recursive: true })
+  await Bun.write(join(dir, KB_JSON), JSON.stringify(kb, null, 2))
+  // 人可读账本：按地址排序渲染，已作废（retired）以删除线保留（设计 B5）
+  const rows = [...kb.slots]
+    .sort((a, b) => a.address.localeCompare(b.address))
+    .map((s) => {
+      const head = `- \`${s.address}\`（${s.kind}/${s.status}）`
+      if (s.status === "retired") return `${head} ~~${s.content.slice(0, 40)}~~ 已作废`
+      return `${head} ${s.content.replace(/\n/g, " ").slice(0, 80)}`
+    })
+  await Bun.write(
+    join(dir, KB_MD),
+    `# 需求知识库\n\n> 由 reqdoc 工具自动维护，请勿手工编辑（改动会在下次工具调用时被覆盖）。\n\n` +
+      `功能点数：${kb.features.length}；槽位数：${kb.slots.length}\n\n` +
+      `## 槽位\n\n${rows.join("\n") || "（暂无）"}\n`,
+  )
+}
+
+export function createReqdocKbTools(store: Store): Record<string, ToolDefinition> {
+  const reqdoc_ingest = tool({
+    description:
+      "reqdoc 槽位批量提交：把从材料中提取的内容一次提交为**槽位**（不是直接写文档）。" +
+      "服务端按模板派生「哪些槽位还开着」，只让你填这些地址；status 一律记为待确认（draft），" +
+      "业务确认请用 reqdoc_answer。分批调用：每次提交后看返回的「本轮该填」清单，" +
+      `一次最多 ${QUESTIONS_PER_TURN} 项。仅 reqdoc 工作流有效。`,
+    args: {
+      slots: z
+        .array(
+          z.object({
+            address: z.string().describe("槽位地址（服务端给出的待填地址，如 3.1 / 5.1.2.3 / 4.1.CRD）"),
+            kind: z.enum(["prose", "term", "field"]).describe("prose=小节正文；term=术语条目；field=字段定义"),
+            content: z.string().describe("该槽位的内容（业务语言正文；术语填释义；字段填定义说明）"),
+            source: z.enum(["文档", "问答", "缺省"]).describe("来源：文档=材料可循 / 问答=业务口述 / 缺省=本次不涉及（须在 reason 给理由）"),
+            reason: z.string().optional().describe("source=缺省 时必填：本次不涉及的理由"),
+            ref: z.string().optional().describe("材料出处（文件名或段落，便于溯源）"),
+          }),
+        )
+        .describe("本批提交的槽位（地址必须来自上一次的「本轮该填」清单）"),
+      features: z
+        .array(
+          z.object({
+            name: z.string().describe("功能点名称（如：名单排查）"),
+            priority: z.enum(["high", "medium", "low"]).describe("优先级"),
+          }),
+        )
+        .optional()
+        .describe("功能点清单（首次提交时给；已确认过则省略）"),
+      containers: z
+        .record(z.string(), z.object({ required: z.boolean(), reason: z.string().optional() }))
+        .optional()
+        .describe("容器声明（如 4.1/5.1.2.1 声明 required:false 表示本次无术语/无结构化字段，须给 reason）"),
+    },
+    async execute(args, context) {
+      const root = projectRoot(context)
+      const saved = store.mutateWorkflow(context.sessionID, (workflow) => {
+        requireReqdoc(workflow, "reqdoc_ingest")
+        const kb = readKb(workflow)
+        // 功能点：给了就以它为准（首次或修正）
+        if (args.features && args.features.length > 0) {
+          kb.features = args.features.map((f, i) => ({
+            no: i + 1,
+            name: f.name,
+            priority: f.priority,
+            confirmedAt: Date.now(),
+          }))
+        }
+        // 容器声明合并
+        kb.containers = { ...(kb.containers ?? {}), ...(args.containers ?? {}) }
+        // 槽位合并：同地址覆盖（status 由服务端强制 draft，模型不能自称已确认）
+        const byAddr = new Map(kb.slots.map((s) => [s.address, s]))
+        for (const s of args.slots) {
+          if (s.source === "缺省" && !s.reason) {
+            throw new WorkflowOpError(`槽位 ${s.address} 标为 [缺省] 但未给 reason（缺省必须写明理由）`)
+          }
+          byAddr.set(s.address, {
+            kind: s.kind,
+            address: s.address,
+            content: s.content,
+            source: s.source,
+            status: "draft",
+            reason: s.reason,
+            ref: s.ref,
+            askCount: 0,
+          })
+        }
+        kb.slots = [...byAddr.values()]
+        kb.updatedAt = Date.now()
+        workflow.kb = kb
+      })
+      const kb = readKb(saved)
+      await writeKbFiles(root, kb)
+      const derived = deriveQuestions(kb.features, {
+        slots: kb.slots,
+        askCounts: kb.askCounts,
+        decls: kb.containers,
+      })
+      // 推进轮次：把本轮展示的地址计数 +1（6.3 按轮次计）
+      const counts = advanceAskCounts(kb.askCounts ?? {}, derived.batch.map((q) => q.address))
+      store.mutateWorkflow(context.sessionID, (workflow) => {
+        if (workflow.kb) workflow.kb.askCounts = counts
+      })
+      const cov = kbCoverage(kb)
+      const lines = derived.batch.map((q) => `  - ${q.address}${q.guess ? `（默认：${q.guess}）` : ""}`)
+      return [
+        `📥 已提交 ${args.slots.length} 个槽位（均为待确认 draft）；已写入 ${KB_DIR}/。`,
+        `覆盖率：${cov}；本轮该填 ${derived.batch.length}/${derived.all.length} 项：`,
+        ...(lines.length ? lines : ["  （无——全部槽位已确认）"]),
+        derived.stopped.length > 0
+          ? `⏸ 因连续 ${STOP_ASK_AFTER} 轮未确认已停问：${derived.stopped.map((q) => q.address).join("、")}（可由业务确认或定稿时 force 收口）`
+          : "",
+        "→ 逐项请业务确认后用 reqdoc_answer 落定；不要直接编辑 PRD 文件。",
+      ]
+        .filter(Boolean)
+        .join("\n")
+    },
+  })
+
+  const reqdoc_answer = tool({
+    description:
+      "reqdoc 槽位确认：把某一项请业务确认后的结论落定（状态转 confirmed）。" +
+      "**只接受派生清单给出的地址**；业务未答满 2 轮的项会被停问，此时应显式收口" +
+      "（source=缺省 + reason 写明未确认原因），而不是反复追问。",
+    args: {
+      address: z.string().describe("槽位地址（来自本轮该填清单或停问清单）"),
+      content: z.string().describe("业务确认后的内容（业务语言，不照搬口语）"),
+      source: z.enum(["文档", "问答", "缺省"]).describe("来源：文档 / 问答（业务口述）/ 缺省（本次不涉及）"),
+      reason: z.string().optional().describe("source=缺省 时必填（如「本次无清算处理」）"),
+    },
+    async execute(args, context) {
+      const root = projectRoot(context)
+      const saved = store.mutateWorkflow(context.sessionID, (workflow) => {
+        requireReqdoc(workflow, "reqdoc_answer")
+        const kb = readKb(workflow)
+        if (args.source === "缺省" && !args.reason) {
+          throw new WorkflowOpError(`槽位 ${args.address} 标为 [缺省] 但未给 reason`)
+        }
+        const idx = kb.slots.findIndex((s) => s.address === args.address)
+        const prev = idx >= 0 ? kb.slots[idx]! : undefined
+        if (!prev) {
+          // 未先 ingest 的地址：允许直接回答（等于补填并确认）
+          kb.slots.push({
+            kind: "prose",
+            address: args.address,
+            content: args.content,
+            source: args.source,
+            status: "confirmed",
+            reason: args.reason,
+          })
+        } else {
+          kb.slots[idx] = {
+            ...prev,
+            content: args.content,
+            source: args.source,
+            status: "confirmed",
+            reason: args.reason,
+          }
+        }
+        kb.updatedAt = Date.now()
+        workflow.kb = kb
+      })
+      const kb = readKb(saved)
+      await writeKbFiles(root, kb)
+      const derived = deriveQuestions(kb.features, {
+        slots: kb.slots,
+        askCounts: kb.askCounts,
+        decls: kb.containers,
+      })
+      return [
+        `✅ 已确认 \`${args.address}\`（来源 ${args.source}${args.reason ? `：${args.reason}` : ""}）。`,
+        `覆盖率：${kbCoverage(kb)}；剩余本轮该填 ${derived.batch.length} 项。`,
+        derived.unclosed.length > 0 ? `⚠ 仍未收口：${derived.unclosed.join("、")}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n")
+    },
+  })
+
+  const reqdoc_assemble = tool({
+    description:
+      "reqdoc PRD 组装：把槽位投影成整篇 PRD（md）并归档到 07_需求规格产出。" +
+      "**结构与来源标签由服务端保证**，你不需要也不应手工编辑产物。" +
+      "本阶段为预览用途（不作为定稿依据，定稿门禁在后续阶段切换）。",
+    args: {
+      source: z
+        .string()
+        .optional()
+        .describe("输出文件名（相对 07_需求规格产出，默认 PRD.md）；功能点子目录由服务端按功能点建"),
+    },
+    async execute(args, context) {
+      const root = projectRoot(context)
+      const workflow = store.get(context.sessionID)?.workflow
+      if (!workflow) throw new WorkflowOpError("未找到工作流状态")
+      requireReqdoc(workflow, "reqdoc_assemble")
+      const kb = readKb(workflow)
+      const result = assembleInto(kb)
+      if (!result) {
+        return "⚠ 无法组装：模板不可用或功能点为空。请先 reqdoc_ingest 提交功能点清单。"
+      }
+      const outDir = kb.features.length === 1
+        ? join(root, "07_需求规格产出", `${kb.features[0]!.no}_${kb.features[0]!.name}`)
+        : join(root, "07_需求规格产出")
+      await mkdir(outDir, { recursive: true })
+      const outPath = join(outDir, args.source ?? "PRD.md")
+      await Bun.write(outPath, result.md)
+      return [
+        `🧩 已组装 PRD：${outDir}/${args.source ?? "PRD.md"}（${result.md.length} 字符）。`,
+        `结构指纹：功能点 ${kb.features.length} 个、小节 ${result.fingerprint.subSections.length} 个、来源标签 ${Object.keys(result.fingerprint.tags).length} 处。`,
+        result.omittedContainers.length > 0 ? `省略的空容器节：${result.omittedContainers.join("、")}` : "",
+        `槽位摘要：${result.digest}（用于幂等校验）。`,
+        "→ 本阶段为预览；结构与标签由服务端保证，请勿手工编辑产物。",
+      ]
+        .filter(Boolean)
+        .join("\n")
+    },
+  })
+
+  return { reqdoc_ingest, reqdoc_answer, reqdoc_assemble }
+}
+
+/** 覆盖率文本（状态条与工具返回共用口径）。 */
+function kbCoverage(kb: ReqdocKbState): string {
+  const req = requiredSlots(kb.features)
+  const filled = req.filter((a) =>
+    kb.slots.some((s) => s.address === a && s.status === "confirmed"),
+  ).length
+  return `${filled}/${req.length} 必填（${req.length ? Math.round((filled / req.length) * 100) : 0}%）`
+}
+
+/** 调用组装：槽位投影为整篇 PRD（`assembleDoc` 在 shared，纯函数）。 */
+function assembleInto(kb: ReqdocKbState) {
+  return assembleDoc(kb.slots, kb.features, loadReqdocTemplate(), { containers: kb.containers })
+}

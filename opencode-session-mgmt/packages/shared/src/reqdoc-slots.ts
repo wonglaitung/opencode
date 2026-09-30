@@ -353,8 +353,9 @@ export interface DeriveOptions {
   l2?: readonly MemoryFact[]
   /** 候选清单：容器下的术语/字段叶子（6.2.1.1，服务端不预置） */
   candidates?: Readonly<Record<string, readonly string[]>>
-  /** 容器声明（可为空通道） */
+  /** 容器声明（可为空通道）。别名 decls；两者等价，传 containers 亦可。 */
   decls?: Readonly<Record<string, ContainerDecl>>
+  containers?: Readonly<Record<string, ContainerDecl>>
   /** 已填槽位 */
   slots?: readonly ReqdocSlot[]
   /** 地址 → 已连续出现在开放项的轮次（6.3；**按轮次计不按调用计**——同一轮重复调用不累加，由调用方按轮推进）。 */

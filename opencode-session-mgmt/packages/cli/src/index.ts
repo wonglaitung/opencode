@@ -5,6 +5,7 @@
  */
 import { runInit } from "./commands/init"
 import { runList } from "./commands/list"
+import { runMemory } from "./commands/memory"
 import { runStats } from "./commands/stats"
 
 export interface ParsedArgs {
@@ -63,6 +64,7 @@ const USAGE = `opencode-sm —— OpenCode 会话管理 CLI
   opencode-sm init                              每台机器一次：写入 api_key 与收集服务地址
   opencode-sm list [--status <s>] [--tag <t>] [--json]
   opencode-sm stats [<sessionID>] [--project <name>] [--period <nd>] [--workflow <type>] [--json]
+  opencode-sm memory [list | forget <关键词>]
 
 说明:
   --project   本地插件库按项目目录存放：缺省按当前工作目录聚合；可传项目目录
@@ -86,6 +88,9 @@ async function main(): Promise<void> {
       break
     case "list":
       await runList(args)
+      break
+    case "memory":
+      await runMemory(args)
       break
     case undefined:
     case "help":

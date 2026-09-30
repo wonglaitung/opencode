@@ -31,6 +31,7 @@ import { createReqdocProbeTools } from "./tools/reqdoc-probe"
 import { createReqdocCheckTools } from "./tools/reqdoc-check"
 import { createReqdocExportTool } from "./tools/reqdoc-export"
 import { createReqdocFieldDictTools } from "./tools/reqdoc-field-dict"
+import { createReqdocKbTools } from "./tools/reqdoc-kb-tools"
 import { createReqdocImportTool } from "./tools/reqdoc-import"
 import { createReqdocConventionReviewTool } from "./tools/reqdoc-review-conventions"
 import { makeSubagentChecker } from "./subagent"
@@ -132,6 +133,8 @@ const SessionMgmtPlugin: Plugin = async (input) => {
       ...createReqdocScanTool(),
       ...createReqdocInitTool(),
       ...createReqdocFeatureTools(store),
+      // 阶段 2a：槽位工具组（只加不删；不接门禁，门禁切换在 2b）
+      ...createReqdocKbTools(store),
       ...createReqdocScoreTools(store),
       ...createReqdocProbeTools(store),
       ...createReqdocCheckTools(store),
