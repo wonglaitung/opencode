@@ -1,5 +1,6 @@
 export * from "./workflow"
 export * from "./reqdoc-render"
+export * from "./reqdoc-slots"
 export * from "./loc"
 export * from "./report"
 export * from "./identity"
