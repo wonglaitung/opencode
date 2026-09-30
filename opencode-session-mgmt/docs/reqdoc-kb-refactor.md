@@ -1,8 +1,8 @@
 # reqdoc 重构设计：需求知识库（Slot-filling KB）
 
-> **文档性质**：目标架构设计（提案），**尚未实施**。当前实现仍以
-> [workflow-reqdoc.md](workflow-reqdoc.md) 为准；本文描述的重构落地后，
-> 该文档相关章节与 mermaid 图需按本文重写。
+> **文档性质**：目标架构设计 + **实施记录**。阶段 0/1/2a/2b/2c **已交付**，对抗审查后的
+> P0/P1/P2 修复亦已完成。现行实现以 [workflow-reqdoc.md](workflow-reqdoc.md) 为准（已按本文同步改写）。
+> 阶段 3（删一致性规则群、定稿接记忆候选回顾）**尚未实施**。
 >
 > **背景动因**：业务投料含组织内部术语（如 CRD=信贷审批部）时，追问环节反复询问
 > "CRD 是什么"；同时现有流程经多轮增量修补，规则与校验函数持续膨胀，需要一次整体重构。
@@ -948,6 +948,10 @@ review_submit(force: boolean, force_reason: string, developer_confirmed: boolean
 r14/r11/r20 瘦身再省约 1880，新增约 800。
 **净变化：6517 → 约 2362 字符，减约 64%**（即规则文本从 17 条降到约 15 条但平均长度大减）。
 
+> **实测偏差（P2 补记）**：实际降至 **4369 字符 / 减约 33%**，未达本节预期。差额来自仍然有效的业务规则
+> （追问纪律、槽位落位映射、流程图规则）——原预期假设 r14/r20 的渲染铁律可大幅压缩，实际因需
+> 保留「内容写到哪个槽位地址」的映射说明而只减半。阶段 3 继续压缩。
+
 ### 7.3 真正会增长的是槽位数
 
 | 功能点数 | 槽位数 | 全量地址列表 | 全量正文 |
@@ -1272,9 +1276,9 @@ KB 横切，不挂任何 stage：goal/rules/edge 为采集与填槽期，prd 为
 **实施中补的一个缺口**：组装产物原先没有内嵌槽位摘要，导致幂等校验（9.3 三分支）无从比对——
 已由 `kbDigest` + md 头注释 + `parseRenderStructure` 解析补齐。
 
-#### 阶段 2c · 删旧（纯删除）
+#### 阶段 2c · 删旧（纯删除）—— **已交付（经对抗审查修复 P0/P1/P2）**
 
-- **交付**：删 7 个写路径工具 + 6 个状态字段 + 清理 `prompt.ts` 残留文案
+- **交付**：删 6 个写路径工具 + 6 个状态字段 + 清理 `prompt.ts` 注入文案（`reqdoc_confirm_features` **保留**：它是 `06_功能点/N_名称/` 目录唯一创建者，`reqdoc_ingest` 不建目录）
 - **删除顺序**（81 处引用分两批，先删机械引用再删门禁引用）：
   1. 先删 `renderProvenance`（13 处，纯记账）+ `renderCheckFails`（3 处，机械）
   2. 再删 `score` / `probes` / `render` / `fieldDict`（随 2b 已改读 `kbGate`，引用已变机械）
@@ -1290,8 +1294,9 @@ KB 横切，不挂任何 stage：goal/rules/edge 为采集与填槽期，prd 为
   `missingDefaultReasonViolations` / `consistencyViolations` / `noDocumentSupportViolation` /
   `coverageFromProvenance` / `patchSectionBody` / `canonicalSourceTag` / `isMappedFieldSection` /
   `ReqdocProvenance` / `ReqdocRender`）
-- 删除 `workflow.ts` 中 `probeGapViolations` / `scoreDimZeroViolations` / `ReqdocProbe` / `REQDOC_PROBES` /
-  `ReqdocScoreDeduction`
+- 删除 `workflow.ts` 中 `scoreDimZeroViolations`（**补记**：对抗审查发现 `probeGapViolations` /
+  `ReqdocScoreDeduction` / `ReqdocProbes` / `ReqdocFieldDef` 当时并未删除，已在 P2 一并清除；
+  `REQDOC_PROBES` 与 `reqdocProbeRubric` 保留——r11 仍用其作为追问话术模板）
 - `prompt.ts` 状态栏改槽位视角；`stats.ts` 的 `score` 指标改 `kb` 覆盖率
 - 提取 `assembleDir()` / `prdRelPath()` 共享路径推导，避免组装与定稿校验各算一遍而漂移
 - `scripts/eval-rules/src/tool-defs.ts` 镜像同步：删 2 个旧工具定义，**补 3 个新工具定义**
@@ -1304,6 +1309,29 @@ KB 横切，不挂任何 stage：goal/rules/edge 为采集与填槽期，prd 为
    评测仍在用已删工具的 schema。2c 一并补齐。
 3. **容器未声明可压低分母**。`kbGate` 在 `containers` 缺 `4.1` / `5.1.2.1` 声明时会拦
    （"必填容器未覆盖"）——防止用"静默声明为空"绕过选项 B 的聚合判定。已加测试锁定。
+
+**阶段 2 对抗审查（自审）发现并修复的问题**：
+
+审查结论：2c 只删了「写路径」（代码），没删「读路径」（注入给模型的文本）。实测 prd 阶段
+6517 字符规则中 **3950 字符（61%）仍在命令模型调用 6 个已删工具**。
+
+| 级别 | 问题 | 修复 |
+|---|---|---|
+| P0 | 8 条注入规则（r11/r14/r20/r21/r22/r23/r24/r31）点名已删工具；r22 谎称「探针未记录即拦截」 | 重写为槽位口径；r21/r23 整条删除 |
+| P0 | `prompt.ts` 的 `!workflow.kb` 分支注入 `reqdoc_render_skeleton`/`reqdoc_patch` 指令（`workflow_revisit` 可达） | 改为「知识库未建 → 先建库」指引 |
+| P0 | `REQDOC_STAGE_PREREQS` 6 条不存在的门禁被回给模型，模型会向业务播报虚假阻塞 | 改写为 kbGate 真实前置 |
+| P1 | **幂等校验可绕过**：`if (liveRender?.kbDigest && ...)` 使产物缺失/手写产物时整条静默跳过——而 `reqdoc_export` 描述恰好指示模型用 `write` 手写 | 改为三分支强制校验（缺产物/缺摘要/不一致各自报错）；export 描述改指 `reqdoc_assemble` |
+| P1 | 死参数 `skip_field_dict` / `no_document_confirmed`：schema 暴露、description 承诺「可跳过门禁」，execute 零处读取 | 删除参数与对应规则句 |
+| P2 | `docs/workflow-reqdoc.md`（AGENTS.md 指定的权威源）75 处描述已废架构 | 整篇改写（打分卡/探针/渲染校验三章替换为 kbGate/开放项派生/组装幂等） |
+| P2 | eval 工具镜像缺 5 个运行时工具、`reqdoc_confirm_features` 目录契约写成 `05_功能点`（应为 `06`） | 补齐并加反射式护栏测试 |
+| P2 | 本文档 4 处不实陈述（工具数/已删项/注入字符数/状态头） | 如实修正 |
+
+**新增护栏测试**（防止同类回归）：
+- `reqdoc-context-budget.test.ts` —— 断言注入规则不再点名任何已删工具
+- `review-gate-holes.test.ts` —— 断言产物缺失/手写产物/过期产物/摘要被抹 四种绕过均被拦
+- `eval-mirror.test.ts` —— 从运行时**反射**工具名与镜像比对，防止再次漂移
+
+**修复后实测**：prd 注入 4369 字符（-33%），点名已删工具 **0 条**；466 项测试全绿。
 
 ### 阶段 3 · 规则与收尾（门禁改造已在 2b 完成）
 
@@ -1341,7 +1369,7 @@ KB 横切，不挂任何 stage：goal/rules/edge 为采集与填槽期，prd 为
 7. `bun test` 全绿；覆盖率阈值校准记录在案
 8. **记忆库无静默接受的污染条目**（全部 `origin=restated`/`explicit`）；
    记忆改动可溯源（`fromProject` + `confirmedAt`）
-9. **上下文不越界**：prd 阶段规则注入实测由 6517 降至约 2362 字符（减约 64%）；工具返回条数与长度均在预算内
+9. **上下文不越界**：prd 阶段规则注入由 6517 降至 **4369** 字符（减约 33%，**未达原定 64%**，差额留给阶段 3）；工具返回条数与长度均在预算内
 10. **sdlc 记忆不影响判定**：构造"已存在 sdlc 记忆"的状态，`kbGate`/门禁结果与无记忆时**完全一致**（3.3.2 红线）
 
 ---

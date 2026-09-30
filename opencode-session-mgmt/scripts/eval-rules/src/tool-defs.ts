@@ -4,11 +4,12 @@
  * 改插件工具时须同步这里,确保评测测的是真实插件暴露给模型的工具契约。
  * 评测只判 tool_use、不执行工具,故省略插件的 Store/execute 上下文。
  *
- * 以下工具为**运行时专用、不入 EVAL_TOOLS**：
- * 它读取真实文件（Bun.file + context.worktree），评测沙箱无文件系统，模型调它只会拿到
- * 不存在的路径；渲染达标性改由 judge.kind="render" 判定——用共享 parseRenderStructure 解析
- * 模型回复文本里的 PRD 渲染骨架（评测模型无 write 工具，须在文本中渲染），与运行时同源。
- * 运行时契约供参考：reqdoc_export(source) 把 PRD md 导出为 docx。
+ * 文件系统类工具（reqdoc_init / reqdoc_import / reqdoc_export / reqdoc_review_conventions）
+ * **仍列入镜像**：它们是 r8/r32/r14 规则明确指示调用的工具，评测模型必须能看到契约才能遵循规则。
+ * 评测沙箱无真实文件系统，调它们不会真的执行——评测只判 tool_use（见文件头）。
+ *
+ * 渲染达标性由 judge.kind="render" 判定：用共享 parseRenderStructure 解析模型回复文本里的
+ * PRD 骨架（评测模型无 write 工具，须在文本中渲染），与运行时同源。
  */
 export type OpenAITool = {
   type: "function"
@@ -200,6 +201,8 @@ export const EVAL_TOOLS: OpenAITool[] = [
           clarity: bool("表达明确(无歧义、可落地)"),
           edgeCoverage: bool("边界覆盖(异常/权限/合规场景俱到)"),
           resolution: bool("职责清晰(技术初步可行性已确认)"),
+          force_kb: bool("仅知识库定稿门禁(kbGate)未通过时使用：业务明确「不想再补」时放行。必须同时给 force_reason。默认 false"),
+          force_reason: str("force_kb=true 时必填：业务给的不再补齐的理由(模型不得代填)"),
         },
       },
     },
@@ -269,7 +272,7 @@ export const EVAL_TOOLS: OpenAITool[] = [
     function: {
       name: "reqdoc_confirm_features",
       description:
-        "reqdoc prd 阶段：功能点拆解确认。AI 已向业务展示拟定的功能点清单(编号/名称/优先级)，业务明确确认后调用本工具记录清单，并在 05_功能点 下为每个功能点建子目录作为渲染来源区。**prd 门禁：进入 prd 前必须先调用本工具确认功能点清单**。仅 reqdoc 工作流有效。",
+        "reqdoc prd 阶段：功能点拆解确认。AI 已向业务展示拟定的功能点清单(编号/名称/优先级)，业务明确确认后调用本工具记录清单，并在 06_功能点 下为每个功能点建子目录作为渲染来源区。**prd 门禁：进入 prd 前必须先调用本工具确认功能点清单**。仅 reqdoc 工作流有效。",
       parameters: {
         type: "object",
         properties: {
@@ -377,6 +380,41 @@ export const EVAL_TOOLS: OpenAITool[] = [
           source: str("输出文件名（相对 07_需求规格产出，默认 PRD.md）；功能点子目录由服务端按功能点建"),
         },
       },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "reqdoc_init",
+      description:
+        "reqdoc 目录骨架初始化：在需求资料根（项目根）幂等创建 00~07 八个约定目录（编号即五步编写流顺序）" +
+        "（00_初稿需求书为已有初稿导入入口；01_背景与目标 / 02_流程与数据 / 03_制度与合规 / 04_角色与权限 / 05_系统现状与能力为业务投放材料区，" +
+        "05_系统现状与能力 可选；06_功能点 / 07_需求规格产出为 AI 工作区）。已存在则跳过，绝不重建或覆盖业务已放材料。" +
+        "goal 阶段目录就绪检查时，确认业务要搭建骨架后调用本工具。仅 reqdoc 工作流有效。",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "reqdoc_import",
+      description:
+        "reqdoc 初稿导入：把业务已有的初稿需求书（文件或目录路径）解析为 [文档] 来源，落盘到 00_初稿需求书/，" +
+        "并产出「按 7 项检查标准的初评」（逐项列 满足/缺失/矛盾）。导入后停在起点，等待业务看初评后逐阶段走工作流补全（不自动快进）。",
+      parameters: {
+        type: "object",
+        properties: { path: str("初稿文件或目录路径（相对项目根，或绝对路径；须在需求资料工作区内）") },
+        required: ["path"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "reqdoc_review_conventions",
+      description:
+        "reqdoc 规约初评：对 00_初稿需求书/ 下已导入的初稿，按 7 项检查标准逐条点评（满足/缺失/矛盾）并标注每条缺失项的补全路径（AI 修/人工补材料/对话补）。",
+      parameters: { type: "object", properties: {} },
     },
   },
   {

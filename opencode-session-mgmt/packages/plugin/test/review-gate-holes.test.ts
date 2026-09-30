@@ -109,7 +109,7 @@ describe("P1 · 定稿幂等门禁不可绕过", () => {
         source: "文档",
         status: "confirmed",
       })
-      if (w.kb) w.kb.askCounts["3.1"] = 0
+      if (w.kb?.askCounts) w.kb.askCounts["3.1"] = 0
     })
     await expect(
       createReviewTools(store).review_submit!.execute(CHECKLIST, ctx),

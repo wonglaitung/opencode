@@ -273,7 +273,7 @@ export interface ReqdocScore {
  * reqdoc 追问探针覆盖记录（质量飞轮 P1，reqdoc_probe 工具写入）。
  * 可选字段：首次记录前缺省；sdlc 恒缺省。随汇报上行。
  * asked 按轮追加去重（保留追问历史供自持续「漏问频率」分析）；gaps 为仍缺口探针。
- * 柔性门禁：缺口探针对应打分卡维度不得打满分（见 probeGapViolations）。
+
  */
 export interface ReqdocProbes {
   /** 已问过的探针 id（追加去重，含历史轮次） */
@@ -288,27 +288,6 @@ export interface ReqdocProbes {
   updatedAt: number
 }
 
-/**
- * 缺口-扣分一致性校验（质量飞轮 P1 柔性门禁，workflow_advance 进 prd 与 review_submit 两处共用）：
- * 对每个缺口探针，若其映射打分卡维度打了满分（score == max），说明自评与缺口矛盾（报缺口却打满分），
- * 返回违规条目；无 probes / 无 score / 缺口为空 → 返回空（柔性：不强制记录探针）。
- */
-export function probeGapViolations(
-  probes: ReqdocProbes | undefined,
-  score: ReqdocScore | undefined,
-): string[] {
-  if (!probes || !score || probes.gaps.length === 0) return []
-  const violations: string[] = []
-  for (const id of probes.gaps) {
-    const probe = REQDOC_PROBES.find((p) => p.id === id)
-    if (!probe) continue
-    const dimScore = score.dims[probe.dim]
-    if (dimScore && dimScore.score >= dimScore.max) {
-      violations.push(`探针 ${id}（${probe.label}）是缺口，但维度 ${probe.dim} 打了满分（${dimScore.score}/${dimScore.max}）`)
-    }
-  }
-  return violations
-}
 
 
 export interface QualityMetrics {

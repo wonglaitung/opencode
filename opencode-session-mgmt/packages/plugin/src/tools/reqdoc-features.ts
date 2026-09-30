@@ -20,7 +20,7 @@ export function createReqdocFeatureTools(store: Store): Record<string, ToolDefin
     description:
       "reqdoc prd 阶段：功能点拆解确认。AI 已向业务展示拟定的功能点清单（编号/名称/优先级），" +
       "业务明确确认后调用本工具记录清单，并为每个功能点在 06_功能点 下建子目录（N_名称/）" +
-      "作为后续按模版渲染的来源区。**prd 门禁：渲染 PRD 或 reqdoc_check 之前必须先调用本工具确认功能点清单**。仅 reqdoc 工作流有效。",
+      "作为后续按模版渲染的来源区。**prd 门禁：进入 prd 前必须先调用本工具确认功能点清单**（功能点是槽位派生必填项的来源，未确认则知识库无法覆盖）。仅 reqdoc 工作流有效。",
     args: {
       features: z
         .array(
