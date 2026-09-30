@@ -5,7 +5,6 @@ import { join } from "node:path"
 import {
   REQDOC,
   REQDOC_SCORE_DIMS,
-  REQDOC_SCORE_PASS,
   SDLC,
   WORKFLOW_DEFINITIONS,
   createWorkflowState,
@@ -16,7 +15,6 @@ import {
   getStage,
   hashApiKey,
   readIdentity,
-  reqdocScoreRubric,
   resolveWorkflowType,
   reviewRecord,
   rulesForStage,
@@ -274,25 +272,31 @@ describe("WorkflowDefinition 注册表（3.2）", () => {
     expect(REQDOC.stagePurpose?.review).toBe("业务逐条确认 PRD 要点")
     expect(SDLC.stagePurpose?.implementation).toBe("编码实现")
     expect(SDLC.stagePurpose?.review).toBe("开发者理解确认代码")
-    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r20" && r.text.includes("渲染铁律") && r.text.includes("字段映射"))).toBe(true)
-    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r21" && r.stage === "edge" && r.text.includes("reqdoc_score"))).toBe(true)
+    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r20" && r.text.includes("槽位内容铁律") && r.text.includes("落位"))).toBe(true)
+    // 重构 2c：r14/r23/r24/r31 已改写为组装路径，不再点名已删工具
+    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r14" && r.text.includes("reqdoc_assemble") && r.text.includes("严禁用 write 手写"))).toBe(true)
+    // 重构 2c：打分卡门禁已删，edge 阶段改为槽位覆盖度门禁（kbGate）
+    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r22" && r.stage === "edge" && r.text.includes("kbGate") && r.text.includes("force_reason"))).toBe(true)
+    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r21")).toBe(false)
     // 实施方案 00~07 产出：03→数据字典与库表设计（r10），04→RBAC 矩阵与审批流（r12），落盘进 r14/r20
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r10" && r.text.includes("数据字典") && r.text.includes("库表设计") && r.text.includes("纯文本步骤") && r.text.includes("flowchart TD"))).toBe(true)
     // 追问 3 轮上限须逐条列出未澄清探针并说明业务可选项（质量飞轮 P1：缺口可见 + 可行动）
-    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r11" && r.text.includes("3 轮上限") && r.text.includes("未澄清探针") && r.text.includes("将扣分数") && r.text.includes("可选项") && r.text.includes("开新会话"))).toBe(true)
+    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r11" && r.text.includes("3 轮") && r.text.includes("可选项") && r.text.includes("开新会话") && r.text.includes("reqdoc_ingest") && r.text.includes("reqdoc_answer"))).toBe(true)
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r12" && r.text.includes("RBAC 权限控制矩阵") && r.text.includes("审批流控制逻辑"))).toBe(true)
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r14" && r.text.includes("数据字典与库表设计") && r.text.includes("RBAC 权限控制矩阵"))).toBe(true)
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r14" && r.text.includes("reqdoc_export") && r.text.includes("Word"))).toBe(true)
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r20" && r.text.includes("数据字典与库表设计/") && r.text.includes("权限矩阵与审批流/"))).toBe(true)
     // 关键确认防浅背书（质量飞轮 #5）：reqdoc-r27 通用规则，连续 2 次默认须逼自主意见
-    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r27" && r.stage === "global" && r.text.includes("连续 2 轮") && r.text.includes("量化目标") && r.text.includes("打分门禁兜底"))).toBe(true)
+    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r27" && r.stage === "global" && r.text.includes("连续 2 轮") && r.text.includes("量化目标") && r.text.includes("reqdoc-r22"))).toBe(true)
     // 先补料再追问（质量飞轮 #6）：reqdoc-r28 edge 规则，进 edge 前促投放≥2 目录
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r28" && r.stage === "edge" && r.text.includes("先补料再追问") && r.text.includes("至少 2 个目录") && r.text.includes("workflow_baseline"))).toBe(true)
     // 来源真实性门禁（P0.2）：reqdoc-r30 通用规则，[文档] 占比≥30% 或 ≥2 功能点有素材
-    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r30" && r.stage === "global" && r.text.includes("≥30%") && r.text.includes("至少 2 个功能点") && r.text.includes("no_document_confirmed"))).toBe(true)
+    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r30" && r.stage === "global" && r.text.includes("[文档]") && r.text.includes("[问答]"))).toBe(true)
   })
 
-  test("打分卡契约：八维权重满分 100、达标线 85", () => {
+  // 重构 2c：打分卡不再是 reqdoc 门禁。八维评分器仅供 eval 独立通道使用（设计 4.4 第 3 层），
+  // REQDOC_SCORE_PASS 已无运行时消费者。此处只锁「eval 评分维度未被改动」。
+  test("eval 独立评分通道：八维权重满分 100（达标线 85 已退役）", () => {
     expect(REQDOC_SCORE_DIMS.map((d) => d.key)).toEqual([
       "businessValue",
       "flowClosure",
@@ -304,37 +308,8 @@ describe("WorkflowDefinition 注册表（3.2）", () => {
       "acceptability",
     ])
     expect(REQDOC_SCORE_DIMS.reduce((sum, d) => sum + d.max, 0)).toBe(100)
-    expect(REQDOC_SCORE_PASS).toBe(85)
   })
 
-  test("打分卡评分标准：每维含判定规则与扣分标准，逐条未超满分（实施方案判定规则列）", () => {
-    for (const d of REQDOC_SCORE_DIMS) {
-      expect(d.rule.length).toBeGreaterThan(0)
-      expect(d.deductionRules.length).toBeGreaterThan(0)
-      for (const p of d.deductionRules) {
-        expect(p.points).toBeGreaterThan(0)
-        expect(p.points).toBeLessThanOrEqual(d.max)
-      }
-    }
-    // 方案原表的关键扣分标准全部落位
-    const rubric = reqdocScoreRubric()
-    expect(rubric).toContain("扣10分：缺失使用角色")
-    expect(rubric).toContain("扣15分：流程有头无尾")
-    expect(rubric).toContain("扣22分：未提及任何异常")
-    expect(rubric).toContain("扣10分：未定义脱敏")
-    expect(rubric).toContain("扣8分：描述为「所有人均可使用」")
-    // r21 规则文本已嵌入完整评分标准（edge 阶段注入提示，模型打分可见）
-    const r21 = REQDOC.rules.find((r) => r.id === "reqdoc-r21")!
-    expect(r21.text).toContain("网络超时")
-    expect(r21.text).toContain("扣22分")
-    expect(r21.text).toContain("reqdoc_score")
-    // 三档分级引导（实施方案「<60 不合格 / 60-84 良好 / ≥85 达标」）
-    expect(r21.text).toContain("<60 分（不合格）")
-    expect(r21.text).toContain("60-84 分（良好）")
-    expect(r21.text).toContain("≥85 分（达标）")
-    expect(r21.text).toContain("停止追问")
-    expect(r21.text).toContain("进度条")
-  })
 
   test("createWorkflowState(reqdoc) 含 reqdoc 阶段与清单", () => {
     const s = createWorkflowState("reqdoc")

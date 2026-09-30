@@ -7,7 +7,6 @@
  */
 import { tool, type ToolDefinition } from "@opencode-ai/plugin"
 import {
-  REQDOC_SCORE_PASS,
   deriveQuestions,
   getDefinition,
   kbGate,
@@ -26,16 +25,16 @@ const REQDOC_STAGE_PREREQS: Record<string, string[]> = {
   rules: ["需求资料目录（01~05）已建", "业务已选择投放材料或确认直接口述", "已扫描提取已投放材料"],
   edge: ["已明确投放/口述方式", "03_制度与合规 / 04_角色与权限 已投且扫描（或确认口述）", "基线工时已录入"],
   prd: [
-    "已记录信息覆盖（未记录即拦截）",
-    "功能点清单已拆分并经业务确认",
-    "质量评分 ≥85 且业务确认",
-    "字段定义已落库（确无结构化字段可跳过）",
-    "信息缺口已如实扣分，无缺口+满分矛盾",
+    "功能点清单已拆分并经业务确认（reqdoc_confirm_features）",
+    "必填槽位覆盖率达标：未 confirmed 的必填槽位会拦截 enter prd",
+    "无未收口项（停问项/conflict 项须用 reqdoc_answer 显式收口）",
+    "4.1 / 5.k.2.1 容器已有 confirmed 子项，或已用 containers 声明 required:false 并附理由",
+    "确实无法补齐且业务坚持不做：force_kb=true + 业务给的 force_reason",
   ],
   review: [
-    "文档已按模板生成并写入 07_需求规格产出",
-    "文档结构校验合规（章节齐全/功能点/字段来源）",
-    "来源真实性达标（[文档] 占比 ≥30% 或 ≥2 功能点含文档支撑），或业务确认无书面材料",
+    "PRD 已由 reqdoc_assemble 生成并写入 07_需求规格产出",
+    "产物内嵌槽位摘要与当前槽位一致（槽位变更后须重新组装；手写产物会被拦）",
+    "必填槽位覆盖率达标且无未收口项（同样可 force_kb + force_reason 放行）",
     "已登记理解确认要点且逐条回填来源证据",
   ],
 }
@@ -78,8 +77,8 @@ export function createWorkflowTools(store: Store): Record<string, ToolDefinition
       const saved = store.mutateWorkflow(context.sessionID, (workflow) => {
         assertStage(workflow, args.stage)
         const def = getDefinition(workflow.type)
-        // 打分卡硬门禁（实施方案第三节）：reqdoc 进入 prd（渲染）前须已打分且 total ≥ 85 并获业务确认。
-        // 【重构 2b】kb 存在时改读派生门禁（kbGate）；kb 缺省时**保持旧门禁**——两套并存可逆（2c 才删旧）。
+        // PRD 产出门禁（重构 2c）：reqdoc 进入 prd 前，知识库必须存在且通过 kbGate
+        // （必填槽位覆盖率 + 无未收口项）。旧打分卡/探针门禁已于 2c 删除。
         if (args.action === "enter" && args.stage === "prd" && def.type === "reqdoc") {
           const kb = workflow.kb
           if (!kb) {

@@ -53,13 +53,29 @@ describe("reqdoc 上下文预算基线", () => {
     expect(renderTargetDigest().length).toBeLessThan(1000)
   })
 
-  test("一致性规则群是上下文大户（重构将删除的四条合计 > 3000 字符，设计 7.2）", () => {
-    // 这四条是"平行账本对账"的成本，也是重构最大的一笔上下文节省来源。
-    // 若未来重构已删除它们，本断言应随之移除或改为断言"已删除"——此断言标记现状基线。
-    const toDelete = ["reqdoc-r21", "reqdoc-r23", "reqdoc-r24", "reqdoc-r31"]
+  test("重构 2c：原「平行账本对账」四条已删除或改写为槽位口径", () => {
+    // 设计 7.2 点名的四条上下文大户：r21（打分卡）/ r23（渲染结构校验）已整条删除；
+    // r24（渲染门禁）/ r31（字段定义）已改写为组装幂等与 field 类槽位口径。
+    const removed = ["reqdoc-r21", "reqdoc-r23"].filter((id) => !rules.some((r) => r.id === id))
+    expect(removed).toEqual(["reqdoc-r21", "reqdoc-r23"])
+
+    const rewritten = ["reqdoc-r24", "reqdoc-r31"]
       .map((id) => rules.find((r) => r.id === id))
       .filter((r): r is { id: string; stage: string; text: string } => Boolean(r))
-    expect(toDelete.length).toBe(4)
-    expect(sum(toDelete)).toBeGreaterThan(3000)
+    expect(rewritten.length).toBe(2)
+    // 改写后单条显著变短（r24 由 ~700 字降到 ~200，r31 由 ~500 降到 ~300）
+    for (const r of rewritten) expect(r.text.length).toBeLessThan(500)
+  })
+
+  test("★ 注入规则不再点名已删除的工具（重构 2c 核心不变量）", () => {
+    // 模型只能看到注入文本。若规则仍命令调用已删工具，弱模型会调用失败——这是 2c 曾遗漏的最大项。
+    const dead = /reqdoc_(score|probe|patch|check|field_dict|render_skeleton)\b/
+    const offenders = rules.filter((r) => dead.test(r.text)).map((r) => `${r.id}(${r.text.length}字)`)
+    expect(offenders).toEqual([])
+  })
+
+  test("★ prd 阶段注入已显著下降（重构 2c 验收 #9）", () => {
+    // 基线 6517 字符（打分管线 8 条规则）。2c 删 r21/r23 并改写 r14/r20/r24/r31 后应明显下降。
+    expect(sum(rules.filter((r) => r.stage === "prd"))).toBeLessThan(4000)
   })
 })

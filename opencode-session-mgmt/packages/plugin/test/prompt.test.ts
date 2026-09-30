@@ -114,7 +114,7 @@ describe("buildSystemFragment", () => {
 
 
 
-  describe("渲染目标结构注入（P3：reqdoc prd 阶段注入结构摘要，不注入模板全文）", () => {
+  describe("PRD 产出指引注入（重构 2c：prd 阶段按槽位流程，不指示手写渲染）", () => {
     const NO_OVERLAY = "/tmp/opencode-sm-conv-not-exist"
     /** 推进 reqdoc 至 prd 进行中（goal/rules/edge 均已 approve）。 */
     function reqdocAtPrd(): WorkflowState {
@@ -127,20 +127,41 @@ describe("buildSystemFragment", () => {
       return s
     }
 
-    test("reqdoc prd 阶段：注入结构摘要（章节骨架 + 子小节 + 映射字段）", () => {
-      const text = buildSystemFragment(reqdocAtPrd(), {}, [], NO_OVERLAY)
-      expect(text).toContain("# 渲染目标结构")
-      expect(text).toContain("章节骨架")
-      expect(text).toContain("2.13 流程图")
-      expect(text).toContain("映射字段须逐功能点标来源")
-      // 不再注入模板全文（首行标题）
-      expect(text).not.toContain("# 业务需求说明书模板")
+    test("reqdoc prd 阶段 + kb 已建：注入槽位流程三步", () => {
+      const s = reqdocAtPrd()
+      s.kb = {
+        slots: [],
+        features: [{ no: 1, name: "名单排查", priority: "high", confirmedAt: 1 }],
+        containers: {},
+        askCounts: {},
+        updatedAt: 1,
+      }
+      const text = buildSystemFragment(s, {}, [], NO_OVERLAY)
+      expect(text).toContain("# 需求知识库流程")
+      expect(text).toContain("reqdoc_ingest")
+      expect(text).toContain("reqdoc_answer")
+      expect(text).toContain("reqdoc_assemble")
+      // 重构 2c：不再注入已删工具的指引
+      expect(text).not.toContain("reqdoc_render_skeleton")
+      expect(text).not.toContain("reqdoc_patch")
     })
 
-    test("reqdoc 非 prd 阶段 → 不注入结构摘要", () => {
+    test("★ reqdoc prd 阶段 + kb 缺省（revisit 回退）：注入建库指引，不注入旧手写渲染指引", () => {
+      const text = buildSystemFragment(reqdocAtPrd(), {}, [], NO_OVERLAY)
+      expect(text).toContain("# 需求知识库未建")
+      expect(text).toContain("reqdoc_ingest")
+      // 关键护栏：旧分支曾让模型去调已删的 render_skeleton/patch
+      expect(text).not.toContain("reqdoc_render_skeleton")
+      expect(text).not.toContain("reqdoc_patch")
+      expect(text).not.toContain("# 渲染目标结构")
+    })
+
+    test("reqdoc 非 prd 阶段 → 不注入 PRD 产出指引", () => {
       const s = createWorkflowState("reqdoc")
       applyTransition(s, "edge", "enter", 1)
-      expect(buildSystemFragment(s, {}, [], NO_OVERLAY)).not.toContain("# 渲染目标结构")
+      const text = buildSystemFragment(s, {}, [], NO_OVERLAY)
+      expect(text).not.toContain("# 需求知识库流程")
+      expect(text).not.toContain("# 需求知识库未建")
     })
 
     test("reqdoc 完成态 → 不注入结构摘要", () => {

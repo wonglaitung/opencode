@@ -10,7 +10,6 @@ import {
   requiredSlots,
   currentInProgressStage,
   getDefinition,
-  renderTargetDigest,
   reviewRecord,
   rulesForStage,
   type WorkflowState,
@@ -92,34 +91,38 @@ export function buildSystemFragment(
   }
   parts.push("", buildStateBar(workflow, stage))
 
-  // 渲染目标结构（P3 上下文瘦身，见 reqdoc-render.ts）：reqdoc 且当前阶段为 prd 时注入结构摘要
-  // （约 1k 字符，替代模板全文 7.6k）。模板逐字落实由服务端 reqdoc_render_skeleton 生成骨架保证，
-  // 客户端模型据本摘要用 reqdoc_patch 逐小节填充，无需读取模板文件。
-  // 知识库渲染指引（重构 2b）：kb 存在时按槽位流程注入，不再指示用已废弃的 patch/render_skeleton。
-  if (def.type === "reqdoc" && workflow.kb && stage === "prd") {
+  // PRD 产出指引（重构 2c）：prd 阶段注入槽位流程。
+  // 模板逐字落实由服务端 reqdoc_assemble 投影保证，模型只负责把槽位内容写对，不读模板、不手写产物。
+  if (def.type === "reqdoc" && stage === "prd") {
     const kb = workflow.kb
-    const req = requiredSlots(kb.features)
-    const filled = req.filter((a) => kb.slots.some((x) => x.address === a && x.status === "confirmed")).length
-    parts.push(
-      "",
-      "# 需求知识库流程（重构 2b；旧 reqdoc_render_skeleton/reqdoc_patch 已不再是渲染路径）",
-      "",
-      `覆盖率：${filled}/${req.length} 必填槽位。`,
-      "1) reqdoc_ingest —— 从材料批量提取内容提交为槽位（不是写文档）；status 由服务端记为待确认。",
-      "2) reqdoc_answer —— 逐项请业务确认后落定；连续 2 轮未确认的项会被停问，应显式收口（[缺省]+理由）。",
-      "3) reqdoc_assemble —— 由槽位投影生成整篇 PRD（结构与来源标签由服务端保证，**不要手工编辑产物**）。",
-      "→ 进入下一阶段与定稿的门禁读知识库派生门禁（kbGate）。",
-      "",
-    )
-  }
-
-  if (def.type === "reqdoc" && stage === "prd" && !workflow.kb) {
-    parts.push(
-      "",
-      "# 渲染目标结构（reqdoc prd 阶段；骨架由 reqdoc_render_skeleton 生成，逐小节用 reqdoc_patch 填充）",
-      "",
-      renderTargetDigest(),
-    )
+    if (!kb) {
+      // kb 缺省只有 workflow_revisit 回退到 prd 一条路径（enter prd 已被 kbGate 拦住）：
+      // 此时必须先建库，不能沿用旧的「手写渲染」指引。
+      parts.push(
+        "",
+        "# 需求知识库未建（重构 2c）",
+        "",
+        "PRD 由槽位投影生成，当前知识库为空——请先：",
+        "1) reqdoc_ingest —— 提交功能点清单与内容槽位（地址取工具返回的「本轮该填」清单）。",
+        "2) reqdoc_answer —— 逐项请业务确认后落定。",
+        "3) reqdoc_assemble —— 由槽位投影生成整篇 PRD。",
+        "",
+      )
+    } else {
+      const req = requiredSlots(kb.features)
+      const filled = req.filter((a) => kb.slots.some((x) => x.address === a && x.status === "confirmed")).length
+      parts.push(
+        "",
+        "# 需求知识库流程（重构 2c：PRD 由服务端从槽位投影生成，不要手写产物）",
+        "",
+        `覆盖率：${filled}/${req.length} 必填槽位。`,
+        "1) reqdoc_ingest —— 从材料批量提取内容提交为槽位（不是写文档）；status 由服务端记为待确认。",
+        "2) reqdoc_answer —— 逐项请业务确认后落定；连续 2 轮未确认的项会被停问，应显式收口（[缺省]+理由）。",
+        "3) reqdoc_assemble —— 由槽位投影生成整篇 PRD（结构与来源标签由服务端保证，**不要手工编辑产物**）。",
+        "→ 进入下一阶段与定稿的门禁读知识库派生门禁（kbGate）：必填槽位未 confirmed 或有未收口项即拦截。",
+        "",
+      )
+    }
   }
 
   const stuckEntries = Object.entries(stuck)
