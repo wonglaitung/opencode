@@ -6,7 +6,6 @@
  * sdlc 与 reqdoc 均已注册（设计文档 session-management.md 3.2 注册表；定义分别见 workflow-sdlc.md 2 章、workflow-reqdoc.md 2 章）。
  */
 import { renderCheckRubric } from "./reqdoc-render"
-import type { ReqdocProvenance, ReqdocRender } from "./reqdoc-render"
 
 export type WorkflowType = "sdlc" | "reqdoc"
 
@@ -311,22 +310,6 @@ export function probeGapViolations(
   return violations
 }
 
-/**
- * 可实施性门禁（P1：material/nfr/acceptability 三维度）：任一维度得 0 分即视为「不可照着做」，
- * 拦截进入 prd / 定稿。缺维度（未打分）不拦（服务端 reqdoc_score 已强制八维齐全）；
- * 仅当显式 0 分才报违规。workflow_advance 进 prd 与 review_submit 两处共用。
- */
-export function scoreDimZeroViolations(score: ReqdocScore | undefined): string[] {
-  if (!score) return []
-  const v: string[] = []
-  for (const dim of REQDOC_SCORE_DIMS) {
-    const ds = score.dims[dim.key]
-    if (ds && ds.score <= 0) {
-      v.push(`维度 ${dim.key}（${dim.label}）得 0 分，需求不可实施（缺真实素材/非功能/验收指标），须回 edge 补缺后重打 reqdoc_score`)
-    }
-  }
-  return v
-}
 
 export interface QualityMetrics {
   /** 一次通过率（3.2）：未重写即 accepted 的片段数 ÷ 全部定论片段数(accepted+manual)。
@@ -375,43 +358,8 @@ export interface WorkflowState {
    */
   features?: ReqdocFeature[]
   /**
-   * reqdoc PRD 质量打分卡（实施方案第三节，reqdoc_score 工具写入）。
-   * 可选字段：打分前缺省；sdlc 恒缺省。扣分明细含 evidence（本机留痕）。
-   */
-  score?: ReqdocScore
-  /**
-   * reqdoc 追问探针覆盖记录（质量飞轮 P1，reqdoc_probe 工具写入）。
-   * 可选字段：首次记录前缺省；sdlc 恒缺省。随汇报上行。
-   */
-  probes?: ReqdocProbes
-  /**
-   * reqdoc 渲染结构校验记录（质量飞轮 P2，reqdoc_check 工具写入）。
-   * 可选字段：未调用 reqdoc_check 前缺省；sdlc 恒缺省。随汇报上行。
-   * review_submit 定稿时重读 source 复核（防快照被篡改）；未记录则柔性放行。
-   */
-  render?: ReqdocRender
-  /**
-   * reqdoc 渲染来源记账（P3.10，服务端规范写入 + 记账）：
-   * 绝对小节键 → 服务端写入的来源标签。reqdoc_patch 每次写入即记账；reqdoc_render_skeleton 重置。
-   * covered/defaults 优先从此处读取（有界匹配，不受自由文本格式变体影响）。
-   * 可选字段：未调用 reqdoc_patch 前缺省；sdlc 恒缺省。
-   */
-  renderProvenance?: Record<string, ReqdocProvenance>
-  /**
-   * reqdoc 字段定义（质量飞轮 P2.5，reqdoc_field_dict 工具写入）：进 prd 前逐字段与业务确认
-   * 名称/类型/长度/必填/取值/来源系统，生成数据字典后再渲染。
-   * 可选字段：未调用 reqdoc_field_dict 前缺省；sdlc 恒缺省。随汇报上行。
-   */
-  fieldDict?: ReqdocFieldDef[]
-  /**
-   * reqdoc 渲染结构校验连续失败计数（质量飞轮 P3.9）：reqdoc_check 连续返回违规累加，
-   * 一旦 success=true 清零；≥3 时 review_submit 提示人工介入 + 格式诊断。sdlc 恒缺省。
-   */
-  renderCheckFails?: number
-  /**
-   * reqdoc 需求知识库（重构阶段 2a：Slot-filling KB，权威状态）。
-   * 与上方旧字段（score/probes/render/renderProvenance/fieldDict）在 2b/2c 期间**并存**——
-   * 旧字段仍写仍读但不再作为门禁依据，2c 才删除（见设计文档 12 章阶段 2b/2c）。
+   * reqdoc 需求知识库（Slot-filling KB，权威状态；重构 2c 起为唯一渲染/门禁依据）。
+   * 槽位是唯一事实源：追问项、覆盖率、门禁、PRD 组装全部由服务端派生。
    * 可选字段：首次 ingest 前缺省；sdlc 恒缺省。
    */
   kb?: ReqdocKbState

@@ -6,7 +6,7 @@
  * 2. `reqdoc_answer` —— 逐项填补派生开放项
  * 3. `reqdoc_assemble` —— 由槽位投影生成整篇 PRD（服务器负责结构，模型不碰文档）
  *
- * **阶段 2a 边界**：本组不接任何门禁（`workflow.ts` 的 prd 门禁与 `review.ts` 定稿门禁
+ * **门禁接入**：本组是 prd 门禁与定稿门禁的唯一依据（`workflow.ts` 与 `review.ts` 的
  * 在 2b 才改读 `kbGate`）。此阶段旧工具与旧状态字段全部保留、两套并存，
  * 便于对照与回退（见设计文档 12 章阶段 2a/2b/2c）。
  */
@@ -22,11 +22,11 @@ import {
   getDefinition,
   requiredSlots,
   type ContainerDecl,
+  type ReqdocFeature,
   type MemoryFact,
   type MemoryTerm,
   type ReqdocKbState,
   type ReqdocSlot,
-  type ReqdocScoreDimKey,
 } from "sm-shared"
 import type { Store } from "../db"
 import { WorkflowOpError } from "../workflow-ops"
@@ -82,6 +82,17 @@ async function writeKbFiles(root: string, kb: ReqdocKbState): Promise<void> {
       `功能点数：${kb.features.length}；槽位数：${kb.slots.length}\n\n` +
       `## 槽位\n\n${rows.join("\n") || "（暂无）"}\n`,
   )
+}
+
+/**
+ * 组装产物目录（2c）：单功能点时进功能点子目录，多功能点时落在 07_ 根。
+ * 组装与定稿校验共用，避免两处各算一遍路径而漂移。
+ */
+export function assembleDir(root: string, features: readonly ReqdocFeature[]): string {
+  if (features.length === 1) {
+    return join(root, "07_需求规格产出", `${features[0]!.no}_${features[0]!.name}`)
+  }
+  return join(root, "07_需求规格产出")
 }
 
 export function createReqdocKbTools(store: Store): Record<string, ToolDefinition> {
@@ -247,7 +258,7 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
     description:
       "reqdoc PRD 组装：把槽位投影成整篇 PRD（md）并归档到 07_需求规格产出。" +
       "**结构与来源标签由服务端保证**，你不需要也不应手工编辑产物。" +
-      "本阶段为预览用途（不作为定稿依据，定稿门禁在后续阶段切换）。",
+      "产物内嵌槽位摘要，定稿时据此校验一致性（摘要不符 = 过期产物或被手改）。",
     args: {
       source: z
         .string()
@@ -264,9 +275,7 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
       if (!result) {
         return "⚠ 无法组装：模板不可用或功能点为空。请先 reqdoc_ingest 提交功能点清单。"
       }
-      const outDir = kb.features.length === 1
-        ? join(root, "07_需求规格产出", `${kb.features[0]!.no}_${kb.features[0]!.name}`)
-        : join(root, "07_需求规格产出")
+      const outDir = assembleDir(root, kb.features)
       await mkdir(outDir, { recursive: true })
       const outPath = join(outDir, args.source ?? "PRD.md")
       await Bun.write(outPath, result.md)

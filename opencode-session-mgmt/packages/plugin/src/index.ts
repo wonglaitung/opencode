@@ -26,11 +26,7 @@ import { createWorkflowStartTools } from "./tools/workflow-start"
 import { createReqdocScanTool } from "./tools/reqdoc-scan"
 import { createReqdocInitTool } from "./tools/reqdoc-dirs"
 import { createReqdocFeatureTools } from "./tools/reqdoc-features"
-import { createReqdocScoreTools } from "./tools/reqdoc-score"
-import { createReqdocProbeTools } from "./tools/reqdoc-probe"
-import { createReqdocCheckTools } from "./tools/reqdoc-check"
 import { createReqdocExportTool } from "./tools/reqdoc-export"
-import { createReqdocFieldDictTools } from "./tools/reqdoc-field-dict"
 import { createReqdocKbTools } from "./tools/reqdoc-kb-tools"
 import { createReqdocImportTool } from "./tools/reqdoc-import"
 import { createReqdocConventionReviewTool } from "./tools/reqdoc-review-conventions"
@@ -133,13 +129,9 @@ const SessionMgmtPlugin: Plugin = async (input) => {
       ...createReqdocScanTool(),
       ...createReqdocInitTool(),
       ...createReqdocFeatureTools(store),
-      // 阶段 2a：槽位工具组（只加不删；不接门禁，门禁切换在 2b）
+      // 阶段 2c：槽位工具组为唯一渲染路径，旧 reqdoc_score/probe/check/patch/field_dict 已移除
       ...createReqdocKbTools(store),
-      ...createReqdocScoreTools(store),
-      ...createReqdocProbeTools(store),
-      ...createReqdocCheckTools(store),
        ...createReqdocExportTool(),
-       ...createReqdocFieldDictTools(store),
        ...createReqdocImportTool(),
        ...createReqdocConventionReviewTool(),
        open_ide: createOpenIdeTool(entries, registry),

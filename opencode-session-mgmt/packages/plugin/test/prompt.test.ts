@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { createWorkflowState, type ReqdocRender, type WorkflowState } from "sm-shared"
+import { createWorkflowState, requiredSlots, type WorkflowState } from "sm-shared"
 import { buildStateBar, buildSystemFragment } from "../src/prompt"
 import { applyTransition } from "../src/workflow-ops"
 
@@ -111,67 +111,8 @@ describe("buildSystemFragment", () => {
     expect(text).not.toContain("人工锁定")
   })
 
-  test("reqdoc 已打分 → 状态条含 PRD 评分行", () => {
-    const s = createWorkflowState("reqdoc")
-    applyTransition(s, "edge", "enter", 1)
-    s.score = {
-      dims: {
-        businessValue: { score: 15, max: 15 },
-        flowClosure: { score: 25, max: 25 },
-        edgeControl: { score: 30, max: 30 },
-        compliance: { score: 10, max: 20 },
-        authority: { score: 10, max: 10 },
-        material: { score: 8, max: 8 },
-        nfr: { score: 7, max: 7 },
-        acceptability: { score: 7, max: 7 },
-      },
-      deductions: [],
-      total: 90,
-      confirmed: true,
-      confirmedAt: 1000,
-      updatedAt: 1000,
-    }
-    const text = buildSystemFragment(s)
-    expect(text).toContain("质量评分：90/100")
-    expect(text).toContain("达标")
-    expect(text).toContain("业务确认：已")
-  })
 
-  test("reqdoc 未打分 → 状态条不含 PRD 评分行；低分未确认标注清晰", () => {
-    const s = createWorkflowState("reqdoc")
-    applyTransition(s, "edge", "enter", 1)
-    const text = buildSystemFragment(s)
-    // 规约文本含"质量评分：85/100"示例，用正则排除引号内的示例
-    expect(text).not.toMatch(/[^"“]质量评分：\d/)
-    s.score = {
-      dims: {
-        businessValue: { score: 15, max: 15 },
-        flowClosure: { score: 20, max: 25 },
-        edgeControl: { score: 25, max: 30 },
-        compliance: { score: 5, max: 20 },
-        authority: { score: 10, max: 10 },
-        material: { score: 8, max: 8 },
-        nfr: { score: 7, max: 7 },
-        acceptability: { score: 7, max: 7 },
-      },
-      deductions: [],
-      total: 75,
-      confirmed: false,
-      confirmedAt: null,
-      updatedAt: 1000,
-    }
-    const text2 = buildSystemFragment(s)
-    expect(text2).toContain("质量评分：75/100")
-    expect(text2).toContain("未达标")
-    expect(text2).toContain("业务确认：未")
-  })
 
-  test("sdlc 恒无 PRD 评分行（打分卡仅 reqdoc）", () => {
-    const s = createWorkflowState("sdlc")
-    applyTransition(s, "implementation", "enter", 1)
-    const text = buildSystemFragment(s)
-    expect(text).not.toMatch(/[^"“]质量评分：\d/)
-  })
 
   describe("渲染目标结构注入（P3：reqdoc prd 阶段注入结构摘要，不注入模板全文）", () => {
     const NO_OVERLAY = "/tmp/opencode-sm-conv-not-exist"
@@ -261,44 +202,9 @@ describe("buildSystemFragment", () => {
 
 describe("buildStateBar 渲染校验行（质量飞轮 P2）", () => {
   /** 结构合规的单功能点 render 记录。 */
-  const okRender = (): ReqdocRender => ({
-    source: "07_需求规格产出/1_测试/需求规格书.md",
-    checkedAt: 1000,
-    expectedFeatures: 1,
-    ok: true,
-    chaptersPresent: ["第一章 项目信息", "第二章 文档变更过程", "第三章 需求概述", "第四章 术语定义与业务规则", "第五章 需求功能详述"],
-    missing: [],
-    outOfOrder: [],
-    missingSections: [],
-    featureCount: 1,
-    featureOk: true,
-    missingFeatureSections: [],
-    covered: { "1.2": 1, "2.1": 1, "2.3": 1, "2.6": 1, "2.7": 1, "2.8": 1, "2.9": 1, "2.11": 1, "2.12": 1 },
-    defaults: { "1.2": 0, "2.1": 0, "2.3": 0, "2.6": 0, "2.7": 0, "2.8": 0, "2.9": 0, "2.11": 0, "2.12": 0 },
-    docBlocks: 1,
-    docCount: 7,
-    qaCount: 0,
-  })
 
-  test("reqdoc 记录过且结构合规 → ✓ 结构合规（N 功能点）", () => {
-    const s = createWorkflowState("reqdoc")
-    s.render = okRender()
-    const bar = buildStateBar(s, "prd")
-    expect(bar).toContain("文档校验：✓ 结构合规（1 功能点）")
-  })
 
-  test("reqdoc 记录过但有违规 → ✗ 缺章节等明细", () => {
-    const s = createWorkflowState("reqdoc")
-    s.render = { ...okRender(), missing: ["第四章 术语定义与业务规则"], ok: false, chaptersPresent: okRender().chaptersPresent.filter((c) => c !== "第四章 术语定义与业务规则") }
-    const bar = buildStateBar(s, "prd")
-    expect(bar).toContain("文档校验：✗ 缺章节：第四章 术语定义与业务规则")
-  })
 
-  test("reqdoc 未记录 → 提示未执行 reqdoc_check（柔性提示）", () => {
-    const s = createWorkflowState("reqdoc")
-    const bar = buildStateBar(s, "prd")
-    expect(bar).toContain("文档校验：未执行")
-  })
 
   test("sdlc → 不出现渲染校验行（仅 reqdoc 提示，不打扰）", () => {
     const s = createWorkflowState("sdlc")
@@ -338,5 +244,50 @@ describe("buildStateBar 渲染校验行（质量飞轮 P2）", () => {
       const bar = buildStateBar(s, null)
       expect(bar).toContain("当前阶段：空档（已 approved：目标与场景、流程与规则），下一步：「边界与异常」")
     })
+  })
+})
+
+describe("buildStateBar · 知识库覆盖（2c）", () => {
+  const kbOf = (filled: number): NonNullable<WorkflowState["kb"]> => {
+    const features = [{ no: 1, name: "名单排查", priority: "high" as const, confirmedAt: 1000 }]
+    const req = requiredSlots(features)
+    return {
+      slots: req.slice(0, filled).map((address) => ({
+        kind: "prose" as const,
+        address,
+        content: `${address} 内容`,
+        source: "文档" as const,
+        status: "confirmed" as const,
+      })),
+      features,
+      containers: {
+        "4.1": { required: false, reason: "无特殊术语" },
+        "5.1.2.1": { required: false, reason: "无结构化字段" },
+      },
+      askCounts: {},
+      updatedAt: 1000,
+    }
+  }
+
+  test("槽位全填 → 状态条显示满覆盖且门禁可过", () => {
+    const s = createWorkflowState("reqdoc")
+    s.kb = kbOf(requiredSlots(kbOf(0).features).length)
+    const bar = buildStateBar(s, "prd")
+    expect(bar).toContain("知识库：必填槽位")
+    expect(bar).toContain("门禁可通过 ✓")
+  })
+
+  test("槽位未填满 → 状态条显示未就绪原因", () => {
+    const s = createWorkflowState("reqdoc")
+    s.kb = kbOf(2)
+    const bar = buildStateBar(s, "prd")
+    expect(bar).toContain("知识库：必填槽位 2/")
+    expect(bar).toContain("未就绪")
+  })
+
+  test("未建知识库 → 提示先 reqdoc_ingest", () => {
+    const s = createWorkflowState("reqdoc")
+    const bar = buildStateBar(s, "prd")
+    expect(bar).toContain("知识库：未建")
   })
 })

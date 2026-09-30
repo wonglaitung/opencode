@@ -7,6 +7,7 @@ import {
   efficiencyRatio,
   getDefinition,
   reviewRecord,
+  slotCoverage,
   sumLinesByCategory,
   type LinesCategory,
   type StageRecord,
@@ -51,7 +52,9 @@ export interface SessionStats {
   baselineHours: number | null
   /** AI 提效率 =（预估 − 实际周期）÷ 预估；无基线或无有效周期为 null，可为负（6.3） */
   efficiency: number | null
-  /** reqdoc PRD 质量打分（实施方案第三节）；reqdoc 未打分或 sdlc 为 null */
+  /** 需求质量：知识库必填槽位覆盖率（2c 起替代打分卡） */
+  kb: { filled: number; total: number; pct: number } | null
+  /** @deprecated 2c 起改用 kb 覆盖率；保留字段仅为历史 JSON 兼容 */
   score: { total: number; confirmed: boolean } | null
   comprehension: { total: number; confirmed: number }
   checklistPassed: number
@@ -159,7 +162,15 @@ export function sessionStats(row: WorkflowSessionRow, usage: Usage): SessionStat
     lines: workflow.quality.linesByFile ? sumLinesByCategory(workflow.quality.linesByFile) : null,
     baselineHours: workflow.baseline?.estimatedHours ?? null,
     efficiency: complete ? efficiencyRatio(workflow.baseline?.estimatedHours, durationMs) : null,
-    score: workflow.score ? { total: workflow.score.total, confirmed: workflow.score.confirmed } : null,
+    score: null, // @deprecated 2c 起不再产出打分卡
+    // 需求质量指标（2c）：打分卡退役，改用知识库必填槽位覆盖率（服务端派生）
+    kb: workflow.kb
+      ? (() => {
+          const kb = workflow.kb
+          const c = slotCoverage(kb.slots, kb.features, kb.containers)
+          return { filled: c.leafFilled, total: c.leafTotal, pct: c.pct }
+        })()
+      : null,
     comprehension: { total: review.comprehension.length, confirmed },
     checklistPassed,
     cost: usage.cost,

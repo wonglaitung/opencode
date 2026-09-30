@@ -3,9 +3,8 @@ import { afterEach } from "bun:test"
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
-import { reviewRecord, type ReqdocRender } from "sm-shared"
+import { requiredSlots, reviewRecord } from "sm-shared"
 import { Store } from "../src/db"
-import { createReqdocCheckTools } from "../src/tools/reqdoc-check"
 import { createReviewTools } from "../src/tools/review"
 
 function reviewOf(store: Store, id = "s1") {
@@ -13,23 +12,24 @@ function reviewOf(store: Store, id = "s1") {
 }
 
 /** reqdoc 门禁夹具：写入一个已业务确认的打分卡（默认 total 90 ≥ 85），供正向用例通过打分门禁。 */
-function setReqdocScore(store: Store, id = "r1", total = 90): void {
+/** reqdoc 门禁夹具（2c）：写入填满且已确认的知识库槽位，供正向用例通过 kbGate。 */
+function setKb(store: Store, id = "r1"): void {
   store.mutateWorkflow(id, (w) => {
-    w.score = {
-      dims: {
-        businessValue: { score: 15, max: 15 },
-        flowClosure: { score: 25, max: 25 },
-        edgeControl: { score: 30, max: 30 },
-        compliance: { score: 10, max: 20 },
-        authority: { score: 10, max: 10 },
-        material: { score: 8, max: 8 },
-        nfr: { score: 7, max: 7 },
-        acceptability: { score: 7, max: 7 },
+    const features = [{ no: 1, name: "公告发布", priority: "medium" as const, confirmedAt: 1000 }]
+    w.kb = {
+      slots: requiredSlots(features).map((address) => ({
+        kind: "prose" as const,
+        address,
+        content: `${address} 内容`,
+        source: "文档" as const,
+        status: "confirmed" as const,
+      })),
+      features,
+      containers: {
+        "4.1": { required: false, reason: "无特殊术语" },
+        "5.1.2.1": { required: false, reason: "无结构化字段" },
       },
-      deductions: [],
-      total,
-      confirmed: true,
-      confirmedAt: 1000,
+      askCounts: {},
       updatedAt: 1000,
     }
   })
@@ -353,9 +353,8 @@ describe("review_submit 门禁", () => {
     const tools = createReviewTools(store)
     store.mutateWorkflow("r1", (w) => {
       for (const name of ["goal", "rules", "edge", "prd"]) w.stages[name].status = "approved"
-      w.fieldDict = [{ feature: "功能点 1", name: "客户号", type: "字符串", required: true }]
     })
-    setReqdocScore(store, "r1")
+    setKb(store, "r1")
     store.lockFile("r1", "/home/dev/project/src/A.java")
     const out = await tools.review_submit!.execute(
       { completeness: true, clarity: true, edgeCoverage: true, resolution: true } as never,
@@ -366,58 +365,43 @@ describe("review_submit 门禁", () => {
     store.close()
   })
 
-  test("reqdoc 门禁：未打分不得定稿", async () => {
+  test("reqdoc 门禁：知识库未建不得定稿（2c）", async () => {
     const store = Store.memory(() => "reqdoc" as const)
     const tools = createReviewTools(store)
     store.mutateWorkflow("r1", (w) => {
       for (const name of ["goal", "rules", "edge", "prd"]) w.stages[name].status = "approved"
     })
-    // 未调用 reqdoc_score（无 workflow.score）→ 定稿被拒
     await expect(
       tools.review_submit!.execute(
         { completeness: true, clarity: true, edgeCoverage: true, resolution: true } as never,
         { sessionID: "r1" } as never,
       ),
-    ).rejects.toThrow(/未打分/)
+    ).rejects.toThrow(/知识库|未就绪/)
     store.close()
   })
 
-  test("reqdoc 门禁：低于 85 分不得定稿", async () => {
+  test("reqdoc 门禁：★ 槽位覆盖不足不得定稿（kbGate 覆盖率）", async () => {
     const store = Store.memory(() => "reqdoc" as const)
     const tools = createReviewTools(store)
     store.mutateWorkflow("r1", (w) => {
       for (const name of ["goal", "rules", "edge", "prd"]) w.stages[name].status = "approved"
-    })
-    setReqdocScore(store, "r1", 75)
-    await expect(
-      tools.review_submit!.execute(
-        { completeness: true, clarity: true, edgeCoverage: true, resolution: true } as never,
-        { sessionID: "r1" } as never,
-      ),
-    ).rejects.toThrow(/未达标/)
-    store.close()
-  })
-
-  test("reqdoc 门禁：高分但未业务确认不得定稿", async () => {
-    const store = Store.memory(() => "reqdoc" as const)
-    const tools = createReviewTools(store)
-    store.mutateWorkflow("r1", (w) => {
-      for (const name of ["goal", "rules", "edge", "prd"]) w.stages[name].status = "approved"
-      w.score = {
-        dims: {
-          businessValue: { score: 15, max: 15 },
-          flowClosure: { score: 25, max: 25 },
-          edgeControl: { score: 30, max: 30 },
-          compliance: { score: 15, max: 20 },
-          authority: { score: 10, max: 10 },
-        material: { score: 8, max: 8 },
-        nfr: { score: 7, max: 7 },
-        acceptability: { score: 7, max: 7 },
-        },
-        deductions: [],
-        total: 95,
-        confirmed: false,
-        confirmedAt: null,
+      // 只填一部分必填槽位
+      const features = [{ no: 1, name: "公告发布", priority: "medium" as const, confirmedAt: 1000 }]
+      const req = requiredSlots(features)
+      w.kb = {
+        slots: req.slice(0, 2).map((address) => ({
+          kind: "prose" as const,
+          address,
+          content: `${address} 内容`,
+          source: "文档" as const,
+          status: "confirmed" as const,
+        })),
+        features,
+        containers: {
+        "4.1": { required: false, reason: "无特殊术语" },
+        "5.1.2.1": { required: false, reason: "无结构化字段" },
+      },
+        askCounts: {},
         updatedAt: 1000,
       }
     })
@@ -426,61 +410,43 @@ describe("review_submit 门禁", () => {
         { completeness: true, clarity: true, edgeCoverage: true, resolution: true } as never,
         { sessionID: "r1" } as never,
       ),
-    ).rejects.toThrow(/未获业务确认/)
+    ).rejects.toThrow(/覆盖率|未就绪/)
     store.close()
   })
 
-  test("reqdoc 门禁：缺口探针对应维度满分不得定稿（缺口+满分矛盾）", async () => {
+  test("reqdoc 门禁：★ 业务给出理由后 force 放行", async () => {
     const store = Store.memory(() => "reqdoc" as const)
     const tools = createReviewTools(store)
     store.mutateWorkflow("r1", (w) => {
       for (const name of ["goal", "rules", "edge", "prd"]) w.stages[name].status = "approved"
-      // exception 缺口映射 edgeControl，但该维打了满分 30/30（setReqdocScore 默认）——自评不诚实
-      w.probes = { asked: ["main_flow", "exception"], gaps: ["exception"], round: 1, updatedAt: 1000 }
+      const features = [{ no: 1, name: "公告发布", priority: "medium" as const, confirmedAt: 1000 }]
+      w.kb = {
+        slots: [],
+        features,
+        containers: {
+        "4.1": { required: false, reason: "无特殊术语" },
+        "5.1.2.1": { required: false, reason: "无结构化字段" },
+      },
+        askCounts: {},
+        updatedAt: 1000,
+      }
     })
-    setReqdocScore(store, "r1")
-    await expect(
-      tools.review_submit!.execute(
-        { completeness: true, clarity: true, edgeCoverage: true, resolution: true } as never,
+    const out = String(
+      await tools.review_submit!.execute(
+        {
+          completeness: true, clarity: true, edgeCoverage: true, resolution: true,
+          force_kb: true, force_reason: "业务明确本期只做主流程",
+        } as never,
         { sessionID: "r1" } as never,
       ),
-    ).rejects.toThrow(/自相矛盾/)
+    )
+    expect(out).toContain("审查阶段通过")
     store.close()
   })
 
-  test("reqdoc 门禁：探针覆盖达标（无缺口）可定稿", async () => {
-    const store = Store.memory(() => "reqdoc" as const)
-    const tools = createReviewTools(store)
-    store.mutateWorkflow("r1", (w) => {
-      for (const name of ["goal", "rules", "edge", "prd"]) w.stages[name].status = "approved"
-      w.fieldDict = [{ feature: "功能点 1", name: "客户号", type: "字符串", required: true }]
-      w.probes = { asked: ["main_flow", "exception"], gaps: [], round: 2, updatedAt: 1000 }
-    })
-    setReqdocScore(store, "r1")
-    const out = await tools.review_submit!.execute(
-      { completeness: true, clarity: true, edgeCoverage: true, resolution: true } as never,
-      { sessionID: "r1" } as never,
-    )
-    expect(String(out)).toContain("/new")
-    store.close()
-  })
 
-  test("reqdoc 门禁：未记录探针（柔性）达标可定稿", async () => {
-    const store = Store.memory(() => "reqdoc" as const)
-    const tools = createReviewTools(store)
-    store.mutateWorkflow("r1", (w) => {
-      for (const name of ["goal", "rules", "edge", "prd"]) w.stages[name].status = "approved"
-      w.fieldDict = [{ feature: "功能点 1", name: "客户号", type: "字符串", required: true }]
-      // 无 probes：柔性门禁不强制记录，放行
-    })
-    setReqdocScore(store, "r1")
-    const out = await tools.review_submit!.execute(
-      { completeness: true, clarity: true, edgeCoverage: true, resolution: true } as never,
-      { sessionID: "r1" } as never,
-    )
-    expect(String(out)).toContain("/new")
-    store.close()
-  })
+
+
 
   test("sdlc 定稿不受打分卡门禁影响", async () => {
     const { store, tools } = setup()
@@ -504,9 +470,8 @@ describe("reqdoc 工作流（业务确认 PRD 要点）", () => {
     // 审查是最后一关：先推进前序阶段（goal/rules/edge/prd approved）+ 打分达标（门禁前置）
     store.mutateWorkflow("r1", (w) => {
       for (const name of ["goal", "rules", "edge", "prd"]) w.stages[name].status = "approved"
-      w.fieldDict = [{ feature: "公告发布", name: "客户号", type: "字符串", required: true }]
     })
-    setReqdocScore(store, "r1")
+    setKb(store, "r1")
     // reqdoc 要点：不填 file/lineStart/lineEnd
     await tools.comprehension_add!.execute(
       { codeSegmentId: "目标与场景", explanation: "面向一线柜员，缩短开户录入时间" } as never,
@@ -547,7 +512,7 @@ describe("reqdoc 工作流（业务确认 PRD 要点）", () => {
     store.mutateWorkflow("r1", (w) => {
       for (const name of ["goal", "rules", "edge", "prd"]) w.stages[name].status = "approved"
     })
-    setReqdocScore(store, "r1")
+    setKb(store, "r1")
     await tools.comprehension_add!.execute(
       { codeSegmentId: "目标与场景", explanation: "面向一线柜员，缩短开户录入时间" } as never,
       ctx,
@@ -652,193 +617,16 @@ describe("firstPassRate 自动计算", () => {
   })
 })
 
-describe("reqdoc 渲染定稿复核门禁（质量飞轮 P2）", () => {
-  const dirs: string[] = []
-  const tempDir = (): string => {
-    const d = mkdtempSync(join(tmpdir(), "sm-rvrender-"))
-    dirs.push(d)
-    return d
-  }
-  afterEach(() => {
-    for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true })
-  })
-  const writeMd = (worktree: string, rel: string, md: string) => {
-    mkdirSync(dirname(join(worktree, rel)), { recursive: true })
-    writeFileSync(join(worktree, rel), md, "utf8")
-  }
 
-  /** 结构齐全的单功能点 PRD（映射字段全标来源；5.1.2.3 默认 [文档]，不触发缺省↔满分）。 */
-  const goodMd = (): string =>
-    `## 第一章 项目信息\n## 第二章 文档变更过程\n## 第三章 需求概述\n### 3.1 需求类型\n### 3.2 属于流程优化项目\n### 3.3 涉及跨部门项目\n### 3.4 涉及总行开发\n### 3.5 希望完成时间\n### 3.6 需求提出原因及功能概述\n## 第四章 术语定义与业务规则\n### 4.1 术语定义\n### 4.2 业务规则\n## 第五章 需求功能详述\n### 5.1 功能点1\n#### 5.1.1 功能点输入要素\n##### 5.1.1.1 简要概述 [文档]\n##### 5.1.1.2 控制要求 [文档]\n#### 5.1.2 功能点处理要求\n##### 5.1.2.1 输入要素的检查 [文档]\n##### 5.1.2.2 系统处理过程 [文档]\n##### 5.1.2.3 异常处理要求 [文档]\n##### 5.1.2.4 提示信息 [文档]\n##### 5.1.2.5 其他要求 [文档]\n##### 5.1.2.6 清算处理 [文档]\n##### 5.1.2.7 差错处理 [文档]\n##### 5.1.2.8 交易安全性 [文档]\n##### 5.1.2.9 数据存贮和清理 [文档]\n##### 5.1.2.10 附件 [文档]\n##### 5.1.2.11 接口与数据源 [文档]\n##### 5.1.2.12 权限与最小授权 [文档]\n##### 5.1.2.13 流程图 [文档]\n` +
-    `## 第六章 非功能需求\n### 6.1 性能与容量\n### 6.2 可用性与可靠性\n### 6.3 安全与信创\n### 6.4 数据主权与合规\n## 第七章 验收标准\n### 7.1 功能点验收指标\n### 7.2 量化验收口径\n`
-
-  /** reqdoc 定稿前置：前序阶段 approved + 1 个已确认功能点 + 达标已确认打分（edgeControl 默认 30/30）。 */
-  const setupReqdoc = (): { store: Store; worktree: string; ctx: never; rel: string } => {
-    const store = Store.memory(() => "reqdoc" as const)
-    store.mutateWorkflow("r1", (w) => {
-      for (const name of ["goal", "rules", "edge", "prd"]) w.stages[name].status = "approved"
-      w.features = [{ no: 1, name: "公告发布", priority: "medium", confirmedAt: 1000 }]
-      w.fieldDict = [{ feature: "公告发布", name: "客户号", type: "字符串", required: true }]
-    })
-    setReqdocScore(store, "r1")
-    const worktree = tempDir()
-    const rel = "07_需求规格产出/1_公告发布/需求规格书.md"
-    return { store, worktree, ctx: { sessionID: "r1", worktree } as never, rel }
-  }
-
-  const reviewArgs = { completeness: true, clarity: true, edgeCoverage: true, resolution: true } as never
-
-  test("记录 render 且结构合规 → 定稿通过", async () => {
-    const { store, worktree, ctx, rel } = setupReqdoc()
-    writeMd(worktree, rel, goodMd())
-    const checkTools = createReqdocCheckTools(store)
-    await checkTools.reqdoc_check!.execute({ source: rel } as never, ctx)
-    const out = String(await createReviewTools(store).review_submit!.execute(reviewArgs, ctx))
-    expect(out).toContain("审查阶段通过")
-    expect(reviewRecord(store.get("r1")!.workflow!).status).toBe("approved")
-    store.close()
-  })
-
-  test("结构违规（缺章节）拒定稿：reqdoc_check 记录后 review_submit 拦", async () => {
-    const { store, worktree, ctx, rel } = setupReqdoc()
-    writeMd(worktree, rel, goodMd().replace("## 第四章 术语定义与业务规则\n### 4.1 术语定义\n### 4.2 业务规则\n", ""))
-    const checkTools = createReqdocCheckTools(store)
-    await checkTools.reqdoc_check!.execute({ source: rel } as never, ctx)
-    await expect(
-      createReviewTools(store).review_submit!.execute(reviewArgs, ctx),
-    ).rejects.toThrow(/文档结构检查未通过.*缺章节.*第四章 术语定义与业务规则/)
-    store.close()
-  })
-
-  test("[缺省]↔满分矛盾拒定稿：缺省字段对应维度打满分被拦", async () => {
-    const { store, worktree, ctx, rel } = setupReqdoc()
-    // 5.1.2.3 异常处理要求标 [缺省]，但 edgeControl 已打满分 30/30（setReqdocScore 默认）——自评矛盾
-    writeMd(worktree, rel, goodMd().replace("##### 5.1.2.3 异常处理要求 [文档]", "##### 5.1.2.3 异常处理要求 [缺省]"))
-    const checkTools = createReqdocCheckTools(store)
-    await checkTools.reqdoc_check!.execute({ source: rel } as never, ctx)
-    await expect(
-      createReviewTools(store).review_submit!.execute(reviewArgs, ctx),
-    ).rejects.toThrow(/文档结构检查未通过.*2\.3 异常处理要求/)
-    store.close()
-  })
-
-  test("完整性门禁：5.1.2.11 标裸 [缺省]（无理由）→ 拒定稿", async () => {
-    const { store, worktree, ctx, rel } = setupReqdoc()
-    writeMd(worktree, rel, goodMd().replace("##### 5.1.2.11 接口与数据源 [文档]", "##### 5.1.2.11 接口与数据源 [缺省]"))
-    const checkTools = createReqdocCheckTools(store)
-    await checkTools.reqdoc_check!.execute({ source: rel } as never, ctx)
-    await expect(
-      createReviewTools(store).review_submit!.execute(reviewArgs, ctx),
-    ).rejects.toThrow(/2\.11 接口与数据源.*完整性门禁/)
-    store.close()
-  })
-
-  test("一致性门禁：3.1 更改功能但 3.6 未点明改造 → 拒定稿", async () => {
-    const { store, worktree, ctx, rel } = setupReqdoc()
-    const md = goodMd()
-      .replace(
-        "### 3.1 需求类型\n### 3.2 属于流程优化项目",
-        "### 3.1 需求类型\n- ● 更改功能　○ 新增功能\n### 3.2 属于流程优化项目",
-      )
-      .replace(
-        "### 3.6 需求提出原因及功能概述\n",
-        "### 3.6 需求提出原因及功能概述\n本需求为新增一类业务查询，支持客户自助查看。\n",
-      )
-    writeMd(worktree, rel, md)
-    const checkTools = createReqdocCheckTools(store)
-    await checkTools.reqdoc_check!.execute({ source: rel } as never, ctx)
-    await expect(
-      createReviewTools(store).review_submit!.execute(reviewArgs, ctx),
-    ).rejects.toThrow(/一致性.*更改功能|更改功能.*改造/)
-    store.close()
-  })
-
-  test("定稿通过 → 自动填充文档变更过程（1.0 初始定稿）", async () => {
-    const { store, worktree, ctx, rel } = setupReqdoc()
-    // 不让 review 预先 approved（否则变更记录写入被 preApproved 守卫跳过），本次 submit 才走定稿
-    store.mutateWorkflow("r1", (w) => {
-      w.stages.review.status = "in_progress"
-    })
-    writeMd(worktree, rel, goodMd())
-    const checkTools = createReqdocCheckTools(store)
-    await checkTools.reqdoc_check!.execute({ source: rel } as never, ctx)
-    await createReviewTools(store).review_submit!.execute(reviewArgs, ctx)
-    const md = readFileSync(join(worktree, rel), "utf8")
-    expect(md).toContain("1.0")
-    expect(md).toContain("初始定稿")
-    store.close()
-  })
-
-  test("定稿复核重读源 md：reqdoc_check 后改动源文件（删第三章）仍拒", async () => {
-    const { store, worktree, ctx, rel } = setupReqdoc()
-    writeMd(worktree, rel, goodMd())
-    const checkTools = createReqdocCheckTools(store)
-    const out = String(await checkTools.reqdoc_check!.execute({ source: rel } as never, ctx))
-    expect(out).toContain("结构合规")
-    // 记录后改动源 md（快照防篡改：定稿复核须重读，发现缺第三章）
-    writeMd(worktree, rel, goodMd().replace("## 第五章 需求功能详述", "## 第五章 需求功能详述（仅标题）"))
-    await expect(
-      createReviewTools(store).review_submit!.execute(reviewArgs, ctx),
-    ).rejects.toThrow(/文档结构检查未通过.*缺章节.*第五章 需求功能详述/)
-    store.close()
-  })
-
-  test("未记录 render → 柔性放行（不强制 reqdoc_check）", async () => {
-    const { store, worktree, ctx } = setupReqdoc()
-    void worktree
-    const out = String(await createReviewTools(store).review_submit!.execute(reviewArgs, ctx))
-    expect(out).toContain("审查阶段通过")
-    expect(store.get("r1")!.workflow!.render).toBeUndefined()
-    store.close()
-  })
-
-  test("render 源文件被删除 → 定稿复核拒（无法复核）", async () => {
-    const { store, worktree, ctx, rel } = setupReqdoc()
-    writeMd(worktree, rel, goodMd())
-    const checkTools = createReqdocCheckTools(store)
-    await checkTools.reqdoc_check!.execute({ source: rel } as never, ctx)
-    rmSync(join(worktree, rel)) // 记录后源文件被删
-    await expect(
-      createReviewTools(store).review_submit!.execute(reviewArgs, ctx),
-    ).rejects.toThrow(/文档结构检查未通过.*不可读或已删除/)
-    store.close()
-  })
-
-  test("非 git 项目 context.directory ≠ worktree 时定稿复核按 directory 读源（regression: 源文件不可读）", async () => {
-    // 复现真实卡死：Windows 非 git 项目 context.worktree 被解析到守护进程启动目录，
-    // 而 00~07 骨架落在 context.directory（项目根）。reqdoc_check/export 经 projectRoot 用
-    // directory 读；review_submit 旧代码用 worktree 拼接 → 源文件不可读。修复后统一 projectRoot。
-    const store = Store.memory(() => "reqdoc" as const)
-    store.mutateWorkflow("r1", (w) => {
-      for (const name of ["goal", "rules", "edge", "prd"]) w.stages[name].status = "approved"
-      w.features = [{ no: 1, name: "公告发布", priority: "medium", confirmedAt: 1000 }]
-      w.fieldDict = [{ feature: "公告发布", name: "客户号", type: "字符串", required: true }]
-    })
-    setReqdocScore(store, "r1")
-    const directory = tempDir() // 项目根：文件落在此
-    const worktree = tempDir() // 守护进程启动目录：与 directory 不同，且为空
-    const rel = "07_需求规格产出/1_公告发布/需求规格书.md"
-    writeMd(directory, rel, goodMd())
-    const ctx = { sessionID: "r1", directory, worktree } as never
-    const checkTools = createReqdocCheckTools(store)
-    await checkTools.reqdoc_check!.execute({ source: rel } as never, ctx)
-    const out = String(await createReviewTools(store).review_submit!.execute(reviewArgs, ctx))
-    expect(out).toContain("审查阶段通过")
-    expect(reviewRecord(store.get("r1")!.workflow!).status).toBe("approved")
-    store.close()
-  })
-})
-
-describe("P2.5 字段定义门禁 / P3.10 溯源写回", () => {
-  const setupReqdoc = (withFieldDict: boolean) => {
+describe("P3.10 溯源写回（2c：路径由知识库推导）", () => {
+  const setupReqdoc = () => {
     const store = Store.memory(() => "reqdoc" as const)
     const tools = createReviewTools(store)
     const ctx = { sessionID: "r1" } as never
     store.mutateWorkflow("r1", (w) => {
       for (const n of ["goal", "rules", "edge", "prd"]) w.stages[n].status = "approved"
-      if (withFieldDict) w.fieldDict = [{ feature: "功能点 1", name: "客户号", type: "字符串", required: true }]
     })
-    setReqdocScore(store, "r1")
+    setKb(store, "r1")
     return { store, tools, ctx }
   }
   const confirm = async (tools: ReturnType<typeof createReviewTools>, ctx: never) => {
@@ -850,46 +638,26 @@ describe("P2.5 字段定义门禁 / P3.10 溯源写回", () => {
   }
   const args = { completeness: true, clarity: true, edgeCoverage: true, resolution: true } as never
 
-  test("P2.5 缺字段定义 → 定稿被拦截", async () => {
-    const { tools, ctx } = setupReqdoc(false)
-    await confirm(tools, ctx)
-    await expect(tools.review_submit!.execute(args, ctx)).rejects.toThrow(/字段定义缺失/)
-  })
-
-  test("P2.5 skip_field_dict=true 可跳过门禁", async () => {
-    const { tools, ctx } = setupReqdoc(false)
-    await confirm(tools, ctx)
-    const out = String(
-      await tools.review_submit!.execute(
-        { completeness: true, clarity: true, edgeCoverage: true, resolution: true, skip_field_dict: true } as never,
-        ctx,
-      ),
-    )
-    expect(out).toContain("审查阶段通过")
-  })
-
-  test("P2.5 已生成数据字典 → 定稿通过", async () => {
-    const { tools, ctx } = setupReqdoc(true)
-    await confirm(tools, ctx)
-    const out = String(await tools.review_submit!.execute(args, ctx))
-    expect(out).toContain("审查阶段通过")
-  })
 
   test("P3.10 确认溯源写回 PRD md（确认溯源章节）", async () => {
     const store = Store.memory(() => "reqdoc" as const)
     const tools = createReviewTools(store)
     const worktree = mkdtempSync(join(tmpdir(), "sm-srcback-"))
-    const rel = "07_需求规格产出/1_测试/需求规格书.md"
+    const rel = "07_需求规格产出/1_测试/PRD.md"
     mkdirSync(dirname(join(worktree, rel)), { recursive: true })
     const md0 = "## 第三章 需求概述\n### 3.1 需求类型\n"
     writeFileSync(join(worktree, rel), md0, "utf8")
     const ctx = { sessionID: "r1", worktree } as never
-    const render: ReqdocRender = {
-      source: rel, checkedAt: 1, expectedFeatures: 1, ok: true, chaptersPresent: [], missing: [],
-      outOfOrder: [], missingSections: [], featureCount: 1, featureOk: true, missingFeatureSections: [],
-      covered: {}, defaults: {}, docBlocks: 1, docCount: 1, qaCount: 0,
-    }
-    store.mutateWorkflow("r1", (w) => { w.render = render })
+    // 2c：组装产物路径由知识库功能点推导（单功能点 → 07_/1_测试/PRD.md）
+    store.mutateWorkflow("r1", (w) => {
+      w.kb = {
+        slots: [],
+        features: [{ no: 1, name: "测试", priority: "medium", confirmedAt: 1000 }],
+        containers: {},
+        askCounts: {},
+        updatedAt: 1000,
+      }
+    })
     await tools.comprehension_add!.execute({ codeSegmentId: "目标与场景", explanation: "缩短开户录入" } as never, ctx)
     await tools.comprehension_confirm!.execute(
       { codeSegmentId: "目标与场景", sourceLabel: "对话第1轮", sourceQuote: "开户现在要手工录三遍" } as never,

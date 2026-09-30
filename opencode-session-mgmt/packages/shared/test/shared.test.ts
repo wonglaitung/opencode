@@ -7,7 +7,6 @@ import {
   REQDOC_SCORE_DIMS,
   REQDOC_SCORE_PASS,
   SDLC,
-  scoreDimZeroViolations,
   WORKFLOW_DEFINITIONS,
   createWorkflowState,
   currentInProgressStage,
@@ -306,16 +305,6 @@ describe("WorkflowDefinition 注册表（3.2）", () => {
     ])
     expect(REQDOC_SCORE_DIMS.reduce((sum, d) => sum + d.max, 0)).toBe(100)
     expect(REQDOC_SCORE_PASS).toBe(85)
-  })
-
-  test("可实施性门禁（P1）：任一维度 0 分 → 违规、拦截进 prd/定稿", () => {
-    const ok = { businessValue: { score: 12, max: 12 }, flowClosure: { score: 20, max: 20 }, edgeControl: { score: 22, max: 22 }, compliance: { score: 16, max: 16 }, authority: { score: 8, max: 8 }, material: { score: 8, max: 8 }, nfr: { score: 7, max: 7 }, acceptability: { score: 7, max: 7 } }
-    expect(scoreDimZeroViolations({ dims: ok, deductions: [], total: 100, confirmed: true, confirmedAt: 1, updatedAt: 1 })).toEqual([])
-    const zero = { ...ok, material: { score: 0, max: 8 } }
-    const v = scoreDimZeroViolations({ dims: zero, deductions: [], total: 92, confirmed: true, confirmedAt: 1, updatedAt: 1 })
-    expect(v.length).toBe(1)
-    expect(v[0]).toContain("material")
-    expect(v[0]).toContain("不可实施")
   })
 
   test("打分卡评分标准：每维含判定规则与扣分标准，逐条未超满分（实施方案判定规则列）", () => {

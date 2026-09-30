@@ -108,7 +108,10 @@ function withKb(
       status: opts.status ?? ("confirmed" as const),
     })),
     features,
-    containers: {},
+    containers: {
+      "4.1": { required: false, reason: "无特殊术语" },
+      "5.1.2.1": { required: false, reason: "无结构化字段" },
+    },
     askCounts: {},
     updatedAt: 1000,
   }

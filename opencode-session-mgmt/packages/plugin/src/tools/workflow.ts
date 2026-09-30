@@ -11,8 +11,6 @@ import {
   deriveQuestions,
   getDefinition,
   kbGate,
-  probeGapViolations,
-  scoreDimZeroViolations,
   type WorkflowState,
 } from "sm-shared"
 import type { Store } from "../db"
@@ -62,12 +60,6 @@ export function createWorkflowTools(store: Store): Record<string, ToolDefinition
         .boolean()
         .describe("approve 时必须为 true，表示开发者已在对话中明确确认；否则调用将被拒绝"),
       note: z.string().optional().describe("本次转换的备注"),
-      skip_field_dict: z
-        .boolean()
-        .optional()
-        .describe(
-          "仅 reqdoc 进入 prd 且需求确无结构化输入字段（无需字段定义）时使用：默认 false；为 true 时跳过「进 prd 前须生成数据字典(reqdoc_field_dict)」门禁。一般需求应在 prd 渲染前完成字段定义。",
-        ),
       force_kb: z
         .boolean()
         .optional()
@@ -89,76 +81,25 @@ export function createWorkflowTools(store: Store): Record<string, ToolDefinition
         // 打分卡硬门禁（实施方案第三节）：reqdoc 进入 prd（渲染）前须已打分且 total ≥ 85 并获业务确认。
         // 【重构 2b】kb 存在时改读派生门禁（kbGate）；kb 缺省时**保持旧门禁**——两套并存可逆（2c 才删旧）。
         if (args.action === "enter" && args.stage === "prd" && def.type === "reqdoc") {
-          if (workflow.kb) {
-            const kb = workflow.kb
-            const gate = kbGate(kb.slots, kb.features, {
-              decls: kb.containers,
-              unclosed: deriveQuestions(kb.features, { slots: kb.slots, askCounts: kb.askCounts, decls: kb.containers }).unclosed,
-              force: args.force_kb,
-              threshold: 1,
-            })
-            if (!gate.pass) {
-              throw new WorkflowOpError(
-                `需求知识库未就绪（重构 2b 门禁）：${gate.reasons.join("；")}。` +
-                  `请用 reqdoc_ingest 补齐槽位、reqdoc_answer 逐项确认；确实无法补齐的，` +
-                  `可 workflow_advance(stage=prd, action=enter, force_kb=true, force_reason=<业务给的理由>) 放行。`,
-              )
-            }
-          } else {
-          const score = workflow.score
-          if (!score) {
+          const kb = workflow.kb
+          if (!kb) {
             throw new WorkflowOpError(
-              "进入 prd 前须先打分：请对照打分卡调用 reqdoc_score 输出各维得分与扣分明细并请业务确认（见 reqdoc-r21）",
+              "需求知识库未建：请先 reqdoc_ingest 提交需求内容槽位，再进入 prd。",
             )
           }
-          if (score.total < REQDOC_SCORE_PASS) {
+          const gate = kbGate(kb.slots, kb.features, {
+            decls: kb.containers,
+            unclosed: deriveQuestions(kb.features, { slots: kb.slots, askCounts: kb.askCounts, decls: kb.containers }).unclosed,
+            force: args.force_kb,
+            threshold: 1,
+          })
+          if (!gate.pass) {
             throw new WorkflowOpError(
-              `PRD 质量未达标（${score.total}/100 < ${REQDOC_SCORE_PASS}）：请按扣分明细回 edge 追问补缺后重打 reqdoc_score`,
+              `需求知识库未就绪：${gate.reasons.join("；")}。` +
+                `请用 reqdoc_ingest 补齐槽位、reqdoc_answer 逐项确认；确实无法补齐的，` +
+                `可 workflow_advance(stage=prd, action=enter, force_kb=true, force_reason=<业务给的理由>) 放行。`,
             )
           }
-          if (!score.confirmed) {
-            throw new WorkflowOpError("PRD 打分结果未获业务确认：请向业务展示并确认扣分明细后重调 reqdoc_score(business_confirmed=true)")
-          }
-          // P0.1 探针记录强制前置：edge 阶段必须已调用 reqdoc_probe 记录探针覆盖，
-          // 堵住「跳追问/跳探针记录直接进渲染」——未记录即视为未做实例探询。
-          if (!workflow.probes) {
-            throw new WorkflowOpError(
-              "进入 prd 前须先调用 reqdoc_probe 记录追问探针（P0.1 前置）：核心流程/异常须以真实案例或书面材料为据。" +
-                "请完成 edge 阶段追问并调用 reqdoc_probe(asked=本轮新问探针, gaps=仍缺口探针) 记录覆盖（材料已全覆盖无追问时可记录一次，asked/gaps 可为空），再进入渲染。",
-            )
-          }
-          // P0.1 实例探针硬约束：main_flow/exception 探针仍记录缺口 = 业务未提供真实案例（无实例空转）。
-          // 卡在 prd 入口，须业务投放 01~05 或提供真实实例后重调 reqdoc_probe 澄清，方可进入渲染（不往下走）。
-          if (
-            workflow.probes &&
-            (workflow.probes.gaps.includes("main_flow") || workflow.probes.gaps.includes("exception"))
-          ) {
-            throw new WorkflowOpError(
-              "核心流程/异常缺真实实例（P0.1）：main_flow 或 exception 探针仍记录缺口，说明业务未提供真实案例。" +
-                "请业务向 01~05 补充书面材料后重扫 reqdoc_scan，或由业务提供真实实例后重调 reqdoc_probe 澄清，方可进入 prd 渲染。",
-            )
-          }
-          // 柔性一致校验（质量飞轮 P1）：缺口探针对应维度不得打满分（报缺口却打满分 = 自评不诚实）。
-          const violations = probeGapViolations(workflow.probes, score)
-          if (violations.length > 0) {
-            throw new WorkflowOpError(
-              `追问缺口与打分自相矛盾：${violations.join("；")}。请回 edge 补齐缺口后重打 reqdoc_score 如实扣分，或去掉缺口记录（reqdoc_probe）`,
-            )
-          }
-          // 可实施性门禁（P1：material/nfr/acceptability 三维度任一 0 分 = 不可照着做）。
-          const zeroV = scoreDimZeroViolations(score)
-          if (zeroV.length > 0) {
-            throw new WorkflowOpError(`可实施性不足：${zeroV.join("；")}。`)
-          }
-          // 字段定义门禁（P2.5）：进 prd 渲染前须逐字段确认并生成数据字典（reqdoc_field_dict）；
-          // 缺字段定义则进 prd 视为未做字段级梳理，除非需求确无结构化字段(skip_field_dict=true)。
-          if (!args.skip_field_dict && (!workflow.fieldDict || workflow.fieldDict.length === 0)) {
-            throw new WorkflowOpError(
-              "字段定义缺失：进 prd 渲染前须逐字段与业务确认（名称/类型/长度/必填/取值/来源系统）并调用 reqdoc_field_dict 生成数据字典。" +
-                "如本需求确无结构化输入字段，可 workflow_advance(stage=prd, action=enter, skip_field_dict=true) 跳过此门禁。",
-            )
-          }
-          } // else: kb 缺省 → 旧门禁（2c 才删）
         }
         if (args.action === "approve") {
           if (def.reviewStage !== null && args.stage === def.reviewStage) {

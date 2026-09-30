@@ -11,29 +11,23 @@
  * review_submit         —— 提交审查清单：所有片段处于终态(accepted/manual)，通过时自动计算 firstPassRate
  */
 import { readdir, unlink } from "node:fs/promises"
-import { join } from "node:path"
+import { join, relative } from "node:path"
 import { tool, type ToolDefinition } from "@opencode-ai/plugin"
 import {
   REQDOC_SCORE_PASS,
   WORKFLOW_DEFINITIONS,
   getDefinition,
-  noDocumentSupportViolation,
-  coverageFromProvenance,
   parseRenderStructure,
-  probeGapViolations,
-  scoreDimZeroViolations,
-  renderGapViolations,
-  renderStructureViolations,
-  consistencyViolations,
-  missingDefaultReasonViolations,
   deriveQuestions,
   kbDigest,
   kbGate,
   reviewRecord,
   type ComprehensionRecord,
-  type ReqdocRender,
+  type ReqdocFeature,
+  type RenderStructure,
   type WorkflowState,
 } from "sm-shared"
+import { assembleDir } from "./reqdoc-kb-tools"
 import type { Store } from "../db"
 import { WorkflowOpError, applyTransition, recomputeCommit } from "../workflow-ops"
 import { projectRoot, resolveWithinWorktree } from "../fs-safe"
@@ -133,8 +127,13 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
       if (args.sourceLabel || args.sourceQuote) {
         const wf = store.ensure(context.sessionID).workflow
         const src = { label: args.sourceLabel ?? "", quote: args.sourceQuote ?? "" }
-        if (wf && getDefinition(wf.type).type === "reqdoc" && wf.render?.source) {
-          await appendConfirmSourceToPrd(projectRoot(context), wf.render.source, args.codeSegmentId, src)
+        if (wf?.kb) {
+          try {
+            const root = projectRoot(context)
+            await appendConfirmSourceToPrd(root, prdRelPath(root, wf.kb.features), args.codeSegmentId, src)
+          } catch {
+            // best-effort：溯源回填失败不阻断要点确认
+          }
         }
       }
       const review = reviewRecord(store.ensure(context.sessionID).workflow!)
@@ -283,61 +282,18 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
       if (args.force_kb && !args.force_reason) {
         throw new WorkflowOpError("force_kb=true 必须同时给 force_reason（理由须由业务给出，模型不得代填）")
       }
-      // 渲染定稿复核（质量飞轮 P2）：reqdoc_check 记录过 render 才复核——重读源 md 重新解析，
-      // 防记录快照与磁盘不一致（reqdoc_check 后改动渲染文件会被再拦）；未记录则柔性放行。
-      // 文件读取必须在 mutateWorkflow 同步回调外 await，违规值闭包传入回调内抛错。
-      const preRender = store.ensure(context.sessionID).workflow?.render
-      let renderErrors: string[] = []
-      let liveRender: ReqdocRender | undefined
-      let mdText: string | undefined
-      let bypassNote: string[] = []
-      if (preRender) {
+      // 组装产物读取（2c）：槽位是唯一事实源，产物只是投影——定稿只需重读产物比对内嵌摘要。
+      // 来源记账/篡改检测等 Option A 机制随 reqdoc_patch 一并退役。
+      let liveRender: RenderStructure | undefined
+      const wf0 = store.ensure(context.sessionID).workflow
+      if (wf0?.kb) {
         try {
-          mdText = await Bun.file(resolveWithinWorktree(projectRoot(context), preRender.source)).text()
-          const md = mdText
-          const live = parseRenderStructure(md)
-          liveRender = {
-            ...live,
-            source: preRender.source,
-            checkedAt: preRender.checkedAt,
-            expectedFeatures: preRender.expectedFeatures,
-          }
-          const preScore = store.ensure(context.sessionID).workflow?.score
-          // 覆盖指标：有记账读记账（有界匹配），无记账回退解析
-          const provenance = store.ensure(context.sessionID).workflow?.renderProvenance
-          const hasProvenance = provenance && Object.keys(provenance).length > 0
-          if (hasProvenance) {
-            const cov = coverageFromProvenance(provenance!, preRender.expectedFeatures)
-            liveRender.covered = cov.covered
-            liveRender.defaults = cov.defaults
-            liveRender.docBlocks = cov.docBlocks
-            liveRender.docCount = cov.docCount
-            liveRender.qaCount = cov.qaCount
-          }
-          // 篡改检测：记账中的标签在 live 文件中应存在
-          if (hasProvenance) {
-            for (const [absKey, prov] of Object.entries(provenance!)) {
-              const canonicalTag = prov.tag === "缺省" ? `[缺省：${prov.reason}]` : `[${prov.tag}]`
-              // 检查对应标题行是否仍含规范标签（用 cleanHeading 去标签后比对）
-              const tagRemoved = md.includes(`${absKey}`) && !md.split("\n").some((l) => l.includes(absKey) && l.includes(canonicalTag))
-              if (!tagRemoved) continue
-              // 标题存在但标签不在 → 可能被篡改
-              renderErrors.push(`来源篡改：小节 ${absKey} 的记账标签 [${prov.tag}] 在源文件中未找到（标签可能被手动删除或修改）`)
-            }
-          }
-          renderErrors = [
-            ...renderErrors,
-            ...renderStructureViolations(liveRender),
-            ...renderGapViolations(liveRender, preScore),
-            ...missingDefaultReasonViolations(liveRender),
-            ...consistencyViolations(md),
-          ]
-          // 绕过检测：有 render 记录但无记账 → 模型绕过 reqdoc_patch 整篇 write（软提示，不拦截）
-          const bypassNote = !hasProvenance
-            ? ["⚠ 来源记账为空（renderProvenance）：覆盖指标由文件解析，未经服务端规范写入。建议使用 reqdoc_patch 的 source_tag 参数。"]
-            : []
+          const root = projectRoot(context)
+          liveRender = parseRenderStructure(
+            await Bun.file(resolveWithinWorktree(root, prdRelPath(root, wf0.kb.features))).text(),
+          )
         } catch {
-          renderErrors = [`PRD 渲染源文件不可读或已删除：${preRender.source}，定稿复核无法执行`]
+          // 产物不存在/不可读时不阻断：kbGate 已校验槽位覆盖，产物缺失由 reqdoc_assemble 补
         }
       }
       // 是否首次定稿（幂等：重复 review_submit 不再重复写变更记录行）
@@ -357,11 +313,14 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
             )
           }
         }
-        // 打分卡定稿兜底（实施方案第三节）：reqdoc 定稿前须已打分达标（≥85）且获业务确认，
-        // 防止越序/未打分直接定稿。prd 入口门禁之外的第二道闸（防弱模型跳过）。
-        if (def.type === "reqdoc" && workflow.kb) {
-          // 【重构 2b】知识库定稿门禁：kb 存在时改读派生门禁；kb 缺省走下方旧门禁（可逆，2c 才删）。
+        // 知识库定稿门禁（2c）：旧打分卡/探针/渲染门禁已删除，kbGate 是唯一依据。
+        if (def.type === "reqdoc") {
           const kb = workflow.kb
+          if (!kb) {
+            throw new WorkflowOpError(
+              "需求知识库未建：请先 reqdoc_ingest 提交需求内容槽位并逐项确认，再定稿。",
+            )
+          }
           const unclosed = deriveQuestions(kb.features, {
             slots: kb.slots,
             askCounts: kb.askCounts,
@@ -375,7 +334,7 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
           })
           if (!gate.pass) {
             throw new WorkflowOpError(
-              `需求知识库未就绪（重构 2b 定稿门禁）：${gate.reasons.join("；")}。` +
+              `需求知识库未就绪：${gate.reasons.join("；")}。` +
                 `覆盖率 ${gate.coverage.leafFilled}/${gate.coverage.leafTotal} 必填槽位。` +
                 `请用 reqdoc_answer 补齐；确实无法补齐的，可 review_submit(force_kb=true, force_reason=<业务给的理由>) 放行。`,
             )
@@ -389,57 +348,6 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
             )
           }
         }
-        if (def.type === "reqdoc" && !workflow.kb) {
-          const score = workflow.score
-          if (!score) {
-            throw new WorkflowOpError("PRD 未打分，不能定稿：请先完成质量打分并获业务确认")
-          }
-          if (score.total < REQDOC_SCORE_PASS) {
-            throw new WorkflowOpError(
-              `PRD 质量未达标（${score.total}/100 < ${REQDOC_SCORE_PASS}），不能定稿：请回到追问环节补全信息后重新打分`,
-            )
-          }
-          if (!score.confirmed) {
-            throw new WorkflowOpError("PRD 打分结果未获业务确认，不能定稿")
-          }
-          // 柔性一致校验（质量飞轮 P1）：缺口探针对应维度不得打满分（报缺口却打满分 = 自评不诚实）。
-          const violations = probeGapViolations(workflow.probes, score)
-          if (violations.length > 0) {
-            throw new WorkflowOpError(
-              `追问缺口与打分自相矛盾：${violations.join("；")}。请补齐缺口后重新打分如实扣分，或去掉缺口记录`,
-            )
-          }
-          // 可实施性门禁（P1：material/nfr/acceptability 三维度任一 0 分 = 不可照着做）。
-          const zeroV = scoreDimZeroViolations(score)
-          if (zeroV.length > 0) {
-            throw new WorkflowOpError(
-              `可实施性不足：${zeroV.join("；")}。`,
-            )
-          }
-          // 渲染定稿复核（质量飞轮 P2）：记录了 render 才复核，违规（结构/缺省↔满分矛盾）拦截；
-          // 未记录 = 柔性放行（评分卡 ≥85 + P0 兜底）。
-          if (workflow.render && renderErrors.length > 0) {
-            throw new WorkflowOpError(
-              `文档结构检查未通过：${renderErrors.join("；")}。` +
-                `结构问题请修正后重新检查；信息不完整请回到追问环节补全后重新打分`,
-            )
-          }
-          // 绕过提示（软提示，不拦截）：有 render 但无记账时提示使用 source_tag
-          if (bypassNote.length > 0) {
-            renderErrors.push(...bypassNote)
-          }
-          // 来源真实性门禁（reqdoc-r30，防全[问答]兜底）：记录了 render 且书面材料支撑不足时拦截，
-          // 除非业务已明确确认「无书面材料可引用」（no_document_confirmed=true）。柔性：未记录 render 则放行。
-          if (workflow.render && liveRender && !args.no_document_confirmed) {
-            const v = noDocumentSupportViolation(liveRender)
-            if (v.length > 0) {
-              throw new WorkflowOpError(
-                `材料来源不足：${v.join("；")}。` +
-                  `如确无书面材料可引用，请业务明确确认后重新提交。`,
-              )
-            }
-          }
-        }
         // 确认溯源门禁（P3.10）：reqdoc 已接受要点须回填来源证据，否则定稿视为凭空认可
         if (def.type === "reqdoc") {
           const noSource = review.comprehension.filter(
@@ -449,16 +357,6 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
             throw new WorkflowOpError(
               `确认溯源缺失：${noSource.map((c) => c.id).join("、")} 已确认但未回填来源证据。` +
                 `请对每处确认补充来源标签与引用原文后再定稿。`,
-            )
-          }
-        }
-        // 字段定义门禁（P2.5）：进 prd 前须逐字段确认并生成数据字典（reqdoc_field_dict）；
-        // 缺字段定义则定稿视为未做字段级梳理，除非需求确无结构化字段(skip_field_dict=true)。
-        if (def.type === "reqdoc" && !args.skip_field_dict) {
-          if (!workflow.fieldDict || workflow.fieldDict.length === 0) {
-            throw new WorkflowOpError(
-              "字段定义缺失：进 PRD 渲染前须逐字段与业务确认（名称/类型/长度/必填/取值/来源系统）并生成数据字典。" +
-                "如本需求确无结构化输入字段，可跳过此门禁。",
             )
           }
         }
@@ -505,23 +403,30 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
         }
         recomputeCommit(workflow)
       })
-      // 变更记录自动填充（含迭代）：reqdoc 首次定稿通过后把本次定稿写入「文档变更过程」表（best-effort）。
-      // revision 0 = 初始定稿（1.0）；revisit 重做后定稿 = 修订行（1.<revision>），使重做轨迹可追溯。
-      if (saved.type === "reqdoc" && !preApproved && saved.render?.source) {
-        await appendChangeRecordToPrd(projectRoot(context), saved.render.source, saved.stages[getDefinition(saved.type).reviewStage!].revision ?? 0)
-      }
-      // PRD 迭代支持：定稿后自动复制到 00_初稿需求书，供下轮迭代
-      if (saved.type === "reqdoc" && saved.render?.source) {
-        await copyPrdToIterDir(projectRoot(context), saved)
+      // PRD 交付件后处理（best-effort）：变更记录回填 + 迭代副本。
+      // 路径由知识库功能点推导（2c）；无 worktree / 写盘失败都不应阻断定稿结果。
+      if (saved.type === "reqdoc" && saved.kb) {
+        try {
+          const root = projectRoot(context)
+          const rel = prdRelPath(root, saved.kb.features)
+          // revision 0 = 初始定稿（1.0）；revisit 重做后定稿 = 修订行（1.<revision>）
+          if (!preApproved) {
+            await appendChangeRecordToPrd(root, rel, saved.stages[getDefinition(saved.type).reviewStage!].revision ?? 0)
+          }
+          await copyPrdToIterDir(root, saved)
+        } catch {
+          // best-effort：交付件后处理失败不影响定稿
+        }
       }
       const review = reviewRecord(saved)
       const total = review.comprehension.length
       const rate = saved.quality.firstPassRate
       const def = getDefinition(saved.type)
-      // 惰性确认软提示（reqdoc-r27）：业务连续默认轮次偏高时，定稿通过仍提醒补材料/实例
+      // 缺省收口软提示（2c）：知识库里 [缺省] 来源的槽位偏多时，提醒补材料/实例
+      const defaultCount = (saved.kb?.slots ?? []).filter((sl) => sl.source === "缺省").length
       const lazyNote =
-        (saved.probes?.defaultRounds ?? 0) >= 2
-          ? `\n⚠ 业务全程选默认轮次 ${saved.probes!.defaultRounds} 轮（需求真实性偏低）：建议补充 01~05 书面材料或真实实例，重新追问提升可实施性。`
+        defaultCount >= 3
+          ? `\n⚠ 本次有 ${defaultCount} 个槽位以 [缺省] 收口（需求细节未落实）：建议补充 01~05 书面材料或真实实例后再评审。`
           : ""
       // 审查是最后阶段：通过即全部阶段 approved → 完成。此时在工具返回直接带出 /new 提醒
       // （弱模型未必等到下一轮注入片段才行动，完成瞬间的工具结果是最稳的触发点）。
@@ -544,7 +449,17 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
     },
   })
 
+  /**
+   * 组装产物相对路径（2c）：由知识库功能点推导，供溯源回填/变更记录/迭代复制共用。
+   * root 缺失（无 worktree 的调用方）时抛错——调用点均为 best-effort，不阻断定稿。
+   */
+  const prdRelPath = (root: string, features: readonly ReqdocFeature[]): string => {
+    if (!root) throw new Error("无工作区根目录，无法定位组装产物")
+    return join(relative(root, assembleDir(root, features)), "PRD.md")
+  }
+
   /** P3.10 溯源回填：把要点的来源证据追加写入 PRD 交付件末尾的「确认溯源」章节（best-effort）。 */
+
   async function appendConfirmSourceToPrd(
     root: string,
     rel: string,
@@ -603,8 +518,9 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
 
   /** PRD 迭代支持：定稿后自动复制 PRD 到 00_初稿需求书，供下轮迭代。 */
   async function copyPrdToIterDir(root: string, workflow: WorkflowState): Promise<void> {
+    if (!workflow.kb) return
     try {
-      const srcRel = workflow.render!.source
+      const srcRel = prdRelPath(root, workflow.kb.features)
       const srcAbs = resolveWithinWorktree(root, srcRel)
       const md = await Bun.file(srcAbs).text()
 

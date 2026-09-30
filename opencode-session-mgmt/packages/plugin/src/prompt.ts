@@ -5,12 +5,11 @@
  * 阶段化注入只给弱模型当前需要的规则，状态条替代冗长 JSON，降低弱模型遵循负担。
  */
 import {
+  deriveQuestions,
+  kbGate,
   requiredSlots,
-  REQDOC_PROBES,
-  REQDOC_SCORE_PASS,
   currentInProgressStage,
   getDefinition,
-  renderStructureViolations,
   renderTargetDigest,
   reviewRecord,
   rulesForStage,
@@ -109,7 +108,7 @@ export function buildSystemFragment(
       "1) reqdoc_ingest —— 从材料批量提取内容提交为槽位（不是写文档）；status 由服务端记为待确认。",
       "2) reqdoc_answer —— 逐项请业务确认后落定；连续 2 轮未确认的项会被停问，应显式收口（[缺省]+理由）。",
       "3) reqdoc_assemble —— 由槽位投影生成整篇 PRD（结构与来源标签由服务端保证，**不要手工编辑产物**）。",
-      "→ 进入下一阶段与定稿的门禁均改读知识库派生门禁（kbGate），不再依赖 reqdoc_score/reqdoc_probe。",
+      "→ 进入下一阶段与定稿的门禁读知识库派生门禁（kbGate）。",
       "",
     )
   }
@@ -185,41 +184,28 @@ export function buildStateBar(workflow: WorkflowState, stage: string | null): st
     }
   }
   if (workflow.baseline) lines.push(`基线：已录入 ${workflow.baseline.estimatedHours} 小时`)
-  if (workflow.score) {
-    const passed = workflow.score.total >= REQDOC_SCORE_PASS
+  // 知识库覆盖（重构 2c）：槽位覆盖率 + 开放项全部由服务端派生，不再展示打分卡/探针/渲染校验
+  if (workflow.kb) {
+    const kb = workflow.kb
+    const gate = kbGate(kb.slots, kb.features, {
+      decls: kb.containers,
+      unclosed: deriveQuestions(kb.features, { slots: kb.slots, askCounts: kb.askCounts, decls: kb.containers }).unclosed,
+      threshold: 1,
+    })
+    const c = gate.coverage
     lines.push(
-      `质量评分：${workflow.score.total}/100（${passed ? "达标 ✓" : `未达标，需 ≥${REQDOC_SCORE_PASS} 才可生成文档/最终确认`}）；业务确认：${workflow.score.confirmed ? "已" : "未"}`,
+      `知识库：必填槽位 ${c.leafFilled}/${c.leafTotal}（${Math.round(c.pct * 100)}%）` +
+        `；${gate.pass ? "门禁可通过 ✓" : `未就绪：${gate.reasons.join("；")}`}`,
     )
-  }
-  // 信息覆盖（质量飞轮 P1）：reqdoc 记录过覆盖才展示（柔性：未记录不打扰）
-  if (workflow.probes) {
-    const total = REQDOC_PROBES.length
-    const gapNames = workflow.probes.gaps
-      .map((id) => REQDOC_PROBES.find((p) => p.id === id)?.label ?? id)
-      .join("、")
-    lines.push(
-      `信息覆盖：已确认 ${workflow.probes.asked.length}/${total} 项；缺口：${gapNames || "无"}；轮次 ${workflow.probes.round}`,
-    )
-  }
-  // 文档校验（质量飞轮 P2）：reqdoc_check 记录过才展示明细；reqdoc 未记录则提示未执行（柔性，不打扰 sdlc）
-  if (workflow.render) {
-    const rv = renderStructureViolations(workflow.render)
-    lines.push(
-      rv.length === 0
-        ? `文档校验：✓ 结构合规（${workflow.render.featureCount} 功能点）`
-        : `文档校验：✗ ${rv[0]}${rv.length > 1 ? ` 等 ${rv.length} 项` : ""}；功能点 ${workflow.render.featureCount}/${workflow.render.expectedFeatures}`,
-    )
-    // 来源覆盖：展示 [文档]/[问答] 标注占比，提醒全 [问答] 缺书面依据
-    const doc = workflow.render.docBlocks
-    const total = workflow.render.featureCount || 1
-    const docPct = Math.round((doc / total) * 100)
-    lines.push(
-      `来源覆盖：文档支撑 ${doc}/${workflow.render.featureCount} 功能点（${docPct}%）` +
-        `、标注 [文档] ${workflow.render.docCount} 处 / [问答] ${workflow.render.qaCount} 处` +
-        (doc === 0 ? `；⚠ 全 [问答] 无 [文档] 支撑，最终确认需先补材料或业务确认无书面材料` : ""),
-    )
+    const open = deriveQuestions(kb.features, { slots: kb.slots, askCounts: kb.askCounts, decls: kb.containers })
+    if (open.all.length > 0) {
+      lines.push(
+        `待确认槽位 ${open.all.length} 项${open.batch.length > 0 ? `（本轮问 ${open.batch.length}）` : ""}` +
+          `${open.stopped.length > 0 ? `；已停问 ${open.stopped.length} 项` : ""}`,
+      )
+    }
   } else if (getDefinition(workflow.type).type === "reqdoc") {
-    lines.push(`文档校验：未执行（最终确认不复核，需质量评分 ≥${REQDOC_SCORE_PASS} 兜底）`)
+    lines.push("知识库：未建（请先 reqdoc_ingest 提交需求内容槽位）")
   }
   const iteration = workflow.quality.iterationCount ?? 0
   if (iteration > 0) {

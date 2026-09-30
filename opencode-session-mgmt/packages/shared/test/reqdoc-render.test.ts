@@ -9,19 +9,8 @@ import {
   REQDOC_TEMPLATE_FIELDS,
   MAPPED_FIELD_KEYS,
   buildPrdSkeleton,
-  canonicalSourceTag,
-  consistencyViolations,
-  coverageFromProvenance,
-  isMappedFieldSection,
-  missingDefaultReasonViolations,
-  noDocumentSupportViolation,
   parseRenderStructure,
-  patchSectionBody,
-  renderGapViolations,
-  renderStructureViolations,
   renderTargetDigest,
-  type ReqdocRender,
-  type ReqdocProvenance,
 } from "../src/reqdoc-render"
 import type { ReqdocFeature, ReqdocScore } from "../src/workflow"
 
@@ -58,29 +47,6 @@ function fullPrd(): string {
     `## 第六章 非功能需求\n### 6.1 性能与容量\n### 6.2 可用性与可靠性\n### 6.3 安全与信创\n### 6.4 数据主权与合规\n` +
     `## 第七章 验收标准\n### 7.1 功能点验收指标\n### 7.2 量化验收口径\n`
   )
-}
-
-/** 构造带 expectedFeatures 的 ReqdocRender（violations/gaps 测试直接构造，不依赖 md 解析）。 */
-function renderOf(partial: Partial<ReqdocRender>): ReqdocRender {
-  return {
-    source: "07_需求规格产出/1_测试/需求规格书.md",
-    checkedAt: 1000,
-    expectedFeatures: 1,
-    ok: true,
-    chaptersPresent: REQDOC_TEMPLATE_CHAPTERS.map((c) => c.title),
-    missing: [],
-    outOfOrder: [],
-    missingSections: [],
-    featureCount: 1,
-    featureOk: true,
-    missingFeatureSections: [],
-    covered: Object.fromEntries(REQDOC_TEMPLATE_FIELDS.map((f) => [f.key, 1])),
-    defaults: Object.fromEntries(REQDOC_TEMPLATE_FIELDS.map((f) => [f.key, 0])),
-    docBlocks: 1,
-    docCount: REQDOC_TEMPLATE_FIELDS.length,
-    qaCount: 0,
-    ...partial,
-  }
 }
 
 describe("parseRenderStructure", () => {
@@ -238,148 +204,6 @@ describe("parseRenderStructure", () => {
   })
 })
 
-describe("noDocumentSupportViolation（来源真实性门禁，reqdoc-r30）", () => {
-  test("有 [文档] 支撑 → 无违规", () => {
-    expect(noDocumentSupportViolation(renderOf({ docBlocks: 1, docCount: 7, qaCount: 0 }))).toEqual([])
-  })
-
-  test("≥2 功能点有真实素材 → 无违规（较松条件一，即便占比低）", () => {
-    expect(noDocumentSupportViolation(renderOf({ docBlocks: 2, docCount: 2, qaCount: 20 }))).toEqual([])
-  })
-
-  test("[文档] 占比 ≥30% → 无违规（较松条件二）", () => {
-    expect(noDocumentSupportViolation(renderOf({ docBlocks: 1, docCount: 5, qaCount: 10 }))).toEqual([])
-  })
-
-  test("全 [问答] 无 [文档] 支撑 → 违规", () => {
-    const v = noDocumentSupportViolation(renderOf({ docBlocks: 0, docCount: 0, qaCount: 7 }))
-    expect(v.length).toBe(1)
-    expect(v[0]).toContain("书面材料支撑不足")
-  })
-
-  test("仅 1 功能点有素材且占比<30% → 违规", () => {
-    const v = noDocumentSupportViolation(renderOf({ docBlocks: 1, docCount: 1, qaCount: 10 }))
-    expect(v.length).toBe(1)
-    expect(v[0]).toContain("书面材料支撑不足")
-  })
-
-  test("无 render → 空（柔性放行）", () => {
-    expect(noDocumentSupportViolation(undefined)).toEqual([])
-  })
-})
-
-describe("renderStructureViolations", () => {
-  test("结构合规（缺省无违规）", () => {
-    const s = parseRenderStructure(fullPrd())
-    const r = renderOf({ ...s, expectedFeatures: 2 })
-    expect(renderStructureViolations(r)).toEqual([])
-  })
-
-  test("功能点块数 ≠ 已确认功能点数 → 违规", () => {
-    const s = parseRenderStructure(fullPrd())
-    const r = renderOf({ ...s, expectedFeatures: 3 }) // 渲染 2 块但确认 3 个功能点
-    const v = renderStructureViolations(r)
-    expect(v.some((x) => x.includes("功能点块数 2 ≠ 已确认功能点 3"))).toBe(true)
-  })
-
-  test("映射字段漏标来源 → 违规（逐字段条数）", () => {
-    const s = parseRenderStructure(fullPrd().replaceAll("##### 5.1.2.8 交易安全性 [文档]\n", "##### 5.1.2.8 交易安全性\n"))
-    const r = renderOf({ ...s, expectedFeatures: 2 })
-    const v = renderStructureViolations(r)
-    expect(v.some((x) => x.includes("字段 2.8 交易安全性"))).toBe(true)
-  })
-
-  test("无 render（未记录）→ 返回空（柔性放行）", () => {
-    expect(renderStructureViolations(undefined)).toEqual([])
-  })
-})
-
-describe("renderGapViolations", () => {
-  const score = (edgeControl: number): ReqdocScore => ({
-    dims: {
-      businessValue: { score: 12, max: 12 },
-      flowClosure: { score: 20, max: 20 },
-      edgeControl: { score: edgeControl, max: 22 },
-      compliance: { score: 16, max: 16 },
-      authority: { score: 8, max: 8 },
-      material: { score: 8, max: 8 },
-      nfr: { score: 7, max: 7 },
-      acceptability: { score: 7, max: 7 },
-    },
-    deductions: [],
-    total: 85,
-    confirmed: true,
-    confirmedAt: 1000,
-    updatedAt: 1000,
-  })
-
-  test("[缺省] 字段对应维度打满分 → 违规（自评矛盾）", () => {
-    // 2.3 异常处理要求 → edgeControl；标 [缺省] 但 edgeControl 打满分 22/22
-    const r = renderOf({ defaults: { ...renderOf({}).defaults, "2.3": 1 } })
-    const v = renderGapViolations(r, score(22))
-    expect(v.some((x) => x.includes("字段 2.3 异常处理要求"))).toBe(true)
-    expect(v.some((x) => x.includes("edgeControl"))).toBe(true)
-  })
-
-  test("[缺省] 字段对应维度未打满分 → 放行", () => {
-    const r = renderOf({ defaults: { ...renderOf({}).defaults, "2.3": 1 } })
-    expect(renderGapViolations(r, score(16))).toEqual([])
-  })
-
-  test("无 [缺省] → 无违规（即使有满分维度）", () => {
-    const r = renderOf({}) // defaults 全 0
-    expect(renderGapViolations(r, score(30))).toEqual([])
-  })
-
-  test("无 render 或无 score → 空（柔性放行）", () => {
-    expect(renderGapViolations(undefined, score(30))).toEqual([])
-    expect(renderGapViolations(renderOf({}), undefined)).toEqual([])
-  })
-})
-
-describe("missingDefaultReasonViolations（完整性门禁）", () => {
-  test("裸 [缺省]（defaults 有计数）→ 违规", () => {
-    const r = renderOf({ defaults: { ...renderOf({}).defaults, "2.11": 1, "2.12": 1 } })
-    const v = missingDefaultReasonViolations(r)
-    expect(v.length).toBe(2)
-    expect(v.join("；")).toContain("2.11 接口与数据源")
-    expect(v.join("；")).toContain("2.12 权限与最小授权")
-  })
-
-  test("[缺省：理由] 不计入裸 [缺省] → 无违规", () => {
-    // 解析器对 [缺省：理由] 不计入 [缺省] 标签，故 defaults 全 0
-    const r = renderOf({ defaults: { ...renderOf({}).defaults } })
-    expect(missingDefaultReasonViolations(r)).toEqual([])
-  })
-
-  test("无 render → 空（柔性放行）", () => {
-    expect(missingDefaultReasonViolations(undefined)).toEqual([])
-  })
-})
-
-describe("consistencyViolations（一致性门禁）", () => {
-  const changePrd = (overview: string) =>
-    `## 第三章 需求概述\n### 3.1 需求类型\n- ● 更改功能　○ 新增功能\n### 3.6 需求提出原因及功能概述\n${overview}\n` +
-    `## 第四章 术语定义与业务规则\n### 4.1 术语定义\n### 4.2 业务规则\n`
-
-  test("更改功能但概述未点明改造 → 违规", () => {
-    const md = changePrd("本需求为新增一类业务查询，支持客户自助查看余额。")
-    const v = consistencyViolations(md)
-    expect(v.length).toBe(1)
-    expect(v[0]).toContain("更改功能")
-  })
-
-  test("更改功能且概述点明改造 → 无违规", () => {
-    const md = changePrd("在现有余额查询功能基础上改造，新增客户自助渠道，调整原有授权校验逻辑。")
-    expect(consistencyViolations(md)).toEqual([])
-  })
-
-  test("新增功能 → 不查概述（跳过）", () => {
-    const md = `## 第三章 需求概述\n### 3.1 需求类型\n- ○ 更改功能　● 新增功能\n### 3.6 需求提出原因及功能概述\n新增一类查询。\n`
-    expect(consistencyViolations(md)).toEqual([])
-  })
-})
-
 // ---- P1 骨架生成 / P2 增量填充 / P3 结构摘要 ----
 
 /** 最小模板（含 buildPrdSkeleton 所需锚点：封面 / 第一章 / 第三章 / 第五章 5.1 块 / 第六章）。 */
@@ -501,38 +325,6 @@ describe("buildPrdSkeleton（P1 服务端生成骨架）", () => {
   })
 })
 
-describe("patchSectionBody（P2 服务端按编号填充）", () => {
-  test("填充功能点子小节：保留标题、替换正文、其它小节不动", () => {
-    const md = buildPrdSkeleton(miniTemplate(), features(["知识入库管理"]))!
-    const result = patchSectionBody(md, "5.1.2.3", "- 网络超时重试 3 次 [文档]\n- 重复提交幂等去重 [问答]")
-    expect(result.ok).toBe(true)
-    expect(result.md).toContain("##### 5.1.2.3 异常处理要求")
-    expect(result.md).toContain("网络超时重试 3 次 [文档]")
-    expect(result.md).toContain("##### 5.1.2.4 提示信息") // 下一小节标题保留
-    expect(result.md).toContain("##### 5.1.2.2 系统处理过程") // 上一小节标题保留
-  })
-
-  test("填充章内小节 3.1：替换到下一同级标题前", () => {
-    const md = buildPrdSkeleton(miniTemplate(), features(["知识入库管理"]))!
-    const result = patchSectionBody(md, "3.1", "- ● 新增功能　○ 更改功能 [问答]")
-    expect(result.ok).toBe(true)
-    expect(result.md).toContain("### 3.1 需求类型")
-    expect(result.md).toContain("[问答]")
-    expect(result.md).toContain("### 3.2 属于流程优化项目")
-  })
-
-  test("未知小节键 / 未找到标题 → 报错且不改动 md", () => {
-    const md = buildPrdSkeleton(miniTemplate(), features(["知识入库管理"]))!
-    const bad = patchSectionBody(md, "5.1", "x")
-    expect(bad.ok).toBe(false)
-    expect(bad.error).toContain("未知小节键")
-    expect(bad.md).toBe(md)
-    const missing = patchSectionBody(md, "3.6", "x")
-    expect(missing.ok).toBe(false)
-    expect(missing.error).toContain("未找到小节 3.6")
-  })
-})
-
 describe("renderTargetDigest（P3 结构摘要）", () => {
   test("含章节骨架 / 子小节 / 映射字段，且远小于模板全文", () => {
     const digest = renderTargetDigest()
@@ -544,98 +336,6 @@ describe("renderTargetDigest（P3 结构摘要）", () => {
 })
 
 // ---- Option A: 来源记账（P3.10）----
-
-describe("canonicalSourceTag", () => {
-  test("文档 → [文档]", () => {
-    expect(canonicalSourceTag("文档")).toBe("[文档]")
-  })
-
-  test("问答 → [问答]", () => {
-    expect(canonicalSourceTag("问答")).toBe("[问答]")
-  })
-
-  test("缺省 + reason → [缺省：理由]", () => {
-    expect(canonicalSourceTag("缺省", "本次无清算处理")).toBe("[缺省：本次无清算处理]")
-  })
-
-  test("缺省无 reason → [缺省]", () => {
-    expect(canonicalSourceTag("缺省")).toBe("[缺省]")
-  })
-})
-
-describe("isMappedFieldSection", () => {
-  test("5.1.1.2 控制要求 → true", () => {
-    expect(isMappedFieldSection("5.1.1.2")).toBe(true)
-  })
-
-  test("5.1.2.1 输入要素的检查 → true", () => {
-    expect(isMappedFieldSection("5.1.2.1")).toBe(true)
-  })
-
-  test("5.1.2.13 流程图 → true", () => {
-    expect(isMappedFieldSection("5.1.2.13")).toBe(true)
-  })
-
-  test("3.1 需求类型 → false（非功能点小节）", () => {
-    expect(isMappedFieldSection("3.1")).toBe(false)
-  })
-
-  test("5.1.2.2 系统处理过程 → false（不在 MAPPED_FIELD_KEYS 中）", () => {
-    expect(isMappedFieldSection("5.1.2.2")).toBe(false)
-  })
-
-  test("5.1.2.4 提示信息 → false（不在 MAPPED_FIELD_KEYS 中）", () => {
-    expect(isMappedFieldSection("5.1.2.4")).toBe(false)
-  })
-})
-
-describe("coverageFromProvenance", () => {
-  test("全 [文档] → docCount>0, qaCount=0, defaults 全 0", () => {
-    const prov: Record<string, ReqdocProvenance> = {}
-    for (const f of REQDOC_TEMPLATE_FIELDS) {
-      prov[`5.1.${f.key}`] = { tag: "文档", at: 1000 }
-    }
-    const cov = coverageFromProvenance(prov, 1)
-    expect(cov.docCount).toBe(REQDOC_TEMPLATE_FIELDS.length)
-    expect(cov.qaCount).toBe(0)
-    for (const f of REQDOC_TEMPLATE_FIELDS) {
-      expect(cov.defaults[f.key]).toBe(0)
-    }
-  })
-
-  test("全 [缺省：理由] → defaults 全 1", () => {
-    const prov: Record<string, ReqdocProvenance> = {}
-    for (const f of REQDOC_TEMPLATE_FIELDS) {
-      prov[`5.1.${f.key}`] = { tag: "缺省", reason: "不适用", at: 1000 }
-    }
-    const cov = coverageFromProvenance(prov, 1)
-    for (const f of REQDOC_TEMPLATE_FIELDS) {
-      expect(cov.defaults[f.key]).toBe(1)
-    }
-  })
-
-  test("混合 → docCount/qaCount/defaults 各计其数", () => {
-    const prov: Record<string, ReqdocProvenance> = {
-      "5.1.1.2": { tag: "文档", at: 1000 },
-      "5.1.2.1": { tag: "问答", at: 1000 },
-      "5.1.2.3": { tag: "缺省", reason: "不适用", at: 1000 },
-    }
-    const cov = coverageFromProvenance(prov, 1)
-    expect(cov.docCount).toBe(1)
-    expect(cov.qaCount).toBe(1)
-    expect(cov.defaults["2.3"]).toBe(1)
-    expect(cov.defaults["1.2"]).toBe(0)
-  })
-
-  test("空记账 → 全 0", () => {
-    const cov = coverageFromProvenance({}, 1)
-    expect(cov.docCount).toBe(0)
-    expect(cov.qaCount).toBe(0)
-    for (const f of REQDOC_TEMPLATE_FIELDS) {
-      expect(cov.defaults[f.key]).toBe(0)
-    }
-  })
-})
 
 describe("parseRenderStructure（[缺省：理由] 标签解析）", () => {
   test("[缺省：理由] → 计入 covered 不计入 defaults（非裸缺省）", () => {
@@ -658,37 +358,5 @@ describe("parseRenderStructure（[缺省：理由] 标签解析）", () => {
     const s = parseRenderStructure(md)
     expect(s.covered["2.1"]).toBe(2)
     expect(s.covered["1.2"]).toBe(2)
-  })
-})
-
-describe("patchSectionBody（source_tag 写入标题行）", () => {
-  test("写入 [文档] → 标题行出现 [文档]", () => {
-    const md = buildPrdSkeleton(miniTemplate(), features(["测试"]))!
-    const result = patchSectionBody(md, "5.1.2.3", "- 测试内容", "文档")
-    expect(result.ok).toBe(true)
-    expect(result.md).toContain("##### 5.1.2.3 异常处理要求 [文档]")
-    expect(result.md).toContain("- 测试内容")
-  })
-
-  test("写入 [缺省：理由] → 标题行出现 [缺省：理由]", () => {
-    const md = buildPrdSkeleton(miniTemplate(), features(["测试"]))!
-    const result = patchSectionBody(md, "5.1.2.3", "- 不适用", "缺省", "本次无异常")
-    expect(result.ok).toBe(true)
-    expect(result.md).toContain("##### 5.1.2.3 异常处理要求 [缺省：本次无异常]")
-  })
-
-  test("保留标题行原始空白（cleanHeading 不丢空格）", () => {
-    const md = buildPrdSkeleton(miniTemplate(), features(["测试"]))!
-    const result = patchSectionBody(md, "5.1.2.3", "- 内容", "文档")
-    expect(result.ok).toBe(true)
-    // 标题编号与名称之间有空格
-    expect(result.md).toContain("##### 5.1.2.3 异常处理要求 [文档]")
-  })
-
-  test("content 含 Markdown 标题行 → 拒绝", () => {
-    const md = buildPrdSkeleton(miniTemplate(), features(["测试"]))!
-    const result = patchSectionBody(md, "5.1.2.3", "### 注入标题\n- 内容", "文档")
-    expect(result.ok).toBe(false)
-    expect(result.error).toContain("content 不得包含 Markdown 标题行")
   })
 })

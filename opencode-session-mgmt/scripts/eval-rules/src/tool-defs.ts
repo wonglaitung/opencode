@@ -4,11 +4,11 @@
  * 改插件工具时须同步这里,确保评测测的是真实插件暴露给模型的工具契约。
  * 评测只判 tool_use、不执行工具,故省略插件的 Store/execute 上下文。
  *
- * reqdoc_check（质量飞轮 P2 渲染校验）为**运行时专用、不入 EVAL_TOOLS**：
+ * 以下工具为**运行时专用、不入 EVAL_TOOLS**：
  * 它读取真实文件（Bun.file + context.worktree），评测沙箱无文件系统，模型调它只会拿到
  * 不存在的路径；渲染达标性改由 judge.kind="render" 判定——用共享 parseRenderStructure 解析
  * 模型回复文本里的 PRD 渲染骨架（评测模型无 write 工具，须在文本中渲染），与运行时同源。
- * 运行时契约供参考：reqdoc_check(source: string)，source=PRD md 相对项目根路径。
+ * 运行时契约供参考：reqdoc_export(source) 把 PRD md 导出为 docx。
  */
 export type OpenAITool = {
   type: "function"
@@ -19,10 +19,7 @@ export type OpenAITool = {
   }
 }
 
-import { REQDOC_PROBES } from "sm-shared"
 
-/** 探针 id 枚举（与 packages/plugin/src/tools/reqdoc-probe.ts 同源；改 REQDOC_PROBES 时同步此处手写）。 */
-const PROBE_IDS = REQDOC_PROBES.map((p) => p.id)
 
 const str = (description: string) => ({ type: "string", description })
 const bool = (description: string) => ({ type: "boolean", description })
@@ -42,7 +39,8 @@ export const EVAL_TOOLS: OpenAITool[] = [
           action: { type: "string", enum: ["enter", "approve"], description: "enter=开始该阶段；approve=确认完成" },
           developer_confirmed: bool("approve 时必须为 true，表示开发者已在对话中明确确认；否则调用将被拒绝"),
           note: str("本次转换的备注"),
-          skip_field_dict: bool("仅 reqdoc 进入 prd 且需求确无结构化输入字段(无需字段定义)时使用：为 true 时跳过「进 prd 前须生成数据字典(reqdoc_field_dict)」门禁"),
+          force_kb: bool("仅知识库门禁(kbGate)未通过时使用：业务明确「不想再补」时放行。必须同时给 force_reason。默认 false"),
+          force_reason: str("force_kb=true 时必填：业务给的不再补齐的理由(模型不得代填)"),
         },
         required: ["stage", "action", "developer_confirmed"],
       },
@@ -271,7 +269,7 @@ export const EVAL_TOOLS: OpenAITool[] = [
     function: {
       name: "reqdoc_confirm_features",
       description:
-        "reqdoc prd 阶段：功能点拆解确认。AI 已向业务展示拟定的功能点清单(编号/名称/优先级)，业务明确确认后调用本工具记录清单，并在 05_功能点 下为每个功能点建子目录作为渲染来源区。**prd 门禁：渲染 PRD 或 reqdoc_check 之前必须先调用本工具确认功能点清单**。仅 reqdoc 工作流有效。",
+        "reqdoc prd 阶段：功能点拆解确认。AI 已向业务展示拟定的功能点清单(编号/名称/优先级)，业务明确确认后调用本工具记录清单，并在 05_功能点 下为每个功能点建子目录作为渲染来源区。**prd 门禁：进入 prd 前必须先调用本工具确认功能点清单**。仅 reqdoc 工作流有效。",
       parameters: {
         type: "object",
         properties: {
@@ -296,68 +294,88 @@ export const EVAL_TOOLS: OpenAITool[] = [
   {
     type: "function",
     function: {
-      name: "reqdoc_score",
+      name: "reqdoc_ingest",
       description:
-        "reqdoc 打分卡：AI 对照评分标准逐维打分（评分标准与逐条扣分口径同 reqdoc-r21，满分 100，单点事实源）。" +
-        "必须先向业务展示各维得分与扣分明细，业务明确认可后才调用本工具记录；total 由服务端计算。**prd 门禁：workflow_advance(stage=prd, action=enter) 之前必须先调用本工具并获业务确认（business_confirmed=true），total≥85 才可推进**。仅 reqdoc 工作流有效；<85 分可按扣分明细回 edge 追问补缺后重打覆盖。",
+        "reqdoc 槽位批量提交：把从材料中提取的内容一次提交为**槽位**（不是直接写文档）。" +
+        "服务端按模板派生「哪些槽位还开着」，只让你填这些地址；status 一律记为待确认，业务确认请用 reqdoc_answer。" +
+        "分批调用：每次提交后看返回的「本轮该填」清单，一次最多 8 项。仅 reqdoc 工作流有效。",
       parameters: {
         type: "object",
         properties: {
-          dims: {
+          slots: {
             type: "array",
+            description: "本批提交的槽位（地址必须来自上一次的「本轮该填」清单）",
             items: {
               type: "object",
               properties: {
-                key: { type: "string", enum: ["businessValue", "flowClosure", "edgeControl", "compliance", "authority"], description: "维度键" },
-                score: { type: "integer", description: "该维度实得分(0~该维度满分)" },
-                deductions: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    properties: {
-                      reason: str("扣分原因(如「未提及任何异常流程」)"),
-                      points: { type: "integer", description: "该条扣分数(≤该维度满分)" },
-                      evidence: str("证据引用：文档路径/段落或 [问答] 轮次"),
-                    },
-                    required: ["reason", "points"],
-                  },
-                  description: "该维度扣分明细(无扣分可省略)",
-                },
+                address: str("槽位地址（服务端给出的待填地址，如 3.1 / 5.1.2.3 / 4.1.CRD）"),
+                kind: { type: "string", enum: ["prose", "term", "field"], description: "prose=小节正文；term=术语条目；field=字段定义" },
+                content: str("该槽位的内容（业务语言正文；术语填释义；字段填定义说明）"),
+                source: { type: "string", enum: ["文档", "问答", "缺省"], description: "来源：文档=材料可循 / 问答=业务口述 / 缺省=本次不涉及（须给 reason）" },
+                reason: { type: "string", description: "source=缺省 时必填：本次不涉及的理由" },
+                ref: { type: "string", description: "材料出处（文件名或段落，便于溯源）" },
               },
-              required: ["key", "score"],
+              required: ["address", "kind", "content", "source"],
             },
-            description: "五个维度实得分，须全部给出",
           },
-          business_confirmed: bool("业务是否已明确认可本打分结果与扣分明细；防止 AI 自评自批"),
+          features: {
+            type: "array",
+            description: "功能点清单（首次提交时给；已确认过则省略）",
+            items: {
+              type: "object",
+              properties: {
+                name: str("功能点名称（如：名单排查）"),
+                priority: { type: "string", enum: ["high", "medium", "low"], description: "优先级" },
+              },
+              required: ["name", "priority"],
+            },
+          },
+          containers: {
+            type: "object",
+            description: "容器声明（如 4.1/5.1.2.1 声明 required:false 表示本次无术语/无结构化字段，须给 reason）",
+            additionalProperties: {
+              type: "object",
+              properties: { required: { type: "boolean" }, reason: { type: "string" } },
+              required: ["required"],
+            },
+          },
         },
-        required: ["dims", "business_confirmed"],
+        required: ["slots"],
       },
     },
   },
   {
     type: "function",
     function: {
-      name: "reqdoc_probe",
+      name: "reqdoc_answer",
       description:
-        "reqdoc 追问探针：每轮追问结束后调用，记录本轮问过与仍缺口的探针（探针清单与追问口径同 reqdoc-r11，单点事实源）。" +
-        "asked = 本轮新问的探针 id；gaps = 问过后仍缺口的探针 id；round = 本轮次(1-3)。" +
-        "材料已全覆盖、无追问时可调用一次(asked/gaps 可为空)；**进入 prd 前必须已调用本工具记录探针(P0.1 强制前置，workflow_advance(enter prd) 未记录即拦截)**。仅 reqdoc 工作流有效。",
+        "reqdoc 槽位确认：把某一项请业务确认后的结论落定（状态转 confirmed）。" +
+        "只接受派生清单给出的地址；业务未答满 2 轮的项会被停问，此时应显式收口（source=缺省 + reason 写明未确认原因），而不是反复追问。",
       parameters: {
         type: "object",
         properties: {
-          asked: {
-            type: "array",
-            items: { type: "string", enum: PROBE_IDS, description: "探针 id(探针清单之一)" },
-            description: "本轮新问过的探针 id(可空)",
-          },
-          gaps: {
-            type: "array",
-            items: { type: "string", enum: PROBE_IDS, description: "探针 id(探针清单之一)" },
-            description: "问过后仍缺口的探针 id(可空)",
-          },
-          round: { type: "integer", minimum: 1, maximum: 3, description: "当前追问轮次(1-3)" },
+          address: str("槽位地址（来自本轮该填清单或停问清单）"),
+          content: str("业务确认后的内容（业务语言，不照搬口语）"),
+          source: { type: "string", enum: ["文档", "问答", "缺省"], description: "来源：文档 / 问答（业务口述）/ 缺省（本次不涉及）" },
+          reason: { type: "string", description: "source=缺省 时必填（如「本次无清算处理」）" },
         },
-        required: ["asked", "gaps"],
+        required: ["address", "content", "source"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "reqdoc_assemble",
+      description:
+        "reqdoc PRD 组装：把槽位投影成整篇 PRD（md）并归档到 07_需求规格产出。" +
+        "结构与来源标签由服务端保证，你不需要也不应手工编辑产物。" +
+        "产物内嵌槽位摘要，定稿时据此校验一致性（摘要不符 = 过期产物或被手改）。",
+      parameters: {
+        type: "object",
+        properties: {
+          source: str("输出文件名（相对 07_需求规格产出，默认 PRD.md）；功能点子目录由服务端按功能点建"),
+        },
       },
     },
   },
