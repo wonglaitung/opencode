@@ -1222,7 +1222,7 @@ KB 横切，不挂任何 stage：goal/rules/edge 为采集与填槽期，prd 为
 ④ 依赖存在环（`reqdoc_check` → `reqdoc_confirm_features`；`prompt.ts` → 三个待删工具），
 **必须先有替代物才能删原物**。
 
-#### 阶段 2a · 先立后破（只加不删）
+#### 阶段 2a · 先立后破（只加不删）—— **已交付**
 
 - **交付**：`reqdoc_ingest` / `reqdoc_answer` / `reqdoc_assemble` 三工具 + `assembleDoc` 纯函数
   + `WorkflowState.kb` 字段 + CLI `opencode-sm memory`（`list`/`forget`）
@@ -1230,7 +1230,23 @@ KB 横切，不挂任何 stage：goal/rules/edge 为采集与填槽期，prd 为
   按 `import.meta.dir` 上溯三级找 `docs/`，与 `buildPrdSkeleton` 同边界）；旧工具与旧状态**全部保留**
 - **验证**：三工具可单独调用（不接门禁）；组装幂等 golden（结构指纹）落地；
   槽位可溯源抽查（每字符能追到 `(address, source)`）；工具返回长度不超批量上限
+- **验证**：已达成——14 项组装测试（幂等/空内容/最弱档/结构指纹）+ 550 项全量绿 + typecheck 通过；
+  CLI `opencode-sm memory list` 冒烟通过
 - **可否中止**：**可**——纯加法，旧流程照跑，git 回滚即可
+
+**已落地文件**：
+- `packages/shared/src/reqdoc-assemble.ts` —— `assembleDoc`（纯投影）+ `kbDigest`（幂等基准）
+  + `verifyAssemble`（一致/过期/手改三分支）；空内容渲染按 6.2.1.2 四条规则
+- `packages/shared/src/workflow.ts` —— `WorkflowState.kb` + `ReqdocKbState`（`slots`/`features`/
+  `containers`/`askCounts`）
+- `packages/plugin/src/tools/reqdoc-kb-tools.ts` —— `reqdoc_ingest`（批量提交，status 服务端强制 draft，
+  推进 askCounts）/ `reqdoc_answer`（只接受派生地址）/ `reqdoc_assemble`（预览，不作定稿依据）
+- `packages/cli/src/commands/memory.ts` —— `opencode-sm memory list|forget`（三层目录可见性，删文件即遗忘）
+
+**实施中修的两个实现 bug**：
+1. 组装正文收集条件写成"遇到同级或更高级标题才停"，导致 `### 3.1` 被 `## 第三章` 的正文吞掉——
+   逐节处理应**遇到任意标题即停**
+2. `subSections.push()` 写在容器省略判断之前，使被省略的空容器仍进结构指纹——已前移
 
 #### 阶段 2b · 切门禁（读新写旧并存）
 
