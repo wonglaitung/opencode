@@ -8,9 +8,13 @@
 import { describe, expect, test } from "bun:test"
 import { createWorkflowState, type ReqdocFeature } from "sm-shared"
 import {
+  QUESTIONS_PER_TURN,
+  STOP_ASK_AFTER,
+  advanceAskCounts,
   containerCovered,
   containerDeclViolations,
   deriveOpenQuestions,
+  deriveQuestions,
   docAddrOf,
   isContainerAddr,
   isDocAddr,
@@ -245,5 +249,97 @@ describe("槽位内核 · 覆盖与门禁（6.2.1/6.2.2）", () => {
     expect(cov.leafTotal).toBe(requiredSlots(oneFeature).length)
     expect(cov.pct).toBeCloseTo(1 / cov.leafTotal, 5)
     expect(cov.containerTotal).toBe(2)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 阶段 1 对抗性审查补测（B/C 档行为锁定）
+// ---------------------------------------------------------------------------
+
+describe("槽位内核 · 停问与分封顶（6.3 / 7.4，审查 A1/A2/A3）", () => {
+  test("★ 连续 2 轮未确认 → 移出 batch，但保留在 stopped/all", () => {
+    const r0 = deriveQuestions(oneFeature)
+    expect(r0.batch.length).toBeGreaterThan(0)
+    // 推进一轮：把 batch 里的地址 askCount +1
+    const c1 = advanceAskCounts({}, r0.batch.map((q) => q.address))
+    const r1 = deriveQuestions(oneFeature, { askCounts: c1 })
+    expect(r1.stopped.length).toBe(0) // 才 1 轮，不停
+    // 轮次语义：askCount 达到阈值（>= 2）的**本轮**即停问，不再消耗用户耐心
+    const c2 = advanceAskCounts(c1, r1.batch.map((q) => q.address))
+    const r2 = deriveQuestions(oneFeature, { askCounts: c2 })
+    expect(r2.stopped.length).toBe(QUESTIONS_PER_TURN) // 首批 8 项计数达 2 → 停问
+    expect(r2.batch.length).toBe(QUESTIONS_PER_TURN) // 露出第二批
+    expect(r2.unclosed).toEqual(expect.arrayContaining(r2.stopped.map((q) => q.address)))
+    // 停问项仍在 all 里（可查、可被 force 收口），只是不进 batch
+    for (const st of r2.stopped) expect(r2.all.map((q) => q.address)).toContain(st.address)
+    expect(STOP_ASK_AFTER).toBe(2)
+
+    // 持续推进直到 batch 空：全部停问、unclosed 覆盖全部
+    let cur = c2
+    for (let i = 0; i < 10; i++) {
+      const r = deriveQuestions(oneFeature, { askCounts: cur })
+      if (r.batch.length === 0) break
+      cur = advanceAskCounts(cur, r.batch.map((q) => q.address))
+    }
+    const final = deriveQuestions(oneFeature, { askCounts: cur })
+    expect(final.batch.length).toBe(0)
+    expect(final.stopped.length).toBe(final.all.length)
+    expect(final.unclosed.length).toBe(final.all.length)
+  })
+
+  test("★ 未收口项 = 停问项 + conflict 项（6.5 门禁单一事实源，审查 A2）", () => {
+    const conflictSlot: ReqdocSlot = { kind: "prose", address: "3.1", content: "", source: "问答", status: "conflict", conflict: { memory: "A", material: "B" } }
+    const r = deriveQuestions(oneFeature, { slots: [conflictSlot] })
+    expect(r.unclosed).toContain("3.1")
+    // conflict 视为未确认 → 仍在开放项里（业务要裁决）
+    expect(r.all.map((q) => q.address)).toContain("3.1")
+  })
+
+  test("★ 分批封顶：batch ≤ QUESTIONS_PER_TURN（审查 A3，7.5 服务端强制）", () => {
+    const two: ReqdocFeature[] = [
+      ...oneFeature,
+      { no: 2, name: "额度调整", priority: "medium", confirmedAt: 1000 },
+    ]
+    const r = deriveQuestions(two)
+    expect(r.all.length).toBeGreaterThan(QUESTIONS_PER_TURN)
+    expect(r.batch.length).toBe(QUESTIONS_PER_TURN)
+    // batch 是 all 的前缀（按文档顺序填，不随机）
+    expect(r.batch.map((q) => q.address)).toEqual(r.all.slice(0, QUESTIONS_PER_TURN).map((q) => q.address))
+  })
+
+  test("同一轮重复调用不累加 askCount（6.3 按轮次计，审查 A1）", () => {
+    const c1 = advanceAskCounts({}, ["3.1"])
+    const c1again = advanceAskCounts(c1, ["3.1"])
+    expect(c1again["3.1"]).toBe(2) // 调用方每轮调一次；同一轮不重复调即为 1
+    // 核心：deriveQuestions 本身不改状态（纯函数）
+    const r1 = deriveQuestions(oneFeature, { askCounts: c1 })
+    const r2 = deriveQuestions(oneFeature, { askCounts: c1 })
+    expect(r1.all).toEqual(r2.all)
+  })
+})
+
+describe("槽位内核 · 边界行为锁定（审查 B2/B3/C1）", () => {
+  test("★ retired 槽位 → 回到开放项（作废即待填，审查 B2）", () => {
+    const retired: ReqdocSlot = { kind: "prose", address: "3.1", content: "x", source: "文档", status: "retired" }
+    const addrs = deriveOpenQuestions(oneFeature, { slots: [retired] }).map((q) => q.address)
+    expect(addrs).toContain("3.1")
+  })
+
+  test("★ 容器唯一 term 被 retired → 容器不覆盖（审查 B3）", () => {
+    const t: ReqdocSlot = { kind: "term", address: "4.1.CRD", content: "x", source: "问答", status: "retired" }
+    expect(containerCovered([t], "4.1")).toBe(false)
+  })
+
+  test("★ conflict 与 leafCovered 口径一致：都视为未确认（审查 C1）", () => {
+    const c: ReqdocSlot = { kind: "prose", address: "3.1", content: "", source: "问答", status: "conflict", conflict: {} }
+    expect(leafCovered([c], "3.1")).toBe(false)
+    expect(deriveOpenQuestions(oneFeature, { slots: [c] }).map((q) => q.address)).toContain("3.1")
+  })
+
+  test("kbGate 在无任何容器子项且未声明时必拦（审查 B1，防误判为 bug）", () => {
+    const allLeaves = requiredSlots(oneFeature).map(confirmed)
+    const g = kbGate(allLeaves, oneFeature, { threshold: 1 })
+    expect(g.pass).toBe(false)
+    expect(g.reasons.join()).toContain("必填容器未覆盖")
   })
 })

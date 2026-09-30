@@ -8,7 +8,6 @@
 import { describe, expect, test } from "bun:test"
 import {
   adjudicateConflict,
-  aggregateSourceTag,
   applyStopAsking,
   decideL1Write,
   decideL4Write,
@@ -20,7 +19,7 @@ import {
   slugForTerm,
   type L1Term,
 } from "../src/reqdoc-kb"
-import type { ReqdocSlot } from "../src/reqdoc-slots"
+import { aggregateSourceTag, type ReqdocSlot } from "../src/reqdoc-slots"
 
 function term(over: Partial<L1Term> = {}): L1Term {
   return {

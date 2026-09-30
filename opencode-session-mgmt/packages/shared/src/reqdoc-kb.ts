@@ -206,30 +206,6 @@ function containsTerm(text: string, term: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// 6.2.2 聚合来源标签取最弱档
-// ---------------------------------------------------------------------------
-
-/** 来源强弱：缺省 < 问答 < 文档（数值越大越"强"）。 */
-const SOURCE_RANK: Record<SlotSource, number> = { 缺省: 0, 问答: 1, 文档: 2 }
-
-/**
- * 容器节的来源标签 = 各子槽位来源的**最弱档**（6.2.2）。
- * 只要有任一子项为 `缺省`，整节不得标 `[文档]`——否则 Option A 的来源保证被绕过。
- */
-export function aggregateSourceTag(
-  children: readonly Pick<ReqdocSlot, "source" | "reason" | "status">[],
-): { tag: string; weakest: SlotSource | null } {
-  const active = children.filter((c) => c.status !== "retired")
-  if (active.length === 0) return { tag: "[缺省：无内容]", weakest: "缺省" }
-  let weakest: SlotSource = active[0]!.source
-  for (const c of active) if (SOURCE_RANK[c.source] < SOURCE_RANK[weakest]) weakest = c.source
-  if (weakest === "文档") return { tag: "[文档]", weakest }
-  if (weakest === "问答") return { tag: "[问答]", weakest }
-  const reason = active.find((c) => c.source === "缺省")?.reason
-  return { tag: reason ? `[缺省：${reason}]` : "[缺省]", weakest }
-}
-
-// ---------------------------------------------------------------------------
 // 6.3 停问收敛：draft 不丢弃也不保留原样，诚实标未确认
 // ---------------------------------------------------------------------------
 

@@ -51,6 +51,12 @@ export interface ContainerDecl {
   reason?: string
 }
 
+/** 停问阈值：同一槽位连续出现在 N 轮开放项后即移出清单（6.3）。 */
+export const STOP_ASK_AFTER = 2
+
+/** 每轮返回给模型的开放项上限（7.4「只注入当前该填的」；7.5 要求封顶在服务端强制，故在此单点定义）。 */
+export const QUESTIONS_PER_TURN = 8
+
 // ---------------------------------------------------------------------------
 // 6.2 地址空间：文档地址（恒 4 段或模板键）与槽位地址（可带子键）
 // ---------------------------------------------------------------------------
@@ -277,6 +283,29 @@ export function kbGate(
 }
 
 // ---------------------------------------------------------------------------
+
+
+/**
+ * 容器节的来源标签 = 各子槽位来源的**最弱档**（6.2.2）。
+ * 只要有任一子项为 `缺省`，整节不得标 `[文档]`——否则 Option A 的来源保证被绕过。
+ */
+/** 来源强弱：缺省 < 问答 < 文档（数值越大越"强"）。 */
+const SOURCE_RANK: Record<SlotSource, number> = { 缺省: 0, 问答: 1, 文档: 2 }
+
+export function aggregateSourceTag(
+  children: readonly Pick<ReqdocSlot, "source" | "reason" | "status">[],
+): { tag: string; weakest: SlotSource | null } {
+  const active = children.filter((c) => c.status !== "retired")
+  if (active.length === 0) return { tag: "[缺省：无内容]", weakest: "缺省" }
+  let weakest: SlotSource = active[0]!.source
+  for (const c of active) if (SOURCE_RANK[c.source] < SOURCE_RANK[weakest]) weakest = c.source
+  if (weakest === "文档") return { tag: "[文档]", weakest }
+  if (weakest === "问答") return { tag: "[问答]", weakest }
+  const reason = active.find((c) => c.source === "缺省")?.reason
+  return { tag: reason ? `[缺省：${reason}]` : "[缺省]", weakest }
+}
+
+// ---------------------------------------------------------------------------
 // 6.2.3 开放项派生：少问的机制核心
 // ---------------------------------------------------------------------------
 
@@ -328,6 +357,8 @@ export interface DeriveOptions {
   decls?: Readonly<Record<string, ContainerDecl>>
   /** 已填槽位 */
   slots?: readonly ReqdocSlot[]
+  /** 地址 → 已连续出现在开放项的轮次（6.3；**按轮次计不按调用计**——同一轮重复调用不累加，由调用方按轮推进）。 */
+  askCounts?: Readonly<Record<string, number>>
 }
 
 /**
@@ -337,56 +368,114 @@ export interface DeriveOptions {
  * - **L1 命中 → 消缺口**（不再问），其叶子视为已确认
  * - **L2 命中 → 不消缺口**，但带默认猜测问一次
  */
-export function deriveOpenQuestions(
-  features: readonly ReqdocFeature[],
-  opts: DeriveOptions = {},
-): OpenQuestion[] {
+/** 派生结果：把"该问什么"拆成本轮批次、停问项、未收口项三部分（6.3/6.5/7.4 的单一事实源）。 */
+export interface DerivedQuestions {
+  /** 本轮返回给模型的批次（已剔除停问项、已按 QUESTIONS_PER_TURN 封顶） */
+  batch: OpenQuestion[]
+  /** 本轮该问的全量（未分批）——状态条/调试用，不直接进模型 */
+  all: OpenQuestion[]
+  /** 因连续 N 轮未确认被移出清单的项（6.3） */
+  stopped: OpenQuestion[]
+  /** 未收口项 = 停问项 + conflict 项；供 kbGate 拦门禁（6.5） */
+  unclosed: string[]
+}
+
+/**
+ * 派生开放项全量（不分批、不剔除停问项）——`deriveQuestions` 的内核。
+ * 停问判定：槽位自身 `askCount` 或调用方传入的 `askCounts[addr]` 达到 STOP_ASK_AFTER 即停问。
+ */
+function deriveAll(features: readonly ReqdocFeature[], opts: DeriveOptions): OpenQuestion[] {
   const slots = opts.slots ?? []
   const l1 = (opts.l1 ?? []).filter((t) => !t.retired)
   const l2 = (opts.l2 ?? []).filter((f) => !f.retired)
-  const decls = opts.decls ?? {}
   const out: OpenQuestion[] = []
 
   // 1) 必填叶子（容器不进来——6.2.1.1）
   for (const addr of requiredSlots(features)) {
     if (leafCovered(slots, addr)) continue
-    out.push({ address: addr, kind: "prose", askCount: 0 })
+    out.push({ address: addr, kind: "prose", askCount: askCountOf(addr, slots, opts.askCounts) })
   }
 
-  // 2) 容器候选子项：L1 命中消缺口；L2 命中带猜测
-  const byDoc = new Map<string, OpenQuestion[]>()
+  // 2) 容器候选子项：L1 命中消缺口；行业通用不要求定义；L2 命中带默认猜测
   for (const [container, list] of Object.entries(opts.candidates ?? {})) {
     for (const name of list) {
       const addr = `${container}.${name}`
       if (activeSlots(slots, addr).some((s) => s.status === "confirmed")) continue
-      // 行业通用缩写不要求定义（3.2 kind 分类）——AML/KYC 属正常行话
       const term = l1.find((t) => t.term === name)
-      if (term && term.kind === "内部简称") {
-        // L1 消缺口：内部简称已被业务复述确认过，不再问（3.6 规则 1）
-        continue
-      }
-      if (term && term.kind === "行业通用") {
-        // 行业通用缩写属正常行话、允许使用（3.2 kind 分类）——不要求定义。
-        // 与"内部简称"不同：它不消缺口（记忆里未必有权威定义），但也不该问"AML 是什么"
-        continue
-      }
+      // L1 消缺口：内部简称已被业务复述确认过；行业通用属正常行话、允许使用（3.2）
+      if (term && (term.kind === "内部简称" || term.kind === "行业通用")) continue
       const guess = term
         ? `${term.term} 我理解是${term.definition}，对吗？`
         : l2.find((f) => f.content.includes(name))
           ? `组织记忆里有相关记录（${name}），是这个吗？`
           : undefined
-      const q: OpenQuestion = {
+      out.push({
         address: addr,
-        kind: container === "4.1" ? "term" : "field",
-        askCount: 0,
-        ...(guess ? { guess } : {}),
-      }
-      const bucket = byDoc.get(container)
-      if (bucket) bucket.push(q)
-      else byDoc.set(container, [q])
+        kind: isTermContainer(container) ? "term" : "field",
+        askCount: askCountOf(addr, slots, opts.askCounts),
+        ...(guess ? { guess, from: l2.length && !term ? "memory-L2" : "memory-L1" } : {}),
+      })
     }
   }
-  for (const list of byDoc.values()) out.push(...list)
-
   return out
+}
+
+/** 是否术语容器（`4.1`）；字段容器（`5.k.2.1`）返回 false。 */
+function isTermContainer(addr: string): boolean {
+  return docAddrOf(addr) === "4.1"
+}
+
+/** 某地址的已问轮次：调用方传入优先，其次槽位自带（6.3 按轮次计）。 */
+function askCountOf(
+  addr: string,
+  slots: readonly ReqdocSlot[],
+  askCounts?: Readonly<Record<string, number>>,
+): number {
+  if (askCounts && addr in askCounts) return askCounts[addr]!
+  const slot = activeSlots(slots, addr)[0]
+  return slot?.askCount ?? 0
+}
+
+/**
+ * 派生开放项（6.2.3）——少问的结构性机制。
+ * 保留此函数作为**回归基线接口**：返回本轮该问的全量地址（等价 `deriveQuestions().all`），
+ * 供阶段 0 冻结清单逐地址比对（漏问检测）。
+ */
+export function deriveOpenQuestions(
+  features: readonly ReqdocFeature[],
+  opts: DeriveOptions = {},
+): OpenQuestion[] {
+  return deriveQuestions(features, opts).all
+}
+
+/**
+ * 派生本轮提问（6.3 + 6.5 + 7.4 的单一事实源）：
+ * - **停问**：连续 `STOP_ASK_AFTER` 轮未确认的项移出 `batch`（仍在 `stopped` 里可查）
+ * - **未收口**：停问项 + `conflict` 项，供 `kbGate` 拦门禁
+ * - **封顶**：`batch` 按 `QUESTIONS_PER_TURN` 截断（7.5 要求封顶在服务端强制）
+ */
+export function deriveQuestions(features: readonly ReqdocFeature[], opts: DeriveOptions = {}): DerivedQuestions {
+  const slots = opts.slots ?? []
+  const all = deriveAll(features, opts)
+  const active = all.filter((q) => q.askCount < STOP_ASK_AFTER)
+  const stopped = all.filter((q) => q.askCount >= STOP_ASK_AFTER)
+  // conflict 项：未收口，但不由 deriveAll 产出（它们是已存在的槽位，非开放项）
+  const conflicts = slots.filter((s) => s.status === "conflict").map((s) => s.address)
+  const unclosed = [...new Set([...stopped.map((q) => q.address), ...conflicts])]
+  return {
+    all,
+    stopped,
+    batch: active.slice(0, QUESTIONS_PER_TURN),
+    unclosed,
+  }
+}
+
+/** 推进一轮：把本轮展示过的地址的 askCount +1（**按轮次计不按调用计**——由调用方每轮调一次，6.3）。 */
+export function advanceAskCounts(
+  askCounts: Readonly<Record<string, number>>,
+  shown: readonly string[],
+): Record<string, number> {
+  const next = { ...askCounts }
+  for (const addr of shown) next[addr] = (next[addr] ?? 0) + 1
+  return next
 }
