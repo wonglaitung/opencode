@@ -1170,7 +1170,26 @@ KB 横切，不挂任何 stage：goal/rules/edge 为采集与填槽期，prd 为
 - **可否中止**：可。独立资产，即使重构取消也有价值
 - **为何前置**：这是**唯一无法在重构中后补**的东西（1.4）
 
-### 阶段 1 · shared 内核（槽位 + 派生 + 记忆匹配）
+### 阶段 1 · shared 内核（槽位 + 派生 + 记忆匹配）—— **已交付**
+
+**已落地**：
+- `packages/shared/src/reqdoc-slots.ts` —— 槽位派生内核：`docAddrOf`/`slotSubKey`/`isContainerAddr`、
+  `requiredSlots`（从 schema 派生、**按文档顺序**）、`leafCovered`/`containerCovered`、
+  `slotCoverage`、`kbGate`（含 6.4.1 material 维不设硬门禁、必填叶子为 0 守卫）、
+  `deriveOpenQuestions`（L1 消缺口 / 行业通用不要求定义 / L2 只 draft 带猜测）
+- `packages/shared/src/reqdoc-kb.ts` —— 记忆内核：`decideL1Write`（静默接受不入库、代码语境不入 L1）、
+  `detectTermConflict`/`mergeL1Terms`（同名不同义不静默覆盖）、`matchL1ByMaterial`（材料驱动封顶）、
+  `aggregateSourceTag`（最弱档）、`applyStopAsking`（停问收敛）、`detectSlotConflict`/`adjudicateConflict`
+  （两侧都不装）、`forgettingImpact`（删前查引用）、`slugForTerm`
+- 测试 58 项，**★ 核心验证 `deriveOpenQuestions(无记忆) === 冻结基线` 逐地址相等**（漏问检测生效）
+
+**实施中发现并修正的 4 处自身错误**：
+1. `MAPPED_FIELD_KEYS` 曾把 `1.2` 错映射为 `5.1.2.2`（`1.2` 属组 1）——改用 `absoluteFieldKey` 组感知映射
+2. 容器必填与叶子必填矛盾——按选项 B 拆成正交维度
+3. `4.1` 曾误入基线开放项（违反 6.2.1.1）——已移除并给自洽校验加容器感知
+4. 行业通用缩写（AML）曾仍进开放项——按 3.2 修正为"不要求定义"
+
+**待阶段 2 接入**：`assembleDoc`（组装全文、6.2.1.2 空内容渲染规则）与三个工具。
 
 - **交付**：`reqdoc-slots.ts` 全部纯函数 + 记忆读写模块（3.4 schema，**含 `scope` 字段、按跨工作流
   共享设计**），复用现有模板 schema，零 UI/门禁耦合
