@@ -14,7 +14,6 @@ import { readdir, unlink } from "node:fs/promises"
 import { join, relative } from "node:path"
 import { tool, type ToolDefinition } from "@opencode-ai/plugin"
 import {
-  REQDOC_SCORE_PASS,
   WORKFLOW_DEFINITIONS,
   getDefinition,
   parseRenderStructure,
@@ -255,18 +254,6 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
       "通过时自动计算一次通过率 firstPassRate 写入质量指标。具名参数由当前工作流类型的审查清单生成。",
     args: {
       ...reviewChecklistArgs,
-      no_document_confirmed: z
-        .boolean()
-        .optional()
-        .describe(
-          "仅当 PRD 全部字段来自 [问答]、无任何 [文档] 支撑时使用：须业务在对话中明确确认「无书面材料可引用」后才可为 true，否则定稿会被来源支撑门禁拦截",
-        ),
-      skip_field_dict: z
-        .boolean()
-        .optional()
-        .describe(
-          "仅当需求确无结构化输入字段（无需字段定义）时使用：默认 false；为 true 时跳过「进 prd 前须生成数据字典(reqdoc_field_dict)」门禁。一般需求应在 prd 渲染前完成字段定义。",
-        ),
       force_kb: z
         .boolean()
         .optional()
@@ -285,6 +272,7 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
       // 组装产物读取（2c）：槽位是唯一事实源，产物只是投影——定稿只需重读产物比对内嵌摘要。
       // 来源记账/篡改检测等 Option A 机制随 reqdoc_patch 一并退役。
       let liveRender: RenderStructure | undefined
+      let prdMissing = false
       const wf0 = store.ensure(context.sessionID).workflow
       if (wf0?.kb) {
         try {
@@ -293,7 +281,7 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
             await Bun.file(resolveWithinWorktree(root, prdRelPath(root, wf0.kb.features))).text(),
           )
         } catch {
-          // 产物不存在/不可读时不阻断：kbGate 已校验槽位覆盖，产物缺失由 reqdoc_assemble 补
+          prdMissing = true
         }
       }
       // 是否首次定稿（幂等：重复 review_submit 不再重复写变更记录行）
@@ -339,9 +327,22 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
                 `请用 reqdoc_answer 补齐；确实无法补齐的，可 review_submit(force_kb=true, force_reason=<业务给的理由>) 放行。`,
             )
           }
-          // 组装幂等校验（9.3 三分支）：产物与槽位不一致时区分「过期」与「被手改」
+          // 组装幂等校验（9.3 三分支）。产品缺失/无内嵌摘要都必须拦——
+          // 否则模型用 write 手写一篇 PRD 就能绕开整个校验（重构审查发现的漏洞）。
           const current = kbDigest(kb.slots)
-          if (liveRender?.kbDigest && liveRender.kbDigest !== current) {
+          if (prdMissing) {
+            throw new WorkflowOpError(
+              `未找到 PRD 产物（预期路径 ${prdRelPath(projectRoot(context), kb.features)}）：` +
+                `PRD 必须由 reqdoc_assemble 从槽位投影生成，不能用 write 手写。请先 reqdoc_assemble 再定稿。`,
+            )
+          }
+          if (!liveRender?.kbDigest) {
+            throw new WorkflowOpError(
+              `PRD 产物缺少槽位摘要（<!-- kb-digest -->），无法校验与知识库的一致性：` +
+                `该产物应为 reqdoc_assemble 生成。请用 reqdoc_assemble 重新组装后定稿，不要手工编辑或手写产物。`,
+            )
+          }
+          if (liveRender.kbDigest !== current) {
             throw new WorkflowOpError(
               `PRD 产物与知识库不一致（槽位摘要 ${current} ≠ 产物内嵌 ${liveRender.kbDigest}）：` +
                 `若槽位已变更请用 reqdoc_assemble 重新组装（过期产物）；若未变更则产物被手工改动，请还原后重组装。`,

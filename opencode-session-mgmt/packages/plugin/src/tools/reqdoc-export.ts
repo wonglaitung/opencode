@@ -281,7 +281,7 @@ export function createReqdocExportTool(): Record<string, ToolDefinition> {
   const reqdoc_export = tool({
     description:
       "reqdoc Word 导出：将已渲染的 PRD Markdown 导出为 Word（.docx）交付件，与源 md 同目录归档。" +
-      "在 reqdoc-r14 完成 PRD 渲染（write 到 07_需求规格产出）并定稿后调用；" +
+      "在 reqdoc_assemble 生成 PRD（写入 07_需求规格产出）并定稿后调用；" +
       "source 填 PRD Markdown 相对项目根路径（如 07_需求规格产出/N_名称/xxx.md）。",
     args: {
       source: z.string().describe("PRD Markdown 相对项目根路径（07_需求规格产出/N_名称/xxx.md）"),
@@ -295,7 +295,7 @@ export function createReqdocExportTool(): Record<string, ToolDefinition> {
       try {
         md = await Bun.file(mdPath).text()
       } catch {
-        throw new Error(`源文件不存在或不可读：${args.source}。请先完成 PRD 渲染（write 到 07_需求规格产出）再调用导出。`)
+        throw new Error(`源文件不存在或不可读：${args.source}。请先用 reqdoc_assemble 生成 PRD 再调用导出（不要用 write 手写产物）。`)
       }
       const buf = await mdToDocx(md)
       const outPath = mdPath.replace(/\.md$/i, ".docx")

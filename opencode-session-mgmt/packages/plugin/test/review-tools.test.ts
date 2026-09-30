@@ -3,7 +3,8 @@ import { afterEach } from "bun:test"
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
-import { requiredSlots, reviewRecord } from "sm-shared"
+import { assembleDoc, requiredSlots, reviewRecord } from "sm-shared"
+import { createReqdocKbTools } from "../src/tools/reqdoc-kb-tools"
 import { Store } from "../src/db"
 import { createReviewTools } from "../src/tools/review"
 
@@ -12,6 +13,25 @@ function reviewOf(store: Store, id = "s1") {
 }
 
 /** reqdoc 门禁夹具：写入一个已业务确认的打分卡（默认 total 90 ≥ 85），供正向用例通过打分门禁。 */
+/**
+ * 真实组装产物（重构审查后新增）：定稿幂等校验要求产物内嵌摘要与槽位一致，
+ * 因此正向用例必须先经 reqdoc_assemble 生成产物，不能只填 state。
+ * 返回可直接用作 context 的 { worktree }。
+ */
+const prdDirs: string[] = []
+afterEach(() => {
+  for (const d of prdDirs.splice(0)) rmSync(d, { recursive: true, force: true })
+})
+
+async function assemblePrd(store: Store, id = "r1"): Promise<{ sessionID: string; worktree: string }> {
+  const worktree = mkdtempSync(join(tmpdir(), "sm-prd-"))
+  prdDirs.push(worktree)
+  const ctx = { sessionID: id, worktree } as never
+  const tools = createReqdocKbTools(store)
+  await tools.reqdoc_assemble!.execute({} as never, ctx)
+  return ctx
+}
+
 /** reqdoc 门禁夹具（2c）：写入填满且已确认的知识库槽位，供正向用例通过 kbGate。 */
 function setKb(store: Store, id = "r1"): void {
   store.mutateWorkflow(id, (w) => {
@@ -355,10 +375,11 @@ describe("review_submit 门禁", () => {
       for (const name of ["goal", "rules", "edge", "prd"]) w.stages[name].status = "approved"
     })
     setKb(store, "r1")
+    const ctx = await assemblePrd(store, "r1")
     store.lockFile("r1", "/home/dev/project/src/A.java")
     const out = await tools.review_submit!.execute(
       { completeness: true, clarity: true, edgeCoverage: true, resolution: true } as never,
-      { sessionID: "r1" } as never,
+      ctx as never,
     )
     expect(String(out)).not.toContain("人工锁定")
     expect(String(out)).toContain("/new")
@@ -431,13 +452,14 @@ describe("review_submit 门禁", () => {
         updatedAt: 1000,
       }
     })
+    const ctx = await assemblePrd(store, "r1")
     const out = String(
       await tools.review_submit!.execute(
         {
           completeness: true, clarity: true, edgeCoverage: true, resolution: true,
           force_kb: true, force_reason: "业务明确本期只做主流程",
         } as never,
-        { sessionID: "r1" } as never,
+        ctx as never,
       ),
     )
     expect(out).toContain("审查阶段通过")
@@ -464,7 +486,6 @@ describe("reqdoc 工作流（业务确认 PRD 要点）", () => {
   test("要点可无 file/lines 登记，review_submit 通过且计算一次通过率", async () => {
     const store = Store.memory(() => "reqdoc" as const)
     const tools = createReviewTools(store)
-    const ctx = { sessionID: "r1" } as never
     const wf = store.ensure("r1").workflow!
     expect(wf.type).toBe("reqdoc")
     // 审查是最后一关：先推进前序阶段（goal/rules/edge/prd approved）+ 打分达标（门禁前置）
@@ -472,6 +493,7 @@ describe("reqdoc 工作流（业务确认 PRD 要点）", () => {
       for (const name of ["goal", "rules", "edge", "prd"]) w.stages[name].status = "approved"
     })
     setKb(store, "r1")
+    const ctx = (await assemblePrd(store, "r1")) as never
     // reqdoc 要点：不填 file/lineStart/lineEnd
     await tools.comprehension_add!.execute(
       { codeSegmentId: "目标与场景", explanation: "面向一线柜员，缩短开户录入时间" } as never,
@@ -508,11 +530,11 @@ describe("reqdoc 工作流（业务确认 PRD 要点）", () => {
   test("P3.10 确认溯源：reqdoc 要点确认但未回填来源 → 定稿被拦截", async () => {
     const store = Store.memory(() => "reqdoc" as const)
     const tools = createReviewTools(store)
-    const ctx = { sessionID: "r1" } as never
     store.mutateWorkflow("r1", (w) => {
       for (const name of ["goal", "rules", "edge", "prd"]) w.stages[name].status = "approved"
     })
     setKb(store, "r1")
+    const ctx = (await assemblePrd(store, "r1")) as never
     await tools.comprehension_add!.execute(
       { codeSegmentId: "目标与场景", explanation: "面向一线柜员，缩短开户录入时间" } as never,
       ctx,
