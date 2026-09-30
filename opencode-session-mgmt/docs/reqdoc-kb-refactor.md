@@ -1279,8 +1279,31 @@ KB 横切，不挂任何 stage：goal/rules/edge 为采集与填槽期，prd 为
   1. 先删 `renderProvenance`（13 处，纯记账）+ `renderCheckFails`（3 处，机械）
   2. 再删 `score` / `probes` / `render` / `fieldDict`（随 2b 已改读 `kbGate`，引用已变机械）
   3. 最后删 7 个工具实现文件（此时已无跨文件引用）
-- **验证**：全量 `bun test` + `bun typecheck` + 人工端到端走通一遍（含 Mermaid 出图）
-- **可否中止**：**应不难**——纯删除，`git revert` 即可，无中间态
+- **验证**：已达成——**443 项全量绿 + typecheck 0 错 + `eval:dry` 46 场景通过**；另加 6 项"旧机制已退役"护栏测试
+- **可否中止**：**难**——删完即不可逆（旧状态/工具不可恢复）
+
+**已落地改动**：
+- 删除 4 个旧工具文件（`reqdoc-score` / `reqdoc-probe` / `reqdoc-check`〔含 patch + render_skeleton〕/
+  `reqdoc-field-dict`）+ 4 个配套测试文件
+- 删除 6 个旧状态字段：`score` / `probes` / `render` / `renderProvenance` / `fieldDict` / `renderCheckFails`
+- 删除 `reqdoc-render.ts` 中 11 个死导出（`renderStructureViolations` / `renderGapViolations` /
+  `missingDefaultReasonViolations` / `consistencyViolations` / `noDocumentSupportViolation` /
+  `coverageFromProvenance` / `patchSectionBody` / `canonicalSourceTag` / `isMappedFieldSection` /
+  `ReqdocProvenance` / `ReqdocRender`）
+- 删除 `workflow.ts` 中 `probeGapViolations` / `scoreDimZeroViolations` / `ReqdocProbe` / `REQDOC_PROBES` /
+  `ReqdocScoreDeduction`
+- `prompt.ts` 状态栏改槽位视角；`stats.ts` 的 `score` 指标改 `kb` 覆盖率
+- 提取 `assembleDir()` / `prdRelPath()` 共享路径推导，避免组装与定稿校验各算一遍而漂移
+- `scripts/eval-rules/src/tool-defs.ts` 镜像同步：删 2 个旧工具定义，**补 3 个新工具定义**
+  （`reqdoc_ingest` / `reqdoc_answer` / `reqdoc_assemble`）与 `force_kb` / `force_reason` 参数
+
+**实施中发现的三个真实缺口**：
+1. **定稿门禁在 kb 未建时无人拦**。2b 的 `if (workflow.kb)` 写法在 2c 删掉旧门禁后变成"kb 缺省即放行"——
+   弱模型只要不调 `reqdoc_ingest` 就能直接定稿。已改为强制 `if (!kb) throw`。
+2. **评测契约与运行时脱节**。`tool-defs.ts` 是发给评测模型的工具 schema 镜像，2a 加新工具时未同步，
+   评测仍在用已删工具的 schema。2c 一并补齐。
+3. **容器未声明可压低分母**。`kbGate` 在 `containers` 缺 `4.1` / `5.1.2.1` 声明时会拦
+   （"必填容器未覆盖"）——防止用"静默声明为空"绕过选项 B 的聚合判定。已加测试锁定。
 
 ### 阶段 3 · 规则与收尾（门禁改造已在 2b 完成）
 
