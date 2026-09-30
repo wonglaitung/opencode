@@ -1155,9 +1155,6 @@ KB 横切，不挂任何 stage：goal/rules/edge 为采集与填槽期，prd 为
 - `reqdoc-open-questions.test.ts` —— 清单**双向自洽校验**（无凭空地址 + 无遗漏 + 无重复 + schema 同步），
   是"自证清单合理性"的可执行形态
 
-**待阶段 1 接入**：`deriveOpenQuestions` 落地后由同一份 golden 规格比对"实现 ≡ 清单"。
-现为数据 + 自洽校验，不参与运行断言（无实现可比）。
-
 - **交付**：golden harness（纯函数断言）+ 四个必含用例（CRD / AML / 猜错固化 / 漏问检测）
   + **三套开放项清单**：无记忆基线 / 有记忆期望 / 冲突场景期望（4.5）
   + 注入长度与批量上限断言（7.5「封顶必须在工具层强制」）
@@ -1169,6 +1166,9 @@ KB 横切，不挂任何 stage：goal/rules/edge 为采集与填槽期，prd 为
   不是"当前实现已满足"**（A1：原表述"对当前实现跑通"自 A1 修复 CRD 断言改叶子形态后即不成立）
 - **可否中止**：可。独立资产，即使重构取消也有价值
 - **为何前置**：这是**唯一无法在重构中后补**的东西（1.4）
+
+> **阶段 0 补记**：`deriveOpenQuestions` 已随阶段 1 落地，冻结清单现已被
+> `test/reqdoc-slots.test.ts` 的 ★ 用例实际比对（"漏问检测"从数据变为生效的断言）。
 
 ### 阶段 1 · shared 内核（槽位 + 派生 + 记忆匹配）—— **已交付**
 
@@ -1212,21 +1212,52 @@ KB 横切，不挂任何 stage：goal/rules/edge 为采集与填槽期，prd 为
   有记忆时 ≡ 有记忆期望（L1 消缺口、L2 不消）
 - **可否中止**：可。纯函数无外部依赖
 
-### 阶段 2 · 工具与状态切换
+### 阶段 2 · 工具与状态切换（拆为 2a/2b/2c：先立后破，删除永远最后）
 
-- **交付**：`reqdoc_ingest` / `reqdoc_answer` / `reqdoc_assemble` + CLI `opencode-sm memory`；
-  删 7 个写路径工具；状态 6 字段收敛为 `kb`
-- **验证**：第 2 层组装幂等 golden（结构指纹）+ 槽位可溯源抽查（每字符能追到 `(address, source)`）
-  + 工具返回长度不超批量上限
-- **可否中止**：较难。已切断旧路径，回滚成本上升
+**为何拆**（第六轮审查）：原方案把"加 3 个工具"与"删 7 个工具 + 6 个状态字段"放同一步，实测不可行——
+① `workflow.ts:69-84` 的 prd 门禁仍读 `workflow.score`，一删 `reqdoc_score` 就**永久拦截、流程死锁**；
+② `prompt.ts:96/101/185` 注入的"用 `reqdoc_render_skeleton`/`reqdoc_patch`/`reqdoc_check`"文案会指向已删工具；
+③ 6 个状态字段共 **81 处**非测试引用（`.render` 23 / `.score` 21 / `.probes` 14 / `renderProvenance` 13 /
+`.fieldDict` 7 / `renderCheckFails` 3），其中 `review.ts` 定稿门禁一次读 6 处；
+④ 依赖存在环（`reqdoc_check` → `reqdoc_confirm_features`；`prompt.ts` → 三个待删工具），
+**必须先有替代物才能删原物**。
 
-### 阶段 3 · 门禁、规则、收尾
+#### 阶段 2a · 先立后破（只加不删）
 
-- **交付**：enter(prd)/review 改读 `kbGate()`；定稿接记忆候选回顾；
-  删一致性规则群（32→~15）；46 个评测场景重写为槽位版；
+- **交付**：`reqdoc_ingest` / `reqdoc_answer` / `reqdoc_assemble` 三工具 + `assembleDoc` 纯函数
+  + `WorkflowState.kb` 字段 + CLI `opencode-sm memory`（`list`/`forget`）
+- **边界**：`assembleDoc` 放 shared 且**接收 `templateText` 参数**（模板读取在 plugin 层 `template.ts`，
+  按 `import.meta.dir` 上溯三级找 `docs/`，与 `buildPrdSkeleton` 同边界）；旧工具与旧状态**全部保留**
+- **验证**：三工具可单独调用（不接门禁）；组装幂等 golden（结构指纹）落地；
+  槽位可溯源抽查（每字符能追到 `(address, source)`）；工具返回长度不超批量上限
+- **可否中止**：**可**——纯加法，旧流程照跑，git 回滚即可
+
+#### 阶段 2b · 切门禁（读新写旧并存）
+
+- **交付**：`workflow.ts` 的 prd 门禁 + `review.ts` 定稿门禁改读 `kbGate`；`prompt.ts` 注入文案改为新工具；
+  旧写路径工具**标为废弃但仍注册**（模型不再被指示使用）
+- **边界**：状态字段**先不删**（`score`/`probes`/`render`/`fieldDict` 仍写仍读，只是不再作为门禁依据），
+  确保任何时刻可切回
+- **验证**：`enter(prd)` 与 `review_submit` 走新路径的用例通过；旧门禁路径的用例仍绿（并存证明可回退）；
+  人工走通一遍 PRD 定稿
+- **可否中止**：**较难但可逆**——门禁已切换，回退只需改回读 `score`（旧字段仍在）
+
+#### 阶段 2c · 删旧（纯删除）
+
+- **交付**：删 7 个写路径工具 + 6 个状态字段 + 清理 `prompt.ts` 残留文案
+- **删除顺序**（81 处引用分两批，先删机械引用再删门禁引用）：
+  1. 先删 `renderProvenance`（13 处，纯记账）+ `renderCheckFails`（3 处，机械）
+  2. 再删 `score` / `probes` / `render` / `fieldDict`（随 2b 已改读 `kbGate`，引用已变机械）
+  3. 最后删 7 个工具实现文件（此时已无跨文件引用）
+- **验证**：全量 `bun test` + `bun typecheck` + 人工端到端走通一遍（含 Mermaid 出图）
+- **可否中止**：**应不难**——纯删除，`git revert` 即可，无中间态
+
+### 阶段 3 · 规则与收尾（门禁改造已在 2b 完成）
+
+- **交付**：删一致性规则群（32→~15）；定稿接记忆候选回顾；46 个评测场景重写为槽位版；
   设计文档 mermaid 重写（旧图整体替换，守 28 图上限）；[docs/README.md](README.md) 与
   `AGENTS.md` 改写；`sync-bundle.sh` 同步
-- **验证**：全量 `bun test` + `eval:dry`（阶段 3 前场景已重写，见 12 章说明）+ 规则注入长度实测对比（应减约 64%）
+- **验证**：全量 `bun test` + `eval:dry`（场景已于 2b 前重写为槽位版）+ 规则注入长度实测对比（应减约 64%）
   + 第 3 层端到端对比 + 人工 CRD 验收（见第 13 章）
 - **可否中止**：门禁可调阈值软化，不必硬回滚
 
@@ -1236,8 +1267,8 @@ KB 横切，不挂任何 stage：goal/rules/edge 为采集与填槽期，prd 为
 
 > **`eval:dry` 的预期失败窗口**：46 个场景的夹具直接构造已删状态
 > （`scenarios.ts:559/576/688/704` 写 `s.score = score({...})`）并断言 `reqdoc_score` 工具调用。
-> **阶段 2 一旦删 `WorkflowState.score`，这些断言立即失效**，`eval:dry` 预期失败，
-> 直到阶段 3 完成场景重写才恢复。阶段 2 的验证因此不依赖 `eval:dry`，
+> **`WorkflowState.score` 在阶段 2c 删除后，这些断言立即失效**，`eval:dry` 预期失败，
+> 直到场景重写完才恢复——故场景重写必须**早于 2c**（建议随 2b 一并做）。2a/2b 的验证不依赖 `eval:dry`，
 > 改以第 2 层 golden（组装幂等 + 槽位可溯源）为准。
 
 ---
