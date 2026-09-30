@@ -6,7 +6,15 @@
  * commit_gate_check  —— 提交门禁检查，返回未完成阶段列表
  */
 import { tool, type ToolDefinition } from "@opencode-ai/plugin"
-import { REQDOC_SCORE_PASS, getDefinition, probeGapViolations, scoreDimZeroViolations, type WorkflowState } from "sm-shared"
+import {
+  REQDOC_SCORE_PASS,
+  deriveQuestions,
+  getDefinition,
+  kbGate,
+  probeGapViolations,
+  scoreDimZeroViolations,
+  type WorkflowState,
+} from "sm-shared"
 import type { Store } from "../db"
 import { WorkflowOpError, applyTransition, recomputeCommit } from "../workflow-ops"
 
@@ -60,13 +68,43 @@ export function createWorkflowTools(store: Store): Record<string, ToolDefinition
         .describe(
           "仅 reqdoc 进入 prd 且需求确无结构化输入字段（无需字段定义）时使用：默认 false；为 true 时跳过「进 prd 前须生成数据字典(reqdoc_field_dict)」门禁。一般需求应在 prd 渲染前完成字段定义。",
         ),
+      force_kb: z
+        .boolean()
+        .optional()
+        .describe(
+          "重构 2b：仅 kb 存在且需求知识库门禁（kbGate）未通过时使用——业务明确「不想再补」时放行。必须同时给 force_reason（业务给的理由）。默认 false。",
+        ),
+      force_reason: z
+        .string()
+        .optional()
+        .describe("force_kb=true 时必填：业务给的不再补齐的理由（模型不得代填，与 business_confirmed 同纪律）"),
     },
     async execute(args, context) {
+      if (args.force_kb && !args.force_reason) {
+        throw new WorkflowOpError("force_kb=true 必须同时给 force_reason（理由须由业务给出，模型不得代填）")
+      }
       const saved = store.mutateWorkflow(context.sessionID, (workflow) => {
         assertStage(workflow, args.stage)
         const def = getDefinition(workflow.type)
         // 打分卡硬门禁（实施方案第三节）：reqdoc 进入 prd（渲染）前须已打分且 total ≥ 85 并获业务确认。
+        // 【重构 2b】kb 存在时改读派生门禁（kbGate）；kb 缺省时**保持旧门禁**——两套并存可逆（2c 才删旧）。
         if (args.action === "enter" && args.stage === "prd" && def.type === "reqdoc") {
+          if (workflow.kb) {
+            const kb = workflow.kb
+            const gate = kbGate(kb.slots, kb.features, {
+              decls: kb.containers,
+              unclosed: deriveQuestions(kb.features, { slots: kb.slots, askCounts: kb.askCounts, decls: kb.containers }).unclosed,
+              force: args.force_kb,
+              threshold: 1,
+            })
+            if (!gate.pass) {
+              throw new WorkflowOpError(
+                `需求知识库未就绪（重构 2b 门禁）：${gate.reasons.join("；")}。` +
+                  `请用 reqdoc_ingest 补齐槽位、reqdoc_answer 逐项确认；确实无法补齐的，` +
+                  `可 workflow_advance(stage=prd, action=enter, force_kb=true, force_reason=<业务给的理由>) 放行。`,
+              )
+            }
+          } else {
           const score = workflow.score
           if (!score) {
             throw new WorkflowOpError(
@@ -120,6 +158,7 @@ export function createWorkflowTools(store: Store): Record<string, ToolDefinition
                 "如本需求确无结构化输入字段，可 workflow_advance(stage=prd, action=enter, skip_field_dict=true) 跳过此门禁。",
             )
           }
+          } // else: kb 缺省 → 旧门禁（2c 才删）
         }
         if (args.action === "approve") {
           if (def.reviewStage !== null && args.stage === def.reviewStage) {

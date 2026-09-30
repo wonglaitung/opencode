@@ -1248,7 +1248,7 @@ KB 横切，不挂任何 stage：goal/rules/edge 为采集与填槽期，prd 为
    逐节处理应**遇到任意标题即停**
 2. `subSections.push()` 写在容器省略判断之前，使被省略的空容器仍进结构指纹——已前移
 
-#### 阶段 2b · 切门禁（读新写旧并存）
+#### 阶段 2b · 切门禁（读新写旧并存）—— **已交付**
 
 - **交付**：`workflow.ts` 的 prd 门禁 + `review.ts` 定稿门禁改读 `kbGate`；`prompt.ts` 注入文案改为新工具；
   旧写路径工具**标为废弃但仍注册**（模型不再被指示使用）
@@ -1256,7 +1256,21 @@ KB 横切，不挂任何 stage：goal/rules/edge 为采集与填槽期，prd 为
   确保任何时刻可切回
 - **验证**：`enter(prd)` 与 `review_submit` 走新路径的用例通过；旧门禁路径的用例仍绿（并存证明可回退）；
   人工走通一遍 PRD 定稿
+- **验证**：已达成——555 项全量绿 + typecheck 通过；门禁切换测试 5 项（kb 存在读派生 / kb 缺省读旧）
 - **可否中止**：**较难但可逆**——门禁已切换，回退只需改回读 `score`（旧字段仍在）
+
+**已落地改动**：
+- `packages/plugin/src/tools/workflow.ts` —— prd 门禁：`workflow.kb` 存在时读 `kbGate`（覆盖率 + 未收口项
+  + force），缺省时走**原 6 道旧门禁**（score/probes/fieldDict）。新增 `force_kb` + `force_reason` 参数
+  （理由须业务给，模型不得代填）
+- `packages/plugin/src/tools/review.ts` —— 定稿门禁同样分流；另加**组装幂等校验**（读产物内嵌摘要比对）
+- `packages/plugin/src/prompt.ts` —— kb 存在时注入「知识库流程」指引（三步 + 不依赖 score/probe），
+  kb 缺省时才注入旧的 `renderTargetDigest` 填充指引
+- `packages/shared/src/reqdoc-render.ts` —— `RenderStructure.kbDigest` 字段 + 解析
+  `<!-- kb-digest: xxx -->`；`assembleDoc` 把摘要内嵌进产物头部
+
+**实施中补的一个缺口**：组装产物原先没有内嵌槽位摘要，导致幂等校验（9.3 三分支）无从比对——
+已由 `kbDigest` + md 头注释 + `parseRenderStructure` 解析补齐。
 
 #### 阶段 2c · 删旧（纯删除）
 

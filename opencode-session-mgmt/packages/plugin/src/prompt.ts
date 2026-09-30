@@ -5,6 +5,7 @@
  * 阶段化注入只给弱模型当前需要的规则，状态条替代冗长 JSON，降低弱模型遵循负担。
  */
 import {
+  requiredSlots,
   REQDOC_PROBES,
   REQDOC_SCORE_PASS,
   currentInProgressStage,
@@ -95,7 +96,25 @@ export function buildSystemFragment(
   // 渲染目标结构（P3 上下文瘦身，见 reqdoc-render.ts）：reqdoc 且当前阶段为 prd 时注入结构摘要
   // （约 1k 字符，替代模板全文 7.6k）。模板逐字落实由服务端 reqdoc_render_skeleton 生成骨架保证，
   // 客户端模型据本摘要用 reqdoc_patch 逐小节填充，无需读取模板文件。
-  if (def.type === "reqdoc" && stage === "prd") {
+  // 知识库渲染指引（重构 2b）：kb 存在时按槽位流程注入，不再指示用已废弃的 patch/render_skeleton。
+  if (def.type === "reqdoc" && workflow.kb && stage === "prd") {
+    const kb = workflow.kb
+    const req = requiredSlots(kb.features)
+    const filled = req.filter((a) => kb.slots.some((x) => x.address === a && x.status === "confirmed")).length
+    parts.push(
+      "",
+      "# 需求知识库流程（重构 2b；旧 reqdoc_render_skeleton/reqdoc_patch 已不再是渲染路径）",
+      "",
+      `覆盖率：${filled}/${req.length} 必填槽位。`,
+      "1) reqdoc_ingest —— 从材料批量提取内容提交为槽位（不是写文档）；status 由服务端记为待确认。",
+      "2) reqdoc_answer —— 逐项请业务确认后落定；连续 2 轮未确认的项会被停问，应显式收口（[缺省]+理由）。",
+      "3) reqdoc_assemble —— 由槽位投影生成整篇 PRD（结构与来源标签由服务端保证，**不要手工编辑产物**）。",
+      "→ 进入下一阶段与定稿的门禁均改读知识库派生门禁（kbGate），不再依赖 reqdoc_score/reqdoc_probe。",
+      "",
+    )
+  }
+
+  if (def.type === "reqdoc" && stage === "prd" && !workflow.kb) {
     parts.push(
       "",
       "# 渲染目标结构（reqdoc prd 阶段；骨架由 reqdoc_render_skeleton 生成，逐小节用 reqdoc_patch 填充）",

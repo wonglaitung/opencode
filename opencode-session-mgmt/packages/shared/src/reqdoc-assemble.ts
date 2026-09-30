@@ -163,10 +163,13 @@ export function assembleDoc(
     else out.push("") // 空正文：留空标题，不写占位文字
   }
 
-  const md = out.join("\n").replace(/\n{3,}/g, "\n\n").trim() + "\n"
+  const digest = kbDigest(slots)
+  // 摘要内嵌进产物头部，供定稿时区分「过期」与「被手改」（9.3 三分支）
+  const body = out.join("\n").replace(/\n{3,}/g, "\n\n").trim()
+  const md = `<!-- kb-digest: ${digest} -->\n\n${body}\n`
   return {
     md,
-    digest: kbDigest(slots),
+    digest,
     fingerprint: {
       chapters: lines.filter((l) => /^##\s/.test(l)).map((l) => l.trim()),
       featureCount: features.length,

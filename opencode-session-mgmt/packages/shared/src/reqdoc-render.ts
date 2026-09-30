@@ -150,6 +150,8 @@ export const MAPPED_FIELD_KEYS = ["1.2", "2.1", "2.3", "2.6", "2.7", "2.8", "2.9
 
 /** 渲染结构解析产物（parseRenderStructure 返回，运行时与评测共用）。 */
 export interface RenderStructure {
+  /** 槽位摘要（组装时内嵌于 md 头注释；未定稿时为 undefined） */
+  kbDigest?: string
   /** 结构达标：无缺章节、无缺小节、无乱序、功能点块骨架齐全（不含 expectedFeatures 对比与来源覆盖） */
   ok: boolean
   /** 出现的章节标题（按 schema 顺序） */
@@ -178,6 +180,12 @@ export interface RenderStructure {
 }
 
 /** reqdoc 渲染校验记录（reqdoc_check 工具写入 WorkflowState.render；Review 时重读源复核）。 */
+/**
+ * 槽位摘要的产物内嵌标记：`<!-- kb-digest: <hex> -->`（组装时写入 PRD 头部，
+ * parseRenderStructure 解析回来）。定稿据此区分「过期构建产物」与「产物被手改」（9.3 三分支）。
+ */
+const KB_DIGEST_RE = /^<!--\s*kb-digest:\s*([0-9a-f]+)\s*-->$/m
+
 export interface ReqdocRender extends RenderStructure {
   /** 校验的 PRD md 相对项目根路径 */
   source: string
@@ -236,6 +244,7 @@ function headingAt(line: string): { level: number; text: string } | null {
  */
 export function parseRenderStructure(md: string): RenderStructure {
   const lines = md.split(/\r?\n/)
+  const digestMatch = md.match(/^<!--\s*kb-digest:\s*([0-9a-f]+)\s*-->$/m)
   const headings: { level: number; text: string; idx: number }[] = []
   lines.forEach((raw, idx) => {
     const h = headingAt(raw)
@@ -369,6 +378,7 @@ export function parseRenderStructure(md: string): RenderStructure {
     missingSections,
     featureCount: blocks.length,
     featureOk,
+    ...(digestMatch ? { kbDigest: digestMatch[1] } : {}),
     missingFeatureSections,
     covered,
     defaults,

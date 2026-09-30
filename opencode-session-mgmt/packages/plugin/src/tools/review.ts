@@ -26,6 +26,9 @@ import {
   renderStructureViolations,
   consistencyViolations,
   missingDefaultReasonViolations,
+  deriveQuestions,
+  kbDigest,
+  kbGate,
   reviewRecord,
   type ComprehensionRecord,
   type ReqdocRender,
@@ -265,8 +268,21 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
         .describe(
           "仅当需求确无结构化输入字段（无需字段定义）时使用：默认 false；为 true 时跳过「进 prd 前须生成数据字典(reqdoc_field_dict)」门禁。一般需求应在 prd 渲染前完成字段定义。",
         ),
+      force_kb: z
+        .boolean()
+        .optional()
+        .describe(
+          "重构 2b：仅知识库定稿门禁（kbGate）未通过时使用——业务明确「不想再补」时放行。必须同时给 force_reason（业务给的理由）。默认 false。",
+        ),
+      force_reason: z
+        .string()
+        .optional()
+        .describe("force_kb=true 时必填：业务给的不再补齐的理由（模型不得代填）"),
     },
     async execute(args, context) {
+      if (args.force_kb && !args.force_reason) {
+        throw new WorkflowOpError("force_kb=true 必须同时给 force_reason（理由须由业务给出，模型不得代填）")
+      }
       // 渲染定稿复核（质量飞轮 P2）：reqdoc_check 记录过 render 才复核——重读源 md 重新解析，
       // 防记录快照与磁盘不一致（reqdoc_check 后改动渲染文件会被再拦）；未记录则柔性放行。
       // 文件读取必须在 mutateWorkflow 同步回调外 await，违规值闭包传入回调内抛错。
@@ -343,7 +359,37 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
         }
         // 打分卡定稿兜底（实施方案第三节）：reqdoc 定稿前须已打分达标（≥85）且获业务确认，
         // 防止越序/未打分直接定稿。prd 入口门禁之外的第二道闸（防弱模型跳过）。
-        if (def.type === "reqdoc") {
+        if (def.type === "reqdoc" && workflow.kb) {
+          // 【重构 2b】知识库定稿门禁：kb 存在时改读派生门禁；kb 缺省走下方旧门禁（可逆，2c 才删）。
+          const kb = workflow.kb
+          const unclosed = deriveQuestions(kb.features, {
+            slots: kb.slots,
+            askCounts: kb.askCounts,
+            decls: kb.containers,
+          }).unclosed
+          const gate = kbGate(kb.slots, kb.features, {
+            decls: kb.containers,
+            unclosed,
+            force: args.force_kb,
+            threshold: 1,
+          })
+          if (!gate.pass) {
+            throw new WorkflowOpError(
+              `需求知识库未就绪（重构 2b 定稿门禁）：${gate.reasons.join("；")}。` +
+                `覆盖率 ${gate.coverage.leafFilled}/${gate.coverage.leafTotal} 必填槽位。` +
+                `请用 reqdoc_answer 补齐；确实无法补齐的，可 review_submit(force_kb=true, force_reason=<业务给的理由>) 放行。`,
+            )
+          }
+          // 组装幂等校验（9.3 三分支）：产物与槽位不一致时区分「过期」与「被手改」
+          const current = kbDigest(kb.slots)
+          if (liveRender?.kbDigest && liveRender.kbDigest !== current) {
+            throw new WorkflowOpError(
+              `PRD 产物与知识库不一致（槽位摘要 ${current} ≠ 产物内嵌 ${liveRender.kbDigest}）：` +
+                `若槽位已变更请用 reqdoc_assemble 重新组装（过期产物）；若未变更则产物被手工改动，请还原后重组装。`,
+            )
+          }
+        }
+        if (def.type === "reqdoc" && !workflow.kb) {
           const score = workflow.score
           if (!score) {
             throw new WorkflowOpError("PRD 未打分，不能定稿：请先完成质量打分并获业务确认")
