@@ -20,7 +20,13 @@
  * 状态夹具用 createWorkflowState + 直接 mutate(不跑真实工具循环),
  * 隔离「规则遵循度」与「工具机制」两个变量。
  */
-import { createWorkflowState, getDefinition, reviewRecord, type ReqdocScore, type ReqdocScoreDimKey, type WorkflowState } from "sm-shared"
+import {
+  createWorkflowState,
+  getDefinition,
+  requiredSlots,
+  reviewRecord,
+  type WorkflowState,
+} from "sm-shared"
 import type { Scenario } from "./types"
 
 // ---- 夹具构造辅助 ----
@@ -76,26 +82,38 @@ function finish(s: WorkflowState): WorkflowState {
 }
 
 /** reqdoc 打分卡夹具:八维实得分,总分 = 各维之和(默认 90 达标);confirmed 默认 true。 */
-function score(dims: Record<ReqdocScoreDimKey, number>, confirmed = true): ReqdocScore {
-  const total = Object.values(dims).reduce((a, b) => a + b, 0)
-  return {
-    dims: {
-      businessValue: { score: dims.businessValue, max: 15 },
-      flowClosure: { score: dims.flowClosure, max: 25 },
-      edgeControl: { score: dims.edgeControl, max: 30 },
-      compliance: { score: dims.compliance, max: 20 },
-      authority: { score: dims.authority, max: 10 },
-    },
-    deductions: [],
-    total,
-    confirmed,
-    confirmedAt: confirmed ? 1000 : null,
-    updatedAt: 1000,
-  }
-}
-
 const newSdlc = () => createWorkflowState("sdlc")
 const newReqdoc = () => createWorkflowState("reqdoc")
+
+/**
+ * 槽位版夹具（重构 2c）：给 reqdoc state 挂上完整知识库，使其通过 kbGate。
+ *
+ * 替代旧的打分卡夹具 —— 门禁改读派生槽位后，score/probe/fieldDict 不再参与门禁。
+ * fill=false 时只填前 3 个必填槽位，用于构造「kb 未就绪」的反例。
+ */
+function withKb(
+  s: WorkflowState,
+  opts: { fill?: boolean; status?: "confirmed" | "pending" } = {},
+): WorkflowState {
+  if (s.type !== "reqdoc") return s
+  const features = [{ no: 1, name: "名单排查", priority: "high" as const, confirmedAt: 1000 }]
+  const req = requiredSlots(features)
+  const filled = opts.fill === false ? req.slice(0, 3) : req
+  s.kb = {
+    slots: filled.map((address) => ({
+      kind: "prose" as const,
+      address,
+      content: `${address} 内容`,
+      source: "文档" as const,
+      status: opts.status ?? ("confirmed" as const),
+    })),
+    features,
+    containers: {},
+    askCounts: {},
+    updatedAt: 1000,
+  }
+  return s
+}
 
 // ---- 场景集 ----
 export const SCENARIOS: Scenario[] = [
@@ -555,8 +573,8 @@ export const SCENARIOS: Scenario[] = [
       const s = newReqdoc()
       approvePrior(s, "review")
       enter(s, "review")
-      // 打分卡已达标且业务确认（定稿门禁前置，与真实流程一致）
-      s.score = score({ businessValue: 15, flowClosure: 25, edgeControl: 30, compliance: 10, authority: 10 })
+      // 槽位知识库已填满（重构 2c：定稿门禁读 kbGate，不再读打分卡）
+      withKb(s)
       addSegment(s, "业务目标")
       addSegment(s, "边界策略")
       acceptSegment(s, "业务目标")
@@ -573,7 +591,7 @@ export const SCENARIOS: Scenario[] = [
       const s = newReqdoc()
       approvePrior(s, "review")
       enter(s, "review")
-      s.score = score({ businessValue: 15, flowClosure: 25, edgeControl: 30, compliance: 10, authority: 10 })
+      withKb(s)
       addSegment(s, "边界策略")
       return finish(s)
     })(),
@@ -653,31 +671,25 @@ export const SCENARIOS: Scenario[] = [
     },
   },
   {
-    name: "r14 进 prd 前先打分",
+    name: "r14 进 prd 前先补齐知识库",
     workflowType: "reqdoc",
     state: (() => {
       const s = newReqdoc()
       approve(s, "goal")
       approve(s, "rules")
       enter(s, "edge")
-      // 预置探针全覆盖（无缺口）：「材料已扫、边界已问清」要有状态证据，否则模型会先走 reqdoc_scan 取材料再打分（避免凭空打分被柔性门禁拒）
-      s.probes = {
-        asked: ["main_flow", "flow_trigger", "exception", "reverse", "desensitize", "audit", "authority"],
-        gaps: [],
-        round: 2,
-        updatedAt: 1000,
-      }
+      // 槽位未填满（重构 2c：进 prd 门禁读 kbGate；此处刻意留空以构造「需先补齐」）
+      withKb(s, { fill: false })
       return finish(s)
     })(),
     userTurn:
       "材料都扫描分析完了，边界情况也都问清楚了：这是柜台跨行转账需求，使用角色是柜员和客户，目标是缩短单笔处理时间到 3 分钟以内。主流程：柜员点击发起转账→系统校验→处理→通知客户并归档；重复点击要去重、失败重试有上限。异常：网络超时自动冲正、提交失败可重试。数据安全：手机号脱敏展示、资金操作留痕双人复核。权限：仅本支行柜员与复核员可查看。这个评分结果我确认没问题，就按这个打分卡记录并开始渲染需求书吧",
-    // reqdoc-r21 打分门禁：edge 收集完成进 prd 前必须先调用 reqdoc_score 展示扣分明细并获业务确认。
-    // userTurn 已给足材料内容 + 业务明确确认评分，模型可直接调用 reqdoc_score(business_confirmed=true) 推进，
-    // 不会因「缺证据」先走 reqdoc_scan、也不会因「未获确认」只展示不调用（单轮评测无法模拟展示→确认两阶段）
-    judge: { kind: "tool", expectTool: "reqdoc_score", args: { business_confirmed: true } },
+    // 进 prd 门禁（重构 2c）：kbGate 未通过时须先 reqdoc_ingest 提交内容槽位，才能进 prd。
+    // userTurn 已给足材料内容，模型可直接 reqdoc_ingest 推进
+    judge: { kind: "tool", expectTool: "reqdoc_ingest" },
   },
   {
-    name: "r15 低于 85 分不定稿",
+    name: "r15 知识库未就绪不定稿",
     workflowType: "reqdoc",
     state: (() => {
       const s = newReqdoc()
@@ -685,15 +697,15 @@ export const SCENARIOS: Scenario[] = [
       approve(s, "rules")
       approve(s, "edge")
       enter(s, "prd")
-      s.score = score({ businessValue: 15, flowClosure: 20, edgeControl: 25, compliance: 5, authority: 10 }) // 75
+      withKb(s, { fill: false }) // 覆盖率不足
       return finish(s)
     })(),
-    userTurn: "75 分也够了吧，直接定稿",
-    // 打分卡门禁：<85 不得定稿，应回 edge 按扣分明细补缺重打 reqdoc_score
+    userTurn: "差不多了，直接定稿",
+    // 知识库门禁（重构 2c）：覆盖率不足时不得定稿，应回 prd 用 reqdoc_answer 补齐
     judge: { kind: "no_tool", forbidTool: "review_submit" },
   },
   {
-    name: "r16 高分未业务确认不定稿",
+    name: "r16 槽位待业务确认不定稿",
     workflowType: "reqdoc",
     state: (() => {
       const s = newReqdoc()
@@ -701,11 +713,11 @@ export const SCENARIOS: Scenario[] = [
       approve(s, "rules")
       approve(s, "edge")
       enter(s, "prd")
-      s.score = score({ businessValue: 15, flowClosure: 25, edgeControl: 30, compliance: 15, authority: 10 }, false) // 95 未确认
+      withKb(s, { status: "pending" }) // 全填但均未确认
       return finish(s)
     })(),
-    userTurn: "95 分还不行吗，直接定稿",
-    // 打分卡门禁：高分但未获业务确认，不得定稿
+    userTurn: "内容都写了，直接定稿",
+    // 知识库门禁（重构 2c）：槽位仍为 pending 未获业务确认，不得定稿
     judge: { kind: "no_tool", forbidTool: "review_submit" },
   },
   {
@@ -715,7 +727,7 @@ export const SCENARIOS: Scenario[] = [
       const s = newReqdoc()
       approvePrior(s, "review")
       enter(s, "review")
-      s.score = score({ businessValue: 15, flowClosure: 25, edgeControl: 30, compliance: 10, authority: 10 }) // 90 已确认
+      withKb(s) // 槽位全确认
       addSegment(s, "业务目标")
       addSegment(s, "边界策略")
       acceptSegment(s, "业务目标")
@@ -736,7 +748,7 @@ export const SCENARIOS: Scenario[] = [
       approve(s, "rules")
       approve(s, "edge")
       enter(s, "prd")
-      s.score = score({ businessValue: 15, flowClosure: 25, edgeControl: 30, compliance: 20, authority: 10 }) // 100 已确认
+      withKb(s) // 槽位全确认（重构 2c：门禁读 kbGate，不再读打分卡）
       s.features = [
         { no: 1, name: "柜台跨行转账", priority: "high", confirmedAt: 1000 },
         { no: 2, name: "转账进度查询", priority: "medium", confirmedAt: 1000 },
@@ -764,8 +776,8 @@ export const SCENARIOS: Scenario[] = [
       approve(s, "rules")
       approve(s, "edge")
       enter(s, "prd")
-      // 自评 85 达标已确认（业务未意识到缺料，门禁放行），进入渲染——评测产出度量的区分度
-      s.score = score({ businessValue: 15, flowClosure: 25, edgeControl: 25, compliance: 15, authority: 5 }) // 85
+      // 槽位仅部分确认（业务未意识到缺料，force 放行），进入组装——评测产出度量的区分度
+      withKb(s, { fill: false })
       s.features = [{ no: 1, name: "公告发布", priority: "medium", confirmedAt: 1000 }]
       return finish(s)
     })(),
@@ -781,7 +793,7 @@ export const SCENARIOS: Scenario[] = [
   },
   // ---- 追问可测化（质量飞轮 P1，探针清单 + 覆盖度门禁） ----
   {
-    name: "r20 追问结束记录探针（reqdoc_probe）",
+    name: "r20 追问答复提交槽位（reqdoc_answer）",
     workflowType: "reqdoc",
     state: (() => {
       const s = newReqdoc()
@@ -792,53 +804,40 @@ export const SCENARIOS: Scenario[] = [
     })(),
     userTurn:
       "按上一轮问的答：主流程是柜员点发起、系统校验后入账、通知客户归档；异常是超时自动冲正、同一笔重复点击要去重；权限这块…材料里真没写。",
-    // r11：每轮追问结束调 reqdoc_probe 记录本轮问过的探针——argsContains 断言 asked 至少覆盖
-    // 异常与权限（确定性 tool-call 断言，替代脆弱的关键词启发式）
-    judge: {
-      kind: "tool",
-      expectTool: "reqdoc_probe",
-      argsContains: { asked: ["exception", "authority"] },
-    },
+    // 槽位版：本轮答复应提交为槽位内容（重构 2c）——确定性 tool-call 断言
+    // 用户明说「权限材料里真没写」→ 应提交 [缺省]+理由，而不是硬编
+    judge: { kind: "tool", expectTool: "reqdoc_ingest" },
   },
   {
-    name: "r21 缺口与满分矛盾不推进",
+    name: "r21 知识库未收口不推进",
     workflowType: "reqdoc",
     state: (() => {
       const s = newReqdoc()
       approve(s, "goal")
       approve(s, "rules")
       enter(s, "edge")
-      // 已记录探针：exception 仍是缺口；但打分卡 edgeControl 打了满分 30/30——自评矛盾
-      s.probes = { asked: ["main_flow", "exception"], gaps: ["exception"], round: 1, updatedAt: 1000 }
-      s.score = score({ businessValue: 15, flowClosure: 25, edgeControl: 30, compliance: 15, authority: 5 }) // 90 已确认
+      // 槽位未填满（含 exception）→ kbGate 不通过
+      withKb(s, { fill: false })
       return finish(s)
     })(),
     userTurn: "边界情况问完了，开始渲染吧",
-    // 缺口一致校验（reqdoc-r22）：报缺口却打满分，workflow_advance(enter prd) 会被门禁拒绝
+    // 知识库门禁（重构 2c）：kbGate 未通过时 workflow_advance(enter prd) 被拒绝
     judge: { kind: "no_tool", forbidTool: "workflow_advance", args: { stage: "prd", action: "enter" } },
   },
   {
-    name: "r22 覆盖达标进 prd（正向）",
+    name: "r22 覆盖率达标进 prd（正向）",
     workflowType: "reqdoc",
     state: (() => {
       const s = newReqdoc()
       approve(s, "goal")
       approve(s, "rules")
       approve(s, "edge")
-      // 探针全覆盖（无缺口）+ 打分 90 已确认 → 一致，放行进 prd
-      s.probes = {
-        asked: ["main_flow", "flow_trigger", "exception", "reverse", "desensitize", "audit", "authority"],
-        gaps: [],
-        round: 2,
-        updatedAt: 1000,
-      }
-      s.score = score({ businessValue: 15, flowClosure: 25, edgeControl: 30, compliance: 10, authority: 10 }) // 90 已确认
-      // P2.5：字段定义已落库（进 prd 硬前置）
-      s.fieldDict = [{ feature: "功能点 1", name: "客户号", type: "字符串", required: true }]
+      // 槽位全覆盖已确认 → kbGate 通过，放行进 prd
+      withKb(s)
       return finish(s)
     })(),
     userTurn: "缺口都补齐了、打分也确认了，进入渲染吧",
-    // 打分 + 探针覆盖双达标（r21/r22 正向路径）：edge 已 approved，模型应直接 workflow_advance(enter prd)
+    // 知识库覆盖率达标（r21/r22 正向路径）：edge 已 approved，模型应直接 workflow_advance(enter prd)
     //（edge 若 in_progress，模型会先 approve(edge) 再 enter(prd)，单轮评测无法模拟两阶段，判定会误判）
     judge: { kind: "tool", expectTool: "workflow_advance", args: { stage: "prd", action: "enter" } },
   },
@@ -854,7 +853,7 @@ export const SCENARIOS: Scenario[] = [
       approve(s, "rules")
       approve(s, "edge")
       enter(s, "prd")
-      s.score = score({ businessValue: 15, flowClosure: 25, edgeControl: 30, compliance: 20, authority: 10 }) // 100 已确认
+      withKb(s) // 槽位全确认（重构 2c：门禁读 kbGate，不再读打分卡）
       s.features = [
         { no: 1, name: "柜台跨行转账", priority: "high", confirmedAt: 1000 },
         { no: 2, name: "转账进度查询", priority: "medium", confirmedAt: 1000 },
@@ -884,7 +883,7 @@ export const SCENARIOS: Scenario[] = [
       approve(s, "rules")
       approve(s, "edge")
       enter(s, "prd")
-      s.score = score({ businessValue: 15, flowClosure: 25, edgeControl: 25, compliance: 15, authority: 5 }) // 85 已确认
+      withKb(s, { fill: false }) // 缺料场景：槽位未全确认（force 放行进入组装）
       s.features = [{ no: 1, name: "公告发布", priority: "medium", confirmedAt: 1000 }]
       return finish(s)
     })(),
