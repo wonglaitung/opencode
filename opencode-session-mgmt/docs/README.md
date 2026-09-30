@@ -20,6 +20,7 @@
 | [leadership-brief.md](leadership-brief.md) | 设计文档 | **方案汇报材料**（给管理层）：SDLC 工作流价值、退出风险/ROI 回应、兼容现状、决策请求（技术细节见 session-management.md） | 无入站引用 | 可 |
 | [leadership-brief-reqdoc.md](leadership-brief-reqdoc.md) | 设计文档 | **reqdoc 汇报材料**（给管理层）：需求书工作流价值、退出风险/ROI 回应、质量飞轮三支柱、兼容现状、决策请求（技术细节见 workflow-reqdoc.md）；与 leadership-brief.md 并列、同一七节骨架 | 无入站引用 | 可 |
 | [reqdoc-prd-template.md](reqdoc-prd-template.md) | 运行时资源 | reqdoc PRD 模板的 **md 渲染载体与权威源**（prd 阶段由服务端 `reqdoc_render_skeleton` 读取并逐字生成骨架） | **代码硬引用**：[template.ts](../packages/plugin/src/template.ts)（`TEMPLATE_FILENAME` 常量拼接候选路径）、[workflow.ts](../packages/shared/src/workflow.ts)（r14/r20 规则文本）、[pack-bundle.sh](../scripts/pack-bundle.sh)（拷 docs/ 到 bundle 根）、[template.test.ts](../packages/plugin/test/template.test.ts) | **不可改名 / 不可移出 docs/ 根**（骨架生成机制按 `docs/<此文件名>` 解析，移动即破坏） |
+| [reqdoc-kb-refactor.md](reqdoc-kb-refactor.md) | 设计文档 | **reqdoc 重构提案（未实施）**：需求知识库（Slot-filling KB）目标架构——五份平行表示坍缩为槽位、文档改构建产物、追问与打分改服务端派生、工具与规则精简清单、迁移与验收 | 暂无消费方（提案）；落地后由 [workflow-reqdoc.md](workflow-reqdoc.md) 承接其内容 | 可（落地后并入 workflow-reqdoc.md 并删除本文） |
 | [qwen3.6-27b.chat-template.jinja](qwen3.6-27b.chat-template.jinja) | 部署参考 | 部署模型 qwen3.6-27b 的 chat template（vLLM 部署用） | [deployment.md](deployment.md) | 可（同步 deployment.md） |
 | [deploy-sync.md](deploy-sync.md) | 部署参考 | **部署同步指南**：三个插件 + CLI 同步到 Windows 目标的步骤 | 无入站引用 | 可 |
 
