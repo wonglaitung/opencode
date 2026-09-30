@@ -1189,6 +1189,19 @@ KB 横切，不挂任何 stage：goal/rules/edge 为采集与填槽期，prd 为
 3. `4.1` 曾误入基线开放项（违反 6.2.1.1）——已移除并给自洽校验加容器感知
 4. 行业通用缩写（AML）曾仍进开放项——按 3.2 修正为"不要求定义"
 
+**阶段 1 对抗性审查（第五轮）修复的 9 条**：
+- A1 停问逻辑缺失 → 新增 `deriveQuestions`（batch/stopped/unclosed 三分）+ `STOP_ASK_AFTER=2` +
+  `advanceAskCounts`（按轮次计；内核保持纯函数，轮次状态由调用方持有）
+- A2 未收口项无单一事实源 → `deriveQuestions().unclosed` = 停问项 + conflict 项，直接喂 `kbGate`
+- A3 分批封顶未实现 → `QUESTIONS_PER_TURN=8` + `deriveQuestions().batch`（服务端强制，7.5）
+- A4 容器 kind 硬编码 `"4.1"` → 改用 `isTermContainer`（基于 `docAddrOf`）
+- B1/B2/B3/C1 边界行为 → 补测试锁定（retired 回开放项、唯一 term retired 容器不覆盖、
+  conflict 与 `leafCovered` 口径一致、kbGate 无容器声明必拦）
+- C2 `aggregateSourceTag` 从 `reqdoc-kb` 移到 `reqdoc-slots`（槽位的 home，避免跨文件耦合）
+
+**审查结论**：4 条 A 档同属一类——实现的是"无状态纯函数计算"，而设计要的是"有状态追问协议"
+（停问/分批/未收口都依赖跨轮次状态）。已在阶段 1 内补齐，避免阶段 2 在工具层重写第二份。
+
 **待阶段 2 接入**：`assembleDoc`（组装全文、6.2.1.2 空内容渲染规则）与三个工具。
 
 - **交付**：`reqdoc-slots.ts` 全部纯函数 + 记忆读写模块（3.4 schema，**含 `scope` 字段、按跨工作流
