@@ -19,6 +19,8 @@ import {
   STOP_ASK_AFTER,
   advanceAskCounts,
   deriveQuestions,
+  materialOf,
+  matchMemory,
   getDefinition,
   requiredSlots,
   type ContainerDecl,
@@ -168,10 +170,15 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
       })
       const kb = readKb(saved)
       await writeKbFiles(root, kb)
+      // 阶段 3：记忆接线——按已提交槽位正文匹配（3.6 由材料驱动，只返回命中项）。
+      // L1 命中消缺口（不再问）、L2 命中只作默认值（仍问一次）。
+      const hits = matchMemory(materialOf(kb.slots.map((s) => s.content)))
       const derived = deriveQuestions(kb.features, {
         slots: kb.slots,
         askCounts: kb.askCounts,
         decls: kb.containers,
+        l1: hits.l1,
+        l2: hits.l2,
       })
       // 推进轮次：把本轮展示的地址计数 +1（6.3 按轮次计）
       const counts = advanceAskCounts(kb.askCounts ?? {}, derived.batch.map((q) => q.address))
@@ -186,6 +193,13 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
         ...(lines.length ? lines : ["  （无——全部槽位已确认）"]),
         derived.stopped.length > 0
           ? `⏸ 因连续 ${STOP_ASK_AFTER} 轮未确认已停问：${derived.stopped.map((q) => q.address).join("、")}（可由业务确认或定稿时 force 收口）`
+          : "",
+        // 记忆效果必须对模型可见，否则它会重复问已被记忆消缺口的项（「少问」机制形同虚设）
+        derived.l1Applied.length > 0
+          ? `🧠 L1 记忆消缺口 ${derived.l1Applied.length} 项（业务曾复述过，**无需再问**）：${derived.l1Applied.join("、")}`
+          : "",
+        hits.l2.length > 0
+          ? `🧠 L2 组织知识命中 ${hits.l2.length} 项（**不消缺口**，仅作默认值请业务点头）：${hits.l2.map((f) => f.content).join("；")}`
           : "",
         "→ 逐项请业务确认后用 reqdoc_answer 落定；不要直接编辑 PRD 文件。",
       ]
@@ -239,15 +253,23 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
       })
       const kb = readKb(saved)
       await writeKbFiles(root, kb)
+      // 阶段 3：记忆接线——按已提交槽位正文匹配（3.6 由材料驱动，只返回命中项）。
+      // L1 命中消缺口（不再问）、L2 命中只作默认值（仍问一次）。
+      const hits = matchMemory(materialOf(kb.slots.map((s) => s.content)))
       const derived = deriveQuestions(kb.features, {
         slots: kb.slots,
         askCounts: kb.askCounts,
         decls: kb.containers,
+        l1: hits.l1,
+        l2: hits.l2,
       })
       return [
         `✅ 已确认 \`${args.address}\`（来源 ${args.source}${args.reason ? `：${args.reason}` : ""}）。`,
         `覆盖率：${kbCoverage(kb)}；剩余本轮该填 ${derived.batch.length} 项。`,
         derived.unclosed.length > 0 ? `⚠ 仍未收口：${derived.unclosed.join("、")}` : "",
+        derived.l1Applied.length > 0
+          ? `🧠 L1 记忆消缺口 ${derived.l1Applied.length} 项（无需再问）：${derived.l1Applied.join("、")}`
+          : "",
       ]
         .filter(Boolean)
         .join("\n")

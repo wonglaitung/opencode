@@ -7,6 +7,8 @@
 import {
   deriveQuestions,
   kbGate,
+  matchMemory,
+  materialOf,
   requiredSlots,
   currentInProgressStage,
   getDefinition,
@@ -200,11 +202,19 @@ export function buildStateBar(workflow: WorkflowState, stage: string | null): st
       `知识库：必填槽位 ${c.leafFilled}/${c.leafTotal}（${Math.round(c.pct * 100)}%）` +
         `；${gate.pass ? "门禁可通过 ✓" : `未就绪：${gate.reasons.join("；")}`}`,
     )
-    const open = deriveQuestions(kb.features, { slots: kb.slots, askCounts: kb.askCounts, decls: kb.containers })
+    const hits = matchMemory(materialOf(kb.slots.map((sl) => sl.content)))
+    const open = deriveQuestions(kb.features, {
+      slots: kb.slots,
+      askCounts: kb.askCounts,
+      decls: kb.containers,
+      l1: hits.l1,
+      l2: hits.l2,
+    })
     if (open.all.length > 0) {
       lines.push(
         `待确认槽位 ${open.all.length} 项${open.batch.length > 0 ? `（本轮问 ${open.batch.length}）` : ""}` +
-          `${open.stopped.length > 0 ? `；已停问 ${open.stopped.length} 项` : ""}`,
+          `${open.stopped.length > 0 ? `；已停问 ${open.stopped.length} 项` : ""}` +
+          `${open.l1Applied.length > 0 ? `；L1 记忆已消缺口 ${open.l1Applied.length} 项` : ""}`,
       )
     }
   } else if (getDefinition(workflow.type).type === "reqdoc") {

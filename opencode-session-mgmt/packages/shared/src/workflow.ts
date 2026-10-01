@@ -569,7 +569,7 @@ export const REQDOC: WorkflowDefinition = {
 
     { id: "reqdoc-r24", stage: "prd", text: "组装幂等门禁（定稿复核）：reqdoc_assemble 会把当前槽位摘要（<!-- kb-digest -->）内嵌进产物。review_submit 定稿时会重读源 md 比对内嵌摘要与当前槽位——**不一致即拒绝**：若槽位已变更，请 reqdoc_assemble 重新组装（过期产物）；若槽位未变更则产物被手工改动，请还原后重组装。手写或编辑过的 PRD（无内嵌摘要）同样会被拦。缺料字段如实标 [缺省] 并附 reason，不要为凑覆盖率编造内容。" },
     { id: "reqdoc-r31", stage: "prd", text: "字段定义（进入 5.k.2.1 的 field 类槽位，逐字段与业务确认）：对每个功能点的输入字段逐一定义——字段名、类型、长度/精度、是否必填、取值域/约束、来源系统/接口——并写入 5.k.2.1 下对应 field 类槽位（reqdoc_ingest 时 kind=\"field\"），逐字段与业务确认后由 reqdoc_answer 落定。**确无结构化输入字段的，用 containers 参数声明 \"5.k.1.2.1\": {required: false, reason: <理由>}**（同样 4.1 无术语时声明 \"4.1\"），否则 kbGate 会因必填容器未覆盖而拦截。字段定义是需求可实施性的直接来源，缺失时业务无法据此开发。" },
-    { id: "reqdoc-r32", stage: "prd", text: "流程图生成（prd 阶段，P3.12）：渲染每个功能点时，若满足以下任一条件，须在 5.k.2.13 流程图 内嵌 Mermaid 流程图（flowchart TD 或 sequence diagram）：(1) 功能点涉及 3 步以上的主流程（含分支/循环）；(2) 功能点涉及多角色交互（如客户→系统→审批人）；(3) 业务在 rules/edge 阶段已提供或确认过流程图（02_流程与数据 扫描提取）。不满足时任选「● 不涉及」。流程图以 Mermaid 语法内嵌 PRD 正文 5.k.2.13 小节（用 ```mermaid 围栏包裹），不单独落盘附_流程图/（除非流程图超长超一屏才拆分独立文件并在 5.k.2.13 引用路径）。" },
+    { id: "reqdoc-r34", stage: "prd", text: "流程图生成（prd 阶段，P3.12）：渲染每个功能点时，若满足以下任一条件，须在 5.k.2.13 流程图 内嵌 Mermaid 流程图（flowchart TD 或 sequence diagram）：(1) 功能点涉及 3 步以上的主流程（含分支/循环）；(2) 功能点涉及多角色交互（如客户→系统→审批人）；(3) 业务在 rules/edge 阶段已提供或确认过流程图（02_流程与数据 扫描提取）。不满足时任选「● 不涉及」。流程图以 Mermaid 语法内嵌 PRD 正文 5.k.2.13 小节（用 ```mermaid 围栏包裹），不单独落盘附_流程图/（除非流程图超长超一屏才拆分独立文件并在 5.k.2.13 引用路径）。" },
     // ---- review 业务确认（核心）----
     { id: "reqdoc-r15", stage: "review", text: "review 是唯一不可由 AI 自行推进的阶段（必须经 review_submit），确保业务真正理解并确认 PRD 要点。" },
     { id: "reqdoc-r16", stage: "review", text: "将 PRD 拆分为可确认要点（业务目标 / 核心字段 / 异常规则 / 合规要求），comprehension_add 逐段复述输出。" },

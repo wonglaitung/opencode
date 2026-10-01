@@ -74,6 +74,12 @@ describe("reqdoc 上下文预算基线", () => {
     expect(offenders).toEqual([])
   })
 
+  test("★ 规则 id 唯一（阶段 3：曾出现两条 reqdoc-r32 同 id）", () => {
+    const ids = rules.map((r) => r.id)
+    const dup = ids.filter((id, i) => ids.indexOf(id) !== i)
+    expect(dup).toEqual([])
+  })
+
   test("★ prd 阶段注入已显著下降（重构 2c 验收 #9）", () => {
     // 基线 6517 字符（打分管线 8 条规则）。2c 删 r21/r23 并改写 r14/r20/r24/r31 后应明显下降。
     expect(sum(rules.filter((r) => r.stage === "prd"))).toBeLessThan(4000)

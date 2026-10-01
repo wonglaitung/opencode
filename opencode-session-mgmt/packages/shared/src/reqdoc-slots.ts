@@ -379,17 +379,24 @@ export interface DerivedQuestions {
   stopped: OpenQuestion[]
   /** 未收口项 = 停问项 + conflict 项；供 kbGate 拦门禁（6.5） */
   unclosed: string[]
+  /** 本次因 L1 记忆命中而消缺口的地址（3.6 规则 1）——**必须对模型可见**，
+   *  否则它会重复追问已被记忆确认过的项，等于「少问」机制失效。 */
+  l1Applied: string[]
 }
 
 /**
  * 派生开放项全量（不分批、不剔除停问项）——`deriveQuestions` 的内核。
  * 停问判定：槽位自身 `askCount` 或调用方传入的 `askCounts[addr]` 达到 STOP_ASK_AFTER 即停问。
  */
-function deriveAll(features: readonly ReqdocFeature[], opts: DeriveOptions): OpenQuestion[] {
+function deriveAll(
+  features: readonly ReqdocFeature[],
+  opts: DeriveOptions,
+): { questions: OpenQuestion[]; l1Applied: string[] } {
   const slots = opts.slots ?? []
   const l1 = (opts.l1 ?? []).filter((t) => !t.retired)
   const l2 = (opts.l2 ?? []).filter((f) => !f.retired)
   const out: OpenQuestion[] = []
+  const l1Applied: string[] = []
 
   // 1) 必填叶子（容器不进来——6.2.1.1）
   for (const addr of requiredSlots(features)) {
@@ -404,7 +411,10 @@ function deriveAll(features: readonly ReqdocFeature[], opts: DeriveOptions): Ope
       if (activeSlots(slots, addr).some((s) => s.status === "confirmed")) continue
       const term = l1.find((t) => t.term === name)
       // L1 消缺口：内部简称已被业务复述确认过；行业通用属正常行话、允许使用（3.2）
-      if (term && (term.kind === "内部简称" || term.kind === "行业通用")) continue
+      if (term && (term.kind === "内部简称" || term.kind === "行业通用")) {
+        l1Applied.push(addr)
+        continue
+      }
       const guess = term
         ? `${term.term} 我理解是${term.definition}，对吗？`
         : l2.find((f) => f.content.includes(name))
@@ -418,7 +428,7 @@ function deriveAll(features: readonly ReqdocFeature[], opts: DeriveOptions): Ope
       })
     }
   }
-  return out
+  return { questions: out, l1Applied }
 }
 
 /** 是否术语容器（`4.1`）；字段容器（`5.k.2.1`）返回 false。 */
@@ -457,17 +467,18 @@ export function deriveOpenQuestions(
  */
 export function deriveQuestions(features: readonly ReqdocFeature[], opts: DeriveOptions = {}): DerivedQuestions {
   const slots = opts.slots ?? []
-  const all = deriveAll(features, opts)
-  const active = all.filter((q) => q.askCount < STOP_ASK_AFTER)
-  const stopped = all.filter((q) => q.askCount >= STOP_ASK_AFTER)
+  const { questions, l1Applied } = deriveAll(features, opts)
+  const active = questions.filter((q) => q.askCount < STOP_ASK_AFTER)
+  const stopped = questions.filter((q) => q.askCount >= STOP_ASK_AFTER)
   // conflict 项：未收口，但不由 deriveAll 产出（它们是已存在的槽位，非开放项）
   const conflicts = slots.filter((s) => s.status === "conflict").map((s) => s.address)
   const unclosed = [...new Set([...stopped.map((q) => q.address), ...conflicts])]
   return {
-    all,
+    all: questions,
     stopped,
     batch: active.slice(0, QUESTIONS_PER_TURN),
     unclosed,
+    l1Applied,
   }
 }
 
