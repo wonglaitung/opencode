@@ -529,16 +529,16 @@ export const REQDOC: WorkflowDefinition = {
   hasCommitGate: false,
   rules: [
     // ---- global：所有阶段通用 ----
-    { id: "reqdoc-r1", stage: "global", text: "会话开始时，调用 workflow_start 初始化工作流（开发者说「启动/开始 reqdoc 工作流」时也调用它，不要仅用文字回复）。" },
+    { id: "reqdoc-r1", stage: "global", text: "会话开始时调用 workflow_start 初始化工作流（开发者说「启动/开始 reqdoc 工作流」时也调用它，不要仅用文字回复）。定稿完成（review_submit 通过）后建议 /new 开始下一个需求，保持统计隔离。" },
     { id: "reqdoc-r2", stage: "global", text: "采用渐进式分段引导，不要一次性抛出所有问题；单次提问最多 5 个问题，每个问题必须附 A/B/C 选项并标注【默认推荐项】（业务回复「同意默认」即按推荐确认）；同一需求追问最长 3 轮，3 轮后仍未澄清项标 [缺省] 进入下一环节，避免业务有被「质问」的挫败感。提问一律用业务语言，严禁出现「高并发、幂等性、API」等纯技术词汇——同一含义必须转述为业务说法（如并发重复提交→「同一笔交易被重复点了几次怎么处理」）。" },
-    { id: "reqdoc-r3", stage: "global", text: "阶段可能完成时，先输出摘要并询问确认；仅业务明确表示「确认/可以」才算确认——模糊表态不算。确认后进入下一阶段即自动确认（approve）本阶段（工具强制，无需单独调 workflow_advance(action=approve)）；如需返工回到本需求用 workflow_revisit，不要用「进入下一阶段」绕过。询问确认时须显式点明所确认的阶段名（如「【边界与异常 阶段】以上边界与异常是否确认？」），不得用笼统的「以上流程与规则是否确认」。" },
+    { id: "reqdoc-r3", stage: "global", text: "阶段推进纪律：阶段可能完成时先输出摘要并询问确认，仅业务明确「确认/可以」才算（模糊表态不算），询问时须点明所确认的阶段名。确认后进入下一阶段即自动确认上一阶段（工具强制，无需单独调 approve）。业务说「回到XX」时立即 workflow_revisit(stage=XX)——**绝不自行判断阶段已完成，也不要用「进入下一阶段」绕过**。" },
     { id: "reqdoc-r25", stage: "global", text: stageVisibilityRule("业务") },
     { id: "reqdoc-r26", stage: "global", text: "投放/口述 决定未完成前不得推进：需求资料目录（01~05）已建、但业务尚未明确选择「投放材料」还是「直接口述」时，每轮开场都须显式向业务提出二选一（或问清已投放了哪些目录），并停下等待业务明确选择；未获得明确选择不得进入追问、不得先抛其它问题。调用 reqdoc_init 后，必须把工具返回的目录绝对路径**逐行粘贴到你的回复正文里**（不要只写「见工具返回/见上方」——业务可能看不到工具记录），再附「① 投放材料 / ② 直接口述」二选一，不得自行浓缩成「方便您后续放材料」之类不触发动作的话术后直接追问。业务选直接口述时先回知情确认（见 reqdoc-r8），部分投放则仅扫描已投目录。" },
     { id: "reqdoc-r27", stage: "global", text: "关键确认防浅背书：若业务连续 2 轮选择「默认推荐 / 同意默认」，则放弃 A/B/C 默认推荐、当轮改为开放式追问，强制业务对 3 项关键内容给出具体意见——量化目标（给具体数字）、功能范围、权限边界——不得继续走默认。此处不做硬拦截，靠 reqdoc-r22 覆盖度门禁兜底——默认项须用 reqdoc_answer(source=缺省, reason=...) 显式收口才计入覆盖。**静默点默认的内容不得写入记忆**（错误定义会跨需求传播）。" },
     { id: "reqdoc-r28", stage: "edge", text: "先补料再追问：进入边界与异常（edge）追问前，若 01_背景与目标 / 03_制度与合规 / 04_角色与权限 仍全空且业务未选「直接口述」，须先促业务投放其中至少 2 个目录（或确认口述），避免全程 [问答] 兜底导致需求说服力与可追溯性弱；同时提示调用 workflow_baseline(developer_confirmed=true) 录入预估工时与 MTTR 基线，形成 AI 提效对比。已扫描材料充足时可跳过。" },
     { id: "reqdoc-r30", stage: "global", text: "来源真实性：尽量让槽位来源为 [文档]——业务向 01_背景与目标 / 02_流程与数据 / 03_制度与合规 / 04_角色与权限 补充书面材料后重扫 reqdoc_scan。当前无书面材料可直接与业务说明「本次全程 [问答] 兜底，未确认项标 [缺省]」，无需额外确认动作。" },
-    { id: "reqdoc-r4", stage: "global", text: "业务说「回到XX」时，立即调用 workflow_revisit(stage=XX)。绝不自行判断阶段已完成。" },
-    { id: "reqdoc-r5", stage: "global", text: "业务确认完成（review_submit 通过）后，建议执行 /new 开始下一个需求，保持统计隔离。" },
+
+
     // ---- goal 目标与场景 ----
     { id: "reqdoc-r6", stage: "goal", text: "用一两句话引导业务说明：上线后谁在用、解决什么痛点；提炼【核心用户】【业务场景】【业务价值】，表达模糊时给出 A/B/C 选项并标注【默认推荐项】让业务勾选确认。" },
     { id: "reqdoc-r7", stage: "goal", text: "进入 goal 阶段时，主动询问预估人工书写工时（小时）；业务明确给出后调用 workflow_baseline(developer_confirmed=true)。未提供不阻塞；已录入后不必重复询问。" },
@@ -570,9 +570,9 @@ export const REQDOC: WorkflowDefinition = {
     { id: "reqdoc-r34", stage: "prd", text: "流程图生成（prd 阶段，P3.12）：渲染每个功能点时，若满足以下任一条件，须在 5.k.2.13 流程图 内嵌 Mermaid 流程图（flowchart TD 或 sequence diagram）：(1) 功能点涉及 3 步以上的主流程（含分支/循环）；(2) 功能点涉及多角色交互（如客户→系统→审批人）；(3) 业务在 rules/edge 阶段已提供或确认过流程图（02_流程与数据 扫描提取）。不满足时任选「● 不涉及」。流程图以 Mermaid 语法内嵌 PRD 正文 5.k.2.13 小节（用 ```mermaid 围栏包裹），不单独落盘附_流程图/（除非流程图超长超一屏才拆分独立文件并在 5.k.2.13 引用路径）。" },
     // ---- review 业务确认（核心）----
     { id: "reqdoc-r15", stage: "review", text: "review 是唯一不可由 AI 自行推进的阶段（必须经 review_submit），确保业务真正理解并确认 PRD 要点。" },
-    { id: "reqdoc-r16", stage: "review", text: "将 PRD 拆分为可确认要点（业务目标 / 核心字段 / 异常规则 / 合规要求），comprehension_add 逐段复述输出。" },
-    { id: "reqdoc-r17", stage: "review", text: "业务确认某要点时，立即调用 comprehension_confirm(codeSegmentId=该要点 id)；单次只接受一个要点，逐段确认、禁止一次确认多个。" },
-    { id: "reqdoc-r18", stage: "review", text: "业务追问时详细解释，comprehension_ask 将问答追加到该要点的 explanation。" },
+    { id: "reqdoc-r16", stage: "review", text: "要点拆解与确认：把 PRD 拆为可确认要点（业务目标/核心字段/异常规则/合规要求），comprehension_add 逐段复述输出。业务确认某要点立即 comprehension_confirm(codeSegmentId=该要点 id)——**单次只接受一个要点，禁止一次确认多个**。业务追问时用 comprehension_ask 把问答追加到该要点。" },
+
+
     { id: "reqdoc-r19", stage: "review", text: "每个要点须达成终态（confirm 接受 / manual 自处理），不允许 pending/rejected 悬空；拒绝的要点先 rewrite 重写或 manual 定论，全部定论且前序阶段（goal/rules/edge/prd）全部 approved 后才可 review_submit；清单四项须全为 true，否则回到 edge/prd。通过率低说明要点含糊，应结合拒绝意见重写，而非简单重试。" },
   ],
 }

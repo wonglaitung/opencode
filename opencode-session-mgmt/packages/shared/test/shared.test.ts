@@ -281,6 +281,12 @@ describe("WorkflowDefinition 注册表（3.2）", () => {
     // 阶段 3：r33 填槽纪律 + r9/r10（主流程推演，已由槽位清单承载）删除
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r33" && r.text.includes("批量起草"))).toBe(true)
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r9" || r.id === "reqdoc-r10")).toBe(false)
+    // 阶段 3：规则合并（r3+r4、r1+r5、r16+r17+r18）后，纪律不得丢失——
+    // 「单次只确认一个要点」「revisit 不得自行判断阶段」是关键约束，须仍出现在某条规则里。
+    const allText = REQDOC.rules.map((r) => r.text).join("\n")
+    expect(allText).toContain("单次只接受一个要点")
+    expect(allText).toContain("workflow_revisit")
+    expect(allText).toContain("/new")
     // 重构 2c：r14/r23/r24/r31 已改写为组装路径，不再点名已删工具
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r14" && r.text.includes("reqdoc_assemble") && r.text.includes("严禁用 write 手写"))).toBe(true)
     // 重构 2c：打分卡门禁已删，edge 阶段改为槽位覆盖度门禁（kbGate）
