@@ -12,21 +12,21 @@
 |------|------|------|----------|----------------|
 | [session-management.md](session-management.md) | 设计文档 | **主设计文档**（通用机制 / 架构 / CLI / 统计 / 部署 / 评测 / **方法论基础置顶：AI 编码质量管控四支柱框架（第 0 章）**；四支柱为主线（6 规约 / 7 知识 / 8 协同 / 9 度量），8.7 含混合开发与 open_ide 文件锁；两个工作流的专属内容已拆到下两行文件） | [CLAUDE.md](../CLAUDE.md)、[README.md](../README.md)、[.opencode/agent/rules-reviewer.md](../.opencode/agent/rules-reviewer.md)、[deployment.md](deployment.md)、[collector-spec.md](collector-spec.md) 引用其内容 | 改名需同步 5 处引用；一般不主张 |
 | [workflow-sdlc.md](workflow-sdlc.md) | 设计文档 | 工作流一：sdlc 软件开发定义（阶段 / 四清单 / hasCommitGate）、12 条规则全文、场景一~四、审查清单、统计口径、评测场景 | [session-management.md](session-management.md)（3.2/6.1/8.3/8.5/9 指针指向其章）、[deployment.md](deployment.md)（6.1 对话示例） | 可（同步引用方）；**新增文档进 docs/ 先登记本表** |
-| [workflow-reqdoc.md](workflow-reqdoc.md) | 设计文档 | 工作流二：reqdoc 需求书定义（双通道）、需求资料目录契约、24 条规则全文、PRD 打分卡、追问探针、渲染结构校验、专属工具、场景五、评测 | [session-management.md](session-management.md)（3.2/6.1/6.2/8.3/8.5/9 指针指向其章）、[reqdoc-prd-template.md](reqdoc-prd-template.md) | 可（同步引用方）；**新增文档进 docs/ 先登记本表** |
+| [workflow-reqdoc.md](workflow-reqdoc.md) | 设计文档 | 工作流二：reqdoc 需求书定义、需求资料目录契约、25 条规则全文、**知识库门禁（kbGate 唯一门禁）**、开放项派生、组装与幂等、专属工具、评测 | [session-management.md](session-management.md)（3.2/6.1/6.2/8.3/8.5/9 指针指向其章）、[reqdoc-prd-template.md](reqdoc-prd-template.md) | 可（同步引用方）；**新增文档进 docs/ 先登记本表** |
 | [collector-spec.md](collector-spec.md) | 设计文档 | 收集服务（collector）规范：三端点、聚合、容错 | 无入站引用（独立规范） | 可，但内容被作为部署/开发依据 |
 | [deployment.md](deployment.md) | 设计文档 | **部署与使用手册**（新人先看）：装 OpenCode、启用插件、CLI、收集服务、内网隔离、FAQ | [README.md](../README.md) 链接；自身引用 [qwen3.6-27b.chat-template.jinja](qwen3.6-27b.chat-template.jinja) | 改名需同步 README.md |
 | [upstream-sync.md](upstream-sync.md) | 设计文档 | 上游同步方案：remote 布局、同步命令、冲突预案、同步记录 | [README.md](../README.md)、[CLAUDE.md](../CLAUDE.md)、[.opencode/command/sync-upstream.md](../.opencode/command/sync-upstream.md)、[deployment.md](deployment.md) | 改名需同步 4 处引用 |
 | [mixed-development-workflow.md](mixed-development-workflow.md) | 设计文档 | ~~混合开发工作流参考~~ **已并入 [session-management.md](session-management.md) 8.7**（open_ide 文件锁 / 人机协同写码边界），本文件删除，勿再引用 | — | — |
 | [leadership-brief.md](leadership-brief.md) | 设计文档 | **方案汇报材料**（给管理层）：SDLC 工作流价值、退出风险/ROI 回应、兼容现状、决策请求（技术细节见 session-management.md） | 无入站引用 | 可 |
 | [leadership-brief-reqdoc.md](leadership-brief-reqdoc.md) | 设计文档 | **reqdoc 汇报材料**（给管理层）：需求书工作流价值、退出风险/ROI 回应、质量飞轮三支柱、兼容现状、决策请求（技术细节见 workflow-reqdoc.md）；与 leadership-brief.md 并列、同一七节骨架 | 无入站引用 | 可 |
-| [reqdoc-prd-template.md](reqdoc-prd-template.md) | 运行时资源 | reqdoc PRD 模板的 **md 渲染载体与权威源**（prd 阶段由服务端 `reqdoc_render_skeleton` 读取并逐字生成骨架） | **代码硬引用**：[template.ts](../packages/plugin/src/template.ts)、[workflow.ts](../packages/shared/src/workflow.ts)、[pack-bundle.sh](../scripts/pack-bundle.sh)、[template.test.ts](../packages/plugin/test/template.test.ts) | **不可改名 / 不可移出 docs/ 根**（骨架生成机制按 `docs/<此文件名>` 解析，移动即破坏） |
+| [reqdoc-prd-template.md](reqdoc-prd-template.md) | 运行时资源 | reqdoc PRD 模板的 **md 渲染载体与权威源**（prd 阶段由服务端 `reqdoc_assemble` 读取并逐字投影骨架） | **代码硬引用**：[template.ts](../packages/plugin/src/template.ts)、[workflow.ts](../packages/shared/src/workflow.ts)、[pack-bundle.sh](../scripts/pack-bundle.sh)、[template.test.ts](../packages/plugin/test/template.test.ts) | **不可改名 / 不可移出 docs/ 根**（组装投影机制按 `docs/<此文件名>` 解析，移动即破坏） |
 | [reqdoc-kb-refactor.md](reqdoc-kb-refactor.md) | 设计文档 | **reqdoc 重构提案（未实施）**：需求知识库（Slot-filling KB）目标架构——五份平行表示坍缩为槽位、文档改构建产物、追问与打分改服务端派生、记忆按污染风险分层（跨工作流共享）、上下文预算与封顶机制、工具与规则精简清单、**四阶段落地次序**、回归证据三层 golden、迁移与验收 | 无入站引用（提案）；实现依据 | 可（落地后内容并入 workflow-reqdoc.md 并删除本文） |
 | [qwen3.6-27b.chat-template.jinja](qwen3.6-27b.chat-template.jinja) | 部署参考 | 部署模型 qwen3.6-27b 的 chat template（vLLM 部署用） | [deployment.md](deployment.md) | 可（同步 deployment.md） |
 | [deploy-sync.md](deploy-sync.md) | 部署参考 | **部署同步指南**：三个插件 + CLI 同步到 Windows 目标的步骤 | 无入站引用 | 可 |
 
 ## 关键约束速览
 
-- **[reqdoc-prd-template.md](reqdoc-prd-template.md) 既是运行时载体也是权威源**：prd 阶段由服务端 `reqdoc_render_skeleton` 读取并逐字生成骨架，内容以本文件为准。
+- **[reqdoc-prd-template.md](reqdoc-prd-template.md) 既是运行时载体也是权威源**：prd 阶段由服务端 `reqdoc_assemble` 读取并逐字投影骨架，内容以本文件为准。
   渲染严格逐字遵循本模板（reqdoc-r20 铁律，见 [workflow-reqdoc.md](workflow-reqdoc.md) 3 章维护约定 / 4 章规则全文）。
   历史上存在对应的 `模版.docx` 权威源（已删除），其全部内容已固化进本 md，后续改模板直接改本文件即可。
 - **[reqdoc-prd-template.md](reqdoc-prd-template.md) 的位置是代码契约**：[template.ts](../packages/plugin/src/template.ts) 按 `packages/plugin/src` 上溯三级解析到
