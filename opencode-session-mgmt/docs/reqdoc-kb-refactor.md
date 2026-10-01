@@ -1442,7 +1442,15 @@ KB 横切，不挂任何 stage：goal/rules/edge 为采集与填槽期，prd 为
 把 44 项新测试搬到**旧代码 worktree**（自建 `node_modules` 让解析指向旧版）跑，10 项失败，
 证明这些护栏确实锁住了修复而非自证。**这个方法（用旧代码验新测试）我该早点采用。**
 
-**修复后**：560 项测试全绿 + typecheck 0 错 + `acceptance:derive` 11/11。
+**同一轮顺手修掉的活文本漂移**：`conventions/reqdoc/06、07` 是**随插件注入模型的规约文本**
+（同时被 `reqdoc_review_conventions` 用来点评初稿），却仍写着已移除的机制——
+`reqdoc_probe / reqdoc_score / reqdoc_check / reqdoc_field_dict`、打分卡八维度、探针覆盖、渲染校验。
+已按现状改写：工具表换成当前 23 个真实工具，「打分维度」换成 `review_submit` 的四项清单
+（completeness / clarity / edgeCoverage / resolution），06 的「与打分卡呼应」换成定稿门禁两项。
+**核实过 eval 不受影响**：`eval-rules` 只带工具 schema、不读这些文件，八维评分在 `run.ts`/`score.ts` 独立通道仍活
+（`REQDOC_SCORE_DIMS` 被其引用，非死代码——差点误删，查了引用方才作罢）。
+
+**修复后**：563 项测试全绿 + typecheck 0 错 + `acceptance:derive` 11/11。
 `p0-adversarial.test.ts` 累计 53 项。
 
 **顺带发现**：`node_modules/sm-plugin` 是 9 月的旧拷贝（非 symlink），
