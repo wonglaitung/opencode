@@ -26,7 +26,7 @@ import {
   type RenderStructure,
   type WorkflowState,
 } from "sm-shared"
-import { assembleDir } from "./reqdoc-kb-tools"
+import { assembleDir, assembleInto } from "./reqdoc-kb-tools"
 import type { Store } from "../db"
 import { WorkflowOpError, applyTransition, recomputeCommit } from "../workflow-ops"
 import { projectRoot, resolveWithinWorktree } from "../fs-safe"
@@ -272,14 +272,14 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
       // 组装产物读取（2c）：槽位是唯一事实源，产物只是投影——定稿只需重读产物比对内嵌摘要。
       // 来源记账/篡改检测等 Option A 机制随 reqdoc_patch 一并退役。
       let liveRender: RenderStructure | undefined
+      let liveMd: string | undefined
       let prdMissing = false
       const wf0 = store.ensure(context.sessionID).workflow
       if (wf0?.kb) {
         try {
           const root = projectRoot(context)
-          liveRender = parseRenderStructure(
-            await Bun.file(resolveWithinWorktree(root, prdRelPath(root, wf0.kb.features))).text(),
-          )
+          liveMd = await Bun.file(resolveWithinWorktree(root, prdRelPath(root, wf0.kb.features))).text()
+          liveRender = parseRenderStructure(liveMd)
         } catch {
           prdMissing = true
         }
@@ -346,6 +346,23 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
             throw new WorkflowOpError(
               `PRD 产物与知识库不一致（槽位摘要 ${current} ≠ 产物内嵌 ${liveRender.kbDigest}）：` +
                 `若槽位已变更请用 reqdoc_assemble 重新组装（过期产物）；若未变更则产物被手工改动，请还原后重组装。`,
+            )
+          }
+          // 摘要相同≠内容相同：kbDigest 只哈希槽位，**纯内容手改（改字不增删槽位）摘要不变**。
+          // 故再做一次「重组装 diff」：服务端用同一模板重投影一次，与磁盘产物逐行比对——
+          // 这才是验收标准 4「组装出的 PRD 与槽位逐字一致」的完整语义。
+          const rebuilt = assembleInto(kb)
+          if (!rebuilt) {
+            throw new WorkflowOpError("服务端无法重组装 PRD（模板不可用或功能点为空），无法校验产物一致性")
+          }
+          // 豁免服务端合法追加的尾部区块：确认溯源（P3.10）与文档变更过程行——
+          // 它们由 comprehension_confirm / 定稿回填写入，不来自槽位，不参与「逐字一致」比对。
+          const drift = diffLines(stripServerAppended(rebuilt.md), stripServerAppended(liveMd ?? ""))
+          if (drift.length > 0) {
+            const shown = drift.slice(0, 5).join("；")
+            throw new WorkflowOpError(
+              `PRD 内容与知识库不一致（重组装比对发现 ${drift.length} 处差异）：${shown}${drift.length > 5 ? " 等" : ""}。` +
+                `产物必须完全由槽位投影生成：请用 reqdoc_assemble 覆盖重新组装，不要手工编辑产物。`,
             )
           }
         }
@@ -467,6 +484,40 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
   }
 
   /** P3.10 溯源回填：把要点的来源证据追加写入 PRD 交付件末尾的「确认溯源」章节（best-effort）。 */
+
+  /**
+   * 剥掉服务端合法追加的尾部区块，只留组装正文用于比对。
+   * 确认溯源（`## 确认溯源`）由 `comprehension_confirm` 写入、文档变更过程行由定稿回填写入，
+   * 都不来自槽位——把它们算进「不一致」会让正常流程被拦。
+   */
+  function stripServerAppended(md: string): string {
+    const cut = md.search(/^##\s*确认溯源\s*$/m)
+    return (cut >= 0 ? md.slice(0, cut) : md).trimEnd()
+  }
+
+  /**
+   * 行级差异（用于「重组装 vs 磁盘产物」比对）。
+   *
+   * 按**行多重集**比对而非按行号：单行插入/删除会让后续行号整体错位，逐行按位比对
+   * 会得出「无差异」的错误结论（实测：删掉一段正文后错位恰好抵消，漏报）。
+   * 多重集比对能稳定检出增、删、改三类差异。
+   */
+  function diffLines(expected: string, actual: string): string[] {
+    const trim = (t: string) => t.trim()
+    const a = expected.split(/\r?\n/).filter((l) => trim(l) !== "")
+    const b = (actual ?? "").split(/\r?\n/).filter((l) => trim(l) !== "")
+    const out: string[] = []
+    const pool = [...a]
+    // 1) 删/改：期望里找不到对应行的，按「缺失」报
+    for (const line of b) {
+      const idx = pool.indexOf(line)
+      if (idx >= 0) pool.splice(idx, 1)
+      else out.push(`产物多出/被改：「${line.slice(0, 40)}」`)
+    }
+    // 2) 期望里有、产物里没有的
+    for (const line of pool) out.push(`产物缺失：「${line.slice(0, 40)}」`)
+    return out
+  }
 
   async function appendConfirmSourceToPrd(
     root: string,

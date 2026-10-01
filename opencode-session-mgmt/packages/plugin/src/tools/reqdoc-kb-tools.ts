@@ -412,7 +412,12 @@ function kbCoverage(kb: ReqdocKbState): string {
   return `${filled}/${req.length} 必填（${req.length ? Math.round((filled / req.length) * 100) : 0}%）`
 }
 
-/** 调用组装：槽位投影为整篇 PRD（`assembleDoc` 在 shared，纯函数）。 */
-function assembleInto(kb: ReqdocKbState) {
+/**
+ * 调用组装：槽位投影为整篇 PRD（`assembleDoc` 在 shared，纯函数）。
+ *
+ * 导出供 `review.ts` 的定稿校验复用——组装与校验必须用同一函数、同一模板，
+ * 否则两处各算一遍会漂移（定稿比对必然失真）。
+ */
+export function assembleInto(kb: ReqdocKbState) {
   return assembleDoc(kb.slots, kb.features, loadReqdocTemplate(), { containers: kb.containers })
 }

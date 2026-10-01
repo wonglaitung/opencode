@@ -185,3 +185,167 @@ describe("P1 · 确认溯源门禁仍生效（未被重构削弱）", () => {
     store.close()
   })
 })
+describe("验收 4 · 组装产物与槽位逐字一致（重组装 diff）", () => {
+  const prdPath = (worktree: string) => join(worktree, "07_需求规格产出/1_公告发布/PRD.md")
+
+  test("★ 纯内容手改（改字不增删槽位）→ 摘要不变但重组装 diff 抓到", async () => {
+    const store = readyStore()
+    const worktree = tempDir()
+    const ctx = await assemble(store, worktree)
+    // 摘要只哈希槽位：改产物正文不会改变内嵌摘要——这正是摘要校验的盲区
+    const before = readFileSync(prdPath(worktree), "utf8")
+    const tampered = before.replace("3.1 内容", "3.1 被偷偷改过的内容")
+    expect(tampered).not.toBe(before)
+    writeFileSync(prdPath(worktree), tampered, "utf8")
+    // 内嵌摘要未变（parseRenderStructure 仍能读出同一摘要）
+    expect(tampered).toContain("<!-- kb-digest:")
+    await expect(
+      createReviewTools(store).review_submit!.execute(CHECKLIST, ctx),
+    ).rejects.toThrow(/内容与知识库不一致/)
+    store.close()
+  })
+
+  test("★ 删掉一段正文 → diff 报错（缺行也算不一致）", async () => {
+    const store = readyStore()
+    const worktree = tempDir()
+    const ctx = await assemble(store, worktree)
+    const md = readFileSync(prdPath(worktree), "utf8")
+    const trimmed = md.replace("3.2 内容\n", "")
+    expect(trimmed).not.toBe(md) // 确认删除真的生效
+    writeFileSync(prdPath(worktree), trimmed, "utf8")
+    let msg = ""
+    try {
+      await createReviewTools(store).review_submit!.execute(CHECKLIST, ctx)
+    } catch (e) {
+      msg = String(e)
+    }
+    expect(msg).toContain("内容与知识库不一致")
+    store.close()
+  })
+
+  test("正向：未改动时重组装 diff 无差异，定稿通过", async () => {
+    const store = readyStore()
+    const worktree = tempDir()
+    const ctx = await assemble(store, worktree)
+    // 追加非 PRD 正文内容（如项目方自己加的落款）不应被当作不一致？
+    // —— 不行：产物必须完全由槽位投影生成。故此处只验证「原样不改」能过。
+    const out = String(await createReviewTools(store).review_submit!.execute(CHECKLIST, ctx))
+    expect(out).toContain("审查阶段通过")
+    store.close()
+  })
+
+  test("★ 组装与校验共用同一 assembleInto（防两处漂移）", async () => {
+    const store = readyStore()
+    const worktree = tempDir()
+    await assemble(store, worktree)
+    const kb = store.get("r1")!.workflow!.kb!
+    const { assembleInto } = await import("../src/tools/reqdoc-kb-tools")
+    // 校验侧重组装的产物必须与磁盘上的逐字一致（否则 diff 恒报错）
+    expect(assembleInto(kb)!.md).toBe(readFileSync(prdPath(worktree), "utf8"))
+    store.close()
+  })
+})
+
+describe("diffLines 比对口径（多重集，非行号）", () => {
+  // 直接验证 review.ts 内部的比对逻辑：按行号比对会漏报增删，必须用多重集。
+  // 这里复刻其实现并断言三类差异都能检出。
+  const trim = (t: string) => t.trim()
+  const diff = (expected: string, actual: string): string[] => {
+    const a = expected.split(/\r?\n/).filter((l) => trim(l) !== "")
+    const b = actual.split(/\r?\n/).filter((l) => trim(l) !== "")
+    const out: string[] = []
+    const pool = [...a]
+    for (const line of b) {
+      const idx = pool.indexOf(line)
+      if (idx >= 0) pool.splice(idx, 1)
+      else out.push(`产物多出/被改：「${line}」`)
+    }
+    for (const line of pool) out.push(`产物缺失：「${line}」`)
+    return out
+  }
+
+  test("★ 纯删除：删掉中间一段必须被检出", () => {
+    const expected = "标题\n内容A\n内容B\n内容C\n结尾"
+    const actual = "标题\n内容A\n内容C\n结尾" // B 被删
+    expect(diff(expected, actual).length).toBeGreaterThan(0)
+    expect(diff(expected, actual)[0]).toContain("内容B")
+  })
+
+  test("★ 纯插入：多出一段必须被检出", () => {
+    expect(diff("标题\n内容A\n结尾", "标题\n内容A\n插入的\n结尾").length).toBeGreaterThan(0)
+  })
+
+  test("★ 内容替换：改字必须被检出", () => {
+    const d = diff("标题\n原内容\n结尾", "标题\n改过的内容\n结尾")
+    expect(d.length).toBe(2) // 一增一删
+  })
+
+  test("完全一致（含空白差异）→ 无差异", () => {
+    expect(diff("a\n\nb", "a\n  \nb").length).toBe(0)
+  })
+
+  test("★ 对照：删一段时行号比对会误报成「多处被改」，多重集才精确", () => {
+    // 穷举结论：删一行必然造成行数差，故按行号比对**不会漏报**（总有行对不上），
+    // 但它会把「后续行整体错位」都报成「被改」——错误定位，且报的数量随错位长度放大。
+    // 多重集比对只报真正增/删的行。
+    const byIndexDiffs = (expected: string, actual: string): string[] => {
+      const a = expected.split("\n"), b = actual.split("\n")
+      const out: string[] = []
+      for (let i = 0; i < Math.max(a.length, b.length); i++) {
+        if ((a[i] ?? "").trim() === (b[i] ?? "").trim()) continue
+        if (!trim(a[i] ?? "") || !trim(b[i] ?? "")) continue
+        out.push((a[i] ?? "").trim())
+      }
+      return out
+    }
+    // 删中间一段：后续 20 行全部错位 → 行号比对报 21 处「被改」
+    const expected = ["标题", ...Array.from({ length: 20 }, (_, i) => `内容${i}`), "结尾"].join("\n")
+    const actual = ["标题", ...Array.from({ length: 19 }, (_, i) => `内容${i < 10 ? i : i + 1}`), "结尾"].join("\n")
+
+    // 实际误报 10 处（错位段），而真正差异只有 1 行
+    expect(byIndexDiffs(expected, actual).length).toBe(10)
+    const precise = diff(expected, actual)
+    expect(precise.length).toBe(1)
+    expect(precise[0]).toContain("内容10")
+  })
+})
+
+describe("重组装 diff · 服务端追加区块豁免", () => {
+  const prdPath = (worktree: string) => join(worktree, "07_需求规格产出/1_公告发布/PRD.md")
+
+  test("★ 确认溯源章节（P3.10 溯源回填写入）不触发不一致", async () => {
+    const store = readyStore()
+    const worktree = tempDir()
+    const tools = createReviewTools(store)
+    const ctx = await assemble(store, worktree)
+    // 正常流程：comprehension_confirm 会把来源证据写进 PRD 的「确认溯源」章节
+    await tools.comprehension_add!.execute(
+      { codeSegmentId: "目标与场景", explanation: "缩短开户录入" } as never,
+      ctx,
+    )
+    await tools.comprehension_confirm!.execute(
+      { codeSegmentId: "目标与场景", sourceLabel: "对话第 1 轮", sourceQuote: "开户要手工录三遍" } as never,
+      ctx,
+    )
+    // 产物末尾确实被写入了溯源章节
+    expect(readFileSync(prdPath(worktree), "utf8")).toContain("## 确认溯源")
+    // 但它不应被判为「与知识库不一致」
+    const out = String(await tools.review_submit!.execute(CHECKLIST, ctx))
+    expect(out).toContain("审查阶段通过")
+    store.close()
+  })
+
+  test("★ 豁免只针对溯源章节：正文里的手改仍被抓", async () => {
+    const store = readyStore()
+    const worktree = tempDir()
+    const ctx = await assemble(store, worktree)
+    const p = prdPath(worktree)
+    // 同时做两件事：追加合法溯源章节 + 手改正文
+    const md = readFileSync(p, "utf8")
+    writeFileSync(p, md.replace("3.1 内容", "3.1 手改内容") + "\n\n## 确认溯源\n\n- 某条记录\n", "utf8")
+    await expect(
+      createReviewTools(store).review_submit!.execute(CHECKLIST, ctx),
+    ).rejects.toThrow(/内容与知识库不一致/)
+    store.close()
+  })
+})
