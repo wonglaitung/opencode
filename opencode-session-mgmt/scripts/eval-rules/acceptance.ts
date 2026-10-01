@@ -142,12 +142,22 @@ async function main() {
     `l1Applied=${second.l1Applied.join("、") || "（空）"}——若为空，模型会重复追问，「少问」机制失效`,
   )
 
-  console.log("\n【验收 3】行业通用缩写：AML/KYC 不应被记忆消缺口（未被业务复述过）")
-  const stillAsked = secondAddrs.includes("4.1.AML") || firstAddrs.includes("4.1.AML")
+  console.log("\n【验收 3】行业通用缩写（AML/KYC）：kind 分类双向生效")
+  // ① 无记忆时仍被问（不得无条件豁免）
   record(
-    "AML/KYC 未被误消缺口（kind 分类生效前仍可问）",
-    stillAsked,
-    `AML 仍在开放项=${stillAsked}——只有 kind=内部简称 且 L1 有条目才消缺口`,
+    "无记忆时 AML 仍进入开放项（不无条件豁免）",
+    firstAddrs.includes("4.1.AML"),
+    `首轮开放项含 4.1.AML=${firstAddrs.includes("4.1.AML")}（材料提到了 AML，未复述过就该问）`,
+  )
+  // ② 记入 L1 且 kind=行业通用 → 消缺口（设计的 kind 分类规则）
+  const withAml = deriveWithMemory(MATERIAL_1, [
+    { term: "AML", definition: "反洗钱", kind: "行业通用", scope: "org", origin: "restated", confirmedAt: 1, fromProject: "p" },
+  ])
+  const withAmlAddrs = withAml.all.map((q) => q.address)
+  record(
+    "★ L1 记入且 kind=行业通用 → 消缺口（不再问）",
+    !withAmlAddrs.includes("4.1.AML") && withAml.l1Applied.includes("4.1.AML"),
+    `L1(kind=行业通用) 后 4.1.AML 在开放项=${withAmlAddrs.includes("4.1.AML")}；l1Applied=${withAml.l1Applied.join("、") || "（空）"}`,
   )
 
   console.log("\n【验收 4】组装幂等：产物与槽位逐字一致，手改能被发现")
@@ -169,13 +179,14 @@ async function main() {
       parsed.kbDigest === kbDigest(slots),
       `产物摘要=${parsed.kbDigest}；槽位摘要=${kbDigest(slots)}`,
     )
-    // 手改产物 → 摘要不变但内容变了；服务端能通过「重组装比对」发现
+    // 手改产物 → 摘要不变（盲区），必须靠 review_submit 的重组装 diff 兜住。
+    // 这里验证盲区确实存在（摘要不变），从而证明第三道网是必需的而非冗余。
     const tampered = doc.md.replace("3.1 的业务内容", "3.1 被手改过的内容")
     const reparsed = parseRenderStructure(tampered)
     record(
-      "手改内容可被检测（重组装比对能发现差异）",
-      tampered !== doc.md,
-      `手改后长度 ${doc.md.length} → ${tampered.length}；幂等摘要仍为 ${reparsed.kbDigest}（故 review_submit 的组装/摘要双校验缺一不可）`,
+      "★ 摘要校验抓不到纯内容手改（证明第三道重组装 diff 必需）",
+      tampered !== doc.md && reparsed.kbDigest === doc.digest,
+      `内容已改=${tampered !== doc.md}；但内嵌摘要仍为 ${reparsed.kbDigest}（与原产物一致）——故必须靠 review_submit 的重组装 LCS 比对`,
     )
   }
 

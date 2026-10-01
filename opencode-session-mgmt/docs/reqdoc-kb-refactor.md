@@ -1374,7 +1374,7 @@ KB 横切，不挂任何 stage：goal/rules/edge 为采集与填槽期，prd 为
 | 1· 业务复述写入 L1（`origin=restated`） | ✓ |
 | 2· **第二个需求中 CRD 完全不被问** | ✓ `l1Applied=4.1.CRD`，剩余 `4.1.AML`、`4.1.KYC` |
 | 2· 消缺口的项对模型可见（`l1Applied` 非空） | ✓ |
-| 3· AML/KYC 未被误消缺口（kind 分类生效） | ✓ |
+| 3· 行业通用缩写（AML/KYC）未被误消缺口 | ✓ 记入 L1 且 `kind=行业通用` 时消缺口；无记忆时仍被问（不无条件豁免）。**此前表述有误**（对抗审查 P2-f）：原文写「未被误消缺口 ✓」但断言测的是"仍被问"，方向相反 |
 | 4· 组装产物内嵌槽位摘要且可读回 | ✓ `5bbcf794c124439a` 双向一致 |
 | 4· 手改内容可被检测 | ✓ |
 | 模型层· **真实模型未就 CRD 提问** | ✓ qwen3 输出只问 `4.1.AML` / `4.1.KYC` |
@@ -1382,6 +1382,23 @@ KB 横切，不挂任何 stage：goal/rules/edge 为采集与填槽期，prd 为
 
 > **模型层实证**：第二个需求里 CRD 已被 L1 记忆消缺口，真实模型（本地 vLLM qwen3）的输出
 > 恰好只包含 `4.1.AML` 与 `4.1.KYC`——**「少问且没丢事实」在真实模型上成立**。
+
+#### 对抗审查 P2 批次修复（2026）
+
+| 项 | 问题 | 修复 |
+|---|---|---|
+| **P2-a** | `AGENTS.md` 整段（约 2000 字）描述已删的 6 个工具 + ≥85 分门禁 + 7 条探针——**仓库最权威的自述**，下一个接手的 AI 会照着它调用不存在的工具 | 改写为槽位 KB 机制（唯一事实源 / 三工具 / kbGate / 记忆 / 定稿三重校验） |
+| **P2-b** | `scope` 字段只写不读：设计声称的「sdlc 记忆不影响 reqdoc 判定」**无任何代码执行**，`scope:"sdlc"` 的 L1 条目会照常消缺口 | `deriveAll` 加 scope 过滤（`sdlc` 作用域记忆在 reqdoc 失效），有测试锁定 |
+| **P2-c** | r11 注入的「探针表」与新机制自相矛盾（说「不需手工维护探针表」后紧跟着表）；表的 `dim` 映射的八维打分卡已不存在 | `ReqdocProbe` → `ReqdocClarifyHint`：剥离 `dim`/`round`（不再对应任何门禁），只保留仍有效的追问话术，明确「清单是唯一依据」 |
+| **P2-d** | CLI `memoryDir()` 硬编码 `homedir()`，不读 `SM_MEMORY_HOME` → 自托管覆盖口下「删文件即遗忘」删错库 | 改为直接复用 `memoryRoot()`，同源由测试锁定 |
+| **P2-e** | 死代码：`renderCheckRubric` / `renderTargetDigest` / `reqdocScoreRubric` / `REQDOC_SCORE_PASS` / `ReqdocScore` / `ReqdocScoreDeduction` / `ReqdocProbes` / `ReqdocFieldDef` | 删除（保留 `REQDOC_SCORE_DIMS`：eval 独立评分通道仍用，设计 4.4 第 3 层）+ 加「已退役机制不得复活」护栏 |
+| **P2-f** | 验收文档不实：标准 5「八维分数可见」已不可能满足却未标作废；验收 3 断言方向与输出文案均错；验收 4 的「手改可检测」是空断言；第 3 层验收**不在 CI** | 标准 5 标作废并给出实际口径；验收 3 改为方向正确的两条断言（无记忆时被问 / L1+行业通用才消缺口）；验收 4 改为验证「摘要抓不到→故第三道网必需」；`acceptance:derive` 接入 CI 作为**不需 secrets 的硬门槛** |
+
+**CI 变更**：`acceptance:derive`（零模型、秒级）此前完全不在 CI 内且会因未配置
+`EVAL_BASE_URL` 而被 `exit 0` 跳过——等于护栏虚设。现作为独立 step 加入，不受该跳过逻辑影响。
+
+**修复后**：540 项测试全绿 + typecheck 0 错 + `acceptance:derive` 8/8。
+`p0-adversarial.test.ts` 累计 31 项（13 P0 + 14 P1 + 4 P2）。
 
 **CI 门槛**：验收 1/2 的核心不变量已下沉为 `reqdoc-memory.test.ts` 的确定性断言
 （`bun test` 必跑）；`bun run acceptance:derive` 为零模型秒级版本（派生链路 5/5）。
@@ -1451,7 +1468,7 @@ KB 横切，不挂任何 stage：goal/rules/edge 为采集与填槽期，prd 为
 2. 同一缩写在第二个需求中**完全不被问**（L1 记忆命中）
 3. 行业通用缩写（AML/KYC/CIPS）不被误要求定义（`kind` 分类生效）
 4. 组装出的 PRD 与槽位逐字一致：手改文档后 `assemble` 幂等校验能发现
-5. 覆盖率、八维分数、开放项数在状态条与汇报中可见且与 `kbGate` 同源
+5. ~~覆盖率、八维分数、开放项数在状态条与汇报中可见且与 `kbGate` 同源~~ **已作废并重写**（对抗审查 P2-f）：八维打分卡 2c 已删，「八维分数可见」不可能满足。现口径 = **必填槽位覆盖率 + 开放项数 + 停问项数 + L1 消缺口数**在状态条（`prompt.ts` 状态栏）与汇报（`stats.ts` 的 `kb`）中可见，且与 `kbGate` 同源（同一 `slotCoverage`/`deriveQuestions`）——有测试锁定同源性。
 6. **开放项集合与冻结清单逐地址相等**（不多不少——不多=少问了可疑，不少=漏问了回归）；
    有记忆场景另需满足 L1 消缺口、L2 **不**消缺口
 7. `bun test` 全绿；覆盖率阈值校准记录在案

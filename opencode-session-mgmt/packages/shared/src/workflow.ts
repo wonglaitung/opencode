@@ -5,7 +5,6 @@
  * 多流程就绪：阶段键/清单/规则/门禁均从 WorkflowDefinition 注册表驱动，而非硬编码。
  * sdlc 与 reqdoc 均已注册（设计文档 session-management.md 3.2 注册表；定义分别见 workflow-sdlc.md 2 章、workflow-reqdoc.md 2 章）。
  */
-import { renderCheckRubric } from "./reqdoc-render"
 
 export type WorkflowType = "sdlc" | "reqdoc"
 
@@ -113,7 +112,6 @@ export interface ReqdocFeature {
  * reqdoc 打分卡八维度（实施方案第三节，满分 100 = Σ max）。
  * 单点定义：reqdoc_score 工具、prd 门禁、状态条/CLI 展示、评测脚本共用。
  * 每维含 `rule`（判定规则）与 `deductionRules`（扣分标准，方案「Agent 后台判定规则与
- * 扣分标准」列），经 reqdocScoreRubric() 生成提示文本——r21 规则文本与工具描述双通道同源，
  * 模型在 edge 打分与追问时即可见完整评分标准。
  */
 export const REQDOC_SCORE_DIMS = [
@@ -187,87 +185,42 @@ export const REQDOC_SCORE_DIMS = [
 /** reqdoc 打分卡维度键（类型安全，消费方遍历 REQDOC_SCORE_DIMS 即可）。 */
 export type ReqdocScoreDimKey = (typeof REQDOC_SCORE_DIMS)[number]["key"]
 
-/** 打分卡达标门禁线（实施方案：≥85 分 + 业务确认才可定稿）。 */
-export const REQDOC_SCORE_PASS = 85
-
 /**
- * 打分卡评分标准文本（实施方案第三节「判定规则与扣分标准」），r21 规则文本与
- * reqdoc_score 工具描述共用同一来源，避免两份漂移。
- * 每维格式：`label满分：判定规则。扣X分：条件；扣Y分：条件`
+ * edge 阶段**追问要点**（不是"探针"）。
+ *
+ * 原为「质量飞轮 P1 探针清单」，与已删的 `reqdoc_probe` 工具/ `probes` 状态一一对应；
+ * 2c 删除那些机制后它成了孤儿：`dim` 映射的八维打分卡已不存在，而 r11 规则一边说
+ * 「不需手工维护探针表」一边把表注入进去——自相矛盾（对抗审查 P2-c）。
+ *
+ * 现在它只保留**仍有效的追问话术**（要真实案例、异常处置、脱敏、权限边界），
+ * 作为「该问什么」的补充提示；实际该问哪些**地址由服务端 `deriveQuestions` 派生**
+ * （槽位缺口 + 容器候选 + 记忆消缺口），此处不参与判定、也不决定轮次。
  */
-export function reqdocScoreRubric(): string {
-  return REQDOC_SCORE_DIMS.map((d) => {
-    const penalties = d.deductionRules.map((p) => `扣${p.points}分：${p.condition}`).join("；")
-    return `${d.label}${d.max}分：${d.rule}${penalties ? `。${penalties}` : ""}`
-  }).join("\n")
-}
-
-/**
- * reqdoc 追问探针清单（质量飞轮 P1「追问可测化」）。
- * 把 edge 阶段该问的内容落成结构化清单，每维映射打分卡维度（扣分项即探针地图）。
- * 单点定义：reqdoc_probe 工具、reqdoc-r11 规则文本、状态条/评测共用——经
- * reqdocProbeRubric() 生成文本注入 r11 与工具描述，自持续「漏问频率前移」改 round 即可。
- * businessValue（角色/痛点/量化目标）由 goal 阶段 reqdoc-r6 负责，不入 edge 清单。
- */
-export interface ReqdocProbe {
-  /** 探针 id（工具/状态/评测共用） */
+export interface ReqdocClarifyHint {
+  /** 要点 id */
   id: string
   /** 业务语言中文名 */
   label: string
-  /** 映射打分卡维度（缺口 → 该维扣分项） */
-  dim: ReqdocScoreDimKey
-  /** 建议追问轮次（1-3；自持续「前移」即改此处） */
-  round: number
   /** 业务语言问题模板（模型转述为 A/B/C + 默认推荐） */
   question: string
 }
 
-export const REQDOC_PROBES: readonly ReqdocProbe[] = [
-  { id: "main_flow", label: "主流程闭环", dim: "flowClosure", round: 1, question: "请举一个最近发生的真实办理案例，描述它从发起到完成的具体步骤（不要泛泛讲流程，先给实例）；给不出实例请先向 01~05 投放材料或确认口述补全。" },
-  { id: "flow_trigger", label: "流程触发条件", dim: "flowClosure", round: 1, question: "什么情况下会开始这笔业务？请结合上面的真实案例说明触发场景。" },
-  { id: "exception", label: "异常处理", dim: "edgeControl", round: 1, question: "请举一个真实发生的异常案例（如某笔交易被重复提交、网络中断或提交失败），说明当时怎么处置的；无真实案例则先投放材料或确认口述补全，不要凭空假设。" },
-  { id: "reverse", label: "逆向撤销/驳回", dim: "edgeControl", round: 2, question: "办错了想撤销、或提交后被驳回，怎么处理？" },
-  { id: "desensitize", label: "敏感字段脱敏", dim: "compliance", round: 2, question: "手机号、身份证这些敏感信息，界面上怎么展示？" },
-  { id: "audit", label: "留痕与复核", dim: "compliance", round: 2, question: "资金或重要操作，要不要留痕、双人复核？" },
-  { id: "authority", label: "权限与机构隔离", dim: "authority", round: 2, question: "谁能看、谁能办？数据在总行/分行/支行之间怎么隔离？" },
+export const REQDOC_CLARIFY_HINTS: readonly ReqdocClarifyHint[] = [
+  { id: "main_flow", label: "主流程闭环", question: "请举一个最近发生的真实办理案例，描述它从发起到完成的具体步骤（不要泛泛讲流程，先给实例）；给不出实例请先向 01~05 投放材料或确认口述补全。" },
+  { id: "flow_trigger", label: "流程触发条件", question: "什么情况下会开始这笔业务？请结合上面的真实案例说明触发场景。" },
+  { id: "exception", label: "异常处理", question: "请举一个真实发生的异常案例（如某笔交易被重复提交、网络中断或提交失败），说明当时怎么处置的；无真实案例则先投放材料或确认口述补全，不要凭空假设。" },
+  { id: "reverse", label: "逆向撤销/驳回", question: "办错了想撤销、或提交后被驳回，怎么处理？" },
+  { id: "desensitize", label: "敏感字段脱敏", question: "手机号、身份证这些敏感信息，界面上怎么展示？" },
+  { id: "audit", label: "留痕与复核", question: "资金或重要操作，要不要留痕、双人复核？" },
+  { id: "authority", label: "权限与机构隔离", question: "谁能看、谁能办？数据在总行/分行/支行之间怎么隔离？" },
 ]
 
-/** 追问探针清单文本（质量飞轮 P1）：reqdoc-r11 规则文本与 reqdoc_probe 工具描述共用同一来源。 */
-export function reqdocProbeRubric(): string {
-  return REQDOC_PROBES.map((p) => `- ${p.label}，建议第 ${p.round} 轮：${p.question}`).join("\n")
+/** 追问要点文本（注入 reqdoc-r11）：作为「该问什么」的补充话术，与派生清单互补。 */
+export function reqdocClarifyHints(): string {
+  return REQDOC_CLARIFY_HINTS.map((p) => `- ${p.label}：${p.question}`).join("\n")
 }
 
-/** 打分卡扣分明细条目（含证据引用，本机留痕可审计）。 */
-export interface ReqdocScoreDeduction {
-  /** 维度键（REQDOC_SCORE_DIMS 之一） */
-  key: ReqdocScoreDimKey
-  /** 该条扣分数（≥1，服务端校验不超出该维度满分） */
-  points: number
-  /** 扣分原因（如「未提及任何异常流程」） */
-  reason: string
-  /** 证据引用（材料片段/文件路径或 [问答] 轮次；含路径仅存本机，汇报不上行） */
-  evidence?: string
-}
 
-/**
- * reqdoc PRD 质量打分卡（实施方案第三节）。经 reqdoc_score 工具写入，total 由服务端 = Σ dims
- * 校验后计算（不信任模型自报总分）。可多次重打覆盖（追问补缺后更新）。sdlc 无此概念，恒缺省。
- * 达标判定 = total ≥ REQDOC_SCORE_PASS（门禁处推导，不存冗余布尔避免漂移）；
- * 追问轮数上限为规则文本约束（reqdoc-r2「最长 3 轮」），不入状态。
- */
-export interface ReqdocScore {
-  /** 各维度实得分：键 → { 实得分, 该维度满分 }（来自 REQDOC_SCORE_DIMS） */
-  dims: Record<ReqdocScoreDimKey, { score: number; max: number }>
-  /** 扣分明细（展示 + 本机留痕；重打即整体替换旧明细） */
-  deductions: ReqdocScoreDeduction[]
-  /** 总分 0-100（服务端 = Σ dims 校验后写入） */
-  total: number
-  /** 业务确认（工具强制 business_confirmed=true；可先记录低分事实再补缺重打） */
-  confirmed: boolean
-  confirmedAt: number | null
-  /** 最近一次打分时间戳（重打覆盖更新） */
-  updatedAt: number
-}
 
 /**
  * reqdoc 追问探针覆盖记录（质量飞轮 P1，reqdoc_probe 工具写入）。
@@ -275,19 +228,6 @@ export interface ReqdocScore {
  * asked 按轮追加去重（保留追问历史供自持续「漏问频率」分析）；gaps 为仍缺口探针。
 
  */
-export interface ReqdocProbes {
-  /** 已问过的探针 id（追加去重，含历史轮次） */
-  asked: string[]
-  /** 仍缺口的探针 id（问过未得全或未问；进入 prd 前如仍缺口须在 reqdoc_score 中如实扣分） */
-  gaps: string[]
-  /** 当前追问轮次（1-3；规则上限「最长 3 轮」） */
-  round: number
-  /** 业务全程选默认（惰性确认）的轮次累计：每轮 reqdoc_probe(business_default=true) 累加，用于 review 软提示需求真实性 */
-  defaultRounds?: number
-  /** 最近一次记录时间戳（覆盖更新） */
-  updatedAt: number
-}
-
 
 
 export interface QualityMetrics {
@@ -374,23 +314,6 @@ export interface ReqdocKbState {
 }
 
 /** reqdoc 字段定义（P2.5 数据字典一项）：逐功能点输入字段的元数据。 */
-export interface ReqdocFieldDef {
-  /** 所属功能点（与已确认功能点名称对应） */
-  feature: string
-  /** 字段名 */
-  name: string
-  /** 类型（如 字符串/数值/日期/枚举） */
-  type: string
-  /** 长度/精度（可选） */
-  length?: string
-  /** 是否必填 */
-  required: boolean
-  /** 取值域/约束（可选，如枚举值、格式） */
-  values?: string
-  /** 来源系统/接口（可选，用于 material 维度证据） */
-  sourceSystem?: string
-}
-
 /** 工作流阶段键（Record 泛化，3.2）。 */
 export type WorkflowStageKey = string
 
@@ -563,7 +486,8 @@ export const REQDOC: WorkflowDefinition = {
     // ---- edge 边界与异常（最关键）----
     // 追问按服务端派生的开放项推进（openItems），不再有独立探针清单：
     // 口径与要求由 deriveQuestions 从槽位缺口派生，模型只负责「问 + 提交 + 确认」。
-    { id: "reqdoc-r11", stage: "edge", text: `按工具返回的「本轮该填」清单追问（清单由服务端从槽位缺口实时派生，随答复收敛，不需手工维护探针表）：${reqdocProbeRubric()}
+    { id: "reqdoc-r11", stage: "edge", text: `按工具返回的「本轮该填」清单追问——**清单是唯一依据**（由服务端从槽位缺口 + 术语候选 + 记忆实时派生，随答复收敛）：${reqdocClarifyHints()}
+（以上是 edge 阶段易漏的追问要点，供参考；**清单里没有的项不要问**，清单有的项不要漏。）
 每轮最多 5 问（见 r2，带 A/B/C 与【默认推荐项】）；主流程/异常类须「先要真实案例再答题」——业务给不出实例则明示缺真实素材、卡住提示投放 01~05，不往下走。**清单里没有的项不要问**；标「默认：…」的说明有记忆可参考，转述成确认式提问（业务点头即可）。
 
 每轮问答后必须回写槽位（唯一事实源，不写则门禁不放行）：提取到的内容批量 reqdoc_ingest（一次最多 8 项）；业务明确答复的立即 reqdoc_answer 落定。同一项连续 ${"2"} 轮未确认会被停问、移出清单——此时不得反复追问，应显式收口（source=缺省 + reason 写明原因）。最多 3 轮；到上限仍未澄清的逐条列出并说明业务可选项：补充材料/口述补全、确认接受 [缺省]、或开新会话继续。` },

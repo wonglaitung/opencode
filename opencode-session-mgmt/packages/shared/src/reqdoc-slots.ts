@@ -423,8 +423,14 @@ function deriveAll(
   const slots = opts.slots ?? []
   // 容错：调用方传错类型（如把 matchMemory 的整个返回值当数组传）退化为空，
   // 而不是让 .filter 抛错——这条路径在 system prompt 构建里，一个笔误会拖垮所有请求。
-  const l1 = Array.isArray(opts.l1) ? opts.l1.filter((t) => !t.retired) : []
-  const l2 = Array.isArray(opts.l2) ? opts.l2.filter((f) => !f.retired) : []
+  //
+  // scope 过滤（P2-b）：此前 scope 只写不读，设计声称的「sdlc 记忆不影响 reqdoc 判定」
+  // 没有任何代码执行——一条 scope:"sdlc" 的 L1 条目会照常参与 reqdoc 消缺口。
+  // 现在只有 org/reqdoc 作用域的记忆能在 reqdoc 生效。
+  const usable = (x: { retired?: boolean; scope?: string }): boolean =>
+    !x.retired && x.scope !== "sdlc"
+  const l1 = Array.isArray(opts.l1) ? opts.l1.filter(usable) : []
+  const l2 = Array.isArray(opts.l2) ? opts.l2.filter(usable) : []
   const out: OpenQuestion[] = []
   const l1Applied: string[] = []
 

@@ -464,3 +464,66 @@ describe("P1 · memory_recall 工作流校验与退役", () => {
     store.close()
   })
 })
+
+/**
+ * P2 回归护栏（对抗审查第三批）。
+ *
+ * 1. `scope` 只写不读 → 设计声称的「sdlc 记忆不影响 reqdoc 判定」无代码执行
+ * 2. 退役机制复活（规则文本里重新点名已删工具/门禁）
+ * 3. CLI 与插件记忆根不同源
+ */
+describe("P2 · scope 过滤真正生效", () => {
+  test("★ scope:sdlc 的 L1 条目不得参与 reqdoc 消缺口", async () => {
+    const { deriveQuestions } = await import("sm-shared")
+    const features = [{ no: 1, name: "X", priority: "high" as const, confirmedAt: 1 }]
+    const base = {
+      slots: [],
+      decls: { "4.1": { required: false, reason: "x" } },
+      candidates: { "4.1": ["CRD"] },
+    }
+    const sdlcTerm = { term: "CRD", definition: "信贷审批部", kind: "内部简称" as const, scope: "sdlc" as const, origin: "restated" as const, confirmedAt: 1, fromProject: "p" }
+    const orgTerm = { ...sdlcTerm, scope: "org" as const }
+
+    // sdlc 作用域的记忆：在 reqdoc 里必须被忽略
+    const d = deriveQuestions(features, { ...base, l1: [sdlcTerm] })
+    expect(d.all.map((q) => q.address)).toContain("4.1.CRD")
+    expect(d.l1Applied).toEqual([])
+
+    // org/reqdoc 作用域：正常生效
+    const d2 = deriveQuestions(features, { ...base, l1: [orgTerm] })
+    expect(d2.all.map((q) => q.address)).not.toContain("4.1.CRD")
+    expect(d2.l1Applied).toContain("4.1.CRD")
+  })
+
+  test("★ retired 条目同样被忽略", async () => {
+    const { deriveQuestions } = await import("sm-shared")
+    const features = [{ no: 1, name: "X", priority: "high" as const, confirmedAt: 1 }]
+    const retired = { term: "CRD", definition: "信贷审批部", kind: "内部简称" as const, scope: "org" as const, origin: "restated" as const, confirmedAt: 1, fromProject: "p", retired: true }
+    const d = deriveQuestions(features, {
+      slots: [], decls: { "4.1": { required: false, reason: "x" } },
+      candidates: { "4.1": ["CRD"] }, l1: [retired],
+    })
+    expect(d.l1Applied).toEqual([])
+  })
+
+  test("类型错乱退化为空而非崩溃（P0-3 遗留的防御）", async () => {
+    const { deriveQuestions } = await import("sm-shared")
+    const features = [{ no: 1, name: "X", priority: "high" as const, confirmedAt: 1 }]
+    expect(() =>
+      deriveQuestions(features, {
+        slots: [], decls: {},
+        l1: matchMemory("任意") as never, // 误传整个返回值
+      }),
+    ).not.toThrow()
+  })
+})
+
+describe("P2 · CLI 与插件记忆根同源", () => {
+  test("★ SM_MEMORY_HOME 覆盖对 CLI 同样生效", async () => {
+    const home = mkdtempSync(join(tmpdir(), "sm-p2cli-"))
+    process.env.SM_MEMORY_HOME = join(home, "memory")
+    const { memoryRoot } = await import("sm-shared")
+    // CLI 的 memoryDir() 已改为直接复用 memoryRoot()——这里锁定该约定
+    expect(memoryRoot()).toBe(join(home, "memory"))
+  })
+})

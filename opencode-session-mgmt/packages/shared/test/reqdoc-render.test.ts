@@ -10,9 +10,8 @@ import {
   MAPPED_FIELD_KEYS,
   buildPrdSkeleton,
   parseRenderStructure,
-  renderTargetDigest,
 } from "../src/reqdoc-render"
-import type { ReqdocFeature, ReqdocScore } from "../src/workflow"
+import type { ReqdocFeature } from "../src/workflow"
 
 /** 一份结构齐全的 PRD md：7 章、第三章 3.1-3.6、第四章 4.1/4.2、2 个功能点块（新格式：5.1/5.2）、映射字段全标来源。 */
 function fullPrd(): string {
@@ -322,16 +321,6 @@ describe("buildPrdSkeleton（P1 服务端生成骨架）", () => {
   test("模板为 null 或功能点为空 → null", () => {
     expect(buildPrdSkeleton(null, features(["A"]))).toBeNull()
     expect(buildPrdSkeleton(miniTemplate(), [])).toBeNull()
-  })
-})
-
-describe("renderTargetDigest（P3 结构摘要）", () => {
-  test("含章节骨架 / 子小节 / 映射字段，且远小于模板全文", () => {
-    const digest = renderTargetDigest()
-    expect(digest).toContain("章节骨架")
-    expect(digest).toContain("2.13 流程图")
-    expect(digest).toContain("映射字段须逐功能点标来源")
-    expect(digest.length).toBeLessThan(miniTemplate().length)
   })
 })
 

@@ -8,7 +8,7 @@
  *   与评测 render 判定类共用同一函数（同源，避免两份漂移）。
  * 模板演进须同步本文件 schema（workflow-reqdoc.md 10 章已承诺），docs/reqdoc-prd-template.md 本身不动。
  */
-import type { ReqdocFeature, ReqdocScore, ReqdocScoreDimKey } from "./workflow"
+import type { ReqdocFeature, ReqdocScoreDimKey } from "./workflow"
 
 /** 模板章节（骨架，渲染 diff 校验用）：meta 章只查出现，sections 章查子小节齐全。 */
 export interface ReqdocTemplateSection {
@@ -380,42 +380,7 @@ function extractSubsection(md: string, num: string, title: string): string {
   return out.join("\n")
 }
 
-/**
- * 渲染结构校验标准文本（质量飞轮 P2）：reqdoc-r23 规则文本与 reqdoc_check 工具描述共用同一来源，
- * 避免「规则说一套、工具查一套」漂移。@see reqdocScoreRubric / reqdocProbeRubric
- */
-export function renderCheckRubric(): string {
-  const fields = REQDOC_TEMPLATE_FIELDS.map((f) => `${f.key} ${f.title}（对应 ${f.dims.join("/")}）`).join("、")
-  return (
-    `章节骨架（须齐全、顺序正确）：第一章 项目信息；第二章 文档变更过程；第三章 需求概述（3.1 需求类型~3.6 需求提出原因及功能概述）；` +
-    `第四章 术语定义与业务规则（4.1 术语定义/4.2 业务规则）；第五章 需求功能详述（每功能点：输入要素 5.k.1.1/5.k.1.2，` +
-    `处理要求 5.k.2.1 输入要素的检查~5.k.2.10 附件，k=功能点序号，编号全局连续不重复）；第六章 非功能需求（6.1 性能与容量~6.4 数据主权与合规）；第七章 验收标准（7.1 功能点验收指标/7.2 量化验收口径）。\n` +
-    `功能点块标题：每个功能点须用三级标题（###）起头、带序号，形如「### 5.N 功能点名称」（例：「### 5.1 知识入库管理」）；校验器按此类标题计数功能点块数，缺序号或非三级标题（##/####）不被识别为块。兼容旧格式「### 功能点 N」或「### N_功能点名称」。\n` +
-    `块内固定小节（标题编号+名称须齐全，层级不拘——三级/四级/五级标题均可，不强制四级或五级）：主分组标题「5.k.1 功能点输入要素」（含 5.k.1.1 简要概述、5.k.1.2 控制要求）与「5.k.2 功能点处理要求」（含 5.k.2.1~5.k.2.12）为可选分组标签，模型常写为纯文本或省略，其下子项齐全即视为完整；小节标题须含编号与名称（如「5.1.2.1 输入要素的检查」），来源标签由服务端规范写入标题行（如「5.1.2.1 输入要素的检查 [文档]」或「5.1.2.3 异常处理要求 [缺省：本次无异常]」）。\n` +
-    `映射字段须逐功能点标来源 [文档]/[问答]/[缺省：理由]（服务端 reqdoc_patch 的 source_tag 参数写入标题行，content 不含标签）：${fields}。\n` +
-    `[缺省] 字段对应打分卡维度打满分 = 渲染缺口与自评矛盾，review_submit 定稿会被拦。\n` +
-    `[缺省] 必须附不适用理由（source_tag="[缺省]" + reason 参数），服务端写入规范形 [缺省：理由]，禁止裸 [缺省]——裸 [缺省] 触发完整性门禁（review_submit 定稿拦截）。`
-  )
-}
-
 // ---- 渲染目标结构摘要（P3 上下文瘦身：替代模板全文注入） ----
-
-/**
- * 渲染目标结构摘要：由结构 schema 生成（约 1k 字符），替代模板全文（7.6k）注入系统提示。
- * 模型据此与 reqdoc_patch 的小节键填充骨架；模板逐字落实由服务端 reqdoc_render_skeleton 保证。
- */
-export function renderTargetDigest(): string {
-  const chapters = REQDOC_TEMPLATE_CHAPTERS.map((c) =>
-    c.sections?.length ? `${c.title}（${c.sections.map((s) => `${s.key} ${s.title}`).join("、")}）` : c.title,
-  ).join("；")
-  const subs = FEATURE_SUB_SECTIONS.map((s) => `${s.group}.${s.sub} ${s.title}`).join("、")
-  const fields = REQDOC_TEMPLATE_FIELDS.map((f) => `${f.key} ${f.title}`).join("、")
-  return (
-    `章节骨架：${chapters}。\n` +
-    `功能点块（### 5.k 名称，k=功能点序号）：含子小节 ${subs}（编号全局连续）。\n` +
-    `映射字段须逐功能点标来源 [文档]/[问答]/[缺省：理由]：${fields}。`
-  )
-}
 
 // ---- 骨架生成（P1 服务端生成，消除模型巨型 write） ----
 

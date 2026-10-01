@@ -34,6 +34,13 @@ jobs:
           if [ -z "$EVAL_BASE_URL" ]; then echo "未配置 EVAL_BASE_URL，跳过"; exit 0; fi
           bun run eval:baseline
 
+      # 确定性验收门槛（对抗审查 P2-f 补入）：`acceptance:derive` 零模型依赖、秒级完成，
+      # 验的是「L1 记忆消缺口 / L2 不消缺口 / 开放项与候选口径 / 组装幂等」。
+      # 它**不需要 EVAL_* secrets**，因此不能像下面两项那样因未配置而 exit 0 跳过——
+      # 否则这套护栏形同虚设（此前第 3 层验收完全不在 CI 内）。
+      - name: 确定性验收（acceptance:derive，无需模型）
+        run: bun run acceptance:derive
+
       - name: 运行 new 并比对 baseline（回归门禁）
         if: ${{ github.event_name == 'schedule' || inputs.variant != 'baseline' }}
         env:

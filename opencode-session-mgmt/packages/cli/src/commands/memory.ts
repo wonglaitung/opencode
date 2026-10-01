@@ -5,13 +5,19 @@
  * 也避免模型成为"它自己记得什么"的传声筒。**删文件即遗忘**。
  */
 import { readdirSync, readFileSync, rmSync } from "node:fs"
-import { homedir } from "node:os"
 import { join } from "node:path"
+import { memoryRoot } from "sm-shared"
 import type { ParsedArgs } from "../index"
 
-/** 记忆目录（与插件同源：~/.config/opencode/session-mgmt/memory/）。 */
+/**
+ * 记忆目录（与插件同源）。
+ *
+ * 必须与 `packages/shared/src/reqdoc-memory.ts` 的 `memoryRoot()` **完全一致**，
+ * 否则「删文件即遗忘」会删错地方、用户看到的记忆不是插件实际在用的
+ * —— 对抗审查 P2-d：`SM_MEMORY_HOME` 自托管覆盖口下两者曾指向不同的库。
+ */
 function memoryDir(): string {
-  return join(homedir(), ".config", "opencode", "session-mgmt", "memory")
+  return memoryRoot()
 }
 
 /** 三层目录 → 中文名与说明（与设计 3.4 的目录布局一致）。 */

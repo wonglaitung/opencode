@@ -12,9 +12,7 @@ import { describe, expect, test } from "bun:test"
 import {
   WORKFLOW_DEFINITIONS,
   getDefinition,
-  reqdocProbeRubric,
-  reqdocScoreRubric,
-  renderTargetDigest,
+  reqdocClarifyHints,
 } from "sm-shared"
 
 const def = getDefinition("reqdoc")
@@ -48,9 +46,7 @@ describe("reqdoc 上下文预算基线", () => {
   })
 
   test("单点事实源摘要都在预算内（各 < 1000 字符，设计 7.4 kbDigest 预算参照）", () => {
-    expect(reqdocScoreRubric().length).toBeLessThan(1000)
-    expect(reqdocProbeRubric().length).toBeLessThan(1000)
-    expect(renderTargetDigest().length).toBeLessThan(1000)
+    expect(reqdocClarifyHints().length).toBeLessThan(1000)
   })
 
   test("重构 2c：原「平行账本对账」四条已删除或改写为槽位口径", () => {
@@ -72,6 +68,25 @@ describe("reqdoc 上下文预算基线", () => {
     const dead = /reqdoc_(score|probe|patch|check|field_dict|render_skeleton)\b/
     const offenders = rules.filter((r) => dead.test(r.text)).map((r) => `${r.id}(${r.text.length}字)`)
     expect(offenders).toEqual([])
+  })
+
+  test("★ 已退役机制不得复活（对抗审查 P2-e）", () => {
+    // 这些符号在 2c/3 已删除；若有人重新引入，本测试的 import 会编译失败。
+    // 保留 REQDOC_SCORE_DIMS：eval 的独立评分通道仍用（设计 4.4 第 3 层）。
+    const src = JSON.stringify(rules)
+    for (const dead of [
+      "reqdoc_score",
+      "reqdoc_probe",
+      "reqdoc_check",
+      "reqdoc_patch",
+      "reqdoc_field_dict",
+      "reqdoc_render_skeleton",
+      "skip_field_dict",
+      "no_document_confirmed",
+      "打分卡 ≥85",
+    ]) {
+      expect(src).not.toContain(dead)
+    }
   })
 
   test("★ 规则 id 唯一（阶段 3：曾出现两条 reqdoc-r32 同 id）", () => {
