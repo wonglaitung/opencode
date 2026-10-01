@@ -204,7 +204,7 @@ export function buildStateBar(workflow: WorkflowState, stage: string | null): st
         `；${gate.pass ? "门禁可通过 ✓" : `未就绪：${gate.reasons.join("；")}`}`,
     )
     const hits = matchMemory(
-      materialOf([...kb.slots.map((sl) => sl.content), ...Object.values(kb.candidates ?? {}).flat()]),
+      materialOf(kb.slots.map((sl) => sl.content)),
     )
     const open = deriveQuestions(kb.features, {
       slots: kb.slots,

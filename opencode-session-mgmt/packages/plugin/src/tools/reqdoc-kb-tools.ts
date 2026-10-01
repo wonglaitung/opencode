@@ -202,9 +202,12 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
       })
       const kb = readKb(saved)
       await writeKbFiles(root, kb)
-      // 记忆匹配同时看已提交槽位正文与候选名——候选名是缩写的主要来源
+      // 记忆匹配的证据**只能是已提交槽位正文**——不能把 candidates 本身算进去：
+      // 候选名若算证据就是自证（模型填 candidates 即可让任意术语命中 L1 消缺口，
+      // 对抗审查 N-5 实测：槽位正文零 CRD 字样、candidates 填 CRD 即白拿消缺口）。
+      // 缩写靠正文佐证即可——材料里出现「信贷审批部（CRD）」时 CRD 就在正文里。
       const hits = matchMemory(
-        materialOf([...kb.slots.map((s) => s.content), ...Object.values(kb.candidates ?? {}).flat()]),
+        materialOf(kb.slots.map((s) => s.content)),
       )
       const derived = deriveQuestions(kb.features, {
         slots: kb.slots,
@@ -325,7 +328,7 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
       // L1 命中消缺口（不再问）、L2 命中只作默认值（仍问一次）。
       // 记忆匹配同时看已提交槽位正文与候选名——候选名是缩写的主要来源
       const hits = matchMemory(
-        materialOf([...kb.slots.map((s) => s.content), ...Object.values(kb.candidates ?? {}).flat()]),
+        materialOf(kb.slots.map((s) => s.content)),
       )
       const derived = deriveQuestions(kb.features, {
         slots: kb.slots,

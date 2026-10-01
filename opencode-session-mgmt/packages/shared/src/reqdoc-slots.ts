@@ -83,12 +83,14 @@ export function slotSubKey(slotAddr: string): string | null {
 export function isDocAddr(addr: string): boolean {
   if (isContainerAddr(addr)) return true
   if (REQDOC_TEMPLATE_CHAPTERS.some((c) => c.sections?.some((s) => s.key === addr))) return true
-  return /^5\.\d+\.[12]\.\d+$/.test(addr)
+  // 功能点下标禁前导零（`5.01.2.1` 会被 `Number()` 归一成 1 而绕过范围检查，
+  // 产出不可渲染的地址却零告警——对抗审查 F-2 实测）
+  return /^5\.(0|[1-9]\d*)\.[12]\.\d+$/.test(addr)
 }
 
 /** 是否容器地址（4.1 术语 / 5.k.2.1 字段，组感知后者形如 5.1.2.1）。 */
 export function isContainerAddr(addr: string): boolean {
-  return addr === "4.1" || /^5\.\d+\.2\.1$/.test(addr)
+  return addr === "4.1" || /^5\.(0|[1-9]\d*)\.2\.1$/.test(addr)
 }
 
 /**
@@ -107,7 +109,13 @@ export function isValidSlotAddr(addr: string, features: readonly ReqdocFeature[]
   const sub = slotSubKey(addr)
   // 容器叶子：`4.1.CRD` / `5.1.2.1.客户号`
   if (sub !== null) {
+    // 子键会**原样插值进 markdown**（容器渲染时形如 `- **子键**：内容`），
+    // 因此必须排除换行与 markdown 结构字符——否则子键里塞一个换行加标题行
+    // 就是一个能绕过 kbDigest / LCS / 定稿三道校验的注入（对抗审查 N-4 实测）。
     if (!sub.trim()) return false
+    if (/[\r\n]/.test(sub)) return false
+    if (/[#|`<>*_[\]\/\\]/.test(sub)) return false
+    if (sub.trim().length > 40) return false
     // 文档地址必须合法，且功能点下标须在范围内（防 5.9.2.1 这类越界）
     if (!isDocAddr(doc)) return false
     if (doc.startsWith("5.")) {

@@ -340,12 +340,13 @@ describe("重组装 diff · 服务端追加区块豁免", () => {
     const worktree = tempDir()
     const ctx = await assemble(store, worktree)
     const p = prdPath(worktree)
-    // 同时做两件事：追加合法溯源章节 + 手改正文
+    // 同时做两件事：追加溯源章节 + 手改正文。溯源章节里的伪造条目会先被独立校验拦下
+    // （比「内容不一致」更精确的报错），正文手改由 LCS 比对负责——两条路径都堵。
     const md = readFileSync(p, "utf8")
     writeFileSync(p, md.replace("3.1 内容", "3.1 手改内容") + "\n\n## 确认溯源\n\n- 某条记录\n", "utf8")
     await expect(
       createReviewTools(store).review_submit!.execute(CHECKLIST, ctx),
-    ).rejects.toThrow(/内容与知识库不一致/)
+    ).rejects.toThrow(/确认溯源|内容与知识库不一致/)
     store.close()
   })
 })

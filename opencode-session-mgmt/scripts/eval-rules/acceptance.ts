@@ -28,6 +28,7 @@ import {
   materialOf,
   requiredSlots,
   writeL1Term,
+  writeL2Fact,
 } from "sm-shared"
 import type { MemoryTerm, ReqdocFeature } from "sm-shared"
 import { EVAL_TOOLS } from "./src/tool-defs"
@@ -65,21 +66,25 @@ function record(name: string, pass: boolean, detail: string) {
 }
 
 /** 用真实派生链路算出开放项：这是模型看到的「本轮该填」。 */
-function deriveWithMemory(material: string, l1: MemoryTerm[] = [], l2: never[] = []) {
+/**
+ * 走**生产路径**派生：L1/L2 一律来自 `matchMemory`，不再由验收脚本手造数组。
+ * （复审 T-4：原实现 `l2: never[] = []` 恒为空 —— L2 猜测路径从未被执行过，
+ *  且手造 l1 绕过了 matchMemory，与生产「记忆只能来自 matchMemory」不符。）
+ */
+function deriveWithMemory(material: string) {
   const hits = matchMemory(materialOf([material]))
-  const used = { l1: l1.length > 0 ? l1 : hits.l1, l2 }
   return deriveQuestions(features, {
     slots: requiredSlots(features).map((address) => ({
       kind: "prose" as const,
       address,
-      content: "",
+      content: material, // 槽位正文即材料（生产里候选名不算自己的证据，N-5）
       source: "文档" as const,
       status: "confirmed" as const,
     })),
     decls: containers,
     candidates: TERM_CANDIDATES,
-    l1: used.l1,
-    l2,
+    l1: hits.l1,
+    l2: hits.l2,
   })
 }
 
@@ -150,14 +155,36 @@ async function main() {
     `首轮开放项含 4.1.AML=${firstAddrs.includes("4.1.AML")}（材料提到了 AML，未复述过就该问）`,
   )
   // ② 记入 L1 且 kind=行业通用 → 消缺口（设计的 kind 分类规则）
-  const withAml = deriveWithMemory(MATERIAL_1, [
-    { term: "AML", definition: "反洗钱", kind: "行业通用", scope: "org", origin: "restated", confirmedAt: 1, fromProject: "p" },
-  ])
+  writeL1Term("AML", "反洗钱", { kind: "行业通用", scope: "org", origin: "restated", fromProject: "p" })
+  const withAml = deriveWithMemory(MATERIAL_1)
   const withAmlAddrs = withAml.all.map((q) => q.address)
   record(
     "★ L1 记入且 kind=行业通用 → 消缺口（不再问）",
     !withAmlAddrs.includes("4.1.AML") && withAml.l1Applied.includes("4.1.AML"),
     `L1(kind=行业通用) 后 4.1.AML 在开放项=${withAmlAddrs.includes("4.1.AML")}；l1Applied=${withAml.l1Applied.join("、") || "（空）"}`,
+  )
+
+  console.log("\n【验收 3b】L2 组织知识：不消缺口，但带出记忆内容")
+  writeL2Fact("交易走 CIPS 通道，报文经 ESB 网关转发至核心系统", {
+    source: "问答",
+    scope: "org",
+    origin: "restated",
+    fromProject: "信贷系统改造",
+  })
+  const withL2 = deriveWithMemory(`${MATERIAL_1}\n交易走 CIPS 通道，报文经 ESB 网关转发至核心系统。`)
+  const l2Q = withL2.all.find((q) => q.from === "memory-L2")
+  // L2 消缺口数必须为 0：l1Applied 里出现的都是前面步骤写入的 L1 条目（CRD/AML），
+  // L2 命中的项若被消缺口会额外出现在这里——逐项核对 L2 命中的候选未被消。
+  const l2Applied = withL2.all.filter((q) => withL2.l1Applied.includes(q.address) && q.from === "memory-L2")
+  record(
+    "★ L2 命中 → 不消缺口（仍被问）",
+    l2Applied.length === 0,
+    `被 L2 消掉的项=${l2Applied.length}（应为 0）；l1Applied=${withL2.l1Applied.join("、") || "（空）"}（均为 L1 来源）`,
+  )
+  record(
+    "★ L2 猜测带出记忆内容（P1-c：原为空壳）",
+    !l2Q || (l2Q.guess?.includes("CIPS") ?? false),
+    l2Q ? `guess="${l2Q.guess}"` : "（本材料无 L2 候选命中）",
   )
 
   console.log("\n【验收 4】组装幂等：产物与槽位逐字一致，手改能被发现")

@@ -7,7 +7,7 @@
  * 3. **溯源节伪造**：整节豁免于比对 → 可写入伪造证据
  * 4. **路径穿越 / 坏 JSON 崩溃 / 词边界误命中 / 长名静默覆盖**
  */
-import { describe, expect, test } from "bun:test"
+import { describe, expect, jest, test } from "bun:test"
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -40,7 +40,9 @@ describe("P0-1 · 记忆链路在生产路径真的接通", () => {
       await tools.reqdoc_ingest!.execute(
         {
           features: [{ name: "名单排查", priority: "high" }],
-          slots: [{ address: "3.1", kind: "prose", content: "信贷审批部流程优化", source: "文档" }],
+          // 槽位正文须含缩写本身（真实材料形态：`信贷审批部（CRD）`）——
+          // 候选名不算自己的证据（对抗审查 N-5：否则臆造 candidates 即可白拿消缺口）
+          slots: [{ address: "3.1", kind: "prose", content: "信贷审批部（CRD）流程优化", source: "文档" }],
           candidates: { "4.1": ["CRD", "AML"] },
         } as never,
         { sessionID: "r1", worktree } as never,
@@ -69,14 +71,18 @@ describe("P0-1 · 记忆链路在生产路径真的接通", () => {
     store.close()
   })
 
-  test("★ 门禁调用点不因记忆放行（3.3.2 红线：记忆不影响判定）", async () => {
+  test("★ 门禁不因记忆放行（打 review_submit 生产路径；复审 T-2：上一版手工调 kbGate，纯自证）", async () => {
     tempMemory()
     writeL1Term("CRD", "信贷审批部", { kind: "内部简称", scope: "org", origin: "restated", fromProject: "p" })
     const store = Store.memory(() => "reqdoc" as const)
     const features = [{ no: 1, name: "名单排查", priority: "high" as const, confirmedAt: 1000 }]
     store.mutateWorkflow("r1", (w) => {
+      for (const n of ["goal", "rules", "edge", "prd"]) w.stages[n].status = "approved"
       w.kb = {
-        slots: [], // 未填任何必填槽位
+        // 只填 3.1：记忆最多消掉 4.1.CRD，覆盖率仍远低于 100% → 门禁必须拦。
+        slots: [
+          { kind: "prose", address: "3.1", content: "信贷审批部（CRD）流程优化", source: "文档", status: "confirmed" },
+        ],
         features,
         containers: {},
         candidates: { "4.1": ["CRD"] },
@@ -84,16 +90,16 @@ describe("P0-1 · 记忆链路在生产路径真的接通", () => {
         updatedAt: 1,
       }
     })
-    // 即便记忆会消掉 4.1.CRD 的缺口，覆盖率仍只认 confirmed 槽位 → 门禁不放行
-    const { kbGate, deriveQuestions } = await import("sm-shared")
-    const unclosed = deriveQuestions(features, {
-      slots: [],
-      decls: {},
-      candidates: { "4.1": ["CRD"] },
-      l1: matchMemory("材料提到 CRD").l1,
-    }).unclosed
-    const gate = kbGate([], features, { decls: {}, unclosed })
-    expect(gate.pass).toBe(false)
+    const worktree = mkdtempSync(join(tmpdir(), "sm-p0gate-"))
+    const ctx = { sessionID: "r1", worktree } as never
+    // 若 review.ts 的门禁调用点被改成「按记忆消缺口后放行」，本用例即失败
+    let msg = ""
+    try {
+      await createReviewTools(store).review_submit!.execute(CHECKLIST, ctx)
+    } catch (e) {
+      msg = String(e)
+    }
+    expect(msg).toMatch(/知识库未就绪|未找到 PRD 产物/)
     store.close()
   })
 })
@@ -519,11 +525,239 @@ describe("P2 · scope 过滤真正生效", () => {
 })
 
 describe("P2 · CLI 与插件记忆根同源", () => {
-  test("★ SM_MEMORY_HOME 覆盖对 CLI 同样生效", async () => {
+  test("★ CLI 真的读到 SM_MEMORY_HOME（跑 CLI 的 runMemory，不复用 memoryRoot）", async () => {
+    // 复审 T-1：上一版只断言 memoryRoot()，把 CLI 改回 homedir() 也照样绿——纯自证。
+    // 现在真跑 CLI 的 runMemory：写入一条记忆后用 CLI 列出来。
     const home = mkdtempSync(join(tmpdir(), "sm-p2cli-"))
     process.env.SM_MEMORY_HOME = join(home, "memory")
-    const { memoryRoot } = await import("sm-shared")
-    // CLI 的 memoryDir() 已改为直接复用 memoryRoot()——这里锁定该约定
-    expect(memoryRoot()).toBe(join(home, "memory"))
+    const { writeL1Term } = await import("sm-shared")
+    writeL1Term("CRD", "信贷审批部", { kind: "内部简称", scope: "org", origin: "restated", fromProject: "CLI同源测试" })
+
+    const { runMemory } = await import("../../cli/src/commands/memory")
+    // CLI 用 process.stdout.write（不是 console.log），必须捕获真正的出口
+    let out = ""
+    const spy = jest.spyOn(process.stdout, "write").mockImplementation((chunk: unknown) => {
+      out += String(chunk)
+      return true
+    })
+    try {
+      await runMemory({ positionals: ["list"], flags: {} })
+    } finally {
+      spy.mockRestore()
+    }
+    // CLI 必须列出我们刚写入的条目——若 CLI 用 homedir()，这里会是空
+    expect(out).toContain("CRD")
+    expect(out).toContain("信贷审批部")
+  })
+
+  test("CLI 层名与 shared 的 MEMORY_LAYERS 一致（消除人工约定的漂移面）", async () => {
+    const { MEMORY_LAYERS } = await import("sm-shared")
+    const src = readFileSync(join(import.meta.dir, "..", "..", "cli", "src", "commands", "memory.ts"), "utf8")
+    // CLI 不得自带一份层名字面量——必须引用 shared 的 MEMORY_LAYERS
+    expect(src).toContain("MEMORY_LAYERS")
+    for (const layer of MEMORY_LAYERS) expect(src).toContain(layer)
+  })
+})
+
+/**
+ * 第二批复审（修复引入的新缺陷）回归护栏。
+ *
+ * 这些缺陷是**修复本身引入的**，比原缺陷更隐蔽——工具照样返回绿色的
+ * 「🧠 L1 记忆消缺口」，而实际行为是错的：
+ * - N-3 `containsTerm` 边界判定反了 → 中文术语 100% 不命中（「少问」对中文完全失效）
+ * - N-4 子键可塞换行 → 伪造章节直达 Word 交付件，且绕过全部三道校验
+ * - N-5 haystack 含 candidates 自身 → 模型臆造候选即白拿消缺口（自证）
+ * - N-2 变更记录表行未豁免 → revisit 二次定稿被永久拦截
+ * - F-1 豁免与校验两处正则不一致 → 5 种溯源伪造变体全部放行
+ * - F-5 溯源整节删除放行；F-4 assembledFile 漏传致迭代副本丢失
+ */
+describe("N-3 · 中文术语必须命中", () => {
+  const seed = (terms: [string, string, "内部简称" | "行业通用"][]) => {
+    const home = tempMemory()
+    for (const [t, d, k] of terms) writeL1Term(t, d, { kind: k, scope: "org", origin: "restated", fromProject: "p" })
+    return home
+  }
+
+  test("★ 多字中文术语在真实中文材料里命中（汉字夹住也算）", () => {
+    seed([["反洗钱", "反洗钱识别", "行业通用"], ["核心系统", "行内核心系统", "内部简称"], ["信用卡", "信用卡业务", "行业通用"]])
+    const hits = matchMemory("本需求涉及反洗钱名单核查，改造核心系统，信用卡业务需要特殊处理。").l1.map((t) => t.term)
+    expect(new Set(hits)).toEqual(new Set(["信用卡", "核心系统", "反洗钱"]))
+  })
+
+  test("单字中文不误命中相邻词（卡 不该命中 卡片管理）", () => {
+    seed([["卡", "卡片管理", "内部简称"]])
+    expect(matchMemory("涉及卡片管理流程").l1.map((t) => t.term)).toEqual([])
+  })
+
+  test("ASCII 缩写仍要求词边界（IT 不命中 AUDIT）", () => {
+    seed([["IT", "信息技术", "内部简称"]])
+    expect(matchMemory("经过 AUDIT 留痕").l1.map((t) => t.term)).toEqual([])
+    expect(matchMemory("本需求涉及 IT 改造").l1.map((t) => t.term)).toEqual(["IT"])
+  })
+})
+
+describe("N-4 · 子键不得注入 markdown 结构", () => {
+  test("★ 子键含换行/结构字符一律拒绝", async () => {
+    const { isValidSlotAddr } = await import("sm-shared")
+    const f = [{ no: 1, name: "X", priority: "high" as const, confirmedAt: 1 }]
+    for (const bad of ["4.1.CRD\n## 第九章 伪造", "4.1.a/b", "4.1.x\\y", "4.1.x|y", "4.1.`x`", "4.1.a[b]", "4.1." + "长".repeat(41)]) {
+      expect(isValidSlotAddr(bad, f)).toBe(false)
+    }
+    // 合法子键仍放行
+    for (const ok of ["4.1.CRD", "4.1.反洗钱", "5.1.2.1.客户号", "4.1"]) {
+      expect(isValidSlotAddr(ok, f)).toBe(true)
+    }
+  })
+
+  test("★ 伪造章节进不了交付件（打真实 assemble 链路）", async () => {
+    tempMemory()
+    const store = Store.memory(() => "reqdoc" as const)
+    const worktree = mkdtempSync(join(tmpdir(), "sm-n4-"))
+    const ctx = { sessionID: "r1", worktree } as never
+    const tools = createReqdocKbTools(store)
+    await tools.reqdoc_ingest!.execute(
+      {
+        features: [{ name: "名单排查", priority: "high" }],
+        slots: [{ address: "3.1", kind: "prose", content: "信贷审批流程优化", source: "文档" }],
+      } as never,
+      ctx,
+    )
+    await expect(
+      tools.reqdoc_ingest!.execute(
+        {
+          features: [{ name: "名单排查", priority: "high" }],
+          slots: [{ address: "4.1.CRD\n## 第九章 伪造章节\n- **审批人**：业务总监", kind: "term", content: "信贷审批部", source: "文档" }],
+        } as never,
+        ctx,
+      ),
+    ).rejects.toThrow(/地址非法/)
+    await tools.reqdoc_assemble!.execute({} as never, ctx)
+    const md = readFileSync(join(worktree, "07_需求规格产出/1_名单排查/PRD.md"), "utf8")
+    expect(md).not.toContain("第九章 伪造章节")
+    store.close()
+  })
+
+  test("功能点地址禁前导零（F-2）", async () => {
+    const { isValidSlotAddr } = await import("sm-shared")
+    const f = [{ no: 1, name: "X", priority: "high" as const, confirmedAt: 1 }]
+    expect(isValidSlotAddr("5.01.2.1.客户号", f)).toBe(false)
+    expect(isValidSlotAddr("5.1.2.1.客户号", f)).toBe(true)
+  })
+})
+
+describe("N-5 · 候选不得自证", () => {
+  test("★ 槽位正文无该术语时，candidates 填了也不消缺口", async () => {
+    tempMemory()
+    writeL1Term("CRD", "信贷审批部", { kind: "内部简称", scope: "org", origin: "restated", fromProject: "p" })
+    const store = Store.memory(() => "reqdoc" as const)
+    const worktree = mkdtempSync(join(tmpdir(), "sm-n5-"))
+    const out = String(
+      await createReqdocKbTools(store).reqdoc_ingest!.execute(
+        {
+          features: [{ name: "X", priority: "high" }],
+          slots: [{ address: "3.1", kind: "prose", content: "本需求为信贷业务改造。", source: "文档" }],
+          candidates: { "4.1": ["CRD"] },
+        } as never,
+        { sessionID: "r1", worktree } as never,
+      ),
+    )
+    // 模型臆造候选 → 不得白拿消缺口
+    expect(out).not.toContain("L1 记忆消缺口")
+    store.close()
+  })
+
+  test("正文含该术语时正常消缺口（正向）", async () => {
+    tempMemory()
+    writeL1Term("CRD", "信贷审批部", { kind: "内部简称", scope: "org", origin: "restated", fromProject: "p" })
+    const store = Store.memory(() => "reqdoc" as const)
+    const worktree = mkdtempSync(join(tmpdir(), "sm-n5b-"))
+    const out = String(
+      await createReqdocKbTools(store).reqdoc_ingest!.execute(
+        {
+          features: [{ name: "X", priority: "high" }],
+          slots: [{ address: "3.1", kind: "prose", content: "信贷审批部（CRD）流程优化", source: "文档" }],
+          candidates: { "4.1": ["CRD"] },
+        } as never,
+        { sessionID: "r1", worktree } as never,
+      ),
+    )
+    expect(out).toContain("L1 记忆消缺口")
+    store.close()
+  })
+})
+
+describe("N-2 / F-1 / F-5 · 服务端追加区块的豁免与校验", () => {
+  const ready = () => {
+    const store = Store.memory(() => "reqdoc" as const)
+    store.mutateWorkflow("r1", (w) => {
+      for (const n of ["goal", "rules", "edge", "prd"]) w.stages[n].status = "approved"
+      const features = [{ no: 1, name: "公告发布", priority: "medium" as const, confirmedAt: 1000 }]
+      w.kb = {
+        slots: requiredSlots(features).map((a) => ({
+          kind: "prose" as const, address: a, content: `${a} 内容`,
+          source: "文档" as const, status: "confirmed" as const,
+        })),
+        features,
+        containers: { "4.1": { required: false, reason: "x" }, "5.1.2.1": { required: false, reason: "y" } },
+        askCounts: {}, updatedAt: 1,
+      }
+    })
+    const worktree = mkdtempSync(join(tmpdir(), "sm-n2-"))
+    const ctx = { sessionID: "r1", worktree } as never
+    return { store, worktree, ctx, tools: createReqdocKbTools(store) }
+  }
+  /** 定稿前提：有产物。先组装一次。 */
+  async function assembled() {
+    const r = ready()
+    await r.tools.reqdoc_assemble!.execute({} as never, r.ctx)
+    return r
+  }
+  const submit = async (store: Store, ctx: never) => {
+    try { await createReviewTools(store).review_submit!.execute(CHECKLIST, ctx); return "" }
+    catch (e) { return String(e) }
+  }
+
+  test("★ 二次定稿不被变更记录表行拦住（N-2：revisit 重做路径）", async () => {
+    const { store, ctx } = await assembled()
+    expect(await submit(store, ctx)).toBe("") // 首次定稿：写入变更记录
+    store.mutateWorkflow("r1", (w) => { w.stages.review.status = "in_progress" })
+    expect(await submit(store, ctx)).toBe("") // 二次定稿：变更记录表行已被豁免
+    store.close()
+  })
+
+  test("★ 溯源条目格式变体一律拦截（F-1：此前 5 种变体全部放行）", async () => {
+    for (const mutate of [
+      (l: string) => l.replace(/^- /, "* "),
+      (l: string) => l.replace("：", ": ").replace("——", "-"),
+      (l: string) => l.replace("要点「T」", "要点「T」 "),
+    ]) {
+      const { store, ctx, worktree } = await assembled()
+      const tools = createReviewTools(store)
+      await tools.comprehension_add!.execute({ codeSegmentId: "T", explanation: "e" } as never, ctx)
+      await tools.comprehension_confirm!.execute({ codeSegmentId: "T", sourceLabel: "L1", sourceQuote: "Q1" } as never, ctx)
+      const p = join(worktree, "07_需求规格产出/1_公告发布/PRD.md")
+      writeFileSync(p, readFileSync(p, "utf8").split("\n").map(mutate).join("\n"), "utf8")
+      expect(await submit(store, ctx)).toContain("确认溯源")
+      store.close()
+    }
+  })
+
+  test("★ 溯源整节删除被拦（F-5：交付件静默失去全部溯源）", async () => {
+    const { store, ctx, worktree } = await assembled()
+    const tools = createReviewTools(store)
+    await tools.comprehension_add!.execute({ codeSegmentId: "T", explanation: "e" } as never, ctx)
+    await tools.comprehension_confirm!.execute({ codeSegmentId: "T", sourceLabel: "L1", sourceQuote: "Q1" } as never, ctx)
+    const p = join(worktree, "07_需求规格产出/1_公告发布/PRD.md")
+    writeFileSync(p, readFileSync(p, "utf8").replace(/## 确认溯源[\s\S]*$/, ""), "utf8")
+    expect(await submit(store, ctx)).toMatch(/确认溯源|缺少/)
+    store.close()
+  })
+
+  test("★ 自定义 source 时迭代副本不丢（F-4：漏传 assembledFile）", async () => {
+    const { store, ctx, worktree, tools } = ready()
+    await tools.reqdoc_assemble!.execute({ source: "需求规格书V2.md" } as never, ctx)
+    expect(await submit(store, ctx)).toBe("")
+    expect(existsSync(join(worktree, "00_初稿需求书"))).toBe(true)
+    store.close()
   })
 })

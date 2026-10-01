@@ -10,7 +10,7 @@
  * comprehension_ask     —— 追问，问答追加到 explanation
  * review_submit         —— 提交审查清单：所有片段处于终态(accepted/manual)，通过时自动计算 firstPassRate
  */
-import { readdir, unlink } from "node:fs/promises"
+import {  mkdir, readdir, unlink } from "node:fs/promises"
 import { join, relative } from "node:path"
 import { tool, type ToolDefinition } from "@opencode-ai/plugin"
 import {
@@ -28,6 +28,15 @@ import {
 } from "sm-shared"
 import { assembleDir, assembleInto } from "./reqdoc-kb-tools"
 import type { Store } from "../db"
+/**
+ * 服务端合法追加的两个章节 + 变更记录表体行。
+ * **`stripServerAppended`（豁免）与 `verifyTraceback`（校验）必须共用同一组正则**——
+ * 此前两处不一致（有 `$` / 无 `$`）导致伪造溯源能藏在变体里（对抗审查 F-1）。
+ */
+const SECTION_TRACEBACK_RE = /^##\s*确认溯源\s*$/
+const SECTION_CHANGES_RE = /^##\s*第二章\s*文档变更过程\s*$/
+const SERVICE_SECTION_RE = /^##\s/
+const CHANGE_ROW_RE = /^\|[^|]*\|[^|]*\|[^|]*\|[^|]*\|[^|]*\|$/
 import { WorkflowOpError, applyTransition, recomputeCommit } from "../workflow-ops"
 import { projectRoot, resolveWithinWorktree } from "../fs-safe"
 
@@ -498,12 +507,33 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
    * 逐条比对：每条 `- 要点「X」来源：L —— Q` 都能在 reviewRecord 里找到同 (id,label,quote)。
    */
   function verifyTraceback(md: string, review: { comprehension: { id: string; confirmSource?: { label: string; quote: string } }[] }): void {
-    const cut = md.search(/^##\s*确认溯源\s*$/m)
-    if (cut < 0) return
-    const section = md.slice(cut)
-    const claimed = [...section.matchAll(/^-\s*要点「(.+?)」来源：(.*?)\s*——\s*(.*)$/gm)].map(
-      (m) => ({ id: m[1]!, label: m[2]!, quote: m[3]! }),
-    )
+    const lines = md.split(/\r?\n/)
+    const start = lines.findIndex((l) => SECTION_TRACEBACK_RE.test(l))
+    // F-5：reviewRecord 里有 confirmSource 却没有落进 PRD → 整节被删，必须拦
+    const expected = review.comprehension.filter((c) => c.confirmSource)
+    if (start < 0) {
+      if (expected.length > 0) {
+        throw new WorkflowOpError(
+          `PRD 缺少「确认溯源」章节，但有 ${expected.length} 个要点已回填来源证据（${expected.map((c) => c.id).join("、")}）。` +
+            `该章节由 comprehension_confirm 自动写入，不得删除；请重新确认要点以重建。`,
+        )
+      }
+      return
+    }
+    const end = lines.findIndex((l, i) => i > start && SERVICE_SECTION_RE.test(l))
+    const section = lines.slice(start + 1, end < 0 ? lines.length : end)
+    const claimed = section.flatMap((l) => {
+      const m = /^-\s*要点「(.+?)」来源：(.*?)\s*——\s*(.*)$/.exec(l)
+      return m ? [{ id: m[1]!, label: m[2]!, quote: m[3]! }] : []
+    })
+    // F-1：节内非空行若不匹配服务端写法 → 违规（此前静默放行，改 `*`/半角标点即可藏伪造）
+    const malformed = section.filter((l) => l.trim() !== "" && !/^-\s*要点「.+?」来源：.+?\s*——\s*.+$/.test(l))
+    if (malformed.length > 0) {
+      throw new WorkflowOpError(
+        `「确认溯源」章节有 ${malformed.length} 行不符合服务端写入格式（如「${malformed[0]!.trim().slice(0, 30)}」）。` +
+          `该章节只能由 comprehension_confirm 回填，禁止手工编辑或改写格式。`,
+      )
+    }
     const known = new Map(review.comprehension.map((c) => [c.id, c.confirmSource]))
     const forged = claimed.filter((c) => {
       const rec = known.get(c.id)
@@ -529,22 +559,33 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
    * 章节标题行本身仍参与比对（否则整节被替换/删除也检测不到，对抗审查 P0-2）。
    */
   function stripServerAppended(md: string): string {
-    let inTraceback = false
+    let skip: "traceback" | "changes" | null = null
     return md
       .split(/\r?\n/)
       .filter((line) => {
-        // 溯源节整体不来自槽位（标题与条目都由 comprehension_confirm 写入），整节滤掉。
-        // 但**只滤这一节**：章节被追加内容以外的篡改（如正文行）仍会被 LCS 比对抓到。
-        if (/^##\s*确认溯源/.test(line)) {
-          inTraceback = true
+        // 两个服务端追加区块，**用与 verifyTraceback 完全相同的正则**判定——
+        // 之前两处正则不一致（有 `$` / 无 `$`），导致伪造溯源能藏在变体里（F-1）。
+        if (SECTION_TRACEBACK_RE.test(line)) {
+          skip = "traceback"
           return false
         }
-        if (inTraceback && /^##\s/.test(line)) inTraceback = false
-        return !inTraceback
+        if (SECTION_CHANGES_RE.test(line)) {
+          skip = "changes"
+          return false
+        }
+        if (skip && SERVICE_SECTION_RE.test(line)) {
+          skip = null
+          return false
+        }
+        // 溯源节整节滤掉；变更记录章只滤表体行（标题由模板给出，应参与比对）
+        if (skip === "traceback") return false
+        if (skip === "changes") return !CHANGE_ROW_RE.test(line)
+        return true
       })
       .join("\n")
       .trimEnd()
   }
+
 
   /**
    * 保序行差异（LCS 定位增/删/改）——用于「重组装 vs 磁盘产物」比对。
@@ -663,7 +704,7 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
   async function copyPrdToIterDir(root: string, workflow: WorkflowState): Promise<void> {
     if (!workflow.kb) return
     try {
-      const srcRel = prdRelPath(root, workflow.kb.features)
+      const srcRel = prdRelPath(root, workflow.kb.features, workflow.kb.assembledFile) // F-4：漏传会丢迭代副本
       const srcAbs = resolveWithinWorktree(root, srcRel)
       const md = await Bun.file(srcAbs).text()
 
@@ -674,8 +715,11 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
       const dstName = `PRD_${version}.md`
       const dstAbs = join(root, "00_初稿需求书", dstName)
 
-      // 删除旧版本（00_初稿需求书/ 下的 PRD_V*.md）
+      // 删除旧版本（00_初稿需求书/ 下的 PRD_V*.md）。
+      // 该目录可能尚未创建（未跑过 reqdoc_init）——readdir 会抛 ENOENT 把整个拷贝吞掉，
+      // 导致迭代副本静默丢失（F-4 实测：自定义 source 时 00_ 初稿始终不存在）。
       const dir = join(root, "00_初稿需求书")
+      await mkdir(dir, { recursive: true })
       for (const f of await readdir(dir)) {
         if (f.startsWith("PRD_V") && f.endsWith(".md") && f !== dstName) {
           await unlink(join(dir, f))

@@ -85,39 +85,43 @@ export function isPollutingOrigin(origin: string): boolean {
  * 否则一个坏文件会让该机器上**所有工作流的所有请求**失败（对抗审查 P0-3b 实测）。
  */
 /**
- * 词边界包含判定：命中要求 `term` 两侧**不是字母/数字/下划线**。
+ * 词边界包含判定。
  *
- * 裸 `includes` 会让 2 字母缩写点亮一切——实测一段没提术语的正文
- * （"…AUDIT留痕…CIPS通道…卡片管理…"）误命中 `IT` / `CI` / `IP` / `卡` 四个，
- * 而 L1 命中会**直接消缺口**（业务不问），误命中的代价是错误产出 + 跨需求污染。
- * 中文按字边界处理（`卡` 不应命中 `卡片`/`考核`）。
+ * 三类分别处理（**中文必须命中**——原始需求场景就是「业务投料含内部中文术语」，
+ * 上一版要求两侧非字母数字，导致汉字夹住的术语 100% 不命中，对抗审查 N-3 实测 8/8 全漏）：
+ * - ASCII 词（CRD / AML / IT）：要求非单词字符边界，避免点亮 AUDIT/COMMIT 内部的 IT
+ * - **多字中文词**（反洗钱 / 核心系统）：直接子串命中。「涉及反洗钱名单」就该命中；
+ *   要求两侧非汉字反而制造大量漏命中（宁可多命中，误命中只导致多问一次）
+ * - **单字中文**（卡 / 单）：要求两侧不是汉字，避免 `卡` 命中 `卡片`/`考核`
  */
 function containsTerm(haystack: string, term: string): boolean {
   const t = term.trim()
   if (!t) return false
-  // 纯 ASCII 字母数字词（如 CRD / AML）要求非单词字符边界
   if (/^[A-Za-z0-9_]+$/.test(t)) {
-    const re = new RegExp(`(?<![A-Za-z0-9_])${escapeRegExp(t)}(?![A-Za-z0-9_])`, "i")
-    return re.test(haystack)
+    return new RegExp(`(?<![A-Za-z0-9_])${escapeRegExp(t)}(?![A-Za-z0-9_])`, "i").test(haystack)
   }
-  // 含中文或符号的词：要求左右不与「组成该词的字符集」相邻，避免「卡」命中「卡片」
-  const first = [...t][0]!
-  const last = [...t].at(-1)!
-  let from = 0
-  for (;;) {
-    const idx = haystack.indexOf(t, from)
-    if (idx < 0) return false
-    const before = haystack[idx - 1]
-    const after = haystack[idx + t.length]
-    if (!isSameCharClass(before, first) && !isSameCharClass(after, last)) return true
-    from = idx + 1
+  // 含 ASCII 的混合词（如「CIPS通道」）按普通子串处理
+  if ([...t].some((c) => /[A-Za-z0-9_]/.test(c))) return haystack.includes(t)
+  // 单字中文：要求两侧不是汉字
+  if ([...t].length === 1) {
+    let from = 0
+    for (;;) {
+      const idx = haystack.indexOf(t, from)
+      if (idx < 0) return false
+      const before = haystack[idx - 1]
+      const after = haystack[idx + 1]
+      if ((before === undefined || !isHan(before)) && (after === undefined || !isHan(after))) return true
+      from = idx + 1
+    }
   }
+  // 多字纯中文：直接包含
+  return haystack.includes(t)
 }
 
-function isSameCharClass(neighbor: string | undefined, boundary: string): boolean {
-  if (neighbor === undefined) return false
-  return /[\p{L}\p{N}_]/u.test(neighbor) === /[\p{L}\p{N}_]/u.test(boundary)
+function isHan(ch: string): boolean {
+  return /\p{Script=Han}/u.test(ch)
 }
+
 
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")

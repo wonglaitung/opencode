@@ -6,7 +6,7 @@
  */
 import { readdirSync, readFileSync, rmSync } from "node:fs"
 import { join } from "node:path"
-import { memoryRoot } from "sm-shared"
+import { MEMORY_LAYERS, memoryRoot } from "sm-shared"
 import type { ParsedArgs } from "../index"
 
 /**
@@ -20,14 +20,24 @@ function memoryDir(): string {
   return memoryRoot()
 }
 
-/** 三层目录 → 中文名与说明（与设计 3.4 的目录布局一致）。 */
-const LAYERS = {
+/**
+ * 三层目录 → 中文名与说明（设计 3.4）。
+ *
+ * **目录名来自 `MEMORY_LAYERS`（shared）而非本地字面量**——此前的两份清单
+ * 靠人工约定保持一致，正是要消除的漂移面（对抗审查 F-8）。
+ */
+const LAYER_META = {
   "l1-glossary": { label: "L1 术语", hint: "内部简称/机构/系统名；命中可消缺口（仅业务复述过的条目）" },
   "l2-org": { label: "L2 组织知识", hint: "系统清单/接口/产品线；命中只作草稿，不消缺口" },
   "l4-prefs": { label: "L4 偏好", hint: "措辞/详略/分工等个人习惯；只影响表达，不影响事实" },
-} as const
+} as const satisfies Record<(typeof MEMORY_LAYERS)[number], { label: string; hint: string }>
 
-type LayerKey = keyof typeof LAYERS
+/** 层名 → 展示元数据（键集合由 MEMORY_LAYERS 约束，新增层必须补 meta 才会编译报错）。 */
+const LAYERS = Object.fromEntries(
+  MEMORY_LAYERS.map((layer) => [layer, LAYER_META[layer]]),
+) as Record<(typeof MEMORY_LAYERS)[number], { label: string; hint: string }>
+
+type LayerKey = (typeof MEMORY_LAYERS)[number]
 
 interface MemoryEntry {
   term?: string

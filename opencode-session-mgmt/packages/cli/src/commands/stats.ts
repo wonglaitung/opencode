@@ -168,7 +168,9 @@ function printSessionStats(s: SessionStats): void {
       `  ${fmtLinesCategory(s.lines)}\n` +
       `  ${fmtBaselineLine(s.baselineHours, s.durationMs, s.efficiency)}\n` +
       `  返工率: ${fmtPct(s.reworkRate)}  审查清单: ${s.checklistPassed}/4  理解确认: ${s.comprehension.confirmed}/${s.comprehension.total}\n` +
-      (s.score ? `  PRD 评分: ${s.score.total}/100${s.score.confirmed ? "（已业务确认）" : "（未确认）"}\n` : "") +
+      (s.kb
+        ? `  需求知识库: 必填槽位 ${s.kb.filled}/${s.kb.total}（${Math.round(s.kb.pct * 100)}%）\n`
+        : "") +
       `\nAI 使用: ${s.cost === null ? "$N/A" : `$${s.cost.toFixed(4)}`} | ${fmtTokens(s.tokensInput)} in / ${fmtTokens(s.tokensOutput)} out\n`,
   )
 }

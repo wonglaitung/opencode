@@ -1397,7 +1397,35 @@ KB 横切，不挂任何 stage：goal/rules/edge 为采集与填槽期，prd 为
 **CI 变更**：`acceptance:derive`（零模型、秒级）此前完全不在 CI 内且会因未配置
 `EVAL_BASE_URL` 而被 `exit 0` 跳过——等于护栏虚设。现作为独立 step 加入，不受该跳过逻辑影响。
 
-**修复后**：540 项测试全绿 + typecheck 0 错 + `acceptance:derive` 8/8。
+**修复后**：553 项测试全绿 + typecheck 0 错 + `acceptance:derive` 10/10。
+
+### 第二批：修复引入的新缺陷（自审）
+
+第一批判定修复完成后立即复审，结论：**修复本身引入了 5 个比原缺陷更隐蔽的新问题**——
+工具照样返回绿色的「🧠 L1 记忆消缺口」，而实际行为是错的。
+
+| 编号 | 新引入的缺陷 | 根因 | 修复 |
+|---|---|---|---|
+| **N-3** | **中文术语 100% 不命中** | `containsTerm` 要求两侧非字母数字，而汉字全是 `\p{L}` → 被汉字夹住的术语全死（实测 8/8 漏）。原始需求场景恰是「中文内部术语」 | 三类分别处理：ASCII 词要边界、**多字中文直接子串命中**、单字中文要边界 |
+| **N-4** | 子键可塞换行 → **伪造章节直达 Word 交付件**，且 kbDigest/LCS/定稿三道校验全部放行（唯一事实源里的注入） | 子键原样插值进 markdown，校验只查了 `!sub.trim()` | 子键禁换行与 markdown 结构字符 + 长度 ≤40；另修 `isDocAddr` 前导零（F-2） |
+| **N-5** | **候选自证 → 臆造即白拿消缺口** | `matchMemory` 的 haystack 含 `candidates` 自身，而候选名就是它自己的证据 | 匹配证据**只取槽位正文**；缩写靠正文佐证（材料里本就有 `信贷审批部（CRD）`） |
+| **N-2** | **revisit 二次定稿被永久拦截** | 变更记录表行未豁免（注释写「同理」但实现没有） | `stripServerAppended` 增加「第二章 文档变更过程」表体行豁免 |
+| **F-1** | 溯源伪造 **5 种变体全部放行** | 豁免处 `/^##\s*确认溯源/`（无 `$`）与校验处 `/^##\s*确认溯源\s*$/m`（有 `$`）不一致；且只校验匹配自己正则的条目 | 两处共用同一组 `SECTION_*_RE`；节内非空行不匹配服务端格式即判违规 |
+| **F-5** | 溯源**整节删除**放行 → 交付件静默失去全部溯源 | 只在有 `## 确认溯源` 时才校验 | `reviewRecord` 有 `confirmSource` 而 PRD 无该节 → 拦 |
+| **F-4** | 自定义 `source` 时**迭代副本静默丢失** | `copyPrdToIterDir` 漏传 `assembledFile`；且 `00_初稿需求书/` 不存在时 `readdir` 抛 ENOENT 被 `catch {}` 吞掉 | 补传参数 + `mkdir` 先建目录 |
+| **F-6** | CLI `stats` 仍读已删的 `s.score` | 死代码清扫漏了消费者 | 改用 `s.kb` 覆盖率 |
+
+**同时修掉三处「自证测试」**（复审最硬的指控——上一轮的绿灯是假的）：
+
+| 测试 | 原来（自证） | 现在（打生产路径） |
+|---|---|---|
+| CLI 记忆根 | 只断言 `memoryRoot()`，**CLI 一次都没被调用**（改回 `homedir()` 照样绿） | 真跑 `runMemory` 并捕获 `process.stdout`；另要求 CLI 层名引用 `MEMORY_LAYERS`（消除人工约定漂移面） |
+| 门禁红线 | 测试内**手工调 `kbGate`**，没走 `review.ts` 的生产门禁 | 打 `review_submit`——若门禁被改成「按记忆放行」，用例即失败 |
+| `acceptance.ts` | `l2: never[] = []` 恒空 → **L2 路径从未执行**；手造 L1 数组绕过 `matchMemory` | 一律走 `matchMemory`；新增 L2 验收项（不消缺口 + 猜测带出内容） |
+
+**顺带发现**：`node_modules/sm-plugin` 是 9 月的旧拷贝（非 symlink），
+导致 `bun typecheck` 长期报 3 个假错误。`bun install` 重建为 symlink 后
+**首次 typecheck 全绿**——此前整个重构期间的红都是环境噪音。
 `p0-adversarial.test.ts` 累计 31 项（13 P0 + 14 P1 + 4 P2）。
 
 **CI 门槛**：验收 1/2 的核心不变量已下沉为 `reqdoc-memory.test.ts` 的确定性断言
