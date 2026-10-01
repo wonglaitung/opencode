@@ -79,7 +79,9 @@ describe("3.6 · L1 消缺口 / L2 不消缺口", () => {
     })
     const q = d.all.find((x) => x.address === "4.1.CIPS")
     expect(q).toBeDefined()
-    expect(q!.guess).toContain("组织记忆")
+    // P1-c：猜测必须带出记忆内容——原实现只说「组织记忆里有相关记录（X）」，
+    // 业务看不到任何实质信息却要点头（规则又规定「回同意默认即视为确认」）
+    expect(q!.guess).toContain("CIPS 报文走 ESB")
     expect(q!.from).toBe("memory-L2")
   })
 

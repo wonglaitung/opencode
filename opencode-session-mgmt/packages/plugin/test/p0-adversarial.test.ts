@@ -8,7 +8,7 @@
  * 4. **路径穿越 / 坏 JSON 崩溃 / 词边界误命中 / 长名静默覆盖**
  */
 import { describe, expect, test } from "bun:test"
-import { mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { matchMemory, requiredSlots, writeL1Term, writeL2Fact } from "sm-shared"
@@ -246,5 +246,221 @@ describe("P0-3 · 记忆库健壮性", () => {
       JSON.stringify({ term: "ESB", definition: "企业服务总线", kind: "内部简称", scope: "org", origin: "restated", confirmedAt: 1, fromProject: "p", retired: true }),
     )
     expect(matchMemory("材料提到 ESB 系统").l1).toEqual([])
+  })
+})
+/**
+ * P1 回归护栏（对抗审查第二批）。
+ *
+ * 1. 非法地址零校验 → 事实「收了却不进交付件」且零告警
+ * 2. `reqdoc_answer` 先写记忆后校验 → 失败调用照样污染全局记忆
+ * 3. L2 猜测是空壳 → 业务对空默认值点头（规则又规定「回同意默认即确认」）
+ * 4. `reqdoc_assemble` 无路径校验 + 自定义 `source` 与定稿期望路径脱节
+ * 5. `reqdoc_memory_recall` 无工作流校验 + 退役是空操作
+ */
+describe("P1 · 槽位地址校验", () => {
+  const setup = () => {
+    const store = Store.memory(() => "reqdoc" as const)
+    const worktree = mkdtempSync(join(tmpdir(), "sm-p1-"))
+    const ctx = { sessionID: "r1", worktree } as never
+    return { store, worktree, ctx, tools: createReqdocKbTools(store) }
+  }
+  const ingest = (tools: ReturnType<typeof createReqdocKbTools>, ctx: never, address: string) =>
+    tools.reqdoc_ingest!.execute(
+      {
+        features: [{ name: "名单排查", priority: "high" }],
+        slots: [{ address, kind: "prose", content: "重要业务事实", source: "文档" }],
+      } as never,
+      ctx,
+    )
+
+  test("★ 非法地址被拒（此前收了却不进交付件且零告警）", async () => {
+    const { store, ctx, tools } = setup()
+    await expect(ingest(tools, ctx, "9.9.999.这不是服务端派生的地址")).rejects.toThrow(/地址非法/)
+    store.close()
+  })
+
+  test("★ 越界功能点被拒（5.9.x 在只有 1 个功能点时）", async () => {
+    const { store, ctx, tools } = setup()
+    await expect(ingest(tools, ctx, "5.9.2.1.客户号")).rejects.toThrow(/地址非法/)
+    store.close()
+  })
+
+  test("合法地址放行（必填叶子 / 容器本身 / 容器叶子）", async () => {
+    const { store, ctx, tools } = setup()
+    for (const addr of ["3.1", "4.1", "4.1.CRD", "5.1.2.1.客户号"]) {
+      expect(await ingest(tools, ctx, addr)).toBeTruthy()
+    }
+    store.close()
+  })
+
+  test("★ 已存在的地址放行（改内容而非建新地址）", async () => {
+    const { store, ctx, tools } = setup()
+    await ingest(tools, ctx, "3.1")
+    await tools.reqdoc_ingest!.execute(
+      { features: [{ name: "名单排查", priority: "high" }], slots: [{ address: "3.1", kind: "prose", content: "改过的内容", source: "文档" }] } as never,
+      ctx,
+    )
+    expect(store.get("r1")!.workflow!.kb!.slots.find((s) => s.address === "3.1")!.content).toBe("改过的内容")
+    store.close()
+  })
+
+  test("reqdoc_answer 同样校验地址", async () => {
+    const { store, ctx, tools } = setup()
+    await expect(
+      tools.reqdoc_answer!.execute({ address: "9.9.非法", content: "x", source: "文档" } as never, ctx),
+    ).rejects.toThrow(/地址非法/)
+    store.close()
+  })
+})
+
+describe("P1 · 记忆写入必须在校验之后", () => {
+  const memFiles = (): string[] => {
+    const dir = join(process.env.SM_MEMORY_HOME!, "l1-glossary")
+    return existsSync(dir) ? readdirSync(dir) : []
+  }
+  const setup = () => {
+    const home = mkdtempSync(join(tmpdir(), "sm-p1m-"))
+    process.env.SM_MEMORY_HOME = join(home, "memory")
+    const store = Store.memory(() => "reqdoc" as const)
+    const worktree = mkdtempSync(join(tmpdir(), "sm-p1w-"))
+    const ctx = { sessionID: "r1", worktree } as never
+    return { store, ctx, worktree, tools: createReqdocKbTools(store) }
+  }
+  const withTerm = (address: string, source: string, reason?: string) => ({
+    address, content: "x", source, reason,
+    restated_term: { term: "CRD", definition: "信贷审批部", kind: "内部简称" as const },
+  })
+
+  test("★ [缺省] 无 reason 失败后记忆库为空", async () => {
+    const { store, ctx, tools } = setup()
+    await tools.reqdoc_ingest!.execute({ features: [{ name: "X", priority: "high" }], slots: [] } as never, ctx)
+    await expect(tools.reqdoc_answer!.execute(withTerm("3.1", "缺省") as never, ctx)).rejects.toThrow()
+    expect(memFiles()).toEqual([])
+    store.close()
+  })
+
+  test("★ 非法地址失败后记忆库为空", async () => {
+    const { store, ctx, tools } = setup()
+    await tools.reqdoc_ingest!.execute({ features: [{ name: "X", priority: "high" }], slots: [] } as never, ctx)
+    await expect(tools.reqdoc_answer!.execute(withTerm("9.9.非法", "文档") as never, ctx)).rejects.toThrow()
+    expect(memFiles()).toEqual([])
+    store.close()
+  })
+
+  test("★ sdlc 会话失败后记忆库为空", async () => {
+    const { worktree } = setup()
+    const sdlc = Store.memory(() => "sdlc" as const)
+    sdlc.ensure("s1")
+    await expect(
+      createReqdocKbTools(sdlc).reqdoc_answer!.execute(withTerm("3.1", "文档") as never, { sessionID: "s1", worktree } as never),
+    ).rejects.toThrow(/仅用于 reqdoc/)
+    expect(memFiles()).toEqual([])
+    sdlc.close()
+  })
+
+  test("正常调用仍写入记忆（修的不是写入，是时机）", async () => {
+    const { store, ctx, tools } = setup()
+    await tools.reqdoc_ingest!.execute({ features: [{ name: "X", priority: "high" }], slots: [] } as never, ctx)
+    const out = String(await tools.reqdoc_answer!.execute(withTerm("3.1", "文档") as never, ctx))
+    expect(out).toContain("已记入 L1")
+    expect(memFiles().length).toBe(1)
+    store.close()
+  })
+})
+
+describe("P1 · L2 猜测必须带出记忆内容", () => {
+  test("★ L2 命中的猜测里含记忆原文（P1-c：原为空壳）", async () => {
+    const { deriveQuestions } = await import("sm-shared")
+    const features = [{ no: 1, name: "X", priority: "high" as const, confirmedAt: 1 }]
+    const d = deriveQuestions(features, {
+      slots: [],
+      decls: { "4.1": { required: false, reason: "x" } },
+      candidates: { "4.1": ["CIPS"] },
+      l2: [{ content: "交易走 CIPS 通道，报文经 ESB 网关", source: "问答", scope: "org", origin: "restated", confirmedAt: 1, fromProject: "p" }],
+    })
+    const q = d.all.find((x) => x.address === "4.1.CIPS")!
+    expect(q.from).toBe("memory-L2")
+    expect(q.guess).toContain("CIPS")
+    expect(q.guess!.length).toBeGreaterThan(15)
+  })
+})
+
+describe("P1 · 组装路径与定稿一致", () => {
+  const setup = () => {
+    const store = Store.memory(() => "reqdoc" as const)
+    store.mutateWorkflow("r1", (w) => {
+      for (const n of ["goal", "rules", "edge", "prd"]) w.stages[n].status = "approved"
+      const features = [{ no: 1, name: "公告发布", priority: "medium" as const, confirmedAt: 1000 }]
+      w.kb = {
+        slots: requiredSlots(features).map((a) => ({
+          kind: "prose" as const, address: a, content: `${a} 内容`,
+          source: "文档" as const, status: "confirmed" as const,
+        })),
+        features,
+        containers: { "4.1": { required: false, reason: "x" }, "5.1.2.1": { required: false, reason: "y" } },
+        askCounts: {}, updatedAt: 1,
+      }
+    })
+    const worktree = mkdtempSync(join(tmpdir(), "sm-p1r-"))
+    const ctx = { sessionID: "r1", worktree } as never
+    return { store, worktree, ctx }
+  }
+
+  test("★ source 含斜杠被拒（路径穿越）", async () => {
+    const { store, ctx } = setup()
+    await expect(
+      createReqdocKbTools(store).reqdoc_assemble!.execute({ source: "../../../evil.md" } as never, ctx),
+    ).rejects.toThrow(/只能是文件名/)
+    store.close()
+  })
+
+  test("★ 自定义 source 后定稿不再死锁（assembledFile 贯通）", async () => {
+    const { store, ctx, worktree } = setup()
+    await createReqdocKbTools(store).reqdoc_assemble!.execute({ source: "需求规格书V2.md" } as never, ctx)
+    expect(store.get("r1")!.workflow!.kb!.assembledFile).toBe("需求规格书V2.md")
+    expect(existsSync(join(worktree, "07_需求规格产出/1_公告发布/需求规格书V2.md"))).toBe(true)
+    const out = String(await createReviewTools(store).review_submit!.execute(CHECKLIST, ctx))
+    expect(out).toContain("审查阶段通过")
+    store.close()
+  })
+})
+
+describe("P1 · memory_recall 工作流校验与退役", () => {
+  test("★ sdlc 会话不得写全局记忆", async () => {
+    const home = mkdtempSync(join(tmpdir(), "sm-p1rc-"))
+    process.env.SM_MEMORY_HOME = join(home, "memory")
+    const sdlc = Store.memory(() => "sdlc" as const)
+    sdlc.ensure("s1")
+    await expect(
+      createReqdocKbTools(sdlc).reqdoc_memory_recall!.execute({ facts: [{ content: "x" }] } as never, {
+        sessionID: "s1", worktree: mkdtempSync(join(tmpdir(), "w-")),
+      } as never),
+    ).rejects.toThrow(/仅用于 reqdoc/)
+    expect(existsSync(join(home, "memory", "l2-org"))).toBe(false)
+    sdlc.close()
+  })
+
+  test("★ 退役按地址生效（P1-e：内容匹配曾是空操作）", async () => {
+    const home = mkdtempSync(join(tmpdir(), "sm-p1rs-"))
+    process.env.SM_MEMORY_HOME = join(home, "memory")
+    const store = Store.memory(() => "reqdoc" as const)
+    store.mutateWorkflow("r1", (w) => {
+      const features = [{ no: 1, name: "公告发布", priority: "medium" as const, confirmedAt: 1000 }]
+      w.kb = {
+        slots: [
+          { kind: "prose", address: "5.1.2.11", content: "交易走 CIPS 报文经 ESB", source: "问答", status: "confirmed" },
+          { kind: "prose", address: "4.2", content: "本行受理跨行转账", source: "文档", status: "confirmed" },
+        ],
+        features, containers: {}, askCounts: {}, updatedAt: 1,
+      }
+    })
+    await createReqdocKbTools(store).reqdoc_memory_recall!.execute(
+      { facts: [{ content: "交易走 CIPS 报文经 ESB" }], retire_slots: ["5.1.2.11"] } as never,
+      { sessionID: "r1", worktree: mkdtempSync(join(tmpdir(), "w-")) } as never,
+    )
+    const slots = store.get("r1")!.workflow!.kb!.slots
+    expect(slots.find((s) => s.address === "5.1.2.11")!.status).toBe("retired")
+    expect(slots.find((s) => s.address === "4.2")!.status).toBe("confirmed")
+    store.close()
   })
 })

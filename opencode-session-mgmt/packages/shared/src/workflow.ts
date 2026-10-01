@@ -366,6 +366,10 @@ export interface ReqdocKbState {
    * 由 `reqdoc_scan` 抽取或 `reqdoc_ingest(candidates=…)` 显式提交。
    */
   candidates?: Record<string, string[]>
+  /** 最近一次组装产物的文件名（相对功能点子目录，默认 `PRD.md`）。
+   *  定稿校验/变更记录/溯源回填都按它定位产物——否则用户传了 `source=需求规格书V2.md`
+   *  就会与硬编码的 `PRD.md` 脱节，导致定稿永久报「未找到产物」（P1-d）。 */
+  assembledFile?: string
   updatedAt: number
 }
 

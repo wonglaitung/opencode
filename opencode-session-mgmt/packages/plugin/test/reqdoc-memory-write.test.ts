@@ -7,7 +7,7 @@
  *    同名不同义走冲突提示而非静默覆盖。
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs"
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Store } from "../src/db"
@@ -15,6 +15,7 @@ import { Store } from "../src/db"
 /** 记忆文件名含内容哈希后缀，按内容查找而非硬编码文件名。 */
 function findMemory(layer: string, pred: (e: Record<string, unknown>) => boolean): Record<string, unknown> | null {
   const dir = join(home, "memory", layer)
+  if (!existsSync(dir)) return null // 没写过 = 目录不存在
   for (const f of readdirSync(dir)) {
     const e = JSON.parse(readFileSync(join(dir, f), "utf8")) as Record<string, unknown>
     if (pred(e)) return e
@@ -115,22 +116,39 @@ describe("3.6.1 ① · reqdoc_answer 复述术语即写 L1", () => {
 })
 
 describe("3.6.1 ③ · reqdoc_memory_recall 业务勾选才入库", () => {
-  test("勾选的写入 L2，且对应槽位退役（不再重复追问）", async () => {
+  test("勾选的写入 L2；退役槽位按地址显式指定（P1-e：内容匹配曾是空操作）", async () => {
     const store = reqdocStore()
     const tools = createReqdocKbTools(store)
     const out = String(
       await tools.reqdoc_memory_recall!.execute(
-        { facts: [{ content: "交易走 CIPS 报文经 ESB" }] } as never,
+        { facts: [{ content: "交易走 CIPS 报文经 ESB" }], retire_slots: ["5.1.2.11"] } as never,
         { sessionID: "r1", worktree: home } as never,
       ),
     )
     expect(out).toContain("写入 L2 组织知识 1 条")
     const saved = findMemory("l2-org", (e) => e.content === "交易走 CIPS 报文经 ESB")!
     expect(saved.origin).toBe("restated")
-    // 已进记忆的槽位退役——避免下轮再问同一件事
+    // 按地址退役——内容相等的写法永不匹配（L2 content 是概括知识、slot content 是正文）
     const slots = store.get("r1")!.workflow!.kb!.slots
-    expect(slots.find((s) => s.content === "交易走 CIPS 报文经 ESB")!.status).toBe("retired")
+    expect(slots.find((s) => s.address === "5.1.2.11")!.status).toBe("retired")
+    expect(slots.find((s) => s.address === "4.2")!.status).toBe("confirmed")
     store.close()
+  })
+
+  test("★ sdlc 会话不得写全局记忆（P1-e：此前无工作流校验）", async () => {
+    const sdlc = Store.memory(() => "sdlc" as const)
+    sdlc.mutateWorkflow("s1", (w) => {
+      w.features = [{ no: 1, name: "登录", priority: "high", confirmedAt: 1 }]
+    })
+    const tools = createReqdocKbTools(sdlc)
+    await expect(
+      tools.reqdoc_memory_recall!.execute({ facts: [{ content: "不该写进去" }] } as never, {
+        sessionID: "s1",
+        worktree: home,
+      } as never),
+    ).rejects.toThrow(/仅用于 reqdoc/)
+    expect(findMemory("l2-org", () => true)).toBeNull()
+    sdlc.close()
   })
 
   test("★ 只写入勾选项：未勾选的槽位保持 confirmed 不退役", async () => {

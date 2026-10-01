@@ -91,6 +91,34 @@ export function isContainerAddr(addr: string): boolean {
   return addr === "4.1" || /^5\.\d+\.2\.1$/.test(addr)
 }
 
+/**
+ * 是否**合法槽位地址**（工具入参校验用）。
+ *
+ * 三类合法：必填叶子（`3.1`、`5.1.2.13`）、容器本身（`4.1`、`5.1.2.1`）、
+ * 容器叶子（`4.1.CRD`、`5.1.2.1.客户号`——子键为任意非空串）。
+ *
+ * 存在的理由（对抗审查 P1-a）：此前 `reqdoc_ingest` 对地址零校验，
+ * 提交 `9.9.999.这不是服务端派生的地址` 会被**接受并落库**，但组装时无法投影——
+ * 结果是「唯一事实源收了事实、交付件里没有、零告警」的最坏组合。
+ */
+export function isValidSlotAddr(addr: string, features: readonly ReqdocFeature[]): boolean {
+  if (!addr || addr.length > 80) return false
+  const doc = docAddrOf(addr)
+  const sub = slotSubKey(addr)
+  // 容器叶子：`4.1.CRD` / `5.1.2.1.客户号`
+  if (sub !== null) {
+    if (!sub.trim()) return false
+    // 文档地址必须合法，且功能点下标须在范围内（防 5.9.2.1 这类越界）
+    if (!isDocAddr(doc)) return false
+    if (doc.startsWith("5.")) {
+      const bi = Number(doc.split(".")[1])
+      if (!Number.isInteger(bi) || bi < 1 || bi > features.length) return false
+    }
+    return true
+  }
+  return requiredSlots(features).includes(addr) || isContainerAddr(addr)
+}
+
 // ---------------------------------------------------------------------------
 // 6.2.0 必填集：从模板 schema 派生，不人工枚举
 // ---------------------------------------------------------------------------
@@ -417,10 +445,14 @@ function deriveAll(
         l1Applied.push(addr)
         continue
       }
+      // L2 猜测必须**带出记忆内容**，否则等于让业务对空默认值点头（P1-c）：
+      // 原实现只说「组织记忆里有相关记录（X）」——一个字都不露，
+      // 而规则又规定「回同意默认即视为确认」，等于系统性把业务推向闭眼签字。
+      const l2hit = l2.find((f) => containsWord(f.content, name))
       const guess = term
         ? `${term.term} 我理解是${term.definition}，对吗？`
-        : l2.find((f) => f.content.includes(name))
-          ? `组织记忆里有相关记录（${name}），是这个吗？`
+        : l2hit
+          ? `上次在别的需求里见过「${excerptAround(l2hit.content, name)}」，是这样吗？`
           : undefined
       out.push({
         address: addr,
@@ -431,6 +463,22 @@ function deriveAll(
     }
   }
   return { questions: out, l1Applied }
+}
+
+/** 候选词是否出现在文本中（朴素包含；候选由服务端抽取，粒度已受控）。 */
+function containsWord(text: string, word: string): boolean {
+  return text.includes(word)
+}
+
+/** 截取命中词所在的一句作为「默认值」露出——业务要看到具体内容才能判断。 */
+function excerptAround(content: string, word: string): string {
+  const i = content.indexOf(word)
+  if (i < 0) return content.slice(0, 60)
+  // 取命中词所在的一句（句号/分号/换行分隔）
+  const from = Math.max(0, content.lastIndexOf("。", i) + 1, content.lastIndexOf("\n", i) + 1)
+  const candidates = [content.indexOf("。", i), content.indexOf("\n", i)].filter((x) => x > i)
+  const to = candidates.length > 0 ? Math.min(...candidates) + 1 : Math.min(content.length, i + 60)
+  return content.slice(from, to).trim().slice(0, 80)
 }
 
 /** 是否术语容器（`4.1`）；字段容器（`5.k.2.1`）返回 false。 */

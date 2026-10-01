@@ -11,7 +11,7 @@
  * 便于对照与回退（见设计文档 12 章阶段 2a/2b/2c）。
  */
 import { mkdir, writeFile } from "node:fs/promises"
-import { basename, join } from "node:path"
+import { basename, join, relative } from "node:path"
 import { tool, type ToolDefinition } from "@opencode-ai/plugin"
 import {
   QUESTIONS_PER_TURN,
@@ -19,6 +19,7 @@ import {
   STOP_ASK_AFTER,
   advanceAskCounts,
   deriveQuestions,
+  isValidSlotAddr,
   materialOf,
   matchMemory,
   writeL1Term,
@@ -36,7 +37,7 @@ import {
 import type { Store } from "../db"
 import { WorkflowOpError } from "../workflow-ops"
 import { loadReqdocTemplate } from "../template"
-import { projectRoot } from "../fs-safe"
+import { projectRoot, resolveWithinWorktree } from "../fs-safe"
 
 const z = tool.schema
 
@@ -167,6 +168,17 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
           }
           kb.candidates = next
         }
+        // 地址合法性校验（P1-a）：非法地址会让事实「收了但不进交付件」且零告警。
+        // 已存在的地址放行（那是改内容，不是建新地址）。
+        const invalid = args.slots.filter((x) => !isValidSlotAddr(x.address, kb.features) && !kb.slots.some((y) => y.address === x.address))
+        if (invalid.length > 0) {
+          throw new WorkflowOpError(
+            `槽位地址非法：${invalid.map((x) => x.address).join("、")}。\n` +
+              `合法地址只有两类：① 工具返回的「本轮该填」清单里的地址（如 3.1、5.1.2.13）；` +
+              `② 容器叶子（4.1.<术语名>、5.1.2.1.<字段名>）。\n` +
+              `请先取本轮清单再提交；若确有模板外内容，用 containers 声明或另开附注，不要自造地址。`,
+          )
+        }
         // 槽位合并：同地址覆盖（status 由服务端强制 draft，模型不能自称已确认）
         const byAddr = new Map(kb.slots.map((s) => [s.address, s]))
         for (const s of args.slots) {
@@ -190,8 +202,6 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
       })
       const kb = readKb(saved)
       await writeKbFiles(root, kb)
-      // 阶段 3：记忆接线——按已提交槽位正文匹配（3.6 由材料驱动，只返回命中项）。
-      // L1 命中消缺口（不再问）、L2 命中只作默认值（仍问一次）。
       // 记忆匹配同时看已提交槽位正文与候选名——候选名是缩写的主要来源
       const hits = matchMemory(
         materialOf([...kb.slots.map((s) => s.content), ...Object.values(kb.candidates ?? {}).flat()]),
@@ -257,27 +267,17 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
     },
     async execute(args, context) {
       const root = projectRoot(context)
-      // 记忆写入（3.6.1 ①）：业务复述 → 立即写 L1。origin 固定 restated——
-      // 模型无法自行指定 origin，杜绝「点默认也入库」的污染路径。
-      const mem = args.restated_term
-        ? writeL1Term(args.restated_term.term, args.restated_term.definition, {
-            kind: args.restated_term.kind,
-            scope: "org",
-            origin: "restated",
-            fromProject: basename(root),
-          })
-        : null
-      const memNote =
-        mem?.ok === true
-          ? `🧠 已记入 L1 术语记忆：${args.restated_term!.term} = ${args.restated_term!.definition}（下个需求出现该词将直接采信、不再问）`
-          : mem?.ok === false && mem.reason === "conflict"
-            ? `⚠ 术语「${args.restated_term!.term}」记忆里已有不同释义（${mem.existing}），未覆盖——请与业务确认该用哪个`
-            : ""
       const saved = store.mutateWorkflow(context.sessionID, (workflow) => {
         requireReqdoc(workflow, "reqdoc_answer")
         const kb = readKb(workflow)
         if (args.source === "缺省" && !args.reason) {
           throw new WorkflowOpError(`槽位 ${args.address} 标为 [缺省] 但未给 reason`)
+        }
+        if (!isValidSlotAddr(args.address, kb.features) && !kb.slots.some((y) => y.address === args.address)) {
+          throw new WorkflowOpError(
+            `槽位地址非法：${args.address}。合法地址只有两类：① 工具返回的「本轮该填」清单里的地址；` +
+              `② 容器叶子（4.1.<术语名>、5.1.2.1.<字段名>）。请先取本轮清单再回答。`,
+          )
         }
         const idx = kb.slots.findIndex((s) => s.address === args.address)
         const prev = idx >= 0 ? kb.slots[idx]! : undefined
@@ -303,6 +303,22 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
         kb.updatedAt = Date.now()
         workflow.kb = kb
       })
+      // 记忆写入（3.6.1 ①）：业务复述 → 立即写 L1。origin 固定 restated——
+      // 模型无法自行指定 origin，杜绝「点默认也入库」的污染路径。
+      const mem = args.restated_term
+        ? writeL1Term(args.restated_term.term, args.restated_term.definition, {
+            kind: args.restated_term.kind,
+            scope: "org",
+            origin: "restated",
+            fromProject: basename(root),
+          })
+        : null
+      const memNote =
+        mem?.ok === true
+          ? `🧠 已记入 L1 术语记忆：${args.restated_term!.term} = ${args.restated_term!.definition}（下个需求出现该词将直接采信、不再问）`
+          : mem?.ok === false && mem.reason === "conflict"
+            ? `⚠ 术语「${args.restated_term!.term}」记忆里已有不同释义（${mem.existing}），未覆盖——请与业务确认该用哪个`
+            : ""
       const kb = readKb(saved)
       await writeKbFiles(root, kb)
       // 阶段 3：记忆接线——按已提交槽位正文匹配（3.6 由材料驱动，只返回命中项）。
@@ -342,7 +358,10 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
       source: z
         .string()
         .optional()
-        .describe("输出文件名（相对 07_需求规格产出，默认 PRD.md）；功能点子目录由服务端按功能点建"),
+        .describe(
+          "输出文件名（**只能是基本文件名**，如 需求规格书.md；默认 PRD.md）。功能点子目录由服务端按功能点建。" +
+            "不要传含斜杠的路径——定稿校验按同一个文件名查找，传路径会导致定稿时找不到产物。",
+        ),
     },
     async execute(args, context) {
       const root = projectRoot(context)
@@ -354,10 +373,20 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
       if (!result) {
         return "⚠ 无法组装：模板不可用或功能点为空。请先 reqdoc_ingest 提交功能点清单。"
       }
+      const fileName = args.source ?? "PRD.md"
+      // 只允许基本文件名：含斜杠/.. 会逃出功能点目录，且与定稿查找路径不一致（P1-d）
+      if (fileName !== basename(fileName) || fileName === "." || fileName === "..") {
+        throw new WorkflowOpError(`source 只能是文件名（如 需求规格书.md），收到：${fileName}。功能点子目录由服务端自动创建。`)
+      }
       const outDir = assembleDir(root, kb.features)
       await mkdir(outDir, { recursive: true })
-      const outPath = join(outDir, args.source ?? "PRD.md")
+      // 统一走 resolveWithinWorktree（同仓 review.ts 的做法），杜绝越界写
+      const outPath = resolveWithinWorktree(root, join(relative(root, outDir), fileName))
       await Bun.write(outPath, result.md)
+      // 记住产物文件名：定稿/变更记录/溯源回填都按它定位（P1-d：否则自定义 source 会与硬编码 PRD.md 脱节）
+      store.mutateWorkflow(context.sessionID, (w) => {
+        if (w.kb) w.kb.assembledFile = fileName
+      })
       return [
         `🧩 已组装 PRD：${outDir}/${args.source ?? "PRD.md"}（${result.md.length} 字符）。`,
         `结构指纹：功能点 ${kb.features.length} 个、小节 ${result.fingerprint.subSections.length} 个、来源标签 ${Object.keys(result.fingerprint.tags).length} 处。`,
@@ -389,9 +418,20 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
         .array(z.object({ key: z.string().describe("偏好键（如 详略/措辞/分工）"), value: z.string().describe("偏好内容") }))
         .optional()
         .describe("可选的表达偏好（只影响措辞与详略，不影响事实与门禁）"),
+      retire_slots: z
+        .array(z.string())
+        .optional()
+        .describe(
+          "可选：本次已写入记忆、后续不必再问的**槽位地址**（如 [\"5.1.2.11\"]）。" +
+            "被退役的槽位不再进开放项、也不计入覆盖率——只填确实已进记忆的，填错会导致门禁永远不通过。",
+        ),
     },
     async execute(args, context) {
       const root = projectRoot(context)
+      // 工作流校验（P1-e）：此前无此校验，sdlc 会话也能调，往全局 L2/L4 写记忆
+      const workflow = store.get(context.sessionID)?.workflow
+      if (!workflow) throw new WorkflowOpError("未找到工作流状态")
+      requireReqdoc(workflow, "reqdoc_memory_recall")
       const fromProject = basename(root)
       const written: string[] = []
       const skipped: string[] = []
@@ -405,12 +445,15 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
         const r = writeL4Pref(p.key, p.value, { scope: "reqdoc", origin: "restated", fromProject })
         if (r.ok) prefWritten.push(`${p.key}=${p.value}`)
       }
-      // 从知识库移除已写入的候选槽位（它们已进记忆，不必重复追问）
-      if (written.length > 0) {
+      // 退役对应槽位（它们已进记忆，不必重复追问）。
+      // 此前用 `written.includes(sl.content)` 严格相等匹配——L2 content 是概括性组织知识、
+      // slot content 是 PRD 正文，**永不匹配**，是段空操作（P1-e）。改为按 slotAddress 显式指定。
+      const retireAddrs = args.retire_slots ?? []
+      if (retireAddrs.length > 0) {
         store.mutateWorkflow(context.sessionID, (w) => {
           if (!w.kb) return
           w.kb.slots = w.kb.slots.map((sl) =>
-            written.includes(sl.content) && sl.source === "问答" ? { ...sl, status: "retired" as const } : sl,
+            retireAddrs.includes(sl.address) ? { ...sl, status: "retired" as const } : sl,
           )
         })
       }

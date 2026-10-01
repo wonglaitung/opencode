@@ -129,7 +129,7 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
         if (wf?.kb) {
           try {
             const root = projectRoot(context)
-            await appendConfirmSourceToPrd(root, prdRelPath(root, wf.kb.features), args.codeSegmentId, src)
+            await appendConfirmSourceToPrd(root, prdRelPath(root, wf.kb.features, wf.kb.assembledFile), args.codeSegmentId, src)
           } catch {
             // best-effort：溯源回填失败不阻断要点确认
           }
@@ -278,7 +278,7 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
       if (wf0?.kb) {
         try {
           const root = projectRoot(context)
-          liveMd = await Bun.file(resolveWithinWorktree(root, prdRelPath(root, wf0.kb.features))).text()
+          liveMd = await Bun.file(resolveWithinWorktree(root, prdRelPath(root, wf0.kb.features, wf0.kb.assembledFile))).text()
           liveRender = parseRenderStructure(liveMd)
         } catch {
           prdMissing = true
@@ -334,7 +334,7 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
           const current = kbDigest(kb.slots)
           if (prdMissing) {
             throw new WorkflowOpError(
-              `未找到 PRD 产物（预期路径 ${prdRelPath(projectRoot(context), kb.features)}）：` +
+              `未找到 PRD 产物（预期路径 ${prdRelPath(projectRoot(context), kb.features, kb.assembledFile)}）：` +
                 `PRD 必须由 reqdoc_assemble 从槽位投影生成，不能用 write 手写。请先 reqdoc_assemble 再定稿。`,
             )
           }
@@ -432,7 +432,7 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
       if (saved.type === "reqdoc" && saved.kb) {
         try {
           const root = projectRoot(context)
-          const rel = prdRelPath(root, saved.kb.features)
+          const rel = prdRelPath(root, saved.kb.features, saved.kb.assembledFile)
           // revision 0 = 初始定稿（1.0）；revisit 重做后定稿 = 修订行（1.<revision>）
           if (!preApproved) {
             await appendChangeRecordToPrd(root, rel, saved.stages[getDefinition(saved.type).reviewStage!].revision ?? 0)
@@ -484,9 +484,9 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
    * 组装产物相对路径（2c）：由知识库功能点推导，供溯源回填/变更记录/迭代复制共用。
    * root 缺失（无 worktree 的调用方）时抛错——调用点均为 best-effort，不阻断定稿。
    */
-  const prdRelPath = (root: string, features: readonly ReqdocFeature[]): string => {
+  const prdRelPath = (root: string, features: readonly ReqdocFeature[], fileName?: string): string => {
     if (!root) throw new Error("无工作区根目录，无法定位组装产物")
-    return join(relative(root, assembleDir(root, features)), "PRD.md")
+    return join(relative(root, assembleDir(root, features)), fileName ?? "PRD.md")
   }
 
   /** P3.10 溯源回填：把要点的来源证据追加写入 PRD 交付件末尾的「确认溯源」章节（best-effort）。 */
