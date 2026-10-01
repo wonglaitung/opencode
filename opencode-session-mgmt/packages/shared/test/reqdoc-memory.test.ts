@@ -88,6 +88,38 @@ describe("3.6 · L1 消缺口 / L2 不消缺口", () => {
     expect(d.all.map((q) => q.address)).toContain("4.1.AML")
   })
 
+  test("★ 验收标准 1/2：CRD 首轮被问、第二个需求被 L1 记忆消缺口", () => {
+    // 这是设计第 13 章的唯一真判据（追问变少且没丢事实），此处以确定性方式锁定：
+    // 模型层验证见 `bun run acceptance`（需本地 vLLM）。
+    const candidates = { "4.1": ["CRD", "AML", "KYC"] }
+    const full = requiredSlots(features).map((address) => ({
+      kind: "prose" as const, address, content: "",
+      source: "文档" as const, status: "confirmed" as const,
+    }))
+
+    // 需求一：无记忆 → CRD 必须被问（前提成立，否则「没问」不算本事）
+    const first = deriveQuestions(features, { slots: full, decls: containers, candidates })
+    expect(first.all.map((q) => q.address)).toContain("4.1.CRD")
+
+    // 业务复述 → 写 L1（origin 由服务端固定为 restated）
+    const w = writeL1Term("CRD", "信贷审批部", {
+      kind: "内部简称", scope: "org", origin: "restated", fromProject: "信贷系统改造",
+    })
+    expect(w.ok).toBe(true)
+
+    // 需求二：命中 L1 → CRD 消缺口、不再问；AML/KYC 未被复述，仍在清单里
+    const hits = matchMemory("信贷审批部（CRD）需要新增批量审批能力")
+    expect(hits.l1.map((t) => t.term)).toEqual(["CRD"])
+    const second = deriveQuestions(features, {
+      slots: full, decls: containers, candidates, l1: hits.l1, l2: hits.l2,
+    })
+    const addrs = second.all.map((q) => q.address)
+    expect(addrs).not.toContain("4.1.CRD")
+    expect(addrs).toContain("4.1.AML")
+    expect(addrs).toContain("4.1.KYC")
+    expect(second.l1Applied).toContain("4.1.CRD")
+  })
+
   test("★ 记忆不得改变 kbGate 判定（3.3.2 红线：sdlc 记忆不影响判定）", async () => {
     seedL1({ term: "CRD", definition: "信贷审批部" })
     const { kbGate, slotCoverage } = await import("sm-shared")
