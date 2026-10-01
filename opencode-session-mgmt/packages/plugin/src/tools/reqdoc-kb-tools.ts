@@ -109,7 +109,10 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
       "reqdoc 槽位批量提交：把从材料中提取的内容一次提交为**槽位**（不是直接写文档）。" +
       "服务端按模板派生「哪些槽位还开着」，只让你填这些地址；status 一律记为待确认（draft），" +
       "业务确认请用 reqdoc_answer。分批调用：每次提交后看返回的「本轮该填」清单，" +
-      `一次最多 ${QUESTIONS_PER_TURN} 项。仅 reqdoc 工作流有效。`,
+      `一次最多 ${QUESTIONS_PER_TURN} 项。` +
+      "**返回里「已采信历史记忆」列出的地址不在清单里、也不要再问业务**——服务端已替你免问，" +
+      "由你随后直接 reqdoc_answer 落定，**source 一律用「问答」**（定义出自业务过往口述，材料只出现该词、" +
+      "并未给出定义；标「文档」等于在交付件上做不实溯源）。不落定则必填容器覆盖不过。仅 reqdoc 工作流有效。",
     args: {
       slots: z
         .array(
@@ -239,7 +242,7 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
           : "",
         // 记忆效果必须对模型可见，否则它会重复问已被记忆消缺口的项（「少问」机制形同虚设）
         derived.l1Applied.length > 0
-          ? `🧠 L1 记忆免问 ${derived.l1Applied.length} 项（业务曾复述过，采信其定义，**不要问业务**）：${derived.l1Applied.join("、")} —— 它们不在「本轮该填」清单里、仍是 draft，**须由你用材料原文直接 reqdoc_answer 落定**（不落定则必填容器覆盖不过、进 prd 会被拦）`
+          ? `🧠 已采信历史记忆，免问 ${derived.l1Applied.length} 项（定义来自过往需求中业务的复述；不在本轮清单、不必再问，由你直接 reqdoc_answer 落定，source=问答）：${derived.l1Applied.join("、")}`
           : "",
         hits.l2.length > 0
           ? `🧠 L2 组织知识命中 ${hits.l2.length} 项（**不消缺口**，仅作默认值请业务点头）：${hits.l2.map((f) => f.content).join("；")}`
@@ -254,10 +257,11 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
   const reqdoc_answer = tool({
     description:
       "reqdoc 槽位确认：把某一项请业务确认后的结论落定（状态转 confirmed）。" +
-      "**只接受派生清单给出的地址**；业务未答满 2 轮的项会被停问，此时应显式收口" +
+      "**接受派生清单（本轮该填/停问）给出的地址，也接受回执「已采信历史记忆」列出的地址**" +
+      "（后者已替你免问、由你直接落定，source 用「问答」）；业务未答满 2 轮的项会被停问，此时应显式收口" +
       "（source=缺省 + reason 写明未确认原因），而不是反复追问。",
     args: {
-      address: z.string().describe("槽位地址（来自本轮该填清单或停问清单）"),
+      address: z.string().describe("槽位地址（来自本轮该填清单、停问清单，或回执「已采信历史记忆」列出的地址——后者不问业务、由你直接落定，source 用「问答」）"),
       content: z.string().describe("业务确认后的内容（业务语言，不照搬口语）"),
       source: z.enum(["文档", "问答", "缺省"]).describe("来源：文档 / 问答（业务口述）/ 缺省（本次不涉及）"),
       reason: z.string().optional().describe("source=缺省 时必填（如「本次无清算处理」）"),
@@ -350,7 +354,7 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
         `覆盖率：${kbCoverage(kb)}；剩余本轮该填 ${derived.batch.length} 项。`,
         derived.unclosed.length > 0 ? `⚠ 仍未收口：${derived.unclosed.join("、")}` : "",
         derived.l1Applied.length > 0
-          ? `🧠 L1 记忆免问 ${derived.l1Applied.length} 项（业务曾复述过，采信其定义，**不要问业务**）：${derived.l1Applied.join("、")} —— 它们不在「本轮该填」清单里、仍是 draft，**须由你用材料原文直接 reqdoc_answer 落定**（不落定则必填容器覆盖不过、进 prd 会被拦）`
+          ? `🧠 已采信历史记忆，免问 ${derived.l1Applied.length} 项（定义来自过往需求中业务的复述；不在本轮清单、不必再问，由你直接 reqdoc_answer 落定，source=问答）：${derived.l1Applied.join("、")}`
           : "",
         memNote,
       ]

@@ -217,8 +217,9 @@ export function buildStateBar(workflow: WorkflowState, stage: string | null): st
       lines.push(
         `待确认槽位 ${open.all.length} 项${open.batch.length > 0 ? `（本轮问 ${open.batch.length}）` : ""}` +
           `${open.stopped.length > 0 ? `；已停问 ${open.stopped.length} 项` : ""}` +
-          // 「待落定」不能省：免问项不在清单里，模型只看状态栏会以为已处理完
-          `${open.l1Applied.length > 0 ? `；L1 记忆已免问 ${open.l1Applied.length} 项（待你用材料原文 reqdoc_answer 落定）` : ""}`,
+          // 「待你落定」不能省：免问项不在清单里，模型只看状态栏会以为已处理完；
+          // 措辞按 07-业务口语 第 3 节用业务语言（不点工具名、不铺门禁因果），动作指令在 ingest 的工具描述里
+          `${open.l1Applied.length > 0 ? `；已采信历史记忆 ${open.l1Applied.length} 项待你落定（不必再问）` : ""}`,
       )
     }
   } else if (getDefinition(workflow.type).type === "reqdoc") {

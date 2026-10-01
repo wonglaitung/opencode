@@ -56,7 +56,7 @@ describe("P0-1 · 记忆链路在生产路径真的接通", () => {
         { sessionID: "r1", worktree } as never,
       ),
     )
-    expect(out).toContain("L1 记忆免问")
+    expect(out).toContain("已采信历史记忆")
     expect(out).toContain("4.1.CRD")
     // candidates 必须落进 kb（否则下一轮派生又拿不到）
     expect(store.get("r1")!.workflow!.kb!.candidates).toEqual({ "4.1": ["CRD", "AML"] })
@@ -670,7 +670,7 @@ describe("N-5 · 候选不得自证", () => {
       ),
     )
     // 模型臆造候选 → 不得白拿消缺口
-    expect(out).not.toContain("L1 记忆免问")
+    expect(out).not.toContain("已采信历史记忆")
     store.close()
   })
 
@@ -690,7 +690,7 @@ describe("N-5 · 候选不得自证", () => {
         { sessionID: "r1", worktree } as never,
       ),
     )
-    expect(out).toContain("L1 记忆免问")
+    expect(out).toContain("已采信历史记忆")
     store.close()
   })
 })
@@ -867,11 +867,11 @@ describe("I-1 · 记忆证据源不可由模型书写", () => {
     // 而 restated_term 的 description 已明示「业务只是点了同意默认时绝对不要填」。
     // 工具输出措辞必须体现「仍需确认」而非「已消缺口」——避免模型把它当既成事实。
     const src = readFileSync(join(import.meta.dir, "..", "src", "tools", "reqdoc-kb-tools.ts"), "utf8")
-    // 消缺口的提示必须同时给出「无需再问」与「来源是业务复述过的记忆」两个要素
-    // 两处回执都必须给出「业务曾复述过」这个来源要素——否则模型会把记忆当成本项目的既成事实
-    const notes = src.match(/🧠 L1 记忆[^`]*/g) ?? []
+    // 消缺口的提示必须同时给出「不必再问」与「来源是业务过往复述过的记忆」两个要素
+    // 两处回执都必须给出「定义来自过往需求中业务的复述」这个来源要素——否则模型会把记忆当成本项目的既成事实
+    const notes = src.match(/🧠 已采信历史记忆[^`]*/g) ?? []
     expect(notes.length).toBeGreaterThanOrEqual(2)
-    for (const n of notes) expect(n).toContain("业务曾复述过")
+    for (const n of notes) expect(n).toContain("业务的复述")
   })
 
   // 方案 C 落地后：证据是材料原文，模型写的槽位正文不再能制造命中。
@@ -892,7 +892,7 @@ describe("I-1 · 记忆证据源不可由模型书写", () => {
         { sessionID: "r1", worktree } as never,
       ),
     )
-    expect(out).not.toContain("L1 记忆免问")
+    expect(out).not.toContain("已采信历史记忆")
     // 状态栏快照也无命中（两处口径一致）
     expect(store.get("r1")!.workflow!.kb!.evidence ?? "").not.toContain("CCB")
     store.close()
@@ -914,7 +914,7 @@ describe("I-1 · 记忆证据源不可由模型书写", () => {
         { sessionID: "r1", worktree } as never,
       ),
     )
-    expect(out).toContain("L1 记忆免问")
+    expect(out).toContain("已采信历史记忆")
     expect(store.get("r1")!.workflow!.kb!.evidence).toContain("CCB")
     store.close()
   })
@@ -1012,10 +1012,10 @@ describe("C · 证据换源的两个失效路径", () => {
   test("★ 材料被替换后旧证据不得残留（缓存按指纹失效）", async () => {
     const { store, worktree } = await withCCB()
     dropMaterial(worktree, "本需求需对接 CCB 系统。")
-    expect(await ingest(store, worktree)).toContain("L1 记忆免问")
+    expect(await ingest(store, worktree)).toContain("已采信历史记忆")
     // 业务换掉材料，CCB 不再出现 → 不得继续凭旧快照免问
     dropMaterial(worktree, "本需求仅涉及名单排查，与外部系统无关。")
-    expect(await ingest(store, worktree)).not.toContain("L1 记忆免问")
+    expect(await ingest(store, worktree)).not.toContain("已采信历史记忆")
     store.close()
   })
 
@@ -1027,7 +1027,7 @@ describe("C · 证据换源的两个失效路径", () => {
     // 只有组装产物含 CCB（正是由槽位正文生成的），材料目录全空
     mkdirSync(join(worktree, "07_需求规格产出/1_X"), { recursive: true })
     writeFileSync(join(worktree, "07_需求规格产出/1_X/PRD.md"), "对接 CCB 系统获取客户号。", "utf8")
-    expect(await ingest(store, worktree)).not.toContain("L1 记忆免问")
+    expect(await ingest(store, worktree)).not.toContain("已采信历史记忆")
     store.close()
   })
 })
@@ -1040,24 +1040,56 @@ describe("C · 证据换源的两个失效路径", () => {
  * 且仍是 draft → 容器 `4.1` 永无 confirmed 子项 → 进 prd 被 `必填容器未覆盖：4.1` 拦住，
  * 而业务从没被问过 CLD、AI 也不知道缺的是它。
  *
- * 修法：回执 + 状态栏 + r33③ 三处点名「不在清单里、不要问业务、但须你用材料原文 reqdoc_answer 落定」。
+ * 修法（受众分层）：
+ * - 动作指令放**工具描述**——model-only、每次请求都带、不分阶段、从不进时间线。放回执会被转述给业务，
+ *   放 r33③ 只在 edge 注入（goal/rules/prd/review 阶段悬空，07 第 4 节也禁止引用规则编号）；
+ * - 回执/状态栏只报**事实 + 一句受众安全的提示**，不铺「draft / 容器覆盖 / 进 prd 被拦」因果链；
+ * - 落定来源一律 `source=问答`：定义出自业务过往口述、材料只出现该词并未给定义，标 [文档] 即不实溯源。
  */
 describe("L1 免问项的落定指引（免问 ≠ 已覆盖）", () => {
   const read = (rel: string) => readFileSync(join(import.meta.dir, rel), "utf8")
 
-  test("★ 回执/状态栏/规则三处都点名「须落定」", () => {
+  test("★ 指令载于工具描述（受众正确 + 不分阶段）", () => {
     const kbSrc = read(join("..", "src", "tools", "reqdoc-kb-tools.ts"))
-    const notes = kbSrc.match(/🧠 L1 记忆免问[^`]*/g) ?? []
+    const ingestDesc = kbSrc.slice(kbSrc.indexOf("reqdoc_ingest = tool"), kbSrc.indexOf("args:"))
+    expect(ingestDesc).toContain("已采信历史记忆")
+    expect(ingestDesc).toContain("source 一律用「问答」")
+    expect(ingestDesc).toContain("不要再问业务")
+    // reqdoc_answer 的 address 参数须接受回执列出的免问地址（不在清单里）
+    expect(kbSrc).toContain("或回执「已采信历史记忆」列出的地址")
+    // answer 的 description 不得与之矛盾（曾写「只接受派生清单给出的地址」，把免问地址挡在外面）
+    const ansIdx = kbSrc.indexOf("reqdoc_answer = tool")
+    const answerDesc = kbSrc.slice(ansIdx, kbSrc.indexOf("args:", ansIdx))
+    expect(answerDesc).toContain("已采信历史记忆")
+    expect(answerDesc).not.toContain("只接受派生清单给出的地址")
+  })
+
+  test("★ 回执/状态栏只报事实：不带门禁因果、不错位指称", () => {
+    const kbSrc = read(join("..", "src", "tools", "reqdoc-kb-tools.ts"))
+    const notes = kbSrc.match(/🧠 已采信历史记忆[^`]*/g) ?? []
     expect(notes.length).toBeGreaterThanOrEqual(2)
     for (const n of notes) {
-      expect(n).toContain("不要问业务")
-      expect(n).toContain("reqdoc_answer 落定")
-      expect(n).toContain("不在「本轮该填」清单里")
+      expect(n).toContain("已采信历史记忆")
+      expect(n).toContain("source=问答")
+      expect(n).toContain("不在本轮清单")
+      expect(n).not.toContain("不要问业务")
+      expect(n).not.toContain("仍是 draft")
+      expect(n).not.toContain("进 prd 会被拦")
+      expect(n).not.toContain("用材料原文")
     }
-    expect(read(join("..", "src", "prompt.ts"))).toContain("待你用材料原文 reqdoc_answer 落定")
+    const bar = read(join("..", "src", "prompt.ts"))
+    const barLine = (bar.match(/已采信历史记忆[^\n]*/) ?? [])[0] ?? ""
+    expect(barLine).toContain("待你落定")
+    expect(barLine).not.toContain("reqdoc_answer")
+    expect(barLine).not.toContain("L1 ")
+  })
+
+  test("★ r33③ 载明 source=问答；r30 对冲「不算降级」", () => {
     const rule = read(join("..", "..", "shared", "src", "workflow.ts"))
     expect(rule).toContain("不在本轮清单里")
-    expect(rule).toContain("须由你用材料原文直接 reqdoc_answer 落定")
+    expect(rule).toContain("source 一律标「问答」")
+    expect(rule).toContain("不实溯源")
+    expect(rule).toContain("不算来源降级")
   })
 
   test("★ 跟着回执走能解卡：免问 → 落定 → 容器覆盖", async () => {
@@ -1079,7 +1111,7 @@ describe("L1 免问项的落定指引（免问 ≠ 已覆盖）", () => {
         ctx,
       ),
     )
-    expect(out).toContain("L1 记忆免问")
+    expect(out).toContain("已采信历史记忆")
     expect(out).toContain("reqdoc_answer 落定")
 
     const kb = () => store.get("r1")!.workflow!.kb!
@@ -1094,10 +1126,16 @@ describe("L1 免问项的落定指引（免问 ≠ 已覆盖）", () => {
     expect(kb().slots.find((x) => x.address === "4.1.CLD")).toBeUndefined()
     expect(kbGate(kb().slots, kb().features, { decls: kb().containers }).coverage.uncoveredContainers).toContain("4.1")
 
-    // 按回执指示落定（无需业务参与）
-    const r = String(await tools.reqdoc_answer!.execute({ address: "4.1.CLD", content: "贷后分类标签", source: "文档" } as never, ctx))
+    // 按回执指示落定（无需业务参与）——source 必须是「问答」：定义出自记忆，材料只出现该词未给定义
+    const r = String(await tools.reqdoc_answer!.execute({ address: "4.1.CLD", content: "贷后分类标签", source: "问答" } as never, ctx))
     expect(r).toContain("4.1.CLD")
     expect(kbGate(kb().slots, kb().features, { decls: kb().containers }).coverage.uncoveredContainers).not.toContain("4.1")
+
+    // 交付件不得把记忆来源的定义标成 [文档]（不实溯源：材料里没有这句话）
+    await tools.reqdoc_assemble!.execute({} as never, ctx)
+    const md = readFileSync(join(worktree, "07_需求规格产出/1_名单排查/PRD.md"), "utf8")
+    expect(md).toContain("- **CLD**：贷后分类标签")
+    expect(md).toContain("4.1 术语定义 [问答]")
     store.close()
   })
 })
