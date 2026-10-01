@@ -1386,6 +1386,32 @@ KB 横切，不挂任何 stage：goal/rules/edge 为采集与填槽期，prd 为
 **CI 门槛**：验收 1/2 的核心不变量已下沉为 `reqdoc-memory.test.ts` 的确定性断言
 （`bun test` 必跑）；`bun run acceptance:derive` 为零模型秒级版本（派生链路 5/5）。
 
+#### 验收标准 6 · 以 golden 为主（逐地址等价性）—— **已通过 9/9**
+
+`packages/shared/test/reqdoc-open-questions-equivalence.test.ts`（9 项，`bun test` 必跑）：
+
+| 项 | 判据 |
+|---|---|
+| **无记忆基线** | `deriveQuestions` 实际产出 **逐地址等于** `BASELINE_OPEN_QUESTIONS`（多一个=漏问回归，少一个=多问/非法地址） |
+| L1 记忆 | `expectedVanished` 恰好消失、`expectedRemain` 一个不少、`l1Applied` 精确匹配 |
+| L2 记忆 | `mustRemainOpen` 仍开放（**L2 不消缺口**），命中项带默认猜测，`l1Applied` 为空 |
+| 冲突项 | 冲突槽位**仍留开放项**（业务需就冲突表态）**且**计入 `unclosed` → 门禁拦、`force` 才放行 |
+| 四用例规格 | `GOLDEN_CASES` 四个 id 齐备；CRD/AML 消缺口、AML 无记忆时仍被问（不无条件豁免） |
+| 覆盖率同源 | `kbGate().coverage` 与 `slotCoverage()` 分母/分子一致 |
+| 3.3.2 红线 | 有无 sdlc 记忆，`kbGate` 的 `pass`/`coverage` **完全一致** |
+
+**三层验收现状**：
+
+| 层 | 载体 | 状态 |
+|---|---|---|
+| 1· 确定性 golden | `reqdoc-open-questions.test.ts`（自洽性）+ `*-equivalence.test.ts`（等价性） | ✓ CI 必跑 |
+| 2· 组合等价/组装幂等 | `reqdoc-kb-only-source.test.ts` / `review-gate-holes.test.ts` | ✓ CI 必跑 |
+| 3· 端到端真实模型 | `bun run acceptance`（qwen3，本地 vLLM） | ✓ 9/9，72 秒 |
+
+> 设计 13 章第 6 条原本依赖「重构前 baseline 快照」做跨版本比对；该快照不存在于仓库，
+> 故改为**以阶段 0 手推的冻结清单为主判据**——它独立于实现（不录现实现），
+> 比录下来的 baseline 更能发现回归。
+
 ### 每阶段的固定动作
 
 `bun typecheck` + `bun test`；提交推送 + `sync-bundle.sh` 同步 Windows bundle。
