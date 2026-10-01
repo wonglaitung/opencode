@@ -5,12 +5,13 @@
  * 解析范围：docx（jszip 解 document.xml）、pdf（pdfjs 文本层）、xlsx（exceljs）、
  * txt/md/json/csv 等纯文本。图像/未知格式显式降级——qwen3.6 无多模态，杜绝 AI 空承诺看图。
  */
-import { readdir } from "node:fs/promises"
+import { readdir, stat } from "node:fs/promises"
 import { basename, extname, join } from "node:path"
 import { tool, type ToolDefinition } from "@opencode-ai/plugin"
 import JSZip from "jszip"
 import ExcelJS from "exceljs"
 import { resolveWithinWorktree, projectRoot } from "../fs-safe"
+import { REQDOC_DIRS } from "./reqdoc-dirs"
 
 const z = tool.schema
 
@@ -88,6 +89,75 @@ export async function extractFile(file: string): Promise<string> {
     return `[图像 ${basename(file)} 无法解析：当前模型不支持读图。请业务用文字描述其内容，或提供含文字的文本版/Word 版。]`
   }
   return `[文件 ${basename(file)} 格式 ${ext || "未知"} 暂不支持解析，请业务提供文本版或说明内容。]`
+}
+
+/**
+ * 记忆匹配的证据文本 = **业务投放的材料原文**（00~05），不是模型转述的槽位正文。
+ *
+ * 为什么换源（对抗审查 I-1，方案 C）：原实现拿 `kb.slots` 正文喂 `matchMemory`，
+ * 而正文是模型写的——模型写一句「本需求与 CCB 系统无关」就能让 CCB 命中 L1，
+ * 进而消掉一个本该问业务的问题（否定句也命中；证据源可被书写即自证面平移）。
+ * 换成材料原文后，材料里没有的词，模型怎么写都命中不了。
+ *
+ * **必须排除 06/07**：07 里是组装出来的 PRD，正由槽位正文生成，
+ * 拿它当证据等于把自证面挪回原位；06 是 AI 工作区，同理。
+ *
+ * 代价（已确认）：`[问答]`/`[缺省]` 来源的槽位不再参与记忆匹配——
+ * 记忆只服务「材料驱动」场景。状态栏同步走 `kb.evidence` 快照，避免两处口径不一。
+ */
+const MATERIAL_EVIDENCE_DIRS = REQDOC_DIRS.filter((d) => !d.startsWith("06_") && !d.startsWith("07_"))
+
+/** 证据总量上限（与 scan 的单次预算同量级，防止多目录累加爆上下文/状态体积）。 */
+const MAX_EVIDENCE_CHARS = 40_000
+
+/** root → { 指纹, 文本 }。材料在两次调用之间被业务替换时指纹变化即重读。 */
+const EVIDENCE_CACHE = new Map<string, { sig: string; text: string }>()
+
+/** 材料目录内全部文件的 `名:mtime:size` 指纹——用它判断缓存是否过期。 */
+async function evidenceSignature(root: string): Promise<string> {
+  const parts: string[] = []
+  for (const dir of MATERIAL_EVIDENCE_DIRS) {
+    let names: string[]
+    try {
+      names = await readdir(join(root, dir))
+    } catch {
+      continue
+    }
+    for (const name of names.filter((n) => !n.startsWith(".")).sort()) {
+      try {
+        const st = await stat(resolveWithinWorktree(root, join(dir, name)))
+        parts.push(`${dir}/${name}:${st.mtimeMs}:${st.size}`)
+      } catch {
+        parts.push(`${dir}/${name}:gone`)
+      }
+    }
+  }
+  return parts.join("|")
+}
+
+export async function materialEvidence(root: string): Promise<string> {
+  const sig = await evidenceSignature(root)
+  const cached = EVIDENCE_CACHE.get(root)
+  if (cached && cached.sig === sig) return cached.text
+  const parts: string[] = []
+  let total = 0
+  outer: for (const dir of MATERIAL_EVIDENCE_DIRS) {
+    let names: string[]
+    try {
+      names = await readdir(join(root, dir))
+    } catch {
+      continue
+    }
+    for (const name of names.filter((n) => !n.startsWith(".")).sort()) {
+      const text = await extractFile(resolveWithinWorktree(root, join(dir, name)))
+      parts.push(text)
+      total += text.length
+      if (total >= MAX_EVIDENCE_CHARS) break outer
+    }
+  }
+  const text = parts.join("\n")
+  EVIDENCE_CACHE.set(root, { sig, text })
+  return text
 }
 
 export function createReqdocScanTool(): Record<string, ToolDefinition> {

@@ -29,26 +29,33 @@ function tempMemory(): string {
   return home
 }
 
+/** 业务投放材料（记忆匹配的证据来源）：往 01_背景与目标 放一个文本文件。 */
+function dropMaterial(worktree: string, text: string) {
+  mkdirSync(join(worktree, "01_背景与目标"), { recursive: true })
+  writeFileSync(join(worktree, "01_背景与目标", "材料.md"), text, "utf8")
+}
+
 describe("P0-1 · 记忆链路在生产路径真的接通", () => {
   test("★ reqdoc_ingest 传 candidates → 工具返回 L1 消缺口（不再是死代码）", async () => {
     tempMemory()
     writeL1Term("CRD", "信贷审批部", { kind: "内部简称", scope: "org", origin: "restated", fromProject: "p" })
     const store = Store.memory(() => "reqdoc" as const)
     const worktree = mkdtempSync(join(tmpdir(), "sm-p0w-"))
+    // 证据 = 材料原文（方案 C）：术语须出现在业务投放的材料里，而非模型转述的槽位正文
+    dropMaterial(worktree, "信贷审批部（CRD）负责名单排查与流程优化。")
     const tools = createReqdocKbTools(store)
     const out = String(
       await tools.reqdoc_ingest!.execute(
         {
           features: [{ name: "名单排查", priority: "high" }],
-          // 槽位正文须含缩写本身（真实材料形态：`信贷审批部（CRD）`）——
           // 候选名不算自己的证据（对抗审查 N-5：否则臆造 candidates 即可白拿消缺口）
-          slots: [{ address: "3.1", kind: "prose", content: "信贷审批部（CRD）流程优化", source: "文档" }],
+          slots: [{ address: "3.1", kind: "prose", content: "流程优化", source: "文档" }],
           candidates: { "4.1": ["CRD", "AML"] },
         } as never,
         { sessionID: "r1", worktree } as never,
       ),
     )
-    expect(out).toContain("L1 记忆消缺口")
+    expect(out).toContain("L1 记忆免问")
     expect(out).toContain("4.1.CRD")
     // candidates 必须落进 kb（否则下一轮派生又拿不到）
     expect(store.get("r1")!.workflow!.kb!.candidates).toEqual({ "4.1": ["CRD", "AML"] })
@@ -662,7 +669,7 @@ describe("N-5 · 候选不得自证", () => {
       ),
     )
     // 模型臆造候选 → 不得白拿消缺口
-    expect(out).not.toContain("L1 记忆消缺口")
+    expect(out).not.toContain("L1 记忆免问")
     store.close()
   })
 
@@ -671,17 +678,18 @@ describe("N-5 · 候选不得自证", () => {
     writeL1Term("CRD", "信贷审批部", { kind: "内部简称", scope: "org", origin: "restated", fromProject: "p" })
     const store = Store.memory(() => "reqdoc" as const)
     const worktree = mkdtempSync(join(tmpdir(), "sm-n5b-"))
+    dropMaterial(worktree, "信贷审批部（CRD）负责流程优化。")
     const out = String(
       await createReqdocKbTools(store).reqdoc_ingest!.execute(
         {
           features: [{ name: "X", priority: "high" }],
-          slots: [{ address: "3.1", kind: "prose", content: "信贷审批部（CRD）流程优化", source: "文档" }],
+          slots: [{ address: "3.1", kind: "prose", content: "流程优化", source: "文档" }],
           candidates: { "4.1": ["CRD"] },
         } as never,
         { sessionID: "r1", worktree } as never,
       ),
     )
-    expect(out).toContain("L1 记忆消缺口")
+    expect(out).toContain("L1 记忆免问")
     store.close()
   })
 })
@@ -865,11 +873,14 @@ describe("I-1 · 记忆证据源不可由模型书写", () => {
     for (const n of notes) expect(n).toContain("业务曾复述过")
   })
 
-  test("★ 槽位正文里的术语会触发消缺口（记录已知限制：证据源仍由模型写）", async () => {
+  // 方案 C 落地后：证据是材料原文，模型写的槽位正文不再能制造命中。
+  test("★ 模型写了否定句也拿不到记忆免问（材料不含该词）", async () => {
     tempMemory()
     writeL1Term("CCB", "某系统", { kind: "内部简称", scope: "org", origin: "restated", fromProject: "p" })
     const store = Store.memory(() => "reqdoc" as const)
     const worktree = mkdtempSync(join(tmpdir(), "sm-i1-"))
+    // 材料里没有 CCB，模型却在槽位正文写「与 CCB 无关」——不得触发
+    dropMaterial(worktree, "本需求仅涉及名单排查，不含其他系统。")
     const out = String(
       await createReqdocKbTools(store).reqdoc_ingest!.execute(
         {
@@ -880,9 +891,30 @@ describe("I-1 · 记忆证据源不可由模型书写", () => {
         { sessionID: "r1", worktree } as never,
       ),
     )
-    // 现状：否定句也会触发（证据源是模型写的正文）。
-    // 这条测试锁定该已知行为，若将来改为 scan 原文证据（模型不可写），本测试应改为断言不触发。
-    expect(out).toContain("L1 记忆消缺口")
+    expect(out).not.toContain("L1 记忆免问")
+    // 状态栏快照也无命中（两处口径一致）
+    expect(store.get("r1")!.workflow!.kb!.evidence ?? "").not.toContain("CCB")
+    store.close()
+  })
+
+  test("★ 材料确实含该词时照常免问（正向对照：换源没把记忆打没）", async () => {
+    tempMemory()
+    writeL1Term("CCB", "某系统", { kind: "内部简称", scope: "org", origin: "restated", fromProject: "p" })
+    const store = Store.memory(() => "reqdoc" as const)
+    const worktree = mkdtempSync(join(tmpdir(), "sm-i1b-"))
+    dropMaterial(worktree, "本需求需对接 CCB 系统获取客户号。")
+    const out = String(
+      await createReqdocKbTools(store).reqdoc_ingest!.execute(
+        {
+          features: [{ name: "X", priority: "high" }],
+          slots: [{ address: "3.1", kind: "prose", content: "取客户号", source: "文档" }],
+          candidates: { "4.1": ["CCB"] },
+        } as never,
+        { sessionID: "r1", worktree } as never,
+      ),
+    )
+    expect(out).toContain("L1 记忆免问")
+    expect(store.get("r1")!.workflow!.kb!.evidence).toContain("CCB")
     store.close()
   })
 })
@@ -952,6 +984,49 @@ describe("I-3 / I-4 · 服务端追加区块的完整性", () => {
     }
     writeFileSync(p, readFileSync(p, "utf8").replace(/^- 要点「B」.*$/m, ""), "utf8")
     expect(await submit(store, ctx)).toMatch(/确认溯源/)
+    store.close()
+  })
+})
+
+describe("C · 证据换源的两个失效路径", () => {
+  const ingest = async (store: ReturnType<typeof Store.memory>, worktree: string) =>
+    String(
+      await createReqdocKbTools(store).reqdoc_ingest!.execute(
+        {
+          features: [{ name: "X", priority: "high" }],
+          slots: [{ address: "3.1", kind: "prose", content: "取客户号", source: "文档" }],
+          candidates: { "4.1": ["CCB"] },
+        } as never,
+        { sessionID: "r1", worktree } as never,
+      ),
+    )
+  const withCCB = async () => {
+    tempMemory()
+    writeL1Term("CCB", "某系统", { kind: "内部简称", scope: "org", origin: "restated", fromProject: "p" })
+    const store = Store.memory(() => "reqdoc" as const)
+    const worktree = mkdtempSync(join(tmpdir(), "sm-c-"))
+    return { store, worktree }
+  }
+
+  test("★ 材料被替换后旧证据不得残留（缓存按指纹失效）", async () => {
+    const { store, worktree } = await withCCB()
+    dropMaterial(worktree, "本需求需对接 CCB 系统。")
+    expect(await ingest(store, worktree)).toContain("L1 记忆免问")
+    // 业务换掉材料，CCB 不再出现 → 不得继续凭旧快照免问
+    dropMaterial(worktree, "本需求仅涉及名单排查，与外部系统无关。")
+    expect(await ingest(store, worktree)).not.toContain("L1 记忆免问")
+    store.close()
+  })
+
+  test("★ 07 产物不作证据（否则自证面挪回原位）", async () => {
+    tempMemory()
+    writeL1Term("CCB", "某系统", { kind: "内部简称", scope: "org", origin: "restated", fromProject: "p" })
+    const store = Store.memory(() => "reqdoc" as const)
+    const worktree = mkdtempSync(join(tmpdir(), "sm-c2-"))
+    // 只有组装产物含 CCB（正是由槽位正文生成的），材料目录全空
+    mkdirSync(join(worktree, "07_需求规格产出/1_X"), { recursive: true })
+    writeFileSync(join(worktree, "07_需求规格产出/1_X/PRD.md"), "对接 CCB 系统获取客户号。", "utf8")
+    expect(await ingest(store, worktree)).not.toContain("L1 记忆免问")
     store.close()
   })
 })

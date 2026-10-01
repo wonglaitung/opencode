@@ -8,7 +8,6 @@ import {
   deriveQuestions,
   kbGate,
   matchMemory,
-  materialOf,
   requiredSlots,
   currentInProgressStage,
   getDefinition,
@@ -203,9 +202,9 @@ export function buildStateBar(workflow: WorkflowState, stage: string | null): st
       `知识库：必填槽位 ${c.leafFilled}/${c.leafTotal}（${Math.round(c.pct * 100)}%）` +
         `；${gate.pass ? "门禁可通过 ✓" : `未就绪：${gate.reasons.join("；")}`}`,
     )
-    const hits = matchMemory(
-      materialOf(kb.slots.map((sl) => sl.content)),
-    )
+    // 证据走 kb.evidence 快照（工具侧写入的材料原文）——本函数同步，读不了文件；
+    // 拿槽位正文会与工具回执口径不一，且重蹈 I-1 的模型可写证据。
+    const hits = matchMemory(kb.evidence ?? "")
     const open = deriveQuestions(kb.features, {
       slots: kb.slots,
       askCounts: kb.askCounts,

@@ -20,7 +20,6 @@ import {
   advanceAskCounts,
   deriveQuestions,
   isValidSlotAddr,
-  materialOf,
   matchMemory,
   writeL1Term,
   writeL2Fact,
@@ -38,6 +37,7 @@ import type { Store } from "../db"
 import { WorkflowOpError } from "../workflow-ops"
 import { loadReqdocTemplate } from "../template"
 import { projectRoot, resolveWithinWorktree } from "../fs-safe"
+import { materialEvidence } from "./reqdoc-scan"
 
 const z = tool.schema
 
@@ -73,7 +73,9 @@ function readKb(workflow: {
 async function writeKbFiles(root: string, kb: ReqdocKbState): Promise<void> {
   const dir = join(root, KB_DIR)
   await mkdir(dir, { recursive: true })
-  await Bun.write(join(dir, KB_JSON), JSON.stringify(kb, null, 2))
+  // evidence（材料原文快照，给同步状态栏用）只活在工作流状态里——
+  // 不写进项目侧 kb.json，否则每次换材料都会往交付目录塞几十 KB 原文。
+  await Bun.write(join(dir, KB_JSON), JSON.stringify({ ...kb, evidence: undefined }, null, 2))
   // 人可读账本：按地址排序渲染，已作废（retired）以删除线保留（设计 B5）
   const rows = [...kb.slots]
     .sort((a, b) => a.address.localeCompare(b.address))
@@ -202,13 +204,17 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
       })
       const kb = readKb(saved)
       await writeKbFiles(root, kb)
-      // 记忆匹配的证据**只能是已提交槽位正文**——不能把 candidates 本身算进去：
-      // 候选名若算证据就是自证（模型填 candidates 即可让任意术语命中 L1 消缺口，
-      // 对抗审查 N-5 实测：槽位正文零 CRD 字样、candidates 填 CRD 即白拿消缺口）。
-      // 缩写靠正文佐证即可——材料里出现「信贷审批部（CRD）」时 CRD 就在正文里。
-      const hits = matchMemory(
-        materialOf(kb.slots.map((s) => s.content)),
-      )
+      // 记忆匹配的证据 = **材料原文**（方案 C，对抗审查 I-1）。
+      // 此前用槽位正文——正文是模型写的：写一句「本需求与 CCB 系统无关」就能让 CCB 命中 L1，
+      // 消掉一个本该问业务的问题（否定句也命中；证据可被书写 = 自证面只是平移）。
+      // 换成 00~05 材料原文后，材料里没有的词模型怎么写都命中不了；
+      // candidates 仍只决定「问什么」不作证据（N-5 已堵）；07 产物不作证据（自证）。
+      const evidence = await materialEvidence(root)
+      const hits = matchMemory(evidence)
+      // 快照给同步的状态栏（buildStateBar 读不了文件），否则两处开放项口径不一
+      store.mutateWorkflow(context.sessionID, (wf) => {
+        if (wf.kb) wf.kb.evidence = evidence
+      })
       const derived = deriveQuestions(kb.features, {
         slots: kb.slots,
         askCounts: kb.askCounts,
@@ -233,7 +239,7 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
           : "",
         // 记忆效果必须对模型可见，否则它会重复问已被记忆消缺口的项（「少问」机制形同虚设）
         derived.l1Applied.length > 0
-          ? `🧠 L1 记忆消缺口 ${derived.l1Applied.length} 项（业务曾复述过，**无需再问**）：${derived.l1Applied.join("、")}`
+          ? `🧠 L1 记忆免问 ${derived.l1Applied.length} 项（业务曾复述过，采信其定义、**无需再问**）：${derived.l1Applied.join("、")}`
           : "",
         hits.l2.length > 0
           ? `🧠 L2 组织知识命中 ${hits.l2.length} 项（**不消缺口**，仅作默认值请业务点头）：${hits.l2.map((f) => f.content).join("；")}`
@@ -324,12 +330,13 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
             : ""
       const kb = readKb(saved)
       await writeKbFiles(root, kb)
-      // 阶段 3：记忆接线——按已提交槽位正文匹配（3.6 由材料驱动，只返回命中项）。
-      // L1 命中消缺口（不再问）、L2 命中只作默认值（仍问一次）。
-      // 记忆匹配同时看已提交槽位正文与候选名——候选名是缩写的主要来源
-      const hits = matchMemory(
-        materialOf(kb.slots.map((s) => s.content)),
-      )
+      // 阶段 3：记忆接线——按**材料原文**匹配（同 ingest，方案 C）。
+      // L1 命中免问（不再问）、L2 命中只作默认值（仍问一次）。
+      const evidence = await materialEvidence(root)
+      const hits = matchMemory(evidence)
+      store.mutateWorkflow(context.sessionID, (wf) => {
+        if (wf.kb) wf.kb.evidence = evidence
+      })
       const derived = deriveQuestions(kb.features, {
         slots: kb.slots,
         askCounts: kb.askCounts,

@@ -262,9 +262,9 @@ flowchart TD
 | `containers` | 容器声明 `{ [addr]: { required: boolean, reason? } }`（如 `4.1`、`5.k.2.1` 声明 `required: false` 表示本次无术语/无结构化字段，须给 reason） |
 | `askCounts` | 地址 → 连续出现在开放项的轮次（追问终止用，`STOP_ASK_AFTER=2`） |
 
-**记忆不在 kb 内（阶段 3 已接线）**：记忆是**独立的文件态**，不进 `WorkflowState.kb`、**不参与 `kbGate` 任何一条判据**（记忆只能影响「问不问」与「措辞」，不能让未确认槽位变成已确认）。落盘在 `~/.config/opencode/session-mgmt/memory/{l1-glossary,l2-org,l4-prefs}/*.json`（按条文件、删文件即遗忘，`SM_MEMORY_HOME` 可覆盖测试路径），读写内核在 `packages/shared/src/reqdoc-memory.ts` 与 `reqdoc-kb.ts`。三条语义（对齐 reqdoc-r11 / r27 / r33）：
+**记忆不在 kb 内（阶段 3 已接线）**：记忆是**独立的文件态**，不进 `WorkflowState.kb`、**不参与 `kbGate` 任何一条判据**（记忆只能影响「问不问」与「措辞」，不能让未确认槽位变成已确认）。`WorkflowState.kb` 里只有一个 `evidence` 字段——那是**材料原文快照**（`materialEvidence(root)` 的产物，喂给同步的状态栏用），不是记忆条目，也不写进项目侧 `kb.json`。落盘在 `~/.config/opencode/session-mgmt/memory/{l1-glossary,l2-org,l4-prefs}/*.json`（按条文件、删文件即遗忘，`SM_MEMORY_HOME` 可覆盖测试路径），读写内核在 `packages/shared/src/reqdoc-memory.ts` 与 `reqdoc-kb.ts`。三条语义（对齐 reqdoc-r11 / r27 / r33）：
 
-- **L1 术语命中消缺口**——业务复述过的内部简称/行业通用词直接采信，不再追问（`deriveQuestions` 的 `l1Applied`，工具返回与状态条都会报「L1 记忆消缺口 N 项」）；
+- **L1 术语命中免问**——业务复述过的内部简称/行业通用词直接采信，不再追问（`deriveQuestions` 的 `l1Applied`，工具返回与状态条都会报「L1 记忆免问 N 项」）；**匹配的证据是 00~05 材料原文**（`materialEvidence`），不是模型转述的槽位正文——否则模型写一句「与 CCB 无关」也能让 CCB 命中（对抗审查 I-1，方案 C）；
 - **L2 组织知识不消缺口**——只作默认值带出（开放项带 `guess`，`from: memory-L2`），仍要业务点头才算确认；
 - **静默点默认不入库**——`origin=accepted_default` / `inferred` 一律拒写（`isPollutingOrigin`），错误定义不跨需求传播；写入只发生在 `reqdoc_answer(restated_term=...)`（业务主动复述释义 → L1）与定稿后的 `reqdoc_memory_recall`（业务勾选 → L2/L4）。
 
@@ -317,7 +317,7 @@ flowchart TD
 
 **容器不逐个追问**：`4.1` 与 `5.k.2.1` 只做聚合判定，永不进开放项（见 5 章选项 B）。只有当调用方显式给出 `candidates`（容器下的术语/字段候选清单）时，容器子项才会以 `4.1.CRD` / `5.1.2.1.客户号` 形态进入开放项——**服务端不预置候选**，且当前门禁/工具/状态条调用点均未传 `candidates`，故线上术语与字段只走聚合判定、不逐项追问。
 
-**记忆机制（阶段 3 已接线；2026 全阶段对抗审查 P0-1 修复前此处曾与代码矛盾——`candidates` 生产零传递，等于死代码，现已接通）**：`deriveQuestions` 支持 `l1`（L1 术语记忆）命中即**消缺口**（内部简称/行业通用不再问）、`l2`（L2 组织知识）命中**不消缺口**但带默认猜测问一次。记忆类型与决策内核在 `packages/shared/src/reqdoc-kb.ts`，读写落盘在 `reqdoc-memory.ts`（`matchMemory` 只返回命中项，**记忆原文不可见给模型**），CLI 侧 `opencode-sm memory list` / `forget` 做可见性与遗忘。**记忆生效的必要条件是 `candidates`**：`deriveQuestions` 的候选分支（`opts.candidates`）是 L1/L2 唯一的消费点，缺了它整段不执行。候选由 `reqdoc_ingest(candidates=…)` 提交（材料中真实出现的术语/字段名，**模型不臆造**）并落进 `kb.candidates`，四个生产调用点均已传入。**调用点已传入 `candidates` 与 `l1`/`l2`**：`reqdoc_ingest` 与 `reqdoc_answer` 的返回（每次回写槽位后按已提交正文重新 `matchMemory` + 派生）、状态条与 prd 阶段注入块（`prompt.ts`），因此线上开放项会随记忆收敛，并输出「🧠 L1 记忆消缺口 N 项」。写入侧只有两处入口（业务主动复述 → L1、定稿勾选 → L2/L4，见 5 章），门禁读入的 `unclosed` 不含记忆项（`workflow.ts` / `review.ts` 的 `kbGate` 调用不传 `l1`/`l2`——门禁口径与「少问」口径刻意分开）。
+**记忆机制（阶段 3 已接线；2026 全阶段对抗审查 P0-1 修复前此处曾与代码矛盾——`candidates` 生产零传递，等于死代码，现已接通）**：`deriveQuestions` 支持 `l1`（L1 术语记忆）命中即**消缺口**（内部简称/行业通用不再问）、`l2`（L2 组织知识）命中**不消缺口**但带默认猜测问一次。记忆类型与决策内核在 `packages/shared/src/reqdoc-kb.ts`，读写落盘在 `reqdoc-memory.ts`（`matchMemory` 只返回命中项，**记忆原文不可见给模型**），CLI 侧 `opencode-sm memory list` / `forget` 做可见性与遗忘。**记忆生效的必要条件是 `candidates`**：`deriveQuestions` 的候选分支（`opts.candidates`）是 L1/L2 唯一的消费点，缺了它整段不执行。候选由 `reqdoc_ingest(candidates=…)` 提交（材料中真实出现的术语/字段名，**模型不臆造**）并落进 `kb.candidates`，四个生产调用点均已传入。**调用点已传入 `candidates` 与 `l1`/`l2`**：`reqdoc_ingest` 与 `reqdoc_answer` 的返回（每次回写槽位后按**材料原文**重新 `matchMemory` + 派生）、状态条与 prd 阶段注入块（`prompt.ts`，读 `kb.evidence` 快照），因此线上开放项会随记忆收敛，并输出「🧠 L1 记忆免问 N 项」。**证据 = 00~05 材料原文，06/07 不作证据**（07 是组装产物，拿它当证据等于把自证面挪回原位）；代价是 `[问答]`/`[缺省]` 来源的槽位不参与记忆匹配——记忆只服务材料驱动场景。写入侧只有两处入口（业务主动复述 → L1、定稿勾选 → L2/L4，见 5 章），门禁读入的 `unclosed` 不含记忆项（`workflow.ts` / `review.ts` 的 `kbGate` 调用不传 `l1`/`l2`——门禁口径与「少问」口径刻意分开）。
 
 **追问纪律不变**：`≤5 问/轮`、`A/B/C + 【默认推荐项】`、`≤3 轮`、业务语言（禁纯技术词汇）由 reqdoc-r2 约束；r27 进一步要求连续 2 轮走默认后改为开放式追问、强制给数字与真实举例。少问由**派生**保证（已确认的不再问），不由模型自觉保证。
 
@@ -347,7 +347,7 @@ reqdoc 无 git 提交门禁（`hasCommitGate=false`），`commit_gate_*` 工具�
 | `reqdoc_init` | 搭建 00~07 目录骨架 + 各目录 README + 根目录总览，并展示各材料目录绝对路径 | 幂等（已存在不重建、不覆盖业务材料） |
 | `reqdoc_scan` | reqdoc 需求资料扫描：单目录参数、按阶段分步调用（goal→01、rules→02、edge→03/04、prd→06/07），解析 docx/pdf/xlsx/txt/md/json/csv 等文本类 | 仅列目录 + 提取文本；图像与不支持格式显式降级提示文字描述（qwen3.6 无多模态，见 3 章硬约束） |
 | `reqdoc_confirm_features` | reqdoc prd：功能点拆解确认（业务已确认清单后记录），**`06_功能点/N_名称/` 的唯一创建者**（写入来源摘录 + 幂等预建 `07_需求规格产出/N_名称/`） | 仅 reqdoc；至少 1 个功能点；重复调用覆盖记录 |
-| `reqdoc_ingest` | reqdoc 槽位批量提交：把从材料提取的内容提交为**槽位**（不是写文档）。可附 `features`（首次/修正功能点清单）与 `containers`（如 `4.1`、`5.1.2.1` 声明 `required:false` + reason） | 仅 reqdoc；`status` 一律服务端强制 `draft`（模型不能自称已确认）；`source=缺省` 未给 reason 报错；同地址覆盖；按工具返回的「本轮该填」清单地址提交（该清单每轮最多 8 项）；每次调用后推进本批地址的 askCounts、回写新的「本轮该填」清单，并按已提交正文匹配记忆返回「🧠 L1 记忆消缺口 N 项」 |
+| `reqdoc_ingest` | reqdoc 槽位批量提交：把从材料提取的内容提交为**槽位**（不是写文档）。可附 `features`（首次/修正功能点清单）与 `containers`（如 `4.1`、`5.1.2.1` 声明 `required:false` + reason） | 仅 reqdoc；`status` 一律服务端强制 `draft`（模型不能自称已确认）；`source=缺省` 未给 reason 报错；同地址覆盖；按工具返回的「本轮该填」清单地址提交（该清单每轮最多 8 项）；每次调用后推进本批地址的 askCounts、回写新的「本轮该填」清单，并按**材料原文**（00~05，缓存按 mtime 指纹失效）匹配记忆返回「🧠 L1 记忆免问 N 项」 |
 | `reqdoc_answer` | reqdoc 槽位确认：业务确认后把某地址落定 `confirmed`（未先 ingest 的地址允许直接补填并确认）。可选 `restated_term` —— 业务**主动口头解释**某缩写/简称时附上，即刻写入 L1 术语记忆 | 仅 reqdoc；`source=缺省` 未给 reason 报错；返回覆盖率、剩余本轮该填数、仍未收口项与 L1 消缺口数；**`restated_term` 的 `origin` 由服务端固定为 `restated`，模型无法自填**——业务只是点了默认时工具描述明确禁止传该参数（静默接受不入库）；同名不同义不覆盖，返回冲突提示交业务裁决 |
 | `reqdoc_assemble` | reqdoc PRD 组装：把槽位投影成整篇 PRD（md）并归档 `07_需求规格产出/`（单功能点进 `N_名称/` 子目录，多功能点落根）。返回结构指纹 + 省略的空容器节 + 槽位摘要 | 仅 reqdoc；模板不可用或功能点为空报错（提示先 `reqdoc_ingest` 提交功能点）；结构与来源标签服务端保证，产物不得手工编辑 |
 | `reqdoc_memory_recall` | reqdoc 定稿记忆回顾（阶段 3 新增）：把本次收集到的组织知识候选（系统名/接口/产品线等）逐条列给业务**勾选**，勾选的写入 L2 组织记忆供后续需求复用为默认值；可选 `prefs` 写 L4 表达偏好（只影响措辞与详略）。定稿通过后调用一次即可 | 仅 reqdoc；**业务未勾选的绝不写入**——刻意做成独立工具而非定稿自动写（自动写等于 AI 决定什么值得记住，而记忆跨需求传播）；静默默认来源（`accepted_default`/`inferred`）不入库并在返回中列出；写入后把对应 `[问答]` 槽位置 `retired`（已进记忆不必重复追问，状态随工作流状态落库、知识库文件在下一次 `reqdoc_ingest`/`reqdoc_answer` 回写时同步）；不影响任何门禁与判定；可见性与遗忘走 `opencode-sm memory list` / `forget` |
@@ -503,7 +503,9 @@ flowchart LR
 
 规则遵循度评测的**迭代闭环与历史结果**（含 sdlc 侧 s1-s22 的混合里程碑）见 session-management.md 13.4。reqdoc 侧记录如下。
 
-**本轮（2026-10-01 阶段 3 记忆接线 + 规则精简）**：接线记忆读写——`matchMemory` 按已提交槽位正文匹配并把 `l1`/`l2` 传进 `deriveQuestions`（L1 消缺口、L2 只作默认值，状态条与工具返回报「L1 记忆消缺口 N 项」），`reqdoc_answer` 新增 `restated_term` 写 L1，新增 `reqdoc_memory_recall` 写 L2/L4（定稿后业务勾选才写），防污染写入层 `isPollutingOrigin` 拒收静默默认；规则集由 30 条精简为 25 条（删 r21/r23/r9/r10/r4/r5/r17/r18，新增 r33/r34，r20 降级为生成事实）。
+**本轮（2026-10-01 记忆证据换源，方案 C）**：`matchMemory` 的输入由「模型转述的槽位正文」换成 **00~05 材料原文**（新增 `materialEvidence(root)`，按 mtime 指纹缓存；`06/07` 排除——07 是组装产物，作证据即自证面挪回原位）。落 `kb.evidence` 快照供同步状态栏读取，**不写进项目侧 `kb.json`**（否则每次换材料往交付目录塞几十 KB 原文）。回执措辞统一为「L1 记忆**免问** N 项」（消的是「问」不是「确认」）。代价：`[问答]`/`[缺省]` 来源不参与记忆匹配。护栏：材料替换后旧证据不得残留、07 产物不作证据、材料不含该词时模型写否定句也拿不到免问（正向对照：材料含则照常免问）。验证：typecheck 0 错 + 全量 `bun test` 566 项全绿 + `acceptance:derive` 11/11。
+
+**上一轮（2026-10-01 阶段 3 记忆接线 + 规则精简）**：接线记忆读写——`matchMemory` 按已提交槽位正文匹配并把 `l1`/`l2` 传进 `deriveQuestions`（L1 消缺口、L2 只作默认值，状态条与工具返回报「L1 记忆消缺口 N 项」），`reqdoc_answer` 新增 `restated_term` 写 L1，新增 `reqdoc_memory_recall` 写 L2/L4（定稿后业务勾选才写），防污染写入层 `isPollutingOrigin` 拒收静默默认；规则集由 30 条精简为 25 条（删 r21/r23/r9/r10/r4/r5/r17/r18，新增 r33/r34，r20 降级为生成事实）。
 
 **本轮（2026-10-01 槽位知识库重构）**：交付阶段 2a/2b/2c——新增 `reqdoc_ingest` / `reqdoc_answer` / `reqdoc_assemble` 三工具与 `WorkflowState.kb`、`assembleDoc` / `kbDigest` / `verifyAssemble` 纯函数内核、CLI `opencode-sm memory list|forget`；门禁切换为 `kbGate`（进 prd 与定稿两处，含 `force_kb` + `force_reason`）；随后删除 6 个旧状态字段与 7 个旧写路径工具、清理注入文本与前置条件清单中的悬空引用；评测场景 r14-r22 重写为槽位版断言；定稿门禁补齐三处绕过口（kb 未建时无人拦 / 产物无内嵌摘要 / 手写产物）。验证：typecheck 0 错 + 全量 `bun test`（443 项全绿）+ `eval:dry` 46 场景通过。**遗留待办**：覆盖率阈值校准（设计 6.1）、`force_kb` 留痕落状态（设计 6.5）、r31 规则文本内容器地址笔误（`5.k.1.2.1` 应为 `5.k.2.1`）修正、来源真实性只剩软提示（r30 已无硬门禁，`05_系统现状与能力` 为可选目录，全程 `[问答]` 兜底无法被门禁拦住）。
 
