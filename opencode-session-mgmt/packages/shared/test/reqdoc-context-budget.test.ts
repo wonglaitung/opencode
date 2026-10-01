@@ -28,12 +28,12 @@ const prdChars = sum(own("prd"))
 const prdInjection = globalChars + prdChars
 
 describe("reqdoc 上下文预算基线", () => {
-  test("prd 阶段规则注入字符数落在实测基线（≈6517 字符，设计 7.1）", () => {
-    // 精确基线来自设计文档实测（global 2000 + prd 本级 4517）。
-    // 允许极小漂移（规则文本微调），但不允许显著膨胀——那是上下文预算的回归。
+  test("prd 阶段规则注入字符数落在实测基线（设计 7.1，阶段 3 重设）", () => {
+    // 历史轨迹：6517（打分卡管线）→ 2c 4369 → 阶段 3 1476（本级）+ 1906（global）。
+    // 原基线「>4000」是重构前的现状记录；重构后应显著低于它，故改为「不超过原基线的 40%」。
     expect(globalChars).toBeGreaterThan(0)
     expect(prdChars).toBeGreaterThan(0)
-    expect(prdInjection).toBeGreaterThan(4000)
+    expect(prdInjection).toBeLessThan(4000)
     expect(prdInjection).toBeLessThan(8000)
   })
 
@@ -80,8 +80,11 @@ describe("reqdoc 上下文预算基线", () => {
     expect(dup).toEqual([])
   })
 
-  test("★ prd 阶段注入已显著下降（重构 2c 验收 #9）", () => {
-    // 基线 6517 字符（打分管线 8 条规则）。2c 删 r21/r23 并改写 r14/r20/r24/r31 后应明显下降。
-    expect(sum(rules.filter((r) => r.stage === "prd"))).toBeLessThan(4000)
+  test("★ prd 阶段注入已大幅下降（阶段 3 验收 #9）", () => {
+    // 历史：6517（打分卡管线 8 条）→ 2c 4369 → 阶段 3 1476。
+    // r20 的字段映射表降级为「生成事实」（映射已由 MAPPED_FIELD_KEYS 派生进槽位地址）后降幅最大。
+    const prd = sum(rules.filter((r) => r.stage === "prd"))
+    expect(prd).toBeLessThan(2000)
+    expect(prd).toBeLessThan(6517 * 0.3) // 至少减 70%
   })
 })

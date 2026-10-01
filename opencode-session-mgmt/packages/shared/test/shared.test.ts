@@ -272,20 +272,29 @@ describe("WorkflowDefinition 注册表（3.2）", () => {
     expect(REQDOC.stagePurpose?.review).toBe("业务逐条确认 PRD 要点")
     expect(SDLC.stagePurpose?.implementation).toBe("编码实现")
     expect(SDLC.stagePurpose?.review).toBe("开发者理解确认代码")
-    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r20" && r.text.includes("槽位内容铁律") && r.text.includes("落位"))).toBe(true)
+    // 阶段 3：r20 降级为「生成事实」——字段映射已由 MAPPED_FIELD_KEYS 派生进槽位地址，
+    // 规则不再复述映射表，只留内容纪律（禁杜撰/书面语/[缺省]附理由）。
+    const r20 = REQDOC.rules.find((r) => r.id === "reqdoc-r20")!
+    expect(r20.text).toContain("槽位内容铁律")
+    expect(r20.text).toContain("禁止杜撰事实")
+    expect(r20.text).not.toContain("5.k.2.8") // 映射表已移除（由地址承载）
+    // 阶段 3：r33 填槽纪律 + r9/r10（主流程推演，已由槽位清单承载）删除
+    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r33" && r.text.includes("批量起草"))).toBe(true)
+    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r9" || r.id === "reqdoc-r10")).toBe(false)
     // 重构 2c：r14/r23/r24/r31 已改写为组装路径，不再点名已删工具
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r14" && r.text.includes("reqdoc_assemble") && r.text.includes("严禁用 write 手写"))).toBe(true)
     // 重构 2c：打分卡门禁已删，edge 阶段改为槽位覆盖度门禁（kbGate）
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r22" && r.stage === "edge" && r.text.includes("kbGate") && r.text.includes("force_reason"))).toBe(true)
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r21")).toBe(false)
-    // 实施方案 00~07 产出：03→数据字典与库表设计（r10），04→RBAC 矩阵与审批流（r12），落盘进 r14/r20
-    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r10" && r.text.includes("数据字典") && r.text.includes("库表设计") && r.text.includes("纯文本步骤") && r.text.includes("flowchart TD"))).toBe(true)
+    // 阶段 3：r10 删除后，其「数据字典与库表设计 / 纯文本步骤展示主流程」要求迁入 r12（不可随规则删除而丢失）
+    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r12" && r.text.includes("数据字典") && r.text.includes("库表设计") && r.text.includes("纯文本步骤"))).toBe(true)
     // 追问 3 轮上限须逐条列出未澄清探针并说明业务可选项（质量飞轮 P1：缺口可见 + 可行动）
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r11" && r.text.includes("3 轮") && r.text.includes("可选项") && r.text.includes("开新会话") && r.text.includes("reqdoc_ingest") && r.text.includes("reqdoc_answer"))).toBe(true)
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r12" && r.text.includes("RBAC 权限控制矩阵") && r.text.includes("审批流控制逻辑"))).toBe(true)
-    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r14" && r.text.includes("数据字典与库表设计") && r.text.includes("RBAC 权限控制矩阵"))).toBe(true)
+    // 模板外成果（数据字典/库表设计、RBAC 权限矩阵、UAT 用例）的落盘要求归 r20（槽位内容铁律）
+    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r20" && r.text.includes("数据字典与库表设计") && r.text.includes("RBAC 权限"))).toBe(true)
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r14" && r.text.includes("reqdoc_export") && r.text.includes("Word"))).toBe(true)
-    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r20" && r.text.includes("数据字典与库表设计/") && r.text.includes("权限矩阵与审批流/"))).toBe(true)
+    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r20" && r.text.includes("07_需求规格产出"))).toBe(true)
     // 关键确认防浅背书（质量飞轮 #5）：reqdoc-r27 通用规则，连续 2 次默认须逼自主意见
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r27" && r.stage === "global" && r.text.includes("连续 2 轮") && r.text.includes("量化目标") && r.text.includes("reqdoc-r22"))).toBe(true)
     // 先补料再追问（质量飞轮 #6）：reqdoc-r28 edge 规则，进 edge 前促投放≥2 目录
