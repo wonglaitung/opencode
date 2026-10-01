@@ -369,6 +369,36 @@ export const EVAL_TOOLS: OpenAITool[] = [
   {
     type: "function",
     function: {
+      name: "reqdoc_memory_recall",
+      description:
+        "reqdoc 定稿记忆回顾：把本次收集到的组织知识候选（系统名/接口/产品线等）逐条列给业务**勾选**，" +
+        "只有业务勾选的才写入 L2 组织记忆（供后续需求复用为默认值）。" +
+        "定稿通过后调用一次即可；业务未勾选的**不会**写入。不影响任何门禁与判定。",
+      parameters: {
+        type: "object",
+        properties: {
+          facts: {
+            type: "array",
+            description: "业务勾选要记住的条目（由你从本次问答中提取候选，逐条给业务确认）",
+            items: { type: "object", properties: { content: str("一条组织知识（如「交易走 CIPS，报文经 ESB」）") }, required: ["content"] },
+          },
+          prefs: {
+            type: "array",
+            description: "可选的表达偏好（只影响措辞与详略，不影响事实与门禁）",
+            items: {
+              type: "object",
+              properties: { key: str("偏好键（如 详略/措辞/分工）"), value: str("偏好内容") },
+              required: ["key", "value"],
+            },
+          },
+        },
+        required: ["facts"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "reqdoc_assemble",
       description:
         "reqdoc PRD 组装：把槽位投影成整篇 PRD（md）并归档到 07_需求规格产出。" +

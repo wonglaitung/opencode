@@ -11,7 +11,7 @@
  * 便于对照与回退（见设计文档 12 章阶段 2a/2b/2c）。
  */
 import { mkdir, writeFile } from "node:fs/promises"
-import { join } from "node:path"
+import { basename, join } from "node:path"
 import { tool, type ToolDefinition } from "@opencode-ai/plugin"
 import {
   QUESTIONS_PER_TURN,
@@ -21,6 +21,9 @@ import {
   deriveQuestions,
   materialOf,
   matchMemory,
+  writeL1Term,
+  writeL2Fact,
+  writeL4Pref,
   getDefinition,
   requiredSlots,
   type ContainerDecl,
@@ -218,9 +221,37 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
       content: z.string().describe("业务确认后的内容（业务语言，不照搬口语）"),
       source: z.enum(["文档", "问答", "缺省"]).describe("来源：文档 / 问答（业务口述）/ 缺省（本次不涉及）"),
       reason: z.string().optional().describe("source=缺省 时必填（如「本次无清算处理」）"),
+      restated_term: z
+        .object({
+          term: z.string().describe("业务刚刚口头复述释义的缩写/简称（如 CRD）"),
+          definition: z.string().describe("业务给出的释义（用业务原话，不要臆测润色）"),
+          kind: z.enum(["行业通用", "系统口径", "内部简称"]).describe("分类：内部简称=行内叫法；系统口径=本系统约定；行业通用=通用行话"),
+        })
+        .optional()
+        .describe(
+          "【记忆】仅当业务**主动口头解释了某个缩写/简称**时才填（origin=restated）。" +
+            "下一个需求材料出现该词将直接采信、不再追问。**业务只是点了「同意默认」时绝对不要填**——" +
+            "静默接受不入库，否则错误定义会跨需求传播。",
+        ),
     },
     async execute(args, context) {
       const root = projectRoot(context)
+      // 记忆写入（3.6.1 ①）：业务复述 → 立即写 L1。origin 固定 restated——
+      // 模型无法自行指定 origin，杜绝「点默认也入库」的污染路径。
+      const mem = args.restated_term
+        ? writeL1Term(args.restated_term.term, args.restated_term.definition, {
+            kind: args.restated_term.kind,
+            scope: "org",
+            origin: "restated",
+            fromProject: basename(root),
+          })
+        : null
+      const memNote =
+        mem?.ok === true
+          ? `🧠 已记入 L1 术语记忆：${args.restated_term!.term} = ${args.restated_term!.definition}（下个需求出现该词将直接采信、不再问）`
+          : mem?.ok === false && mem.reason === "conflict"
+            ? `⚠ 术语「${args.restated_term!.term}」记忆里已有不同释义（${mem.existing}），未覆盖——请与业务确认该用哪个`
+            : ""
       const saved = store.mutateWorkflow(context.sessionID, (workflow) => {
         requireReqdoc(workflow, "reqdoc_answer")
         const kb = readKb(workflow)
@@ -270,6 +301,7 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
         derived.l1Applied.length > 0
           ? `🧠 L1 记忆消缺口 ${derived.l1Applied.length} 项（无需再问）：${derived.l1Applied.join("、")}`
           : "",
+        memNote,
       ]
         .filter(Boolean)
         .join("\n")
@@ -313,7 +345,62 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
     },
   })
 
-  return { reqdoc_ingest, reqdoc_answer, reqdoc_assemble }
+  /**
+   * 记忆候选回顾（设计 3.6.1 ③，阶段 3）：定稿后由业务**勾选**才写入 L2 组织知识。
+   *
+   * 刻意做成独立工具而非定稿自动写：自动写等于「AI 决定什么值得记住」，
+   * 而记忆会跨需求传播，污染成本高（3.6 规则 3）。业务勾选是唯一的入库授权。
+   */
+  const reqdoc_memory_recall = tool({
+    description:
+      "reqdoc 定稿记忆回顾：把本次收集到的组织知识候选（系统名/接口/产品线等）逐条列给业务**勾选**，" +
+      "只有业务勾选的才写入 L2 组织记忆（供后续需求复用为默认值）。" +
+      "定稿通过后调用一次即可；业务未勾选的**不会**写入。不影响任何门禁与判定。",
+    args: {
+      facts: z
+        .array(z.object({ content: z.string().describe("一条组织知识（如「交易走 CIPS，报文经 ESB」）") }))
+        .describe("业务勾选要记住的条目（由你从本次问答中提取候选，逐条给业务确认）"),
+      prefs: z
+        .array(z.object({ key: z.string().describe("偏好键（如 详略/措辞/分工）"), value: z.string().describe("偏好内容") }))
+        .optional()
+        .describe("可选的表达偏好（只影响措辞与详略，不影响事实与门禁）"),
+    },
+    async execute(args, context) {
+      const root = projectRoot(context)
+      const fromProject = basename(root)
+      const written: string[] = []
+      const skipped: string[] = []
+      for (const f of args.facts) {
+        const r = writeL2Fact(f.content, { source: "问答", scope: "org", origin: "restated", fromProject })
+        if (r.ok) written.push(f.content)
+        else skipped.push(f.content)
+      }
+      const prefWritten: string[] = []
+      for (const p of args.prefs ?? []) {
+        const r = writeL4Pref(p.key, p.value, { scope: "reqdoc", origin: "restated", fromProject })
+        if (r.ok) prefWritten.push(`${p.key}=${p.value}`)
+      }
+      // 从知识库移除已写入的候选槽位（它们已进记忆，不必重复追问）
+      if (written.length > 0) {
+        store.mutateWorkflow(context.sessionID, (w) => {
+          if (!w.kb) return
+          w.kb.slots = w.kb.slots.map((sl) =>
+            written.includes(sl.content) && sl.source === "问答" ? { ...sl, status: "retired" as const } : sl,
+          )
+        })
+      }
+      return [
+        `🧠 记忆回顾完成：写入 L2 组织知识 ${written.length} 条${written.length ? `——${written.join("；")}` : ""}`,
+        prefWritten.length > 0 ? `已记表达偏好 ${prefWritten.length} 条：${prefWritten.join("、")}` : "",
+        skipped.length > 0 ? `⚠ 未写入（静默默认来源不入库）：${skipped.join("、")}` : "",
+        "→ 可用 `opencode-sm memory list` 查看与遗忘（删文件即遗忘）。",
+      ]
+        .filter(Boolean)
+        .join("\n")
+    },
+  })
+
+  return { reqdoc_ingest, reqdoc_answer, reqdoc_assemble, reqdoc_memory_recall }
 }
 
 /** 覆盖率文本（状态条与工具返回共用口径）。 */

@@ -121,6 +121,7 @@ export function buildSystemFragment(
         "1) reqdoc_ingest —— 从材料批量提取内容提交为槽位（不是写文档）；status 由服务端记为待确认。",
         "2) reqdoc_answer —— 逐项请业务确认后落定；连续 2 轮未确认的项会被停问，应显式收口（[缺省]+理由）。",
         "3) reqdoc_assemble —— 由槽位投影生成整篇 PRD（结构与来源标签由服务端保证，**不要手工编辑产物**）。",
+        "4) reqdoc_memory_recall（定稿后）—— 把本次收集到的组织知识候选逐条给业务**勾选**，勾选的写入 L2 记忆供后续复用。",
         "→ 进入下一阶段与定稿的门禁读知识库派生门禁（kbGate）：必填槽位未 confirmed 或有未收口项即拦截。",
         "",
       )

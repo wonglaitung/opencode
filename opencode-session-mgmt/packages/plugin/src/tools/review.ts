@@ -429,6 +429,13 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
         defaultCount >= 3
           ? `\n⚠ 本次有 ${defaultCount} 个槽位以 [缺省] 收口（需求细节未落实）：建议补充 01~05 书面材料或真实实例后再评审。`
           : ""
+      // 记忆回顾提示（3.6.1 ③）：定稿后请业务勾选要记住的组织知识——只提示，写入由 reqdoc_memory_recall 显式执行
+      const recallCandidates = (saved.kb?.slots ?? []).filter((sl) => sl.source === "问答" && sl.status === "confirmed").length
+      const recallNote =
+        saved.type === "reqdoc" && recallCandidates > 0
+          ? `\n🧠 记忆回顾：本次有 ${recallCandidates} 项来自业务口述的内容。请把它们整理成 2~4 条组织知识候选（系统名/接口/产品线等），` +
+            `逐条问业务「这条要不要记入组织记忆供后续复用」，勾选的调用 reqdoc_memory_recall 写入。`
+          : ""
       // 审查是最后阶段：通过即全部阶段 approved → 完成。此时在工具返回直接带出 /new 提醒
       // （弱模型未必等到下一轮注入片段才行动，完成瞬间的工具结果是最稳的触发点）。
       const locked = store.listLocks(context.sessionID)
@@ -445,7 +452,7 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
         (saved.commit.status === "allowed"
           ? `\n⚑ 工作流已完成，请提醒开发者执行 /new 开始下一个需求（保持统计隔离）。`
           : "") +
-        lockedNote + lazyNote
+        lockedNote + lazyNote + recallNote
       )
     },
   })
