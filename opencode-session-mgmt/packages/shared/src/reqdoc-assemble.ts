@@ -47,12 +47,18 @@ function active(slots: readonly ReqdocSlot[], addr: string): ReqdocSlot[] {
   return slots.filter((s) => docAddrOf(s.address) === addr && s.status !== "retired")
 }
 
-/** 取某地址的正文：优先 confirmed，其次 draft；无内容返回空串。 */
+/**
+ * 取某地址的正文：优先 confirmed，其次 draft；无内容返回空串。
+ *
+ * 结构行转义在此统一进行（I-2）——prose 正文同样内插进 markdown，
+ * 一个 `## 第九章` 就能造出新章节并绕过全部三重校验（它们只验「槽位 ↔ 产物一致」，
+ * 而产物正是由本函数生成的）。
+ */
 function bodyOf(slots: readonly ReqdocSlot[], addr: string): string {
   const list = active(slots, addr)
   const confirmed = list.find((s) => s.status === "confirmed")
   const chosen = confirmed ?? list[0]
-  return chosen?.content.trim() ?? ""
+  return chosen ? escapeStructural(chosen.content.trim()) : ""
 }
 
 /**
@@ -68,16 +74,40 @@ export function kbDigest(slots: readonly ReqdocSlot[]): string {
   return createHash("sha256").update(norm, "utf8").digest("hex").slice(0, 16)
 }
 
+/**
+ * 内容里的 **markdown 结构行**检测（对抗审查 I-2）。
+ *
+ * 槽位正文是业务语言需求描述，禁掉所有换行不现实；但**标题行与表格行会改变文档结构**——
+ * 子键已焊死（`isValidSlotAddr`），值却是敞开的：`content` 里塞一个
+ * `## 第九章 伪造章节` 就能把伪造内容送进 Word 交付件，且 kbDigest / LCS / 定稿三重校验全部放行
+ * （它们只看「槽位 ↔ 产物是否一致」，而产物正是由这个 content 生成的——自证）。
+ *
+ * 规则：拒绝以 `#` / `|` 开头的行（标题、表格）。普通段落、列表、换行照常允许。
+ */
+export function hasStructuralMarkdown(text: string): boolean {
+  return text
+    .split(/\r?\n/)
+    .some((line) => /^\s*(#{1,6}\s|\|)/.test(line))
+}
+
 /** 容器节正文：术语容器渲染术语表，字段容器渲染字段清单（均为子项聚合视图）。 */
 function containerBody(slots: readonly ReqdocSlot[], container: string): string {
   const children = active(slots, container).sort((a, b) => a.address.localeCompare(b.address))
   if (children.length === 0) return ""
-  if (docAddrOf(children[0]!.address) === "4.1") {
-    // 术语定义：`- **CRD**：信贷审批部` 逐行
-    return children.map((c) => `- **${slotName(c.address, "4.1")}**：${c.content.trim()}`).join("\n")
-  }
-  // 输入要素的检查：`- **字段名**：说明` 逐行
-  return children.map((c) => `- **${slotName(c.address, container)}**：${c.content.trim()}`).join("\n")
+  // 内容里的标题/表格行会被转义——它们只在正文里是字面量，不应改变文档结构（I-2）
+  const body = (c: ReqdocSlot) => `- **${slotName(c.address, container)}**：${escapeStructural(c.content.trim())}`
+  return children.map(body).join("\n")
+}
+
+/**
+ * 把内容里的 markdown 结构行降级为字面量：`## 伪造章节` → `\#\# 伪造章节`。
+ * 保留语义（读者仍能看出那是标题文本）但不再被解析成新章节。
+ */
+function escapeStructural(text: string): string {
+  return text
+    .split(/\r?\n/)
+    .map((line) => (/^\s*(#{1,6}\s|\|)/.test(line) ? line.replace(/^(\s*)(#{1,6}\s|\|)/, "$1\\$2") : line))
+    .join("\n")
 }
 
 /** 取槽位子键（术语名 / 字段名）。 */

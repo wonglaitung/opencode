@@ -90,7 +90,9 @@ function deriveWithMemory(material: string) {
 
 /** 材料中出现的术语候选（服务端不预置，由扫描提取——这里模拟 reqdoc_scan 的产物）。 */
 const TERM_CANDIDATES = {
-  "4.1": ["CRD", "AML", "KYC"],
+  // CIPS 必须在列：L2 猜测只在「候选名出现在 L2 事实里」时才产出（复审 S-1：原先没有它，
+  // 导致 L2 验收项恒短路、0 覆盖）
+  "4.1": ["CRD", "AML", "KYC", "CIPS"],
 }
 
 /** PRD 模板（权威源，assembleDoc 需要它逐字落实骨架）。 */
@@ -173,18 +175,23 @@ async function main() {
   })
   const withL2 = deriveWithMemory(`${MATERIAL_1}\n交易走 CIPS 通道，报文经 ESB 网关转发至核心系统。`)
   const l2Q = withL2.all.find((q) => q.from === "memory-L2")
-  // L2 消缺口数必须为 0：l1Applied 里出现的都是前面步骤写入的 L1 条目（CRD/AML），
-  // L2 命中的项若被消缺口会额外出现在这里——逐项核对 L2 命中的候选未被消。
-  const l2Applied = withL2.all.filter((q) => withL2.l1Applied.includes(q.address) && q.from === "memory-L2")
+  // 前提：必须真的命中 L2，否则下面两条断言毫无意义（复审 S-1/S-2 指出原实现恒短路）
+  record(
+    "前提：L2 确实被命中（否则后续断言无效）",
+    !!l2Q,
+    l2Q ? `命中 ${l2Q.address}，from=${l2Q.from}` : "★未命中——L2 分支未被执行，后续断言是空转",
+  )
   record(
     "★ L2 命中 → 不消缺口（仍被问）",
-    l2Applied.length === 0,
-    `被 L2 消掉的项=${l2Applied.length}（应为 0）；l1Applied=${withL2.l1Applied.join("、") || "（空）"}（均为 L1 来源）`,
+    !!l2Q && !withL2.l1Applied.includes("4.1.CIPS"),
+    l2Q
+      ? `4.1.CIPS 仍在开放项=${withL2.all.some((q) => q.address === "4.1.CIPS")}；未被消缺口（L2 不消缺口）`
+      : "★无 L2 命中，断言无效",
   )
   record(
     "★ L2 猜测带出记忆内容（P1-c：原为空壳）",
-    !l2Q || (l2Q.guess?.includes("CIPS") ?? false),
-    l2Q ? `guess="${l2Q.guess}"` : "（本材料无 L2 候选命中）",
+    !!l2Q && (l2Q.guess?.includes("CIPS") ?? false),
+    l2Q ? `guess="${l2Q.guess}"` : "★无 L2 命中，断言无效",
   )
 
   console.log("\n【验收 4】组装幂等：产物与槽位逐字一致，手改能被发现")

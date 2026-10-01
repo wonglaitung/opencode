@@ -343,7 +343,7 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
         `覆盖率：${kbCoverage(kb)}；剩余本轮该填 ${derived.batch.length} 项。`,
         derived.unclosed.length > 0 ? `⚠ 仍未收口：${derived.unclosed.join("、")}` : "",
         derived.l1Applied.length > 0
-          ? `🧠 L1 记忆消缺口 ${derived.l1Applied.length} 项（无需再问）：${derived.l1Applied.join("、")}`
+          ? `🧠 L1 记忆免问 ${derived.l1Applied.length} 项（业务曾复述过，采信其定义、无需再问）：${derived.l1Applied.join("、")}`
           : "",
         memNote,
       ]

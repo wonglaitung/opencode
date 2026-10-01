@@ -335,18 +335,37 @@ describe("重组装 diff · 服务端追加区块豁免", () => {
     store.close()
   })
 
-  test("★ 豁免只针对溯源章节：正文里的手改仍被抓", async () => {
+  // 复审 S-3：原先用 `/确认溯源|内容与知识库不一致/` 一个 matcher 覆盖两种场景，
+  // 而注入的是非法溯源格式 → 恒由第一分支命中，LCS 路径**已无任何断言**。拆成两条。
+  test("合法溯源章节 + 正文手改 → 必须报「内容与知识库不一致」（LCS 路径）", async () => {
+    const store = readyStore()
+    const worktree = tempDir()
+    const tools = createReviewTools(store)
+    const ctx = await assemble(store, worktree)
+    // 先正常写一份合法溯源（避免被 F-1 的 malformed 检查抢先拦下）
+    await tools.comprehension_add!.execute({ codeSegmentId: "T", explanation: "e" } as never, ctx)
+    await tools.comprehension_confirm!.execute({ codeSegmentId: "T", sourceLabel: "L1", sourceQuote: "Q1" } as never, ctx)
+    // 只改正文，不碰溯源
+    const md = readFileSync(prdPath(worktree), "utf8")
+    writeFileSync(prdPath(worktree), md.replace("3.1 内容", "3.1 手改内容"), "utf8")
+    await expect(
+      createReviewTools(store).review_submit!.execute(CHECKLIST, ctx),
+    ).rejects.toThrow(/内容与知识库不一致/)
+    store.close()
+  })
+
+  test("非法溯源格式 → 必须报「确认溯源」（独立校验路径）", async () => {
     const store = readyStore()
     const worktree = tempDir()
     const ctx = await assemble(store, worktree)
-    const p = prdPath(worktree)
-    // 同时做两件事：追加溯源章节 + 手改正文。溯源章节里的伪造条目会先被独立校验拦下
-    // （比「内容不一致」更精确的报错），正文手改由 LCS 比对负责——两条路径都堵。
-    const md = readFileSync(p, "utf8")
-    writeFileSync(p, md.replace("3.1 内容", "3.1 手改内容") + "\n\n## 确认溯源\n\n- 某条记录\n", "utf8")
+    writeFileSync(
+      prdPath(worktree),
+      readFileSync(prdPath(worktree), "utf8") + "\n\n## 确认溯源\n\n- 某条记录\n",
+      "utf8",
+    )
     await expect(
       createReviewTools(store).review_submit!.execute(CHECKLIST, ctx),
-    ).rejects.toThrow(/确认溯源|内容与知识库不一致/)
+    ).rejects.toThrow(/确认溯源/)
     store.close()
   })
 })

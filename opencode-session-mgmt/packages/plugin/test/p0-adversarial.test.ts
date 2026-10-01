@@ -761,3 +761,197 @@ describe("N-2 / F-1 / F-5 · 服务端追加区块的豁免与校验", () => {
     store.close()
   })
 })
+
+/**
+ * 第三轮复审（I-2 / I-1）回归护栏。
+ *
+ * - **I-2** `content` 曾与子键同级地插值进 markdown：子键焊死了，值却敞开——
+ *   `content` 里塞 `## 第九章 伪造章节` 即可造出新章节直达 Word 交付件，
+ *   且 kbDigest / LCS / 定稿三重校验全部放行（它们只验「槽位 ↔ 产物一致」，
+ *   而产物正是由这个 content 生成的——自证）。
+ * - **I-1** 记忆匹配的证据源曾包含 `candidates`（候选自证），
+ *   改为「只取槽位正文」后自证面只是平移——正文也是模型写的。
+ */
+describe("I-2 · 槽位内容不得注入 markdown 结构", () => {
+  const build = (content: string) => {
+    const store = Store.memory(() => "reqdoc" as const)
+    const features = [{ no: 1, name: "名单排查", priority: "high" as const, confirmedAt: 1000 }]
+    const slots = requiredSlots(features).map((a) => ({
+      kind: "prose" as const, address: a, content: `${a} 内容`,
+      source: "文档" as const, status: "confirmed" as const,
+    }))
+    slots[0] = { ...slots[0]!, content }
+    store.mutateWorkflow("r1", (w) => {
+      for (const n of ["goal", "rules", "edge", "prd"]) w.stages[n].status = "approved"
+      w.kb = {
+        slots, features,
+        containers: { "4.1": { required: false, reason: "x" }, "5.1.2.1": { required: false, reason: "y" } },
+        askCounts: {}, updatedAt: 1,
+      }
+    })
+    const worktree = mkdtempSync(join(tmpdir(), "sm-i2-"))
+    const ctx = { sessionID: "r1", worktree } as never
+    return { store, worktree, ctx }
+  }
+  const prdOf = (worktree: string) =>
+    readFileSync(join(worktree, "07_需求规格产出/1_名单排查/PRD.md"), "utf8")
+
+  test("★ 标题行不被解析为新章节（转义但保留原文）", async () => {
+    const { store, worktree, ctx } = build("信贷审批流程\n\n## 第九章 伪造章节\n\n- 审批人：业务总监")
+    await createReqdocKbTools(store).reqdoc_assemble!.execute({} as never, ctx)
+    const md = prdOf(worktree)
+    // 不得成为真正的标题行
+    expect(/^\s*#{1,6}\s+第九章/m.test(md)).toBe(false)
+    // 但内容仍可读（转义为字面量，不丢信息）
+    expect(md).toContain("\\## 第九章 伪造章节")
+    expect(md).toContain("信贷审批流程")
+    store.close()
+  })
+
+  test("★ 表格行不被解析为表格", async () => {
+    const { store, worktree, ctx } = build("正文\n\n| 版本 | 说明 |\n| --- | --- |\n| 9.9 | 伪造 |")
+    await createReqdocKbTools(store).reqdoc_assemble!.execute({} as never, ctx)
+    const md = prdOf(worktree)
+    expect(/^\s*\|\s*9\.9/m.test(md)).toBe(false)
+    store.close()
+  })
+
+  test("容器子项内容同样受约束（子键与值两条路）", async () => {
+    const store = Store.memory(() => "reqdoc" as const)
+    const features = [{ no: 1, name: "名单排查", priority: "high" as const, confirmedAt: 1000 }]
+    const slots = requiredSlots(features).map((a) => ({
+      kind: "prose" as const, address: a, content: `${a} 内容`,
+      source: "文档" as const, status: "confirmed" as const,
+    }))
+    slots.push({
+      kind: "term" as never, address: "4.1.CRD",
+      content: "信贷审批部\n\n## 伪造章节\n\n伪造内容",
+      source: "文档" as const, status: "confirmed" as const,
+    })
+    store.mutateWorkflow("r1", (w) => {
+      for (const n of ["goal", "rules", "edge", "prd"]) w.stages[n].status = "approved"
+      w.kb = { slots, features, containers: { "5.1.2.1": { required: false, reason: "y" } }, askCounts: {}, updatedAt: 1 }
+    })
+    const worktree = mkdtempSync(join(tmpdir(), "sm-i2b-"))
+    const ctx = { sessionID: "r1", worktree } as never
+    await createReqdocKbTools(store).reqdoc_assemble!.execute({} as never, ctx)
+    const md = prdOf(worktree)
+    expect(/^\s*#{1,6}\s+伪造章节/m.test(md)).toBe(false)
+    store.close()
+  })
+
+  test("正常需求描述（段落/列表/换行）不受影响", async () => {
+    const normal = "流程分三步：\n1. 柜员发起\n2. 系统校验\n3. 通知客户\n\n补充说明：可批量提交。"
+    const { store, worktree, ctx } = build(normal)
+    await createReqdocKbTools(store).reqdoc_assemble!.execute({} as never, ctx)
+    const md = prdOf(worktree)
+    expect(md).toContain("流程分三步")
+    expect(md).toContain("1. 柜员发起")
+    expect(md).not.toContain("\\1.")
+    store.close()
+  })
+})
+
+describe("I-1 · 记忆证据源不可由模型书写", () => {
+  test("★ 模型不得自行声称某条术语成立（restated_term 需业务复述语义）", () => {
+    // 这条不是门禁而是契约断言：记忆消缺口的正当性来自「业务复述」，
+    // 而 restated_term 的 description 已明示「业务只是点了同意默认时绝对不要填」。
+    // 工具输出措辞必须体现「仍需确认」而非「已消缺口」——避免模型把它当既成事实。
+    const src = readFileSync(join(import.meta.dir, "..", "src", "tools", "reqdoc-kb-tools.ts"), "utf8")
+    // 消缺口的提示必须同时给出「无需再问」与「来源是业务复述过的记忆」两个要素
+    // 两处回执都必须给出「业务曾复述过」这个来源要素——否则模型会把记忆当成本项目的既成事实
+    const notes = src.match(/🧠 L1 记忆[^`]*/g) ?? []
+    expect(notes.length).toBeGreaterThanOrEqual(2)
+    for (const n of notes) expect(n).toContain("业务曾复述过")
+  })
+
+  test("★ 槽位正文里的术语会触发消缺口（记录已知限制：证据源仍由模型写）", async () => {
+    tempMemory()
+    writeL1Term("CCB", "某系统", { kind: "内部简称", scope: "org", origin: "restated", fromProject: "p" })
+    const store = Store.memory(() => "reqdoc" as const)
+    const worktree = mkdtempSync(join(tmpdir(), "sm-i1-"))
+    const out = String(
+      await createReqdocKbTools(store).reqdoc_ingest!.execute(
+        {
+          features: [{ name: "X", priority: "high" }],
+          slots: [{ address: "3.1", kind: "prose", content: "本需求与 CCB 系统无关。", source: "文档" }],
+          candidates: { "4.1": ["CCB"] },
+        } as never,
+        { sessionID: "r1", worktree } as never,
+      ),
+    )
+    // 现状：否定句也会触发（证据源是模型写的正文）。
+    // 这条测试锁定该已知行为，若将来改为 scan 原文证据（模型不可写），本测试应改为断言不触发。
+    expect(out).toContain("L1 记忆消缺口")
+    store.close()
+  })
+})
+
+/**
+ * 第三轮复审（I-3 / I-4 / S-3）回归护栏。
+ *
+ * - **I-3** `CHANGE_ROW_RE` 曾匹配任意 5 列表格行 → 版本审计轨迹可伪造
+ * - **I-4** `verifyTraceback` 只有「每行 → record」单向映射 → 逐条删除溯源记录放行
+ * - **S-3** 我曾把 LCS 断言放宽成 `/确认溯源|内容与知识库不一致/`，导致 LCS 路径失去护栏
+ */
+describe("I-3 / I-4 · 服务端追加区块的完整性", () => {
+  const assembled = async () => {
+    tempMemory()
+    const store = Store.memory(() => "reqdoc" as const)
+    store.mutateWorkflow("r1", (w) => {
+      for (const n of ["goal", "rules", "edge", "prd"]) w.stages[n].status = "approved"
+      const features = [{ no: 1, name: "公告发布", priority: "medium" as const, confirmedAt: 1000 }]
+      w.kb = {
+        slots: requiredSlots(features).map((a) => ({
+          kind: "prose" as const, address: a, content: `${a} 内容`,
+          source: "文档" as const, status: "confirmed" as const,
+        })),
+        features,
+        containers: { "4.1": { required: false, reason: "x" }, "5.1.2.1": { required: false, reason: "y" } },
+        askCounts: {}, updatedAt: 1,
+      }
+    })
+    const worktree = mkdtempSync(join(tmpdir(), "sm-i34-"))
+    const ctx = { sessionID: "r1", worktree } as never
+    await createReqdocKbTools(store).reqdoc_assemble!.execute({} as never, ctx)
+    return { store, ctx, p: join(worktree, "07_需求规格产出/1_公告发布/PRD.md") }
+  }
+  const submit = async (store: Store, ctx: never) => {
+    try { await createReviewTools(store).review_submit!.execute(CHECKLIST, ctx); return "" }
+    catch (e) { return String(e) }
+  }
+
+  test("★ 伪造版本审计行被拦（I-3：任意 5 列表格行不再豁免）", async () => {
+    const { store, ctx, p } = await assembled()
+    writeFileSync(
+      p,
+      readFileSync(p, "utf8").replace(
+        "## 第二章 文档变更过程",
+        "## 第二章 文档变更过程\n\n| 9.9 | 【伪造】监管已出具无异议函 | 2020-01-01 | 张三 | 已通过 |",
+      ),
+      "utf8",
+    )
+    expect(await submit(store, ctx)).toMatch(/与知识库不一致|内容与知识库不一致/)
+    store.close()
+  })
+
+  test("服务端自己写的变更记录行仍被豁免（正向：二次定稿不拦）", async () => {
+    const { store, ctx } = await assembled()
+    expect(await submit(store, ctx)).toBe("") // 首次定稿写入变更记录
+    store.mutateWorkflow("r1", (w) => { w.stages.review.status = "in_progress" })
+    expect(await submit(store, ctx)).toBe("") // 二次定稿：变更行豁免
+    store.close()
+  })
+
+  test("★ 溯源逐条删除被拦（I-4：反向完整性）", async () => {
+    const { store, ctx, p } = await assembled()
+    const tools = createReviewTools(store)
+    for (const [id, label, quote] of [["A", "L1", "Q1"], ["B", "L2", "Q2"]] as const) {
+      await tools.comprehension_add!.execute({ codeSegmentId: id, explanation: "e" } as never, ctx)
+      await tools.comprehension_confirm!.execute({ codeSegmentId: id, sourceLabel: label, sourceQuote: quote } as never, ctx)
+    }
+    writeFileSync(p, readFileSync(p, "utf8").replace(/^- 要点「B」.*$/m, ""), "utf8")
+    expect(await submit(store, ctx)).toMatch(/确认溯源/)
+    store.close()
+  })
+})

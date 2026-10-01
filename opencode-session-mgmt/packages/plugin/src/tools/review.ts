@@ -36,7 +36,7 @@ import type { Store } from "../db"
 const SECTION_TRACEBACK_RE = /^##\s*确认溯源\s*$/
 const SECTION_CHANGES_RE = /^##\s*第二章\s*文档变更过程\s*$/
 const SERVICE_SECTION_RE = /^##\s/
-const CHANGE_ROW_RE = /^\|[^|]*\|[^|]*\|[^|]*\|[^|]*\|[^|]*\|$/
+const CHANGE_ROW_RE = /^\|\s*1\.\d+\s*\|[^|]*\|[^|]*\|[^|]*\|[^|]*\|$/
 import { WorkflowOpError, applyTransition, recomputeCommit } from "../workflow-ops"
 import { projectRoot, resolveWithinWorktree } from "../fs-safe"
 
@@ -549,6 +549,16 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
           `该章节只能由 comprehension_confirm 回填，禁止手工编辑；请删除伪造内容或重新确认要点。`,
       )
     }
+    // 反向完整性（I-4）：每条已确认的来源证据都必须在节内出现。
+    // 此前只有「每行 → record」单向映射，逐条删除溯源记录能通过（交付件静默失去全部溯源）。
+    const claimedIds = new Set(claimed.map((c) => c.id))
+    const missing = expected.filter((c) => !claimedIds.has(c.id))
+    if (missing.length > 0) {
+      throw new WorkflowOpError(
+        `「确认溯源」章节缺少 ${missing.length} 条已确认要点的来源证据：${missing.map((c) => c.id).join("、")}。` +
+          `该章节必须逐条对应理解确认记录；请重新确认这些要点以重建。`,
+      )
+    }
   }
 
   /**
@@ -577,8 +587,11 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
           skip = null
           return false
         }
-        // 溯源节整节滤掉；变更记录章只滤表体行（标题由模板给出，应参与比对）
+        // 溯源节整节滤掉
         if (skip === "traceback") return false
+        // 变更记录章：只豁免**服务端自己写的那种行**（I-3）。
+        // 此前用「任意 5 列表格行」豁免，等于允许伪造版本审计轨迹
+        // （`| 9.9 | 【伪造】监管已出具无异议函 | 2020-01-01 | 张三 | 已通过 |` 能通过）。
         if (skip === "changes") return !CHANGE_ROW_RE.test(line)
         return true
       })
