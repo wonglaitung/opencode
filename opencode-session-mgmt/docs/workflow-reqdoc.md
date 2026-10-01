@@ -317,7 +317,7 @@ flowchart TD
 
 **容器不逐个追问**：`4.1` 与 `5.k.2.1` 只做聚合判定，永不进开放项（见 5 章选项 B）。只有当调用方显式给出 `candidates`（容器下的术语/字段候选清单）时，容器子项才会以 `4.1.CRD` / `5.1.2.1.客户号` 形态进入开放项——**服务端不预置候选**，且当前门禁/工具/状态条调用点均未传 `candidates`，故线上术语与字段只走聚合判定、不逐项追问。
 
-**记忆机制（阶段 3 已接线，非内核待办）**：`deriveQuestions` 支持 `l1`（L1 术语记忆）命中即**消缺口**（内部简称/行业通用不再问）、`l2`（L2 组织知识）命中**不消缺口**但带默认猜测问一次。记忆类型与决策内核在 `packages/shared/src/reqdoc-kb.ts`，读写落盘在 `reqdoc-memory.ts`（`matchMemory` 只返回命中项，**记忆原文不可见给模型**），CLI 侧 `opencode-sm memory list` / `forget` 做可见性与遗忘。**调用点已传入 `l1`/`l2`**：`reqdoc_ingest` 与 `reqdoc_answer` 的返回（每次回写槽位后按已提交正文重新 `matchMemory` + 派生）、状态条与 prd 阶段注入块（`prompt.ts`），因此线上开放项会随记忆收敛，并输出「🧠 L1 记忆消缺口 N 项」。写入侧只有两处入口（业务主动复述 → L1、定稿勾选 → L2/L4，见 5 章），门禁读入的 `unclosed` 不含记忆项（`workflow.ts` / `review.ts` 的 `kbGate` 调用不传 `l1`/`l2`——门禁口径与「少问」口径刻意分开）。
+**记忆机制（阶段 3 已接线；2026 全阶段对抗审查 P0-1 修复前此处曾与代码矛盾——`candidates` 生产零传递，等于死代码，现已接通）**：`deriveQuestions` 支持 `l1`（L1 术语记忆）命中即**消缺口**（内部简称/行业通用不再问）、`l2`（L2 组织知识）命中**不消缺口**但带默认猜测问一次。记忆类型与决策内核在 `packages/shared/src/reqdoc-kb.ts`，读写落盘在 `reqdoc-memory.ts`（`matchMemory` 只返回命中项，**记忆原文不可见给模型**），CLI 侧 `opencode-sm memory list` / `forget` 做可见性与遗忘。**记忆生效的必要条件是 `candidates`**：`deriveQuestions` 的候选分支（`opts.candidates`）是 L1/L2 唯一的消费点，缺了它整段不执行。候选由 `reqdoc_ingest(candidates=…)` 提交（材料中真实出现的术语/字段名，**模型不臆造**）并落进 `kb.candidates`，四个生产调用点均已传入。**调用点已传入 `candidates` 与 `l1`/`l2`**：`reqdoc_ingest` 与 `reqdoc_answer` 的返回（每次回写槽位后按已提交正文重新 `matchMemory` + 派生）、状态条与 prd 阶段注入块（`prompt.ts`），因此线上开放项会随记忆收敛，并输出「🧠 L1 记忆消缺口 N 项」。写入侧只有两处入口（业务主动复述 → L1、定稿勾选 → L2/L4，见 5 章），门禁读入的 `unclosed` 不含记忆项（`workflow.ts` / `review.ts` 的 `kbGate` 调用不传 `l1`/`l2`——门禁口径与「少问」口径刻意分开）。
 
 **追问纪律不变**：`≤5 问/轮`、`A/B/C + 【默认推荐项】`、`≤3 轮`、业务语言（禁纯技术词汇）由 reqdoc-r2 约束；r27 进一步要求连续 2 轮走默认后改为开放式追问、强制给数字与真实举例。少问由**派生**保证（已确认的不再问），不由模型自觉保证。
 

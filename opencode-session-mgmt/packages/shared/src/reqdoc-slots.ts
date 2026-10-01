@@ -393,8 +393,10 @@ function deriveAll(
   opts: DeriveOptions,
 ): { questions: OpenQuestion[]; l1Applied: string[] } {
   const slots = opts.slots ?? []
-  const l1 = (opts.l1 ?? []).filter((t) => !t.retired)
-  const l2 = (opts.l2 ?? []).filter((f) => !f.retired)
+  // 容错：调用方传错类型（如把 matchMemory 的整个返回值当数组传）退化为空，
+  // 而不是让 .filter 抛错——这条路径在 system prompt 构建里，一个笔误会拖垮所有请求。
+  const l1 = Array.isArray(opts.l1) ? opts.l1.filter((t) => !t.retired) : []
+  const l2 = Array.isArray(opts.l2) ? opts.l2.filter((f) => !f.retired) : []
   const out: OpenQuestion[] = []
   const l1Applied: string[] = []
 

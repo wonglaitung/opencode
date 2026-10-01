@@ -357,6 +357,15 @@ export interface ReqdocKbState {
   containers?: Record<string, import("./reqdoc-slots").ContainerDecl>
   /** 地址 → 已连续出现在开放项的轮次（6.3 停问；按轮次计不按调用计） */
   askCounts?: Record<string, number>
+  /**
+   * 容器下待判定的子项候选（6.2.1.1：服务端不预置，由扫描/抽取产出）。
+   * 例：`{ "4.1": ["CRD","AML"], "5.1.2.1": ["客户号"] }`。
+   *
+   * **这是 L1/L2 记忆的唯一生效入口**——缺了它 `deriveAll` 的候选分支整段不执行，
+   * 「少问」机制形同虚设（对抗审查 P0-1）。模型不产生候选（会产生幻觉术语），
+   * 由 `reqdoc_scan` 抽取或 `reqdoc_ingest(candidates=…)` 显式提交。
+   */
+  candidates?: Record<string, string[]>
   updatedAt: number
 }
 

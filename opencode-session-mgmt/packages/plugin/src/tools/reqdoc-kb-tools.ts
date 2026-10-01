@@ -129,6 +129,14 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
         )
         .optional()
         .describe("功能点清单（首次提交时给；已确认过则省略）"),
+      candidates: z
+        .record(z.string(), z.array(z.string()))
+        .optional()
+        .describe(
+          "容器下的子项候选（如 {\"4.1\": [\"CRD\",\"AML\"], \"5.1.2.1\": [\"客户号\"]}）——" +
+            "从材料中抽取到的术语/字段名。**这是记忆生效的必要条件**：命中 L1 术语记忆的候选会直接消缺口（不再问），" +
+            "服务端才能据此少问。只填材料里真实出现的，不要臆造。",
+        ),
       containers: z
         .record(z.string(), z.object({ required: z.boolean(), reason: z.string().optional() }))
         .optional()
@@ -150,6 +158,15 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
         }
         // 容器声明合并
         kb.containers = { ...(kb.containers ?? {}), ...(args.containers ?? {}) }
+        // 候选合并（去重）：记忆消缺口的唯一入口
+        if (args.candidates) {
+          const next = { ...(kb.candidates ?? {}) }
+          for (const [container, list] of Object.entries(args.candidates)) {
+            const merged = new Set([...(next[container] ?? []), ...list])
+            next[container] = [...merged]
+          }
+          kb.candidates = next
+        }
         // 槽位合并：同地址覆盖（status 由服务端强制 draft，模型不能自称已确认）
         const byAddr = new Map(kb.slots.map((s) => [s.address, s]))
         for (const s of args.slots) {
@@ -175,11 +192,15 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
       await writeKbFiles(root, kb)
       // 阶段 3：记忆接线——按已提交槽位正文匹配（3.6 由材料驱动，只返回命中项）。
       // L1 命中消缺口（不再问）、L2 命中只作默认值（仍问一次）。
-      const hits = matchMemory(materialOf(kb.slots.map((s) => s.content)))
+      // 记忆匹配同时看已提交槽位正文与候选名——候选名是缩写的主要来源
+      const hits = matchMemory(
+        materialOf([...kb.slots.map((s) => s.content), ...Object.values(kb.candidates ?? {}).flat()]),
+      )
       const derived = deriveQuestions(kb.features, {
         slots: kb.slots,
         askCounts: kb.askCounts,
         decls: kb.containers,
+        candidates: kb.candidates,
         l1: hits.l1,
         l2: hits.l2,
       })
@@ -286,11 +307,15 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
       await writeKbFiles(root, kb)
       // 阶段 3：记忆接线——按已提交槽位正文匹配（3.6 由材料驱动，只返回命中项）。
       // L1 命中消缺口（不再问）、L2 命中只作默认值（仍问一次）。
-      const hits = matchMemory(materialOf(kb.slots.map((s) => s.content)))
+      // 记忆匹配同时看已提交槽位正文与候选名——候选名是缩写的主要来源
+      const hits = matchMemory(
+        materialOf([...kb.slots.map((s) => s.content), ...Object.values(kb.candidates ?? {}).flat()]),
+      )
       const derived = deriveQuestions(kb.features, {
         slots: kb.slots,
         askCounts: kb.askCounts,
         decls: kb.containers,
+        candidates: kb.candidates,
         l1: hits.l1,
         l2: hits.l2,
       })

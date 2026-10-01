@@ -7,10 +7,20 @@
  *    同名不同义走冲突提示而非静默覆盖。
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
-import { mkdtempSync, readFileSync, rmSync } from "node:fs"
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Store } from "../src/db"
+
+/** 记忆文件名含内容哈希后缀，按内容查找而非硬编码文件名。 */
+function findMemory(layer: string, pred: (e: Record<string, unknown>) => boolean): Record<string, unknown> | null {
+  const dir = join(home, "memory", layer)
+  for (const f of readdirSync(dir)) {
+    const e = JSON.parse(readFileSync(join(dir, f), "utf8")) as Record<string, unknown>
+    if (pred(e)) return e
+  }
+  return null
+}
 import { createReqdocKbTools } from "../src/tools/reqdoc-kb-tools"
 
 let home: string
@@ -60,9 +70,7 @@ describe("3.6.1 ① · reqdoc_answer 复述术语即写 L1", () => {
       ),
     )
     expect(out).toContain("已记入 L1")
-    const saved = JSON.parse(
-      readFileSync(join(home, "memory", "l1-glossary", "CIPS.json"), "utf8"),
-    ) as Record<string, unknown>
+    const saved = findMemory("l1-glossary", (e) => e.term === "CIPS")!
     // origin 由服务端固定为 restated——模型无法自行指定，杜绝「点默认也入库」
     expect(saved.origin).toBe("restated")
     expect(saved.definition).toBe("中国现代化支付系统")
@@ -88,9 +96,7 @@ describe("3.6.1 ① · reqdoc_answer 复述术语即写 L1", () => {
     )
     expect(out2).toContain("已有不同释义")
     // 原释义未被覆盖
-    expect(JSON.parse(readFileSync(join(home, "memory", "l1-glossary", "CRD.json"), "utf8")).definition).toBe(
-      "信贷审批部",
-    )
+    expect(findMemory("l1-glossary", (e) => e.term === "CRD")!.definition).toBe("信贷审批部")
     store.close()
   })
 
@@ -119,9 +125,7 @@ describe("3.6.1 ③ · reqdoc_memory_recall 业务勾选才入库", () => {
       ),
     )
     expect(out).toContain("写入 L2 组织知识 1 条")
-    const saved = JSON.parse(
-      readFileSync(join(home, "memory", "l2-org", "交易走_CIPS_报文经_ESB.json"), "utf8"),
-    ) as Record<string, unknown>
+    const saved = findMemory("l2-org", (e) => e.content === "交易走 CIPS 报文经 ESB")!
     expect(saved.origin).toBe("restated")
     // 已进记忆的槽位退役——避免下轮再问同一件事
     const slots = store.get("r1")!.workflow!.kb!.slots
@@ -163,7 +167,7 @@ describe("3.6.1 ③ · reqdoc_memory_recall 业务勾选才入库", () => {
       ),
     )
     expect(out).toContain("已记表达偏好 1 条")
-    expect(JSON.parse(readFileSync(join(home, "memory", "l4-prefs", "详略.json"), "utf8")).value).toBe("偏简洁")
+    expect(findMemory("l4-prefs", (e) => e.key === "详略")!.value).toBe("偏简洁")
     store.close()
   })
 })

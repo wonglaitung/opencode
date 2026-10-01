@@ -313,6 +313,8 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
             slots: kb.slots,
             askCounts: kb.askCounts,
             decls: kb.containers,
+            candidates: kb.candidates,
+            // 门禁不传 l1/l2：记忆只影响"问什么"，覆盖判定只看 confirmed 槽位（3.3.2 红线）
           }).unclosed
           const gate = kbGate(kb.slots, kb.features, {
             decls: kb.containers,
@@ -357,7 +359,11 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
           }
           // 豁免服务端合法追加的尾部区块：确认溯源（P3.10）与文档变更过程行——
           // 它们由 comprehension_confirm / 定稿回填写入，不来自槽位，不参与「逐字一致」比对。
+          // 过滤各自文本中的溯源正文（按行处理，两边独立扫描）
           const drift = diffLines(stripServerAppended(rebuilt.md), stripServerAppended(liveMd ?? ""))
+          // 溯源节被整节豁免于 LCS 比对，故**独立校验**：其条目必须与 reviewRecord 逐条对应——
+          // 否则模型可手写伪造证据（「业务总监口头批准」）混进交付件（对抗审查 P0-2）。
+          verifyTraceback(liveMd ?? "", review)
           if (drift.length > 0) {
             const shown = drift.slice(0, 5).join("；")
             throw new WorkflowOpError(
@@ -486,36 +492,114 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
   /** P3.10 溯源回填：把要点的来源证据追加写入 PRD 交付件末尾的「确认溯源」章节（best-effort）。 */
 
   /**
-   * 剥掉服务端合法追加的尾部区块，只留组装正文用于比对。
-   * 确认溯源（`## 确认溯源`）由 `comprehension_confirm` 写入、文档变更过程行由定稿回填写入，
-   * 都不来自槽位——把它们算进「不一致」会让正常流程被拦。
+   * 溯源节独立校验：其条目必须与 `reviewRecord` 的 `confirmSource` 严格一致。
+   *
+   * 溯源节整节不参与 LCS 比对（它不来自槽位），若不单独校验就成了伪造证据的后门。
+   * 逐条比对：每条 `- 要点「X」来源：L —— Q` 都能在 reviewRecord 里找到同 (id,label,quote)。
    */
-  function stripServerAppended(md: string): string {
+  function verifyTraceback(md: string, review: { comprehension: { id: string; confirmSource?: { label: string; quote: string } }[] }): void {
     const cut = md.search(/^##\s*确认溯源\s*$/m)
-    return (cut >= 0 ? md.slice(0, cut) : md).trimEnd()
+    if (cut < 0) return
+    const section = md.slice(cut)
+    const claimed = [...section.matchAll(/^-\s*要点「(.+?)」来源：(.*?)\s*——\s*(.*)$/gm)].map(
+      (m) => ({ id: m[1]!, label: m[2]!, quote: m[3]! }),
+    )
+    const known = new Map(review.comprehension.map((c) => [c.id, c.confirmSource]))
+    const forged = claimed.filter((c) => {
+      const rec = known.get(c.id)
+      if (!rec) return true
+      // quote 在写入时被截断到 200 字，比对时同样截断
+      const q = rec.quote.replace(/\r?\n/g, " ").slice(0, 200)
+      return rec.label !== c.label || q !== c.quote
+    })
+    if (forged.length > 0) {
+      throw new WorkflowOpError(
+        `「确认溯源」章节与理解确认记录不符（${forged.length} 条）：` +
+          `${forged.map((f) => `要点「${f.id}」`).join("、")}。` +
+          `该章节只能由 comprehension_confirm 回填，禁止手工编辑；请删除伪造内容或重新确认要点。`,
+      )
+    }
   }
 
   /**
-   * 行级差异（用于「重组装 vs 磁盘产物」比对）。
+   * 服务端合法追加的区块处理：**逐行过滤**而非整节豁免。
    *
-   * 按**行多重集**比对而非按行号：单行插入/删除会让后续行号整体错位，逐行按位比对
-   * 会得出「无差异」的错误结论（实测：删掉一段正文后错位恰好抵消，漏报）。
-   * 多重集比对能稳定检出增、删、改三类差异。
+   * 「确认溯源」章节由 `comprehension_confirm` 写入、文档变更过程表由定稿回填，
+   * 都不来自槽位，不参与「逐字一致」比对——但**只过滤该章节的正文行**，
+   * 章节标题行本身仍参与比对（否则整节被替换/删除也检测不到，对抗审查 P0-2）。
+   */
+  function stripServerAppended(md: string): string {
+    let inTraceback = false
+    return md
+      .split(/\r?\n/)
+      .filter((line) => {
+        // 溯源节整体不来自槽位（标题与条目都由 comprehension_confirm 写入），整节滤掉。
+        // 但**只滤这一节**：章节被追加内容以外的篡改（如正文行）仍会被 LCS 比对抓到。
+        if (/^##\s*确认溯源/.test(line)) {
+          inTraceback = true
+          return false
+        }
+        if (inTraceback && /^##\s/.test(line)) inTraceback = false
+        return !inTraceback
+      })
+      .join("\n")
+      .trimEnd()
+  }
+
+  /**
+   * 保序行差异（LCS 定位增/删/改）——用于「重组装 vs 磁盘产物」比对。
+   *
+   * 早期版本用行多重集，会漏掉**行置换**（把 3.1 与 3.2 的内容对调后完全放行——
+   * 槽位内容↔地址错位是最危险的一类手改，对抗审查 P0-2 实测）。故改为保序比对：
+   * 先用最长公共子序列对齐未变行，剩下的即为新增/删除/替换。
    */
   function diffLines(expected: string, actual: string): string[] {
     const trim = (t: string) => t.trim()
     const a = expected.split(/\r?\n/).filter((l) => trim(l) !== "")
-    const b = (actual ?? "").split(/\r?\n/).filter((l) => trim(l) !== "")
-    const out: string[] = []
-    const pool = [...a]
-    // 1) 删/改：期望里找不到对应行的，按「缺失」报
-    for (const line of b) {
-      const idx = pool.indexOf(line)
-      if (idx >= 0) pool.splice(idx, 1)
-      else out.push(`产物多出/被改：「${line.slice(0, 40)}」`)
+    const b = actual.split(/\r?\n/).filter((l) => trim(l) !== "")
+    // LCS 表（规模为 PRD 行数，O(n·m) 可接受）
+    const lcs: number[][] = Array.from({ length: a.length + 1 }, () => new Array<number>(b.length + 1).fill(0))
+    for (let i = a.length - 1; i >= 0; i--) {
+      for (let j = b.length - 1; j >= 0; j--) {
+        lcs[i]![j] = a[i] === b[j] ? lcs[i + 1]![j + 1]! + 1 : Math.max(lcs[i + 1]![j]!, lcs[i]![j + 1]!)
+      }
     }
-    // 2) 期望里有、产物里没有的
-    for (const line of pool) out.push(`产物缺失：「${line.slice(0, 40)}」`)
+    // 沿 LCS 回溯，收集非对齐段
+    const out: string[] = []
+    let i = 0
+    let j = 0
+    const segExpected: string[] = []
+    const segActual: string[] = []
+    const flush = () => {
+      if (segExpected.length === 0 && segActual.length === 0) return
+      if (segExpected.length === segActual.length) {
+        // 长度相同 → 逐位对照报「替换」（能定位到内容错位）
+        for (let k = 0; k < segExpected.length; k++) {
+          out.push(`「${segExpected[k]!.slice(0, 30)}」应为「${segActual[k]!.slice(0, 30)}」`)
+        }
+      } else {
+        for (const l of segExpected) if (!segActual.includes(l)) out.push(`产物缺失：「${l.slice(0, 30)}」`)
+        for (const l of segActual) if (!segExpected.includes(l)) out.push(`产物多出：「${l.slice(0, 30)}」`)
+      }
+      segExpected.length = 0
+      segActual.length = 0
+    }
+    while (i < a.length && j < b.length) {
+      if (a[i] === b[j]) {
+        flush()
+        i++
+        j++
+      } else if (lcs[i + 1]![j]! >= lcs[i]![j + 1]!) {
+        segExpected.push(a[i]!)
+        i++
+      } else {
+        segActual.push(b[j]!)
+        j++
+      }
+    }
+    while (i < a.length) segExpected.push(a[i++]!)
+    while (j < b.length) segActual.push(b[j++]!)
+    flush()
     return out
   }
 

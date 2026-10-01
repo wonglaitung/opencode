@@ -203,11 +203,14 @@ export function buildStateBar(workflow: WorkflowState, stage: string | null): st
       `知识库：必填槽位 ${c.leafFilled}/${c.leafTotal}（${Math.round(c.pct * 100)}%）` +
         `；${gate.pass ? "门禁可通过 ✓" : `未就绪：${gate.reasons.join("；")}`}`,
     )
-    const hits = matchMemory(materialOf(kb.slots.map((sl) => sl.content)))
+    const hits = matchMemory(
+      materialOf([...kb.slots.map((sl) => sl.content), ...Object.values(kb.candidates ?? {}).flat()]),
+    )
     const open = deriveQuestions(kb.features, {
       slots: kb.slots,
       askCounts: kb.askCounts,
       decls: kb.containers,
+      candidates: kb.candidates,
       l1: hits.l1,
       l2: hits.l2,
     })

@@ -88,7 +88,13 @@ export function createWorkflowTools(store: Store): Record<string, ToolDefinition
           }
           const gate = kbGate(kb.slots, kb.features, {
             decls: kb.containers,
-            unclosed: deriveQuestions(kb.features, { slots: kb.slots, askCounts: kb.askCounts, decls: kb.containers }).unclosed,
+            unclosed: deriveQuestions(kb.features, {
+              slots: kb.slots,
+              askCounts: kb.askCounts,
+              decls: kb.containers,
+              candidates: kb.candidates,
+              // 门禁不因记忆放行：记忆只影响"问什么"，覆盖判定只看 confirmed 槽位（3.3.2 红线）
+            }).unclosed,
             force: args.force_kb,
             threshold: 1,
           })

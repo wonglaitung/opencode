@@ -13,6 +13,7 @@
  * 目录布局与 `opencode-sm memory` CLI 同源（该 CLI 是可见性入口，3.7）：
  *   ~/.config/opencode/session-mgmt/memory/{l1-glossary,l2-org,l4-prefs}/*.json
  */
+import { createHash } from "node:crypto"
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
@@ -56,6 +57,19 @@ export interface MemoryHits {
 }
 
 /**
+ * 记忆文件名：**必须消毒**。
+ *
+ * `term` / `content` / `key` 全部由模型经工具参数指定，若直接拼进路径可逃出记忆目录
+ * （`../../pwned` → 写到目录外，对抗审查 P0-3a 实测）。
+ * 同时追加内容哈希后缀，避免长前缀截断导致两条不同记忆落到同一文件、静默覆盖（P1 #9）。
+ */
+function safeFileName(raw: string): string {
+  const cleaned = raw.replace(/[^\p{L}\p{N}]+/gu, "_").replace(/^_+|_+$/g, "").slice(0, 40)
+  const digest = createHash("sha256").update(raw, "utf8").digest("hex").slice(0, 8)
+  return `${cleaned || "entry"}-${digest}.json`
+}
+
+/**
  * 静默接受默认的条目**一律不入库**（3.6 规则 3 / 硬红线）。
  * 业务点「同意默认」等于没真的认可，凭什么让下一个需求直接采信。
  */
@@ -63,7 +77,53 @@ export function isPollutingOrigin(origin: string): boolean {
   return origin === "accepted_default" || origin === "inferred"
 }
 
-function readJsonDir<T>(layer: MemoryLayer): T[] {
+/**
+ * 读取一层记忆目录，**逐条校验**后返回。
+ *
+ * 记忆库是全局的且设计上允许用户手工维护（3.7），因此损坏条目不能拖垮调用方：
+ * JSON 语法错误、字段类型不符（如 `term: 2024`）一律跳过而非让 `.replace` 抛错——
+ * 否则一个坏文件会让该机器上**所有工作流的所有请求**失败（对抗审查 P0-3b 实测）。
+ */
+/**
+ * 词边界包含判定：命中要求 `term` 两侧**不是字母/数字/下划线**。
+ *
+ * 裸 `includes` 会让 2 字母缩写点亮一切——实测一段没提术语的正文
+ * （"…AUDIT留痕…CIPS通道…卡片管理…"）误命中 `IT` / `CI` / `IP` / `卡` 四个，
+ * 而 L1 命中会**直接消缺口**（业务不问），误命中的代价是错误产出 + 跨需求污染。
+ * 中文按字边界处理（`卡` 不应命中 `卡片`/`考核`）。
+ */
+function containsTerm(haystack: string, term: string): boolean {
+  const t = term.trim()
+  if (!t) return false
+  // 纯 ASCII 字母数字词（如 CRD / AML）要求非单词字符边界
+  if (/^[A-Za-z0-9_]+$/.test(t)) {
+    const re = new RegExp(`(?<![A-Za-z0-9_])${escapeRegExp(t)}(?![A-Za-z0-9_])`, "i")
+    return re.test(haystack)
+  }
+  // 含中文或符号的词：要求左右不与「组成该词的字符集」相邻，避免「卡」命中「卡片」
+  const first = [...t][0]!
+  const last = [...t].at(-1)!
+  let from = 0
+  for (;;) {
+    const idx = haystack.indexOf(t, from)
+    if (idx < 0) return false
+    const before = haystack[idx - 1]
+    const after = haystack[idx + t.length]
+    if (!isSameCharClass(before, first) && !isSameCharClass(after, last)) return true
+    from = idx + 1
+  }
+}
+
+function isSameCharClass(neighbor: string | undefined, boundary: string): boolean {
+  if (neighbor === undefined) return false
+  return /[\p{L}\p{N}_]/u.test(neighbor) === /[\p{L}\p{N}_]/u.test(boundary)
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
+function readJsonDir<T>(layer: MemoryLayer, isValid: (x: unknown) => boolean): T[] {
   const dir = join(memoryRoot(), layer)
   let files: string[]
   try {
@@ -71,16 +131,26 @@ function readJsonDir<T>(layer: MemoryLayer): T[] {
   } catch {
     return []
   }
-  return files
-    .map((file) => {
-      try {
-        return JSON.parse(readFileSync(join(dir, file), "utf8")) as T
-      } catch {
-        return null
-      }
-    })
-    .filter((x): x is T => x !== null && (x as { retired?: boolean }).retired !== true)
+  const out: T[] = []
+  for (const file of files) {
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(readFileSync(join(dir, file), "utf8"))
+    } catch {
+      continue // 语法错误：跳过
+    }
+    if (!isValid(parsed)) continue // 字段类型不符：跳过
+    const entry = parsed as T & { retired?: boolean }
+    if (entry.retired === true) continue
+    out.push(entry)
+  }
+  return out
 }
+
+const isL1Entry = (x: unknown): boolean =>
+  typeof x === "object" && x !== null && typeof (x as MemoryTerm).term === "string" && (x as MemoryTerm).term !== ""
+const isL2Entry = (x: unknown): boolean =>
+  typeof x === "object" && x !== null && typeof (x as MemoryFact).content === "string" && (x as MemoryFact).content !== ""
 
 /**
  * 按材料文本做关键词匹配，只返回命中条目（3.6：由材料驱动 + 封顶）。
@@ -89,11 +159,11 @@ function readJsonDir<T>(layer: MemoryLayer): T[] {
  * 刻意保守（宁可少命中也不误命中），因为 L1 命中会直接消缺口。
  */
 export function matchMemory(text: string): MemoryHits {
-  const hay = text.replace(/\s+/g, "")
-  if (!hay) return { l1: [], l2: [] }
+  const hay = text
+  if (!hay.trim()) return { l1: [], l2: [] }
   return {
-    l1: readJsonDir<MemoryTerm>("l1-glossary").filter((t) => t.term && hay.includes(t.term.replace(/\s+/g, ""))),
-    l2: readJsonDir<MemoryFact>("l2-org").filter((f) => f.content && hay.includes(f.content.replace(/\s+/g, ""))),
+    l1: readJsonDir<MemoryTerm>("l1-glossary", isL1Entry).filter((t) => containsTerm(hay, t.term)),
+    l2: readJsonDir<MemoryFact>("l2-org", isL2Entry).filter((f) => containsTerm(hay, f.content)),
   }
 }
 
@@ -120,8 +190,8 @@ export function writeL1Term(
 ): { ok: true; path: string } | { ok: false; reason: "polluting_origin" } | { ok: false; reason: "conflict"; existing: string } {
   if (isPollutingOrigin(opts.origin)) return { ok: false, reason: "polluting_origin" }
   const dir = join(memoryRoot(), "l1-glossary")
-  const path = join(dir, `${term}.json`)
-  const existing = readJsonDir<MemoryTerm>("l1-glossary").find((t) => t.term === term)
+  const path = join(dir, safeFileName(term))
+  const existing = readJsonDir<MemoryTerm>("l1-glossary", isL1Entry).find((t) => t.term === term)
   if (existing && existing.definition !== definition) {
     return { ok: false, reason: "conflict", existing: existing.definition }
   }
@@ -154,7 +224,7 @@ export function writeL2Fact(
 ): { ok: true; path: string } | { ok: false; reason: "polluting_origin" } {
   if (isPollutingOrigin(opts.origin)) return { ok: false, reason: "polluting_origin" }
   const dir = join(memoryRoot(), "l2-org")
-  const path = join(dir, `${content.replace(/[^\p{L}\p{N}]+/gu, "_").slice(0, 60)}.json`)
+  const path = join(dir, safeFileName(content))
   mkdirSync(dir, { recursive: true })
   writeFileSync(
     path,
@@ -172,7 +242,7 @@ export function writeL4Pref(
 ): { ok: true; path: string } | { ok: false; reason: "polluting_origin" } {
   if (isPollutingOrigin(opts.origin)) return { ok: false, reason: "polluting_origin" }
   const dir = join(memoryRoot(), "l4-prefs")
-  const path = join(dir, `${key.replace(/[^\p{L}\p{N}]+/gu, "_").slice(0, 60)}.json`)
+  const path = join(dir, safeFileName(key))
   mkdirSync(dir, { recursive: true })
   writeFileSync(
     path,
