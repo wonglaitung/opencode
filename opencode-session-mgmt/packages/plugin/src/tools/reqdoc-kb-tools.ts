@@ -239,7 +239,7 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
           : "",
         // 记忆效果必须对模型可见，否则它会重复问已被记忆消缺口的项（「少问」机制形同虚设）
         derived.l1Applied.length > 0
-          ? `🧠 L1 记忆免问 ${derived.l1Applied.length} 项（业务曾复述过，采信其定义、**无需再问**）：${derived.l1Applied.join("、")}`
+          ? `🧠 L1 记忆免问 ${derived.l1Applied.length} 项（业务曾复述过，采信其定义，**不要问业务**）：${derived.l1Applied.join("、")} —— 它们不在「本轮该填」清单里、仍是 draft，**须由你用材料原文直接 reqdoc_answer 落定**（不落定则必填容器覆盖不过、进 prd 会被拦）`
           : "",
         hits.l2.length > 0
           ? `🧠 L2 组织知识命中 ${hits.l2.length} 项（**不消缺口**，仅作默认值请业务点头）：${hits.l2.map((f) => f.content).join("；")}`
@@ -350,7 +350,7 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
         `覆盖率：${kbCoverage(kb)}；剩余本轮该填 ${derived.batch.length} 项。`,
         derived.unclosed.length > 0 ? `⚠ 仍未收口：${derived.unclosed.join("、")}` : "",
         derived.l1Applied.length > 0
-          ? `🧠 L1 记忆免问 ${derived.l1Applied.length} 项（业务曾复述过，采信其定义、无需再问）：${derived.l1Applied.join("、")}`
+          ? `🧠 L1 记忆免问 ${derived.l1Applied.length} 项（业务曾复述过，采信其定义，**不要问业务**）：${derived.l1Applied.join("、")} —— 它们不在「本轮该填」清单里、仍是 draft，**须由你用材料原文直接 reqdoc_answer 落定**（不落定则必填容器覆盖不过、进 prd 会被拦）`
           : "",
         memNote,
       ]

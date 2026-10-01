@@ -11,9 +11,10 @@ import { describe, expect, jest, test } from "bun:test"
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { matchMemory, requiredSlots, writeL1Term, writeL2Fact } from "sm-shared"
+import { deriveQuestions, kbGate, matchMemory, requiredSlots, writeL1Term, writeL2Fact } from "sm-shared"
 import { Store } from "../src/db"
 import { createReqdocKbTools } from "../src/tools/reqdoc-kb-tools"
+import { materialEvidence } from "../src/tools/reqdoc-scan"
 import { createReviewTools } from "../src/tools/review"
 
 const CHECKLIST = {
@@ -1027,6 +1028,76 @@ describe("C · 证据换源的两个失效路径", () => {
     mkdirSync(join(worktree, "07_需求规格产出/1_X"), { recursive: true })
     writeFileSync(join(worktree, "07_需求规格产出/1_X/PRD.md"), "对接 CCB 系统获取客户号。", "utf8")
     expect(await ingest(store, worktree)).not.toContain("L1 记忆免问")
+    store.close()
+  })
+})
+
+
+/**
+ * L1 免问项的落定指引（实测缺口）。
+ *
+ * 症状：材料含 CLD + 业务以前复述过 → `4.1.CLD` 被移出「本轮该填」清单（r11 说清单是唯一依据）
+ * 且仍是 draft → 容器 `4.1` 永无 confirmed 子项 → 进 prd 被 `必填容器未覆盖：4.1` 拦住，
+ * 而业务从没被问过 CLD、AI 也不知道缺的是它。
+ *
+ * 修法：回执 + 状态栏 + r33③ 三处点名「不在清单里、不要问业务、但须你用材料原文 reqdoc_answer 落定」。
+ */
+describe("L1 免问项的落定指引（免问 ≠ 已覆盖）", () => {
+  const read = (rel: string) => readFileSync(join(import.meta.dir, rel), "utf8")
+
+  test("★ 回执/状态栏/规则三处都点名「须落定」", () => {
+    const kbSrc = read(join("..", "src", "tools", "reqdoc-kb-tools.ts"))
+    const notes = kbSrc.match(/🧠 L1 记忆免问[^`]*/g) ?? []
+    expect(notes.length).toBeGreaterThanOrEqual(2)
+    for (const n of notes) {
+      expect(n).toContain("不要问业务")
+      expect(n).toContain("reqdoc_answer 落定")
+      expect(n).toContain("不在「本轮该填」清单里")
+    }
+    expect(read(join("..", "src", "prompt.ts"))).toContain("待你用材料原文 reqdoc_answer 落定")
+    const rule = read(join("..", "..", "shared", "src", "workflow.ts"))
+    expect(rule).toContain("不在本轮清单里")
+    expect(rule).toContain("须由你用材料原文直接 reqdoc_answer 落定")
+  })
+
+  test("★ 跟着回执走能解卡：免问 → 落定 → 容器覆盖", async () => {
+    tempMemory()
+    writeL1Term("CLD", "贷后分类标签", { kind: "内部简称", scope: "org", origin: "restated", fromProject: "p" })
+    const store = Store.memory(() => "reqdoc" as const)
+    const worktree = mkdtempSync(join(tmpdir(), "sm-l1fill-"))
+    dropMaterial(worktree, "名单排查按 CLD 过滤。")
+    const ctx = { sessionID: "r1", worktree } as never
+    const tools = createReqdocKbTools(store)
+
+    const out = String(
+      await tools.reqdoc_ingest!.execute(
+        {
+          features: [{ name: "名单排查", priority: "high" }],
+          slots: [{ address: "3.1", kind: "prose", content: "按 CLD 过滤名单", source: "文档" }],
+          candidates: { "4.1": ["CLD"] },
+        } as never,
+        ctx,
+      ),
+    )
+    expect(out).toContain("L1 记忆免问")
+    expect(out).toContain("reqdoc_answer 落定")
+
+    const kb = () => store.get("r1")!.workflow!.kb!
+    // 免问项确实不在清单里、且没被自动落定
+    const hits = matchMemory(await materialEvidence(worktree))
+    const d = deriveQuestions(kb().features, {
+      slots: kb().slots, askCounts: kb().askCounts, decls: kb().containers,
+      candidates: kb().candidates, l1: hits.l1, l2: hits.l2,
+    })
+    expect(d.l1Applied).toContain("4.1.CLD")
+    expect(d.all.map((q) => q.address)).not.toContain("4.1.CLD")
+    expect(kb().slots.find((x) => x.address === "4.1.CLD")).toBeUndefined()
+    expect(kbGate(kb().slots, kb().features, { decls: kb().containers }).coverage.uncoveredContainers).toContain("4.1")
+
+    // 按回执指示落定（无需业务参与）
+    const r = String(await tools.reqdoc_answer!.execute({ address: "4.1.CLD", content: "贷后分类标签", source: "文档" } as never, ctx))
+    expect(r).toContain("4.1.CLD")
+    expect(kbGate(kb().slots, kb().features, { decls: kb().containers }).coverage.uncoveredContainers).not.toContain("4.1")
     store.close()
   })
 })
