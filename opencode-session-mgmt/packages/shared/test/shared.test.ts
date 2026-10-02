@@ -272,7 +272,7 @@ describe("WorkflowDefinition 注册表（3.2）", () => {
     expect(REQDOC.stagePurpose?.review).toBe("业务逐条确认 PRD 要点")
     expect(SDLC.stagePurpose?.implementation).toBe("编码实现")
     expect(SDLC.stagePurpose?.review).toBe("开发者理解确认代码")
-    // 阶段 3：r20 降级为「生成事实」——字段映射已由 MAPPED_FIELD_KEYS 派生进槽位地址，
+    // 阶段 3：r20 降级为「生成事实」——字段映射已由 模板解析派生的槽位地址，
     // 规则不再复述映射表，只留内容纪律（禁杜撰/书面语/[缺省]附理由）。
     const r20 = REQDOC.rules.find((r) => r.id === "reqdoc-r20")!
     expect(r20.text).toContain("槽位内容铁律")

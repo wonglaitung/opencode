@@ -9,7 +9,8 @@
  * 按 `import.meta.dir` 上溯三级找 `docs/`，与 `buildPrdSkeleton` 同边界）。
  */
 import { createHash } from "node:crypto"
-import { MAPPED_FIELD_KEYS, buildPrdSkeleton } from "./reqdoc-render"
+import { buildPrdSkeleton } from "./reqdoc-render"
+import { requireTemplateSchema, type TemplateSchema } from "./reqdoc-template-schema"
 import type { ReqdocFeature } from "./workflow"
 import {
   aggregateSourceTag,
@@ -23,6 +24,8 @@ import {
 export interface AssembleOptions {
   /** 容器声明（可为空通道）：全空的 `required:false` 容器整节省略 */
   containers?: Readonly<Record<string, ContainerDecl>>
+  /** 模板结构；缺省取已加载的模板。仅测试与「换模板」场景显式传入。 */
+  schema?: TemplateSchema
 }
 
 /** 组装结果：正文 + 摘要（供幂等校验）+ 结构指纹（golden 比对）。 */
@@ -43,8 +46,8 @@ export interface AssembleResult {
 }
 
 /** 有效槽位（排除 retired——已作废留痕但不参与渲染）。 */
-function active(slots: readonly ReqdocSlot[], addr: string): ReqdocSlot[] {
-  return slots.filter((s) => docAddrOf(s.address) === addr && s.status !== "retired")
+function active(slots: readonly ReqdocSlot[], addr: string, schema: TemplateSchema): ReqdocSlot[] {
+  return slots.filter((s) => docAddrOf(s.address, schema) === addr && s.status !== "retired")
 }
 
 /**
@@ -54,8 +57,8 @@ function active(slots: readonly ReqdocSlot[], addr: string): ReqdocSlot[] {
  * 一个 `## 第九章` 就能造出新章节并绕过全部三重校验（它们只验「槽位 ↔ 产物一致」，
  * 而产物正是由本函数生成的）。
  */
-function bodyOf(slots: readonly ReqdocSlot[], addr: string): string {
-  const list = active(slots, addr)
+function bodyOf(slots: readonly ReqdocSlot[], addr: string, schema: TemplateSchema): string {
+  const list = active(slots, addr, schema)
   const confirmed = list.find((s) => s.status === "confirmed")
   const chosen = confirmed ?? list[0]
   return chosen ? escapeStructural(chosen.content.trim()) : ""
@@ -91,8 +94,8 @@ export function hasStructuralMarkdown(text: string): boolean {
 }
 
 /** 容器节正文：术语容器渲染术语表，字段容器渲染字段清单（均为子项聚合视图）。 */
-function containerBody(slots: readonly ReqdocSlot[], container: string): string {
-  const children = active(slots, container).sort((a, b) => a.address.localeCompare(b.address))
+function containerBody(slots: readonly ReqdocSlot[], container: string, schema: TemplateSchema): string {
+  const children = active(slots, container, schema).sort((a, b) => a.address.localeCompare(b.address))
   if (children.length === 0) return ""
   // 内容里的标题/表格行会被转义——它们只在正文里是字面量，不应改变文档结构（I-2）
   const body = (c: ReqdocSlot) => `- **${slotName(c.address, container)}**：${escapeStructural(c.content.trim())}`
@@ -115,11 +118,14 @@ function slotName(addr: string, container: string): string {
   return addr.startsWith(`${container}.`) ? addr.slice(container.length + 1) : addr
 }
 
-/** 该地址是否必标来源（映射字段）。 */
-function requiresTag(addr: string): boolean {
-  const m = addr.match(/^5\.\d+\.(\d+)\.(\d+)$/)
-  if (!m) return false
-  return MAPPED_FIELD_KEYS.includes(`${m[1]}.${m[2]}`)
+/** 该地址是否必标来源（模板声明的必标来源子节）。
+ *  章号与组号均取自模板，不再写死 `^5\.` 与字段键表。 */
+function requiresTag(addr: string, s: TemplateSchema): boolean {
+  const ch = s.featureChapter
+  if (ch === null) return false
+  const m = addr.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/)
+  if (!m || Number(m[1]) !== ch) return false
+  return s.taggedSubRels.includes(`${m[3]}.${m[4]}`)
 }
 
 /**
@@ -137,7 +143,8 @@ export function assembleDoc(
   templateText: string | null,
   opts: AssembleOptions = {},
 ): AssembleResult | null {
-  const skeleton = buildPrdSkeleton(templateText, features)
+  const schema = opts.schema ?? requireTemplateSchema()
+  const skeleton = buildPrdSkeleton(templateText, features, schema)
   if (skeleton === null) return null
 
   const containers = opts.containers ?? {}
@@ -175,9 +182,9 @@ export function assembleDoc(
       continue
     }
     // 容器节：全空且声明可为空 → 整节省略（**在 push subSections 之前**，否则指纹会含被略节）
-    if (isContainerAddr(addr)) {
+    if (isContainerAddr(addr, schema)) {
       const decl = containers[addr]
-      const children = active(slots, addr)
+      const children = active(slots, addr, schema)
       if (children.length === 0 && decl?.required === false) {
         omittedContainers.push(addr)
         continue
@@ -185,8 +192,8 @@ export function assembleDoc(
     }
     subSections.push(addr)
 
-    const newBody = isContainerAddr(addr) ? containerBody(slots, addr) : bodyOf(slots, addr)
-    const label = labelFor(slots, addr, newBody, requiresTag(addr))
+    const newBody = isContainerAddr(addr, schema) ? containerBody(slots, addr, schema) : bodyOf(slots, addr, schema)
+    const label = labelFor(slots, addr, newBody, requiresTag(addr, schema), schema)
     tags[addr] = label
     out.push(`${heading[1]} ${titleText} ${label}`.trimEnd())
     if (newBody) out.push("", newBody, "")
@@ -219,13 +226,14 @@ function labelFor(
   addr: string,
   body: string,
   requires: boolean,
+  schema: TemplateSchema,
 ): string {
-  if (isContainerAddr(addr)) {
-    const children = active(slots, addr)
+  if (isContainerAddr(addr, schema)) {
+    const children = active(slots, addr, schema)
     if (children.length === 0) return "[缺省：本节无内容]"
     return aggregateSourceTag(children).tag
   }
-  const self = active(slots, addr)
+  const self = active(slots, addr, schema)
   if (self.length > 0) {
     const confirmed = self.find((s) => s.status === "confirmed")
     if (confirmed) {

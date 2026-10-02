@@ -105,11 +105,11 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
       sourceLabel: z
         .string()
         .optional()
-        .describe("确认来源标签（溯源，P3.10）：如「文档 3.2 章」「对话第 4 轮业务原话」「要点 2.3」；reqdoc 要点确认时建议填写以便定稿溯源"),
+        .describe("确认来源标签（溯源）：如「文档 3.2 章」「对话第 4 轮业务原话」「要点 2.3」；reqdoc 要点确认时建议填写以便定稿溯源"),
       sourceQuote: z
         .string()
         .optional()
-        .describe("确认来源引用原文/编号（溯源，P3.10）：粘贴被确认要点的出处片段或编号；reqdoc 要点确认时建议填写"),
+        .describe("确认来源引用原文/编号（溯源）：粘贴被确认要点的出处片段或编号；reqdoc 要点确认时建议填写"),
     },
     async execute(args, context) {
       let confirmedNow = false

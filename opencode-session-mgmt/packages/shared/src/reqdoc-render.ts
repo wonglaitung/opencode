@@ -1,138 +1,45 @@
 /**
  * reqdoc 渲染结构校验（质量飞轮 P2「渲染可测化」）。
- * 把「渲染严格逐字遵循模板」（reqdoc-r20 铁律）从纯规则文本升级为结构 schema + 渲染 diff 校验：
- * - REQDOC_TEMPLATE_CHAPTERS：模板章节骨架（章节树 + 必填小节），校验出现 + 顺序。
- * - REQDOC_TEMPLATE_FIELDS：r20 扣分项→字段映射表结构化（7 条，全部 feature-scoped），
- *   兼作「必填字段须标来源」清单与「[缺省]↔满分」矛盾映射。
- * - parseRenderStructure：纯函数解析渲染 md（标题/功能点块/来源标注），运行时 reqdoc_check 工具
- *   与评测 render 判定类共用同一函数（同源，避免两份漂移）。
- * 模板演进须同步本文件 schema（workflow-reqdoc.md 10 章已承诺），docs/reqdoc-prd-template.md 本身不动。
+ * 把「渲染严格逐字遵循模板」（reqdoc-r20 铁律）从纯规则文本升级为结构校验 + 渲染 diff 校验。
+ *
+ * 模板结构**不在本文件**——它由 `reqdoc-template-schema.ts` 从
+ * `docs/reqdoc-prd-template.md` 解析得到（唯一事实源）。此前此处有一份手抄本
+ * （REQDOC_TEMPLATE_CHAPTERS / FEATURE_SUB_SECTIONS / MAPPED_FIELD_KEYS / REQDOC_TEMPLATE_FIELDS），
+ * 与 md 之间没有任何交叉校验：换模板漏改不报错，模板里的地址代码不认会被静默拒收，
+ * 代码要求的地址模板里没有则组装时填占位符——正是「槽位收了、交付件里没有、零告警」。
+ * 现改为：结构解析一次，本文件与评测判定共用同一份解析结果。
+ *
+ * - parseRenderStructure：纯函数解析渲染 md（标题/功能点块/来源标注），运行时与
+ *   评测 render 判定类共用同一函数（同源，避免两份漂移）。
+ * - 换模板只需改 md；小节标题改名会经 schema 的 unresolvedPolicy 报出来，要求人工确认口径。
  */
-import type { ReqdocFeature, ReqdocScoreDimKey } from "./workflow"
-
-/** 模板章节（骨架，渲染 diff 校验用）：meta 章只查出现，sections 章查子小节齐全。 */
-export interface ReqdocTemplateSection {
-  key: string
-  title: string
-}
-
-export interface ReqdocTemplateChapter {
-  key: string
-  title: string
-  /** 元数据章（项目信息/文档变更过程）：渲染时留空占位，不查来源标注 */
-  meta?: boolean
-  /** 章节子小节（第一章 1.1-1.6、第二章 2.1/2.2） */
-  sections?: readonly ReqdocTemplateSection[]
-}
-
-/** reqdoc PRD 模板章节骨架（docs/reqdoc-prd-template.md 的有序章节树）。 */
-export const REQDOC_TEMPLATE_CHAPTERS: readonly ReqdocTemplateChapter[] = [
-  { key: "project_info", title: "第一章 项目信息", meta: true },
-  { key: "doc_change", title: "第二章 文档变更过程", meta: true },
-  {
-    key: "overview",
-    title: "第三章 需求概述",
-    sections: [
-      { key: "3.1", title: "需求类型" },
-      { key: "3.2", title: "属于流程优化项目" },
-      { key: "3.3", title: "涉及跨部门项目" },
-      { key: "3.4", title: "涉及总行开发" },
-      { key: "3.5", title: "希望完成时间" },
-      { key: "3.6", title: "需求提出原因及功能概述" },
-    ],
-  },
-  {
-    key: "terms",
-    title: "第四章 术语定义与业务规则",
-    sections: [
-      { key: "4.1", title: "术语定义" },
-      { key: "4.2", title: "业务规则" },
-    ],
-  },
-  { key: "details", title: "第五章 需求功能详述" },
-  {
-    key: "nfr",
-    title: "第六章 非功能需求",
-    sections: [
-      { key: "6.1", title: "性能与容量" },
-      { key: "6.2", title: "可用性与可靠性" },
-      { key: "6.3", title: "安全与信创" },
-      { key: "6.4", title: "数据主权与合规" },
-    ],
-  },
-  {
-    key: "acceptance",
-    title: "第七章 验收标准",
-    sections: [
-      { key: "7.1", title: "功能点验收指标" },
-      { key: "7.2", title: "量化验收口径" },
-    ],
-  },
-]
+import type { ReqdocFeature } from "./workflow"
+import {
+  featureAddr,
+  requireTemplateSchema,
+  type TemplateSchema,
+} from "./reqdoc-template-schema"
 
 /**
- * 打分卡扣分项→模板字段映射（reqdoc-r20 铁律内嵌映射表的结构化，逐功能点出现）。
- * 同时是「必填字段须标来源」清单（covered 检查）与「[缺省]↔满分」矛盾映射（renderGapViolations）。
- * 单点定义：reqdoc_check 工具、reqdoc-r23 规则文本、状态条、评测共用——经 renderCheckRubric() 生成文本注入。
+ * 模板结构改由 `reqdoc-template-schema.ts` 从 md 解析得到（唯一事实源），
+ * 本文件只保留**校验与计数**逻辑。以下两个取值器把解析结果投影成
+ * 「与旧常量同形」的结构，让既有校验代码与评测判定零改动。
  */
-export interface ReqdocTemplateField {
-  key: string
-  title: string
-  /** 映射打分卡维度：该字段标 [缺省] 而维度打满分 = 渲染缺口与自评矛盾 */
-  dims: readonly ReqdocScoreDimKey[]
-}
 
-export const REQDOC_TEMPLATE_FIELDS: readonly ReqdocTemplateField[] = [
-  // 留痕与双人复核 → 1.2 控制要求；数据边界与岗位权限 → 1.2 控制要求/2.1 输入要素的检查
-  { key: "1.2", title: "控制要求", dims: ["compliance", "authority"] },
-  { key: "2.1", title: "输入要素的检查", dims: ["authority"] },
-  // 异常边界（网络超时/操作失败/并发重复提交/逆向撤销驳回）→ 2.3 异常处理要求/2.6 清算处理/2.7 差错处理
-  { key: "2.3", title: "异常处理要求", dims: ["edgeControl"] },
-  { key: "2.6", title: "清算处理", dims: ["edgeControl"] },
-  { key: "2.7", title: "差错处理", dims: ["edgeControl"] },
-  // 脱敏规则（手机号/身份证遮罩）→ 2.8 交易安全性/2.9 数据存贮和清理
-  { key: "2.8", title: "交易安全性", dims: ["compliance"] },
-  { key: "2.9", title: "数据存贮和清理", dims: ["compliance"] },
-  // 接口与数据源（外部系统对接/数据来源）→ 2.11 接口与数据源（material 维度：真实接口/字段证据）
-  { key: "2.11", title: "接口与数据源", dims: ["material"] },
-  // 权限与最小授权 → 2.12 权限与最小授权（authority 数据边界/岗位权限 + compliance 合规）
-  { key: "2.12", title: "权限与最小授权", dims: ["authority", "compliance"] },
-]
+/** 模板章节骨架（供渲染 diff 校验与评测 judge 遍历）：meta 章即无小节的章。 */
+export function reqdocChapters(): readonly { title: string; sections: { key: string; title: string }[] }[] {
+  return requireTemplateSchema().chapters.map((c) => ({ title: c.title, sections: c.sections }))
+}
 
 /**
- * 功能点块内子小节（模板「功能点 N」的固定骨架：输入要素 group1=1.1/1.2 + 处理要求 group2=2.1-2.10）。
- * 编号全局连续：第 k 个功能点（k 从 1 起）的输入要素=第 (2k-1) 组、处理要求=第 (2k) 组，
- * 故功能点 1 为 1./2.，功能点 2 为 3./4.，功能点 N 为 (2N-1)./(2N).，避免各功能点下重复 1.1。
- * 校验时按块序号 bi（0 起）偏移：绝对组号 = 2*bi + group。
+ * 必标来源的字段清单（逐功能点计数用）。
+ *
+ * 取代旧 `REQDOC_TEMPLATE_FIELDS`：那份表把「相对键 + 标题」写死成手抄本，
+ * 模板重排即失效。相对键现由政策（按标题）∩ 模板（按编号）解析得出，
+ * 编号变了自动跟随；`dims` 一并去掉——全仓无消费点（实测），留着只会诱使人以为它有用。
  */
-export interface FeatureSubSection {
-  /** 组内分组（1=输入要素，2=处理要求） */
-  group: number
-  /** 组内小节号（如 1.1 的 sub=1、2.10 的 sub=10） */
-  sub: number
-  title: string
-}
-export const FEATURE_SUB_SECTIONS: readonly FeatureSubSection[] = [
-  { group: 1, sub: 1, title: "简要概述" },
-  { group: 1, sub: 2, title: "控制要求" },
-  { group: 2, sub: 1, title: "输入要素的检查" },
-  { group: 2, sub: 2, title: "系统处理过程" },
-  { group: 2, sub: 3, title: "异常处理要求" },
-  { group: 2, sub: 4, title: "提示信息" },
-  { group: 2, sub: 5, title: "其他要求" },
-  { group: 2, sub: 6, title: "清算处理" },
-  { group: 2, sub: 7, title: "差错处理" },
-  { group: 2, sub: 8, title: "交易安全性" },
-  { group: 2, sub: 9, title: "数据存贮和清理" },
-  { group: 2, sub: 10, title: "附件" },
-  { group: 2, sub: 11, title: "接口与数据源" },
-  { group: 2, sub: 12, title: "权限与最小授权" },
-  { group: 2, sub: 13, title: "流程图" },
-]
-
-/** 第 bi 个功能点块（0 起）内某相对分组 sub 的绝对编号（如块 0 的 group1.sub1 → "5.1.1.1"，块 1 的 → "5.2.1.1"）。 */
-function featureSubKey(bi: number, s: FeatureSubSection): string {
-  return `5.${bi + 1}.${s.group}.${s.sub}`
+export function reqdocTaggedFields(): readonly { key: string; title: string }[] {
+  return requireTemplateSchema().taggedSubs.map((s) => ({ key: s.rel, title: s.title }))
 }
 
 /**
@@ -144,9 +51,6 @@ const SOURCE_TAG_RE = /\[文档\]|\[问答\]|\[缺省(?:\s*[：:][^\]]*)?\]|「�
 
 /** 裸 [缺省]（含空理由 [缺省：] / [缺省:]）：仅此触发完整性门禁（render.defaults 计数）。 */
 const NAKED_DEFAULT_RE = /\[缺省\s*(?:[：:]\s*)?\]/g
-
-/** 10 个映射字段的相对键（须逐功能点标来源，reqdoc-r20）：5.k.1.2, 5.k.2.1/.3/.6/.7/.8/.9/.11/.12/.13。 */
-export const MAPPED_FIELD_KEYS = ["1.2", "2.1", "2.3", "2.6", "2.7", "2.8", "2.9", "2.11", "2.12", "2.13"] as readonly string[]
 
 /** 渲染结构解析产物（parseRenderStructure 返回，运行时与评测共用）。 */
 export interface RenderStructure {
@@ -186,10 +90,9 @@ export interface RenderStructure {
  */
 const KB_DIGEST_RE = /^<!--\s*kb-digest:\s*([0-9a-f]+)\s*-->$/m
 
-/** 第 bi 个功能点块某相对字段键的绝对键（如 bi=0, "2.3" → "5.1.2.3"）。 */
-export function absoluteFieldKey(bi: number, fieldKey: string): string {
-  const [g, s] = fieldKey.split(".")
-  return `5.${bi + 1}.${g}.${s}`
+/** 正则元字符转义（章号虽是数字，保留此函数以防将来允许字母编号）。 */
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
 
 /** 标题归一化：忽略所有空白差异（模型渲染时空白/全角空格可能有出入）。 */
@@ -213,7 +116,7 @@ function headingAt(line: string): { level: number; text: string } | null {
  * 渲染 diff 校验：解析渲染的 PRD md，对照模板结构 schema 检查章节出现/顺序、功能点块骨架、
  * 映射字段来源标注与 [缺省] 提取。纯函数，运行时 reqdoc_check 与评测 render 判定类共用。
  */
-export function parseRenderStructure(md: string): RenderStructure {
+export function parseRenderStructure(md: string, schema: TemplateSchema = requireTemplateSchema()): RenderStructure {
   const lines = md.split(/\r?\n/)
   const digestMatch = md.match(/^<!--\s*kb-digest:\s*([0-9a-f]+)\s*-->$/m)
   const headings: { level: number; text: string; idx: number }[] = []
@@ -226,13 +129,13 @@ export function parseRenderStructure(md: string): RenderStructure {
   const chaptersPresent: string[] = []
   for (const h of headings) {
     if (h.level !== 2) continue
-    const si = REQDOC_TEMPLATE_CHAPTERS.findIndex((c) => norm(c.title) === norm(h.text))
-    if (si >= 0 && !chaptersPresent.includes(REQDOC_TEMPLATE_CHAPTERS[si].title)) {
-      chaptersPresent.push(REQDOC_TEMPLATE_CHAPTERS[si].title)
+    const si = schema.chapters.findIndex((c) => norm(c.title) === norm(h.text))
+    if (si >= 0 && !chaptersPresent.includes(schema.chapters[si].title)) {
+      chaptersPresent.push(schema.chapters[si].title)
     }
   }
-  const missing = REQDOC_TEMPLATE_CHAPTERS.map((c) => c.title).filter((t) => !chaptersPresent.includes(t))
-  const orderIdx = chaptersPresent.map((t) => REQDOC_TEMPLATE_CHAPTERS.findIndex((c) => c.title === t))
+  const missing = schema.chapters.map((c) => c.title).filter((t) => !chaptersPresent.includes(t))
+  const orderIdx = chaptersPresent.map((t) => schema.chapters.findIndex((c) => c.title === t))
   const outOfOrder: string[] = []
   for (let i = 1; i < orderIdx.length; i++) {
     if (orderIdx[i] <= orderIdx[i - 1]) outOfOrder.push(chaptersPresent[i])
@@ -241,8 +144,8 @@ export function parseRenderStructure(md: string): RenderStructure {
   // 2) 第一章/第二章 子小节齐全（按章节出现顺序切块，下一章节前即本章范围）
   const missingSections: string[] = []
   const l2 = headings.filter((h) => h.level === 2)
-  for (const ch of REQDOC_TEMPLATE_CHAPTERS) {
-    if (!ch.sections?.length) continue
+  for (const ch of schema.chapters) {
+    if (!ch.sections.length) continue
     const cIdx = l2.findIndex((h) => norm(h.text) === norm(ch.title))
     if (cIdx < 0) {
       for (const s of ch.sections) missingSections.push(`${ch.title} ${s.key} ${s.title}`)
@@ -261,15 +164,19 @@ export function parseRenderStructure(md: string): RenderStructure {
     }
   }
 
-   // 3) 功能点块切分（### 起，到下一个该行或 EOF 止）。
-   // 标题兼容三种约定：
-   //   - 「### 5.N 名称」（新格式，与章节编号一致，如「### 5.1 知识入库管理」）
-   //   - 「### 功能点 N」或「### 功能点 N：名称」「### 功能点 N 名称」（旧格式）
-   //   - 「### N_名称」（与系统建档目录 06_功能点/N_名称 一致的编号_名称 形式，如「### 1_故障应急智能检索」）
-   //   - 「### N. 名称」（点号后接空格/非数字，例如「### 1. 故障应急智能检索」）
-   // 须三级标题（###）；排除章内小节「### N.M …」（点号后接数字，如 1.1 需求类型）以免误计数。
-   // 排除「### N. 功能点…」（块内主小节，点号后接「功能点」字样），避免与功能点块误并；保留「### N. 名称」。
-   const featureHeadingRe = /^###\s+(?:5\.(\d+)\s+|(?:功能点\s*)?(\d+)(?:[：:_\s].*|\.(?!\s*功能点)[^\d].*|)$)/
+// 3) 功能点块切分（### 起，到下一个该行或 EOF 止）。
+  // 标题兼容三种约定：
+  //   - 「### {功能点章号}.{数字} 名称」（新格式，与章节编号一致，如「### 5.1 知识入库管理」）
+  //   - 「### 功能点 N」或「### 功能点 N：名称」「### 功能点 N 名称」（旧格式）
+  //   - 「### N_名称」（与系统建档目录 06_功能点/N_名称 一致的编号_名称 形式，如「### 1_故障应急智能检索」）
+  //   - 「### N. 名称」（点号后接空格/非数字，例如「### 1. 故障应急智能检索」）
+  // 须三级标题（###）；排除章内小节「### N.M …」（点号后接数字，如 1.1 需求类型）以免误计数。
+  // 排除「### N. 功能点…」（块内主小节，点号后接「功能点」字样），避免与功能点块误并；保留「### N. 名称」。
+  // 章号取自模板（此前写死 `5\\.`）：换模板把功能点挪到第八章后，这里会一个块都切不出来。
+  const chRe = escapeRe(String(schema.featureChapter ?? -1))
+  const featureHeadingRe = new RegExp(
+    `^###\\s+(?:${chRe}\\.(\\d+)\\s+|(?:功能点\\s*)?(\\d+)(?:[：:_\\s].*|\\.(?!\\s*功能点)[^\\d].*|)$)`,
+  )
   const blocks: string[][] = []
   let cur: string[] | null = null
   for (const raw of lines) {
@@ -285,10 +192,10 @@ export function parseRenderStructure(md: string): RenderStructure {
    // 4) 每块骨架 + 映射字段来源提取
    const covered: Record<string, number> = {}
    const defaults: Record<string, number> = {}
-   for (const f of REQDOC_TEMPLATE_FIELDS) {
-     covered[f.key] = 0
-     defaults[f.key] = 0
-   }
+for (const f of reqdocTaggedFields()) {
+      covered[f.key] = 0
+      defaults[f.key] = 0
+    }
    let featureOk = true
    const missingFeatureSections: string[] = []
    let docBlocks = 0
@@ -302,22 +209,20 @@ export function parseRenderStructure(md: string): RenderStructure {
         const h = headingAt(l)
         return !!h && h.level <= maxLevel && cleanHeading(h.text) === cleanHeading(text)
       }
-      // 主分组标题「1. 功能点输入要素」/「2. 功能点处理要求」为可选分组标签（模型常写为纯文本或省略），
-      // 其下子项（1.1/1.2 与 2.1~2.10）齐全即视为结构完整，故不再硬要求。编号全局连续：
-      // 第 bi 个功能点（0 起）的绝对组号 = 2*bi + group，故多功能点下编号不重复（1./2.、3./4.、…）。
-      for (const s of FEATURE_SUB_SECTIONS) {
-        const absKey = featureSubKey(bi, s)
-        if (!blockLines.some((l) => matchHeading(l, 5, `${absKey} ${s.title}`))) {
+      // 主分组标题（输入要素/处理要求）为可选分组标签（模型常写为纯文本或省略），
+      // 其下子节齐全即视为结构完整，故不再硬要求。子节清单取自模板解析结果，
+      // 绝对地址 = `{功能点章号}.{bi+1}.{rel}`——模板重排编号后自动跟随。
+      for (const sub of schema.featureSubs) {
+        const absKey = featureAddr(schema, bi, sub.rel)
+        if (!blockLines.some((l) => matchHeading(l, 5, `${absKey} ${sub.title}`))) {
           featureOk = false
-          missingFeatureSections.push(`${label} 缺 ${absKey} ${s.title}`)
+          missingFeatureSections.push(`${label} 缺 ${absKey} ${sub.title}`)
         }
       }
      // 块内任何位置出现 [文档] 即视为本块有文档支撑（用于定稿门禁 Z）；标题或内容里的都算
      if (blockLines.join("\n").includes("[文档]")) docBlocks += 1
-      for (const f of REQDOC_TEMPLATE_FIELDS) {
-        // f.key 为相对键（如 "1.2"、"2.1"）；第 bi 个功能点的绝对编号 = 5.(bi+1).组号.子号。
-        const [fg, fs] = f.key.split(".")
-        const absKey = `5.${bi + 1}.${fg}.${fs}`
+      for (const f of reqdocTaggedFields()) {
+        const absKey = featureAddr(schema, bi, f.key)
         const fi = blockLines.findIndex((l) => matchHeading(l, 5, `${absKey} ${f.title}`))
         if (fi < 0) continue // 结构缺失已在上报
         // 来源标注可能在标题行上（「##### 2.1 … [文档]」）或标题下内容里，两者都算；到下一级 ≤5 标题止
@@ -359,27 +264,6 @@ export function parseRenderStructure(md: string): RenderStructure {
   }
 }
 
-/** 取某三级小节（num + title）正文：从标题行到下个三级/二级标题止。 */
-function extractSubsection(md: string, num: string, title: string): string {
-  const lines = md.split(/\r?\n/)
-  let start = -1
-  for (let i = 0; i < lines.length; i++) {
-    const h = headingAt(lines[i])
-    if (h && h.level === 3 && cleanHeading(h.text) === cleanHeading(`${num} ${title}`)) {
-      start = i
-      break
-    }
-  }
-  if (start < 0) return ""
-  const out: string[] = []
-  for (let i = start + 1; i < lines.length; i++) {
-    const h = headingAt(lines[i])
-    if (h && h.level <= 3) break
-    out.push(lines[i])
-  }
-  return out.join("\n")
-}
-
 // ---- 渲染目标结构摘要（P3 上下文瘦身：替代模板全文注入） ----
 
 // ---- 骨架生成（P1 服务端生成，消除模型巨型 write） ----
@@ -391,29 +275,66 @@ function priorityLine(p: ReqdocFeature["priority"]): string {
 }
 
 /**
- * 服务端生成 PRD 骨架（P1）：第 1~4、6、7 章逐字取自模板正文，第五章按已确认功能点生成 N 个块
- * （以模板 5.1 块为骨架，替换编号/名称/优先级）。模型不再手写整篇骨架，避免单次输出过长被截断。
- * templateText 为 null（模板读不到）或功能点为空时返回 null，调用方退化为模型 write。
+ * 服务端生成 PRD 骨架（P1）：非功能点章节逐字取自模板正文，功能点章按已确认功能点生成 N 个块
+ * （以模板首个功能点块为骨架，替换编号/名称/优先级）。模型不再手写整篇骨架，避免单次输出过长被截断。
+ * templateText 为 null（模板读不到）或功能点为空时返回 null。
+ *
+ * 三个刻意的改动（换模板时会踩到的坑，此处一并修掉）：
+ * 1. **章锚点取自解析结果**（原写死「## 第一章」「## 第五章」「## 第六章」）——
+ *    模板把功能点挪到第八章、或删掉某一章时，这里会直接 `return null`，组装静默退化为失败。
+ * 2. **块模板切到下一个功能点块或功能点章末**（原要求模板必须写死第2 个样例块，
+ *    `secondFeat < 0` 即返回 null）——只需一个功能点块也能工作。
+ * 3. **块编号按首块实际章号替换**（原 `.replace(/5\.1/g, ...)` 把「5.1」焊死在代码里）。
  */
-export function buildPrdSkeleton(templateText: string | null, features: readonly ReqdocFeature[]): string | null {
+export function buildPrdSkeleton(
+  templateText: string | null,
+  features: readonly ReqdocFeature[],
+  schema: TemplateSchema = requireTemplateSchema(),
+): string | null {
   if (!templateText || features.length === 0) return null
+  if (schema.featureChapter === null || schema.chapters.length === 0) return null
+  const ch = schema.featureChapter
   const lines = templateText.split(/\r?\n/)
-  const findLine = (prefix: string, from = 0): number => {
-    for (let i = from; i < lines.length; i++) if (lines[i]!.startsWith(prefix)) return i
-    return -1
+  const headingLine = (title: string): number => {
+    const want = norm(title)
+    return lines.findIndex((l) => {
+      const h = headingAt(l)
+      return !!h && h.level === 2 && norm(h.text) === want
+    })
   }
-  const ch1 = findLine("## 第一章")
-  const ch5 = findLine("## 第五章")
-  const ch6 = findLine("## 第六章")
-  if (ch1 < 0 || ch5 < 0 || ch6 < 0) return null
-  const isFeatureHeading = (l: string) => /^###\s+5\.\d+\s/.test(l)
-  const firstFeat = lines.findIndex(isFeatureHeading)
-  const secondFeat = firstFeat < 0 ? -1 : lines.findIndex((l, i) => i > firstFeat && isFeatureHeading(l))
-  if (firstFeat < 0 || secondFeat < 0) return null
+  // 章锚点按**实际出现在模板里的**二级标题定位，而不是要求 schema 的每一章都命中：
+  // 组装只需要「首个章起点、功能点章、功能点章之后」三个锚点，缺中间某章不影响投影。
+  // （此前写死「## 第一章/第五章/第六章」，模板删章或换编号即 return null。）
+  const chapterAt = schema.chapters
+    .map((c) => ({ number: c.number, at: headingLine(c.title) }))
+    .filter((c) => c.at >= 0)
+  if (chapterAt.length === 0) return null
+  const firstAt = chapterAt[0]!.at
+  const featurePos = chapterAt.findIndex((c) => c.number === ch)
+  if (featurePos < 0) return null
+  const featureAt = chapterAt[featurePos]!.at
+  const afterFeatureAt = featurePos + 1 < chapterAt.length ? chapterAt[featurePos + 1]!.at : lines.length
 
-  // 封面：章一之前、跳过开头说明性引用与文档标题后的行（项目名 / 业务需求说明书 / 日期）
+  // 功能点块：`### {章号}.{数字} `（排除 `### {章号}.N` 字母示意块）。
+  // 刻意**不要求**块下有更深一级标题——最小模板（无 `####` 分组行）也应能投影；
+  // 代价是「章内恰好有形如 5.1 的三级小节」会被误当功能点块，但那种模板
+  // 本就不是本模板的形态（真模板的功能点块必有子节），且不会静默丢内容。
+  const isFeatureHeading = (l: string): boolean => {
+    const h = headingAt(l)
+    if (!h || h.level !== 3) return false
+    return new RegExp(`^${ch}\\.\\d+\\s`).test(h.text)
+  }
+  const featureLines = lines
+    .map((l, i) => ({ l, i }))
+    .filter((x) => x.i > featureAt && x.i < afterFeatureAt && isFeatureHeading(x.l))
+  const firstFeat = featureLines[0]?.i ?? -1
+  if (firstFeat < 0) return null
+  const blockEnd = featureLines[1]?.i ?? afterFeatureAt
+  const firstFeatNo = headingAt(lines[firstFeat]!)!.text.match(new RegExp(`^${ch}\\.(\\d+)\\s`))![1]!
+
+  // 封面：首章之前、跳过开头说明性引用与文档标题后的行（项目名 / 业务需求说明书 / 日期）
   const cover: string[] = []
-  for (let i = ch1 - 1; i >= 0; i--) {
+  for (let i = firstAt - 1; i >= 0; i--) {
     const l = lines[i]!
     if (l.startsWith(">") || l.startsWith("# ")) break
     cover.unshift(l)
@@ -421,12 +342,16 @@ export function buildPrdSkeleton(templateText: string | null, features: readonly
   while (cover.length > 0 && cover[0]!.trim() === "") cover.shift()
   while (cover.length > 0 && cover[cover.length - 1]!.trim() === "") cover.pop()
 
-  const blockTemplate = lines.slice(firstFeat, secondFeat).join("\n")
+  const blockTemplate = lines.slice(firstFeat, blockEnd).join("\n")
+  // 块内所有 `{章}.{首块序号}` 前缀都要换成新序号——不只是行首：`##### 5.1.2.6` 也带此前缀。
+  // 边界用「后面不接数字」，不能用 `\b`：`5.1` 与 `.` 之间没有词边界（`.` 非词字符），
+  // 用 `\b` 会一个都替换不到，表现为「第 2 个功能点仍写着 5.1.2.6」。
+  const numRe = new RegExp(`^(\\s*#{1,6}\\s*)?${ch}\\.${firstFeatNo}(?!\\d)`, "gm")
   const blocks = features.flatMap((f, idx) => {
     const k = idx + 1
     const block = blockTemplate
-      .replace(/5\.1/g, `5.${k}`)
-      .replace(/^(### 5\.\d+\s+)功能点名称\s*$/m, (_m, p1: string) => `${p1}${f.name}`)
+      .replace(numRe, (_m, hash: string) => `${hash ?? ""}${ch}.${k}`)
+      .replace(new RegExp(`^(### ${ch}\\.\\d+\\s+)功能点名称\\s*$`, "m"), (_m, p1: string) => `${p1}${f.name}`)
       .replace(/功能点编号：\s*\d+/, `功能点编号：${k}`)
       .replace(/功能名称：\s*X+/, () => `功能名称：${f.name}`)
       .replace(/^- 优先级：.*$/m, priorityLine(f.priority))
@@ -436,22 +361,16 @@ export function buildPrdSkeleton(templateText: string | null, features: readonly
   return [
     ...cover,
     "",
-    ...lines.slice(ch1, ch5),
-    ...lines.slice(ch5, firstFeat),
+    ...lines.slice(firstAt, featureAt),
+    // 功能点章的章首说明（编号规则那类引用行）保留，样例块整段丢弃
+    ...lines.slice(featureAt, firstFeat),
     ...blocks,
-    ...lines.slice(ch6),
+    // 功能点章内首个样例块之后的行**全部丢弃**：那里只剩模板自带的样例块
+    // （真实模板有 5.1/5.2/5.N 三块），它们是「块模板」而非交付内容。
+    // 旧实现用「切到第六章」间接丢弃；这里改为显式丢弃，语义更清楚，
+    // 且不依赖「功能点章之后紧跟哪一章」。
+    ...lines.slice(afterFeatureAt),
   ].join("\n")
 }
 
-// ---- 增量填充（P2 服务端按编号定位，模型只产出内容） ----
 
-/** 小节键可用范围提示（patchSectionBody 报错用）。 */
-function sectionKeyHint(): string {
-  return "可用键：3.1~3.6、4.1/4.2、6.1~6.4、7.1/7.2，功能点子小节 5.k.1.1、5.k.1.2、5.k.2.1~5.k.2.13（k=功能点序号）"
-}
-
-/** 合法小节键：章内小节（REQDOC_TEMPLATE_CHAPTERS.sections）或功能点子小节（5.k.{1|2}.n）。 */
-function isKnownSectionKey(key: string): boolean {
-  if (REQDOC_TEMPLATE_CHAPTERS.some((c) => c.sections?.some((s) => s.key === key))) return true
-  return /^5\.\d+\.[12]\.\d+$/.test(key)
-}

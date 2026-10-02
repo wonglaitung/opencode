@@ -97,7 +97,7 @@ describe("reqdoc 上下文预算基线", () => {
 
   test("★ prd 阶段注入已大幅下降（阶段 3 验收 #9）", () => {
     // 历史：6517（打分卡管线 8 条）→ 2c 4369 → 阶段 3 1476。
-    // r20 的字段映射表降级为「生成事实」（映射已由 MAPPED_FIELD_KEYS 派生进槽位地址）后降幅最大。
+    // r20 的字段映射表降级为「生成事实」（映射已由 模板解析派生的槽位地址）后降幅最大。
     const prd = sum(rules.filter((r) => r.stage === "prd"))
     expect(prd).toBeLessThan(2000)
     expect(prd).toBeLessThan(6517 * 0.3) // 至少减 70%

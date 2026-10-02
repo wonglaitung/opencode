@@ -5,11 +5,9 @@
  */
 import { describe, expect, test } from "bun:test"
 import {
-  REQDOC_TEMPLATE_CHAPTERS,
-  REQDOC_TEMPLATE_FIELDS,
-  MAPPED_FIELD_KEYS,
   buildPrdSkeleton,
   parseRenderStructure,
+  reqdocTaggedFields,
 } from "../src/reqdoc-render"
 import type { ReqdocFeature } from "../src/workflow"
 
@@ -58,8 +56,8 @@ describe("parseRenderStructure", () => {
     expect(s.featureCount).toBe(2)
     expect(s.featureOk).toBe(true)
     expect(s.missingFeatureSections).toEqual([])
-    for (const f of REQDOC_TEMPLATE_FIELDS) expect(s.covered[f.key]).toBe(2)
-    for (const f of REQDOC_TEMPLATE_FIELDS) expect(s.defaults[f.key]).toBe(0)
+    for (const f of reqdocTaggedFields()) expect(s.covered[f.key]).toBe(2)
+    for (const f of reqdocTaggedFields()) expect(s.defaults[f.key]).toBe(0)
   })
 
   test("缺章节：去掉第四章，missing 含其标题", () => {
@@ -154,7 +152,7 @@ describe("parseRenderStructure", () => {
     expect(s.featureCount).toBe(2)
     expect(s.featureOk).toBe(true)
     expect(s.missingFeatureSections).toEqual([])
-    for (const f of REQDOC_TEMPLATE_FIELDS) expect(s.covered[f.key]).toBe(2)
+    for (const f of reqdocTaggedFields()) expect(s.covered[f.key]).toBe(2)
   })
 
   test("来源标签包全角括号（### 5.1.2.1 输入要素的检查（[问答]））也能识别——修复 0/42 主因", () => {
@@ -178,7 +176,7 @@ describe("parseRenderStructure", () => {
     const s = parseRenderStructure(md)
     expect(s.featureOk).toBe(true)
     expect(s.missingFeatureSections).toEqual([])
-    for (const f of REQDOC_TEMPLATE_FIELDS) expect(s.covered[f.key]).toBe(2)
+    for (const f of reqdocTaggedFields()) expect(s.covered[f.key]).toBe(2)
   })
 
   test("空白差异不影响标题匹配（全角空格/多余空格）", () => {

@@ -9,9 +9,9 @@
 import type { Judge, ModelOutput } from "./types"
 import {
   REQDOC_SCORE_DIMS,
-  REQDOC_TEMPLATE_CHAPTERS,
-  REQDOC_TEMPLATE_FIELDS,
   parseRenderStructure,
+  reqdocChapters,
+  reqdocTaggedFields,
   type ReqdocScoreDimKey,
 } from "sm-shared"
 import { scorePrd, type PrdScore } from "./score"
@@ -153,7 +153,7 @@ export function judgeScenario(judge: Judge, out: ModelOutput): { pass: boolean; 
     case "render": {
       // 渲染 diff 判定(质量飞轮 P2)：同源 parseRenderStructure 解析模型回复文本
       const struct = parseRenderStructure(out.text)
-      const required = judge.requiredChapters ?? REQDOC_TEMPLATE_CHAPTERS.map((c) => c.title)
+      const required = judge.requiredChapters ?? reqdocChapters().map((c) => c.title)
       const fails: string[] = []
       const observations: string[] = []
       // fuzzy: 用 includes 匹配（弱模型可能用「需求概述」而非「第一章 需求概述」）
@@ -171,11 +171,11 @@ export function judgeScenario(judge: Judge, out: ModelOutput): { pass: boolean; 
         if (struct.featureCount === 0) {
           pushSource("无功能点块(第三章须每功能点一段)")
         } else {
-          const uncovered = REQDOC_TEMPLATE_FIELDS.filter((f) => struct.covered[f.key] < struct.featureCount)
+          const uncovered = reqdocTaggedFields().filter((f) => struct.covered[f.key] < struct.featureCount)
           if (uncovered.length) pushSource(`映射字段未全标来源 ${uncovered.map((f) => f.key).join("、")}`)
         }
       }
-      if (judge.anyDefault && !REQDOC_TEMPLATE_FIELDS.some((f) => (struct.defaults[f.key] ?? 0) > 0)) {
+      if (judge.anyDefault && !reqdocTaggedFields().some((f) => (struct.defaults[f.key] ?? 0) > 0)) {
         pushSource("无 [缺省] 标注(缺料却硬写=杜撰风险)")
       }
       const obsNote = observations.length ? `;观察项(不计通过率):${observations.join(";")}` : ""
@@ -183,7 +183,7 @@ export function judgeScenario(judge: Judge, out: ModelOutput): { pass: boolean; 
         pass: fails.length === 0,
         detail: fails.length
           ? `✗ ${fails.join(";")}（功能点块 ${struct.featureCount}，缺章节 ${struct.missing.join("、") || "无"}，乱序 ${struct.outOfOrder.join("、") || "无"}）${obsNote}`
-          : `✓ 渲染结构达标（章节 ${struct.chaptersPresent.length}/${REQDOC_TEMPLATE_CHAPTERS.length}，功能点块 ${struct.featureCount}` +
+          : `✓ 渲染结构达标（章节 ${struct.chaptersPresent.length}/${reqdocChapters().length}，功能点块 ${struct.featureCount}` +
             `${judge.sourceAll ? "，映射字段全标来源" : ""}${judge.anyDefault ? "，含 [缺省]" : ""}）${obsNote}`,
       }
     }

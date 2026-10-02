@@ -64,7 +64,7 @@ export type Judge =
       /** 渲染 diff 判定（质量飞轮 P2）：用共享 parseRenderStructure 解析模型回复文本，
        *  断言章节骨架/顺序/功能点块数/来源标注（与运行时 reqdoc_check 同源，无真实文件，
        *  judge 解析 out.text——评测模型在回复文本里渲染 PRD 骨架）。 */
-      /** 必查章节标题（缺省=REQDOC_TEMPLATE_CHAPTERS 全部）；断言这些标题都出现 */
+      /** 必查章节标题（缺省=模板全部章节）；断言这些标题都出现 */
       requiredChapters?: string[]
       /** 章节顺序须正确（outOfOrder 为空），缺省 true */
       ordered?: boolean

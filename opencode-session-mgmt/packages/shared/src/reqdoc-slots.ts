@@ -14,7 +14,14 @@
  * - **容器必填**（聚合判定，不进开放项）：`4.1` 术语、`5.k.2.1` 字段——≥1 个 confirmed 子项即覆盖
  * - 容器无候选时须声明 `required: false` + 理由（可为空通道），有候选却声明为空 → 报错（防绕过）
  */
-import { MAPPED_FIELD_KEYS, REQDOC_TEMPLATE_CHAPTERS, absoluteFieldKey } from "./reqdoc-render"
+import {
+  featureAddr,
+  isFeatureAddr,
+  isFeatureSubAddr,
+  requireTemplateSchema,
+  TERM_CONTAINER_TITLE,
+  type TemplateSchema,
+} from "./reqdoc-template-schema"
 import type { ReqdocFeature, ReqdocScoreDimKey } from "./workflow"
 
 /** 槽位来源（与 Option A 来源标签同源）。 */
@@ -28,8 +35,8 @@ export type SlotKind = "prose" | "term" | "field"
 
 export interface ReqdocSlot {
   kind: SlotKind
-  /** prose=模板地址（3.1~3.6、4.2、5.k.1.1、5.k.2.3~2.13、6.1~6.4、7.1/7.2）
-   *  term=4.1 + 术语名作子键 | field=5.k.2.1 + 字段名作子键 */
+  /** prose=模板声明的小节地址（如 3.1、5.k.1.1）；term/field=容器地址 + 名称作子键
+   *  （容器地址由模板结构派生，见 reqdoc-template-schema）*/
   address: string
   /** prose=正文文本；term/field=结构化定义的正文形态（人类可读部分）。 */
   content: string
@@ -61,52 +68,63 @@ export const QUESTIONS_PER_TURN = 8
 // 6.2 地址空间：文档地址（恒 4 段或模板键）与槽位地址（可带子键）
 // ---------------------------------------------------------------------------
 
-/** 容器型地址（6.2.1.1 选项 B）：必填但只聚合，永不进开放项。 */
-export const CONTAINER_ADDRS = ["4.1", "2.1"] as const
-
 /** 剥掉子键取文档地址：`4.1.CRD` → `4.1`；`5.1.2.1.客户号` → `5.1.2.1`；无子键原样返回。 */
-export function docAddrOf(slotAddr: string): string {
+export function docAddrOf(slotAddr: string, schema: TemplateSchema = requireTemplateSchema()): string {
   const i = slotAddr.lastIndexOf(".")
   if (i < 0) return slotAddr
   const head = slotAddr.slice(0, i)
-  // 仅当剥掉后仍是合法文档地址时才剥（`5.1.2.13` 不可被剥成 `5.1.2`）
-  return isDocAddr(head) ? head : slotAddr
+  // 仅当剥掉后仍是合法文档地址时才剥（功能点子节 `5.1.2.13` 不可被剥成 `5.1.2`）
+  return isDocAddr(head, schema) ? head : slotAddr
 }
 
 /** 取子键：`4.1.CRD` → `CRD`；无子键返回 null。 */
-export function slotSubKey(slotAddr: string): string | null {
-  const doc = docAddrOf(slotAddr)
+export function slotSubKey(slotAddr: string, schema: TemplateSchema = requireTemplateSchema()): string | null {
+  const doc = docAddrOf(slotAddr, schema)
   return doc === slotAddr ? null : slotAddr.slice(doc.length + 1)
 }
 
-/** 是否为文档地址（模板章节键或 5.k.g.s 四段功能点子小节）。 */
-export function isDocAddr(addr: string): boolean {
-  if (isContainerAddr(addr)) return true
-  if (REQDOC_TEMPLATE_CHAPTERS.some((c) => c.sections?.some((s) => s.key === addr))) return true
-  // 功能点下标禁前导零（`5.01.2.1` 会被 `Number()` 归一成 1 而绕过范围检查，
-  // 产出不可渲染的地址却零告警——对抗审查 F-2 实测）
-  return /^5\.(0|[1-9]\d*)\.[12]\.\d+$/.test(addr)
+/** 是否为文档地址（模板声明的章内小节，或模板声明组号内的功能点子小节）。
+ *  判定依据全部来自模板解析结果，不再有写死的章号/组号正则。 */
+export function isDocAddr(addr: string, schema: TemplateSchema = requireTemplateSchema()): boolean {
+  return isContainerAddr(addr, schema) || schema.docSectionAddrs.has(addr) || isFeatureSubAddr(schema, addr)
 }
 
-/** 是否容器地址（4.1 术语 / 5.k.2.1 字段，组感知后者形如 5.1.2.1）。 */
-export function isContainerAddr(addr: string): boolean {
-  return addr === "4.1" || /^5\.(0|[1-9]\d*)\.2\.1$/.test(addr)
+/** 是否容器地址（章级容器如术语定义，或功能点级字段容器如 `{章}.k.g.s`）。 */
+export function isContainerAddr(addr: string, schema: TemplateSchema = requireTemplateSchema()): boolean {
+  const s = schema
+  if (s.chapterContainers.includes(addr)) return true
+  const segs = addr.split(".")
+  if (segs.length !== 4) return false
+  // 功能点序号须为正整数且**禁前导零**：`5.01.2.1` 会被 `Number()` 归一成 1 而绕过
+  // 范围检查，产出不可渲染的地址却零告警（对抗审查 F-2 实测）。
+  // 归一化序号做结构比对之前必须先在这里校验，否则归一会把 `01` 洗成 `1`、
+  // 让前导零地址被误判为合法容器（这正是 F-2 回归过一次的地方）。
+  if (!/^[1-9]\d*$/.test(segs[1]!)) return false
+  // 组号/子号同样禁前导零
+  if (/^0\d/.test(segs[2]!) || /^0\d/.test(segs[3]!)) return false
+  return isFeatureSubAddr(s, addr) && s.featureContainerRels.includes(`${segs[2]}.${segs[3]}`)
 }
 
 /**
  * 是否**合法槽位地址**（工具入参校验用）。
  *
- * 三类合法：必填叶子（`3.1`、`5.1.2.13`）、容器本身（`4.1`、`5.1.2.1`）、
- * 容器叶子（`4.1.CRD`、`5.1.2.1.客户号`——子键为任意非空串）。
+ * 三类合法：必填叶子、容器本身、容器叶子（`<容器地址>.<子键>`，子键为任意非空串）。
+ * 具体地址一律取工具返回的「本轮该填」清单，勿自造。
  *
  * 存在的理由（对抗审查 P1-a）：此前 `reqdoc_ingest` 对地址零校验，
  * 提交 `9.9.999.这不是服务端派生的地址` 会被**接受并落库**，但组装时无法投影——
  * 结果是「唯一事实源收了事实、交付件里没有、零告警」的最坏组合。
  */
-export function isValidSlotAddr(addr: string, features: readonly ReqdocFeature[]): boolean {
+export function isValidSlotAddr(
+  addr: string,
+  features: readonly ReqdocFeature[],
+  schema: TemplateSchema = requireTemplateSchema(),
+): boolean {
   if (!addr || addr.length > 80) return false
-  const doc = docAddrOf(addr)
-  const sub = slotSubKey(addr)
+  // 这两处必须传 schema：漏传会退回真实模板，使显式传入的 schema 只生效一半
+  //（异构模板下 2.2/3.1.2.1 之类的新地址会被误判为非法）。
+  const doc = docAddrOf(addr, schema)
+  const sub = slotSubKey(addr, schema)
   // 容器叶子：`4.1.CRD` / `5.1.2.1.客户号`
   if (sub !== null) {
     // 子键会**原样插值进 markdown**（容器渲染时形如 `- **子键**：内容`），
@@ -117,66 +135,66 @@ export function isValidSlotAddr(addr: string, features: readonly ReqdocFeature[]
     if (/[#|`<>*_[\]\/\\]/.test(sub)) return false
     if (sub.trim().length > 40) return false
     // 文档地址必须合法，且功能点下标须在范围内（防 5.9.2.1 这类越界）
-    if (!isDocAddr(doc)) return false
-    if (doc.startsWith("5.")) {
+    if (!isDocAddr(doc, schema)) return false
+    if (isFeatureAddr(schema, doc)) {
       const bi = Number(doc.split(".")[1])
       if (!Number.isInteger(bi) || bi < 1 || bi > features.length) return false
     }
     return true
   }
-  return requiredSlots(features).includes(addr) || isContainerAddr(addr)
+  return requiredSlots(features, schema).includes(addr) || isContainerAddr(addr, schema)
 }
 
 // ---------------------------------------------------------------------------
 // 6.2.0 必填集：从模板 schema 派生，不人工枚举
 // ---------------------------------------------------------------------------
 
-/** 章节级必填小节（去 meta 章、去容器 4.1）。 */
-export function requiredChapterAddrs(): string[] {
+/** 章内必填小节（去 meta 章——即无小节的表格式章、去容器）。 */
+export function requiredChapterAddrs(schema: TemplateSchema = requireTemplateSchema()): string[] {
+  return [...schema.docSectionAddrs]
+}
+
+/** 功能点级必填**叶子**（第 bi 块，bi 从 0 起）：政策声明的必填子节（不含容器）。 */
+export function requiredFeatureLeafAddrs(bi: number, schema: TemplateSchema = requireTemplateSchema()): string[] {
+  return schema.requiredSubRels.map((rel) => featureAddr(schema, bi, rel))
+}
+
+/**
+ * 全部必填叶子（进开放项），**按文档顺序**排列。
+ * 顺序有意义：它就是模型填充与业务逐项确认的天然顺序，也是 golden 逐地址比对的基准。
+ * 容器不在此列（6.2.1.1）。
+ *
+ * 功能点块插在**功能点章所在位置**——由模板章序决定，不再用「章号小于 6」这种魔数
+ * 把功能点硬塞到第四章与第六章之间（换模板把功能点挪到第八章时会插错位置）。
+ */
+export function requiredSlots(
+  features: readonly ReqdocFeature[],
+  schema: TemplateSchema = requireTemplateSchema(),
+): string[] {
+  const s = schema
   const out: string[] = []
-  for (const c of REQDOC_TEMPLATE_CHAPTERS) {
-    if (c.meta) continue
-    for (const s of c.sections ?? []) {
-      if (isContainerAddr(s.key)) continue
-      out.push(s.key)
+  for (const c of s.chapters) {
+    if (c.number === s.featureChapter) {
+      for (let bi = 0; bi < features.length; bi++) out.push(...requiredFeatureLeafAddrs(bi, schema))
+    }
+    for (const key of c.sections.map((x) => x.key)) {
+      if (!s.docSectionAddrs.has(key)) continue
+      out.push(key)
     }
   }
   return out
 }
 
-/** 功能点级必填**叶子**（第 bi 块，bi 从 0 起）：简要概述 + 映射字段叶子（去容器 2.1）。 */
-export function requiredFeatureLeafAddrs(bi: number): string[] {
-  return [
-    `5.${bi + 1}.1.1`,
-    ...MAPPED_FIELD_KEYS.filter((k) => !isContainerRelKey(k)).map((k) => absoluteFieldKey(bi, k)),
-  ]
-}
-
-/** 相对键是否为容器（`2.1` 是字段容器）。 */
-function isContainerRelKey(rel: string): boolean {
-  return CONTAINER_ADDRS.includes(rel as (typeof CONTAINER_ADDRS)[number])
-}
-
-/**
- * 全部必填叶子（进开放项），**按文档顺序**排列（三章→四章→五章→六章→七章）。
- * 顺序有意义：它就是模型填充与业务逐项确认的天然顺序，也是 golden 逐地址比对的基准。
- * 容器不在此列（6.2.1.1）。
- */
-export function requiredSlots(features: readonly ReqdocFeature[]): string[] {
-  const chapter = requiredChapterAddrs()
-  // 第三章之前插入功能点块（功能点属第五章，排在 4.2 之后、6.1 之前）
-  const beforeCh6 = chapter.filter((a) => Number(a.split(".")[0]) < 6)
-  const fromCh6 = chapter.filter((a) => Number(a.split(".")[0]) >= 6)
-  return [
-    ...beforeCh6,
-    ...features.flatMap((_, bi) => requiredFeatureLeafAddrs(bi)),
-    ...fromCh6,
-  ]
-}
-
 /** 全部必填容器（聚合判定，不进开放项）。 */
-export function requiredContainers(features: readonly ReqdocFeature[]): string[] {
-  return ["4.1", ...features.map((_, bi) => absoluteFieldKey(bi, "2.1"))]
+export function requiredContainers(
+  features: readonly ReqdocFeature[],
+  schema: TemplateSchema = requireTemplateSchema(),
+): string[] {
+  const s = schema
+  return [
+    ...s.chapterContainers,
+    ...features.flatMap((_, bi) => s.featureContainerRels.map((rel) => featureAddr(s, bi, rel))),
+  ]
 }
 
 // ---------------------------------------------------------------------------
@@ -396,6 +414,8 @@ export interface DeriveOptions {
   slots?: readonly ReqdocSlot[]
   /** 地址 → 已连续出现在开放项的轮次（6.3；**按轮次计不按调用计**——同一轮重复调用不累加，由调用方按轮推进）。 */
   askCounts?: Readonly<Record<string, number>>
+  /** 模板结构；缺省取已加载的模板。仅测试与「换模板」场景显式传入。 */
+  schema?: TemplateSchema
 }
 
 /**
@@ -470,7 +490,7 @@ function deriveAll(
           : undefined
       out.push({
         address: addr,
-        kind: isTermContainer(container) ? "term" : "field",
+        kind: isTermContainer(container, opts.schema ?? requireTemplateSchema()) ? "term" : "field",
         askCount: askCountOf(addr, slots, opts.askCounts),
         ...(guess ? { guess, from: l2.length && !term ? "memory-L2" : "memory-L1" } : {}),
       })
@@ -495,9 +515,13 @@ function excerptAround(content: string, word: string): string {
   return content.slice(from, to).trim().slice(0, 80)
 }
 
-/** 是否术语容器（`4.1`）；字段容器（`5.k.2.1`）返回 false。 */
-function isTermContainer(addr: string): boolean {
-  return docAddrOf(addr) === "4.1"
+/** 是否术语容器（模板里标题为「术语定义」的章级容器）；字段容器返回 false。
+ *  按**标题**而非地址判定——换模板把术语章从 4.1 挪到 2.2 时无需改代码。 */
+function isTermContainer(addr: string, schema: TemplateSchema): boolean {
+  const termKey = schema.chapters
+    .flatMap((c) => c.sections)
+    .find((x) => x.title === TERM_CONTAINER_TITLE)?.key
+  return termKey !== undefined && docAddrOf(addr, schema) === termKey
 }
 
 /** 某地址的已问轮次：调用方传入优先，其次槽位自带（6.3 按轮次计）。 */
@@ -556,10 +580,13 @@ export function advanceAskCounts(
   return next
 }
 
-/** 槽位是否落在功能点地址域（`5.{序号}.*`：5.k.1.1 必填叶子、5.k.2.1.<字段> 容器叶子）。
+/** 槽位是否落在功能点地址域（`{功能点章号}.{序号}.*`：5.k.1.1 必填叶子、5.k.2.1.<字段> 容器叶子）。
  *  用它判断「功能点清单被重排是否已有实际后果」——没有槽位时重排只是改目录，无副作用。 */
-export function hasFeatureScopedSlots(slots: readonly ReqdocSlot[]): boolean {
-  return slots.some((s) => /^5\.\d+\./.test(s.address))
+export function hasFeatureScopedSlots(
+  slots: readonly ReqdocSlot[],
+  schema: TemplateSchema = requireTemplateSchema(),
+): boolean {
+  return slots.some((x) => isFeatureAddr(schema, x.address))
 }
 
 /**

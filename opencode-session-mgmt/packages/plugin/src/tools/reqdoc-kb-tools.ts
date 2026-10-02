@@ -29,6 +29,7 @@ import {
   writeL4Pref,
   getDefinition,
   requiredSlots,
+  requireTemplateSchema,
   type ContainerDecl,
   type ReqdocFeature,
   type MemoryFact,
@@ -43,6 +44,43 @@ import { projectRoot, resolveWithinWorktree } from "../fs-safe"
 import { materialEvidence } from "./reqdoc-scan"
 
 const z = tool.schema
+
+/**
+ * 从模板实时取几个真实地址，用于工具描述里的**示例**。
+ *
+ * 此前这些示例写死（`3.1`、`5.1.2.3`、`4.1.CRD`），模板一换就变成误导——
+ * 模型会照着示例自造地址，而服务端只认清单里的。改为实时派生后，
+ * 换模板时示例自动跟随，且始终是当前模板里真实存在的地址。
+ *
+ * 取不到模板时退化为不含具体编号的通用文案（宁可少示例，不给错示例）。
+ */
+function addrHint(): { leaf: string; feature: string; termContainer: string; fieldContainer: string; termLeaf: string; fieldLeaf: string } {
+  const s = templateSchemaSafe()
+  if (!s) return { leaf: "", feature: "", termContainer: "", fieldContainer: "", termLeaf: "", fieldLeaf: "" }
+  const leaf = [...s.docSectionAddrs][0] ?? ""
+  const ch = s.featureChapter
+  const firstRel = s.requiredSubRels[0] ?? s.featureSubs[0]?.rel ?? ""
+  const feature = ch === null || firstRel === "" ? "" : `${ch}.1.${firstRel}`
+  const termContainer = s.chapterContainers[0] ?? ""
+  const fieldContainer = ch === null || !s.featureContainerRels[0] ? "" : `${ch}.1.${s.featureContainerRels[0]}`
+  return {
+    leaf,
+    feature,
+    termContainer,
+    fieldContainer,
+    termLeaf: termContainer ? `${termContainer}.CRD` : "",
+    fieldLeaf: fieldContainer ? `${fieldContainer}.客户号` : "",
+  }
+}
+
+/** 取 schema，不抛错（工具描述在注册期求值，不能因模板缺失导致插件加载失败）。 */
+function templateSchemaSafe() {
+  try {
+    return requireTemplateSchema()
+  } catch {
+    return null
+  }
+}
 
 /** KB 目录名（设计第 5 章：独立顶层目录，不占用 00~07 编号、不混入业务投料区）。 */
 const KB_DIR = "需求知识库"
@@ -130,7 +168,9 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
       slots: z
         .array(
           z.object({
-            address: z.string().describe("槽位地址（服务端给出的待填地址，如 3.1 / 5.1.2.3 / 4.1.CRD）"),
+            address: z.string().describe(
+              `槽位地址（**只能取工具返回的「本轮该填」清单里的地址**，勿自造；当前模板的合法形状如 ${addrHint().leaf} / ${addrHint().feature} / ${addrHint().termLeaf}）`,
+            ),
             kind: z.enum(["prose", "term", "field"]).describe("prose=小节正文；term=术语条目；field=字段定义"),
             content: z.string().describe("该槽位的内容（业务语言正文；术语填释义；字段填定义说明）"),
             source: z.enum(["文档", "问答", "缺省"]).describe("来源：文档=材料可循 / 问答=业务口述 / 缺省=本次不涉及（须在 reason 给理由）"),
@@ -150,20 +190,23 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
         .describe(
           "功能点清单（首次提交时给；已确认过则省略）。与 reqdoc_confirm_features 同为「整体替换 + 按序重编号」语义，" +
             "**给已有需求加功能时必须传「原清单 + 末尾追加的新功能」，不得插在中间、不得删除或改名**" +
-            "（既有槽位地址 `5.{序号}.*` 按序号索引，改动会让地址漂移、业务被要求重述整份需求）。",
+            "（既有槽位的功能点地址按序号索引，具体地址取工具清单；改动会让地址漂移、业务被要求重述整份需求）。",
         ),
       candidates: z
         .record(z.string(), z.array(z.string()))
         .optional()
         .describe(
-          "容器下的子项候选（如 {\"4.1\": [\"CRD\",\"AML\"], \"5.1.2.1\": [\"客户号\"]}）——" +
+          `容器下的子项候选（如 ${addrHint().termContainer ? `{ "${addrHint().termContainer}": ["CRD","AML"]` : "{\"<容器地址>\": [\"CRD\",\"AML\"]"}` +
+          `${addrHint().fieldContainer ? `, "${addrHint().fieldContainer}": ["客户号"]` : ""}）——` +
             "从材料中抽取到的术语/字段名。**这是记忆生效的必要条件**：命中 L1 术语记忆的候选会直接消缺口（不再问），" +
             "服务端才能据此少问。只填材料里真实出现的，不要臆造。",
         ),
       containers: z
         .record(z.string(), z.object({ required: z.boolean(), reason: z.string().optional() }))
         .optional()
-        .describe("容器声明（如 4.1/5.1.2.1 声明 required:false 表示本次无术语/无结构化字段，须给 reason）"),
+        .describe(
+          `容器声明（对**工具清单里标出的必填容器**声明；如 ${addrHint().termContainer || "<术语容器地址>"} / ${addrHint().fieldContainer || "<字段容器地址>"} 声明 required:false 表示本次无术语/无结构化字段，须给 reason）`,
+        ),
     },
     async execute(args, context) {
       const root = projectRoot(context)
@@ -201,11 +244,11 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
         if (invalid.length > 0) {
           throw new WorkflowOpError(
             `槽位地址非法：${invalid.map((x) => x.address).join("、")}。\n` +
-              `合法地址只有两类：① 工具返回的「本轮该填」清单里的地址（如 3.1、5.1.2.13）；` +
-              `② 容器叶子（4.1.<术语名>、5.1.2.1.<字段名>）。\n` +
+              `合法地址只有两类：① 工具返回的「本轮该填」清单里的地址（如 ${addrHint().leaf}、${addrHint().feature}）；` +
+              `② 容器叶子（<容器地址>.<术语名>、<容器地址>.<字段名>，如 ${addrHint().termLeaf}）。\n` +
               `请先取本轮清单再提交，不要自造地址。\n` +
               `确实装不进模板的内容只有两条合法出路：① 该维度本次不涉及 → 用 containers 声明对应容器 ` +
-              `"4.1"/"5.k.2.1": {required:false, reason:"<理由>"}；② 它其实属于某个已有章节 → 归到该章节的具体地址。\n` +
+              `${addrHint().termContainer || "<术语容器地址>"} / ${addrHint().fieldContainer || "<字段容器地址>"} 声明 {required:false, reason:"<理由>"}；② 它其实属于某个已有章节 → 归到该章节的具体地址。\n` +
               `**不要凭空造一个"附注/附录"章节**——本模板没有这种章节，凭空新增的内容不会出现在 PRD 里，等于悄悄丢失；` +
               `若两类都归不进去，如实告诉业务「这段内容模板装不下」，由业务决定删掉还是另立需求，不要自行处置。`,
           )
@@ -329,7 +372,7 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
         if (!isValidSlotAddr(args.address, kb.features) && !kb.slots.some((y) => y.address === args.address)) {
           throw new WorkflowOpError(
             `槽位地址非法：${args.address}。合法地址只有两类：① 工具返回的「本轮该填」清单里的地址；` +
-              `② 容器叶子（4.1.<术语名>、5.1.2.1.<字段名>）。请先取本轮清单再回答。`,
+              `② 容器叶子（<容器地址>.<术语名>、<容器地址>.<字段名>，如 ${addrHint().termLeaf}）。请先取本轮清单再回答。`,
           )
         }
         const idx = kb.slots.findIndex((s) => s.address === args.address)
@@ -599,7 +642,7 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
         .array(z.string())
         .optional()
         .describe(
-          "可选：本次已写入记忆、后续不必再问的**槽位地址**（如 [\"5.1.2.11\"]）。" +
+          `可选：本次已写入记忆、后续不必再问的**槽位地址**（如 ${addrHint().feature ? `["${addrHint().feature}"]` : "[]"}，地址取工具清单）。` +
             "被退役的槽位不再进开放项、也不计入覆盖率——只填确实已进记忆的，填错会导致门禁永远不通过。",
         ),
     },

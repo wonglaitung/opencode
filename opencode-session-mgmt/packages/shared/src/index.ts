@@ -1,5 +1,6 @@
 export * from "./workflow"
 export * from "./reqdoc-render"
+export * from "./reqdoc-template-schema"
 export * from "./reqdoc-slots"
 export * from "./reqdoc-kb"
 export * from "./reqdoc-assemble"
