@@ -26,15 +26,20 @@ const HARDCODE = /\d+\.\d+(?:\.\d+)*(?:\.[A-Z][A-Za-z]+)?/g
 
 /** 形状记号：尖括号占位、花括号变量、`k`/`序号`/`N` 之类的泛指。 */
 function isShape(hit: string, full: string): boolean {
-  // `<容器地址>.<名称>`、`{序号}.*` —— 命中片段所在字符串里含占位记号即放行
-  if (/<[^>]*>|\{[^}]*\}|序号|占位/.test(full)) return true
-  // 运行时插值：`${addrHint().fieldContainer}` 之类不是写死
-  if (/\$\{[^}]*\}/.test(full)) return true
+  const at = full.indexOf(hit)
+  // 占位豁免必须**命中点局部**：只有紧贴命中片段的占位记号才说明「这一段是形状」。
+  // 曾经按整串判定（含占位即全串放行），漏判「必填 5.1.2.13（参考 <容器地址>）」与
+  // 「{序号}.* 的 5.1」——真实地址藏在占位旁边照样放行，等于没有护栏。
+  const before14 = full.slice(Math.max(0, at - 14), at)
+  // 形状片段形如 `<名称>.1.2`、`{序号}.1.2`、`${x}.1.2`：占位记号紧邻左侧、其后可跟点号
+  if (/[<{][^<>{}]{0,12}[>}]\s*\.?$/.test(before14)) return true
+  if (/序号|占位|泛指/.test(before14.split(/\s+/).pop() ?? "")) return true
+  // 运行时插值紧邻左侧：`${addrHint().fieldContainer}.1.2` 的 `1.2` 是形状
+  if (/\$\{[^}]{0,40}\}\s*\.?$/.test(before14)) return true
   // **设计文档章节引用**：`设计 2.2`、`6.2.1.1 选项 B`、`（3.6.1 ①）`、
   // `录入基线预估人工工时（6.3，AI 提效对比）`、`授权（3.4 逃生口）`。
   // 判据是「命中片段**前面紧邻**设计/章节类词，或**后面紧跟**中文说明」——
   // 两者都是设计引用的语法特征；模板地址不会长这样（后面跟的是标题或正文）。
-  const at = full.indexOf(hit)
   const before = full.slice(Math.max(0, at - 16), at)
   const after = full.slice(at + hit.length, at + hit.length + 12)
   if (/设计|文档|章节|第\s*$/.test(before)) return true
@@ -48,6 +53,10 @@ function isShape(hit: string, full: string): boolean {
   // **全角括号包裹的数字对**是本仓设计文档引用的统一形态（`（6.3）`、`（3.4 逃生口）`），
   //模板地址不会这样出现（小节标题跟在编号后而非括号内）。
   if (/^\s*(：[：])?/.test(after) && before.includes("（")) return true
+  // SLO 数值不是地址：`可用性99.9%`、`响应<2s`、`并发≥1000`、`P99 2.5s`。
+  // 判据是紧邻的百分号或比较符——模板地址永远不携带这两种语法，故不会连带放过真地址。
+  if (/[%％]/.test(after) || /[<>=≤≥]\s*$/.test(before)) return true
+  if (/^\s*(毫秒|秒|次|ms|s)\b/.test(after)) return true
   return false
 }
 
@@ -79,6 +88,11 @@ function scan(file: string): { file: string; hit: string }[] {
     }
   }
   return out
+}
+
+/** 取一个字符串字面量里**未被豁免**的硬编码命中（正向对照用）。 */
+function caught(literal: string): string[] {
+  return [...literal.matchAll(HARDCODE)].filter((m) => !isShape(m[0], literal)).map((m) => m[0])
 }
 
 /** Markdown 规约扫描：反引号包裹的算占位示意（合规），括号包裹的算设计文档章节引用。 */
@@ -152,6 +166,29 @@ describe("模型可见文本不得写死模板地址", () => {
     const injected = String(renderNew(sc.state as never))
     const leaked = injected.match(/(?<![\w.$\{`<])\b[45]\.\d+(\.\d+)*\b(?!`)/g) ?? []
     expect([...new Set(leaked)]).toEqual([])
+  })
+
+  test("正向对照：占位只豁免紧邻片段，不豁免同串别处的写死地址", () => {
+    // 回归：曾按「整串含占位即全串放行」判定，于是「必填 5.1.2.13（参考 <容器地址>）」
+    // 里的真实地址被放过——护栏看着在跑，实际对最危险的混写完全失明。
+    const leaks = ["必填容器未覆盖：5.1.2.13（参考 <容器地址>）", "顺序形如 {序号}.* 的 5.1 也一样"]
+    for (const lit of leaks) expect(caught(lit)).not.toEqual([])
+    // 同串里占位与地址并存时，**地址必须仍被抓到**
+    expect(caught(leaks[0])).toContain("5.1.2.13")
+    expect(caught(leaks[1])).toContain("5.1")
+  })
+
+  test("反向对照：真正的形状记号与设计引用仍放行（豁免不得过宽）", () => {
+    // 豁免收紧的代价必须可控：形状记号、设计章节引用、SLO 数值仍不应报警
+    for (const lit of [
+      "<容器地址>.<名称>",
+      "{序号}.1.2",
+      "顺序形如 {序号}.* ",
+      "详见设计 2.2 与 3.4 逃生口",
+      "对应第 2.3 节",
+      "可用性99.9%，响应<2s",
+    ])
+      expect(caught(lit)).toEqual([])
   })
 
   test("扫描覆盖所有插件源文件（防新增文件漏扫）", () => {
