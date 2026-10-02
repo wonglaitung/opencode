@@ -344,3 +344,46 @@ describe("buildStateBar · 知识库覆盖（2c）", () => {
     expect(bar).toContain("知识库：未建")
   })
 })
+
+describe("★ 状态条跨轮持久提示：本次增量范围（Step 6）", () => {
+  const withScope = () => {
+    const s = createWorkflowState("reqdoc")
+    applyTransition(s, "goal", "enter", 1)
+    const features = [{ no: 1, name: "名单排查", priority: "high" as const, confirmedAt: 1 }]
+    s.kb = {
+      slots: [{ kind: "prose" as const, address: "3.1", content: "x", source: "文档" as const, status: "draft" as const }],
+      features,
+      scope: [
+        { target: "3.1", intent: "改写" as const, note: "背景要重写" },
+        { target: "new-feature", intent: "新增" as const },
+      ],
+      baselineSnapshot: { file: "00_初稿需求书/初稿_旧需求.md", slots: [], features, at: 1 },
+      containers: {},
+      askCounts: {},
+      updatedAt: 1,
+    }
+    return s
+  }
+
+  test("范围与基线都进状态条：压缩上下文后仍知道「这次要改什么」", () => {
+    const bar = buildStateBar(withScope(), "goal")
+    expect(bar).toContain("本次增量范围 2 项")
+    expect(bar).toContain("改写 3.1")
+    expect(bar).toContain("新增 new-feature")
+    expect(bar).toContain("已承认基线 初稿_旧需求.md")
+    expect(bar).toContain("范围外已确认的内容不再问")
+  })
+
+  test("还没承认基线时要明说（否则模型以为旧稿内容已被沿用）", () => {
+    const s = withScope()
+    delete s.kb!.baselineSnapshot
+    const bar = buildStateBar(s, "goal")
+    expect(bar).toContain("尚未承认基线")
+  })
+
+  test("无范围时不出现该行（分支一不添噪音）", () => {
+    const s = createWorkflowState("reqdoc")
+    applyTransition(s, "goal", "enter", 1)
+    expect(buildStateBar(s, "goal")).not.toContain("本次增量范围")
+  })
+})

@@ -1619,3 +1619,54 @@ describe("Step 5 · 参考件隔离：别家项目的需求文档不得成为本
     expect(src.match(/names\.filter\(\(n\) => !n\.startsWith\("\."\)\)/g)?.length).toBe(1)
   })
 })
+
+describe("Step 6 · 分支二的说明书：AI 得知道按什么顺序调（否则能力建好也不会用）", () => {
+  const wfSrc = () => read(join("..", "..", "shared", "src", "workflow.ts"))
+  const convSrc = () => read(join("..", "conventions", "reqdoc", "07-业务口语.md"))
+
+  test("★ 分支二八步调用序载明在 r8（goal 阶段），且点名「顺序反了会出事」", () => {
+    const src = wfSrc()
+    const from = src.indexOf('id: "reqdoc-r8"')
+    const rule = src.slice(from, src.indexOf('{ id: "reqdoc-', from + 10))
+    for (const step of [
+      "reqdoc_import",
+      "reqdoc_ingest",
+      "ref 填该稿路径",
+      "reqdoc_adopt_baseline",
+      "先不带 confirm 预演",
+      "authorized_by",
+      "confirm_note",
+      "unmapped",
+      "reqdoc_scope",
+      "末尾追加",
+      "顺序反了会出事",
+    ]) {
+      expect(rule).toContain(step)
+    }
+    // 模型不得代填授权与理由——与 force_kb/force_reason 同一先例
+    expect(rule).toContain("模型不得代填")
+  })
+
+  test("★ 调用序不占 global 每轮预算：stage 是 goal 而非 global", () => {
+    // 曾单开一条 global r36（580 字），把 global+prd 注入顶到 4362 > 4000 预算（上下文预算护栏当场报红）。
+    // 分支二从 goal 阶段起步，序也只在起步时需要——折进 r8 既不超预算，注入时机还更准。
+    const src = wfSrc()
+    expect(src).not.toContain('id: "reqdoc-r36"')
+    expect(src).toMatch(/id: "reqdoc-r8", stage: "goal"/)
+    expect(src).toContain("调用序按 `reqdoc-r36` 不跳步") // 编号留作文档引用锚点，规则体已并入 r8
+  })
+
+  test("★ 07 词汇表收了两个新工具的业务语言（讲给业务听时不能出现工具名）", () => {
+    const conv = convSrc()
+    expect(conv).toContain("| reqdoc_scope | 记录这次要改的范围 |")
+    expect(conv).toContain("| reqdoc_adopt_baseline | 沿用已有需求书里已经写好的内容 |")
+    expect(conv).toContain("| 承认基线 | 沿用旧稿已写好的内容 |")
+    expect(conv).toContain("| 本次增量范围 | 这次要改的部分 |")
+  })
+
+  test("★ 两个新工具在运行时均已注册（说明书指向的工具必须存在）", () => {
+    const kbSrc = read(join("..", "src", "tools", "reqdoc-kb-tools.ts"))
+    expect(kbSrc).toContain("const reqdoc_scope = tool(")
+    expect(kbSrc).toContain("const reqdoc_adopt_baseline = tool(")
+  })
+})
