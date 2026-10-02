@@ -1065,6 +1065,17 @@ describe("L1 免问项的落定指引（免问 ≠ 已覆盖）", () => {
     expect(answerDesc).not.toContain("只接受派生清单给出的地址")
   })
 
+  test("★ 悬空承诺清零：不得再指引模型去找不存在的「附注」能力", () => {
+    // 「用 containers 声明或另开附注」曾写进 ingest 报错文案，但全仓没有任何附注机制——
+    // 模型按这句去找必然落空，然后大概率自行编一个办法把内容糊掉（PRD 只渲染槽位，糊掉=内容消失）。
+    const kbSrc = read(join("..", "src", "tools", "reqdoc-kb-tools.ts"))
+    expect(kbSrc).not.toContain("另开附注")
+    // 给出两条真实存在的出路，并要求如实上报装不下的内容
+    expect(kbSrc).toContain("只有两条合法出路")
+    expect(kbSrc).toContain("如实告诉业务「这段内容模板装不下」")
+    expect(kbSrc).toContain("不会出现在 PRD 里，等于悄悄丢失")
+  })
+
   test("★ 增量红线进工具描述：功能点只能追加末尾、不得整篇重提（两处写 features 的工具都要有）", () => {
     const kbSrc = read(join("..", "src", "tools", "reqdoc-kb-tools.ts"))
     const ingestDesc = kbSrc.slice(kbSrc.indexOf("reqdoc_ingest = tool"), kbSrc.indexOf("args:"))

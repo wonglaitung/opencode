@@ -206,8 +206,11 @@ test("reqdoc 完成：提示 /new + revisit，无 git 门禁相关文案", () =>
       const s = createWorkflowState("reqdoc")
       applyTransition(s, "goal", "enter", 1)
       const text = buildSystemFragment(s, {}, [], NO_OVERLAY)
-      // r8 承载分流判定：分三类（自己的稿/上一版定稿 → 接着完善；别家文档 → 参考件；空 → 常规）
-      expect(text).toContain("先判定其定位再选路径")
+      // r8 承载分支判定（两分支）：二=改已有需求（自己的稿/上一版定稿）→ 问清改什么、只优化那部分；一=全新流程（目录空或只有参考件）
+      expect(text).toContain("先判定走哪个分支")
+      expect(text).toContain("分支二（改已有需求）")
+      expect(text).toContain("问清「这次要改什么」")
+      expect(text).toContain("分支一（全新流程）")
       expect(text).toContain("参考_")
       // 分流并入既有那一次提问，不得为分流单独多问一轮（用户零额外打断）
       expect(text).toContain("不要为此单独多问一轮")
