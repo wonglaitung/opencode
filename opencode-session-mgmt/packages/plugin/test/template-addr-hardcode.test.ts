@@ -27,10 +27,26 @@ const HARDCODE = /\d+\.\d+(?:\.\d+)*(?:\.[A-Z][A-Za-z]+)?/g
 function isShape(hit: string, full: string): boolean {
   // `<容器地址>.<名称>`、`{序号}.*` —— 命中片段所在字符串里含占位记号即放行
   if (/<[^>]*>|\{[^}]*\}|序号|占位/.test(full)) return true
-  // 设计文档章节引用（`设计 2.2`、`6.2.1.1 选项 B`、`（3.6.1 ①）`）
-  if (/设计|文档|章节|第\s*\d+\s*[章节]|\d+\s*[章节]\s*$/.test(full)) return true
   // 运行时插值：`${addrHint().fieldContainer}` 之类不是写死
   if (/\$\{[^}]*\}/.test(full)) return true
+  // **设计文档章节引用**：`设计 2.2`、`6.2.1.1 选项 B`、`（3.6.1 ①）`、
+  // `录入基线预估人工工时（6.3，AI 提效对比）`、`授权（3.4 逃生口）`。
+  // 判据是「命中片段**前面紧邻**设计/章节类词，或**后面紧跟**中文说明」——
+  // 两者都是设计引用的语法特征；模板地址不会长这样（后面跟的是标题或正文）。
+  const at = full.indexOf(hit)
+  const before = full.slice(Math.max(0, at - 16), at)
+  const after = full.slice(at + hit.length, at + hit.length + 12)
+  if (/设计|文档|章节|第\s*$/.test(before)) return true
+  // 「文档位置引用」而非模板地址：`要点 2.3`、`对话第 4 轮`、`2.3 章`。
+  // 量词字（要点/章/节/轮/页/条）出现在附近即判为文档位置，不是槽位地址。
+  if (/[要点章节轮页条]\s*$/.test(before)) return true
+  if (/^\s*(章|节|轮|页|条)/.test(after)) return true
+  // 「数字对 + 紧邻中文」是设计引用语法（`6.3三分支`、`3.4逃生口`）。
+  // **不能允许中间有空格**——`5.1.2.13 那样`（空格+中文）恰是模板地址示例。
+  if (/^[一-龥、，,]/.test(after)) return true
+  // **全角括号包裹的数字对**是本仓设计文档引用的统一形态（`（6.3）`、`（3.4 逃生口）`），
+  //模板地址不会这样出现（小节标题跟在编号后而非括号内）。
+  if (/^\s*(：[：])?/.test(after) && before.includes("（")) return true
   return false
 }
 
@@ -75,13 +91,26 @@ describe("模型可见文本不得写死模板地址", () => {
     expect(bad).toEqual([])
   })
 
-  test("工具描述与参数说明（reqdoc 工具文件）", () => {
+  test("工具描述、参数说明与阶段前置条件（reqdoc 工具文件）", () => {
+    // workflow.ts 的「下一阶段前置条件」是**模型可见文案**（每次 advance 后打印），
+    // 此前漏扫导致里面写死了 `4.1 / 5.k.2.1` 而无人发现——换模板后即失效指引。
+    // 宁可多扫几个文件，也不要靠白名单维护「哪些文件模型可见」。
     const out = [
       ...scan(join(PLUGIN_SRC, "tools/reqdoc-kb-tools.ts")),
       ...scan(join(PLUGIN_SRC, "tools/reqdoc-features.ts")),
       ...scan(join(PLUGIN_SRC, "tools/review.ts")),
+      ...scan(join(PLUGIN_SRC, "tools/workflow.ts")),
       ...scan(join(PLUGIN_SRC, "prompt.ts")),
     ]
+    expect(out).toEqual([])
+  })
+
+  test("扫描覆盖所有插件源文件（防新增文件漏扫）", () => {
+    // 白名单式扫描必然漏：新增一个含模型可见文案的工具文件就会逃过。
+    // 改为「扫全部 src/**/*.ts」，靠 isShape 排除注释与设计文档编号。
+    const files = Array.from(new Bun.Glob("**/*.ts").scanSync({ cwd: PLUGIN_SRC, absolute: false })).sort()
+    expect(files.length).toBeGreaterThan(10)
+    const out = files.flatMap((f) => scan(join(PLUGIN_SRC, f)))
     expect(out).toEqual([])
   })
 

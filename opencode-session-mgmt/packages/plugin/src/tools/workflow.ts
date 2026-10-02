@@ -29,7 +29,7 @@ const REQDOC_STAGE_PREREQS: Record<string, string[]> = {
     "功能点清单已拆分并经业务确认（reqdoc_confirm_features）",
     "必填槽位覆盖率达标：未 confirmed 的必填槽位会拦截 enter prd",
     "无未收口项（停问项/conflict 项须用 reqdoc_answer 显式收口）",
-    "4.1 / 5.k.2.1 容器已有 confirmed 子项，或已用 containers 声明 required:false 并附理由",
+    "术语容器与字段容器（清单里 kind=term / kind=field 的那两个）已有 confirmed 子项，或已用 containers 声明 required:false 并附理由",
     "确实无法补齐且业务坚持不做：force_kb=true + 业务给的 force_reason",
   ],
   review: [
