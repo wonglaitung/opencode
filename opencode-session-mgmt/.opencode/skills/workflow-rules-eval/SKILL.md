@@ -13,7 +13,7 @@ description: Use when running or analyzing the rule-following evaluation baselin
 
 - `bun run scripts/eval-rules/run.ts --variant baseline|new [--repeat 3] [--dry] [--workflow sdlc|reqdoc] [--name 场景名子串]`
 - `--dry`：只打印各场景注入片段与判定期望，不调模型（验证渲染用）。
-- `--workflow`：只跑单个工作流（reqdoc 提速常用）；`--name`：只跑匹配的场景（单场景调试用）。
+- `--workflow`：只跑单个工作流（reqdoc 提速常用）；`--name`：只跑匹配的场景（单场景调试用）。两者同时给出即子集运行，落独立文件名并在报告里记 `partial`，不会覆盖全量结果。
 - 输出：控制台 per-scenario 表 + 聚合通过率；`--variant new` 且 baseline 带 score 快照时追加 PRD 五维逐维对比。结果落 `results/{variant}.json`。
 
 ## 标准操作流程（改评分标准 → 评测迭代 → 完成修改）
@@ -79,7 +79,7 @@ EVAL_BASE_URL=http://localhost:8086/v1 EVAL_MODEL=/models/qwen3 EVAL_MAX_TOKENS=
   bun run scripts/eval-rules/run.ts --variant baseline --repeat 3
 ```
 
-冻结结果 `baseline.json` **入库 commit** 作参照。日常改动只跑 `--variant new`，不要重跑 baseline 覆盖参照，否则对比失效。**只跑单个工作流用 `--workflow reqdoc|sdlc` 提速，跑完用 cp 合并两批**（baseline/new 一次只落一个 workflow，会互相覆盖）。
+冻结结果 `baseline.json` **入库 commit** 作参照。日常改动只跑 `--variant new`，不要重跑 baseline 覆盖参照，否则对比失效。**只跑单个工作流用 `--workflow reqdoc|sdlc` 提速**——子集运行落独立文件（`new.reqdoc.json`、`new.reqdoc-r20.json`），**不再覆写全量结果，无需 cp 合并**。子集与全量 baseline 口径不可比：对比只报绝对值，`--fail-on-regression` 在子集下直接拒绝判定（退出码 1），要判定必须跑全量。
 
 ### 迭代循环（每次改行为面，三级验证）
 

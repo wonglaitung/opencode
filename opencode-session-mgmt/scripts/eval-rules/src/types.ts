@@ -157,6 +157,8 @@ export interface EvalReport {
   model: string
   dry: boolean
   runAt: string
+  /** 仅跑了子集时的留痕：ran/total 场景数与过滤条件。与全量结果不可直接比较 */
+  partial?: { ran: number; total: number; name?: string; workflow?: string }
   results: ScenarioResult[]
   summary: { overall: GroupSummary; sdlc: GroupSummary; reqdoc: GroupSummary; score?: ScoreSummary }
 }

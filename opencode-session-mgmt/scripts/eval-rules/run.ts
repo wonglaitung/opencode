@@ -16,6 +16,7 @@
  * --dry:只打印各场景注入片段与判定期望,不调模型(验证渲染用)。
  * 输出:控制台 per-scenario 表 + 聚合通过率,落 scripts/eval-rules/results/{variant}.json
  */
+import { existsSync } from "node:fs"
 import { EVAL_TOOLS } from "./src/tool-defs"
 import { SCENARIOS } from "./src/scenarios"
 import { judgeScenario } from "./src/judge"
@@ -180,20 +181,41 @@ const report: EvalReport = {
   model: modelId(),
   dry,
   runAt: new Date().toISOString(),
+  /** 本次是否只跑了子集（--name/--workflow 会收窄场景集）——子集结果不可与全量对比 */
+  partial: scenarios.length < SCENARIOS.length ? { ran: scenarios.length, total: SCENARIOS.length, name: nameFilter, workflow } : undefined,
   results,
   summary: score ? { overall, sdlc, reqdoc, score } : { overall, sdlc, reqdoc },
 }
-await Bun.write(`scripts/eval-rules/results/${variant}.json`, JSON.stringify(report, null, 2))
+// 子集运行写独立文件：否则「单独跑一个场景复现」会把上一轮全量结果截断且无任何提示
+// 文件名只拼真实存在的过滤条件（无 workflow 过滤就不写 "all"，避免歧义）
+const suffix = report.partial ? `.${[workflow, nameFilter].filter(Boolean).join("-")}` : ""
+const outFile = `scripts/eval-rules/results/${variant}${suffix}.json`
+await Bun.write(outFile, JSON.stringify(report, null, 2))
+console.log(`\n结果已写入 ${outFile}${report.partial ? `（子集运行 ${report.partial.ran}/${report.partial.total}，不覆盖全量结果）` : ""}`)
 
 if (variant === "new") {
-  const baseline = await Bun.file("scripts/eval-rules/results/baseline.json").exists().catch(() => false)
-  if (baseline) {
-    const prev: EvalReport = JSON.parse(await Bun.file("scripts/eval-rules/results/baseline.json").text())
-    const lines = [
-      `整体   ${prev.summary.overall.rate}% → ${overall.rate}%`,
-    ]
-    if (prev.summary.sdlc.total > 0) lines.push(`sdlc   ${prev.summary.sdlc.rate}% → ${sdlc.rate}%`)
-    if (prev.summary.reqdoc.total > 0) lines.push(`reqdoc ${prev.summary.reqdoc.rate}% → ${reqdoc.rate}%`)
+  // 口径对齐：部分运行优先对比同过滤条件的 baseline；否则会拿「跑 1 个场景」与
+  // 「baseline 全量」算通过率，得出 reqdoc 75% → 0% 这类毫无意义的数字。
+  const basePath = suffix
+    ? [`scripts/eval-rules/results/baseline${suffix}.json`, "scripts/eval-rules/results/baseline.json"].find((f) =>
+        existsSync(f),
+      )
+    : "scripts/eval-rules/results/baseline.json"
+  if (basePath) {
+    const prev: EvalReport = JSON.parse(await Bun.file(basePath).text())
+    // 口径错位时不打 delta——「跑 1 个场景 0%」与「全量 75%」并排只会误导，即使附警告也照样被误读
+    const scopeMismatch = Boolean(report.partial) && !basePath.includes(suffix)
+    const lines = scopeMismatch
+      ? [
+          `⚠ 子集运行（${report.partial?.ran}/${report.partial?.total} 场景），无同口径 baseline，本次只报绝对值：`,
+          `  本次 reqdoc ${reqdoc.rate}%（${reqdoc.pass}/${reqdoc.total}）`,
+          `  参照 baseline.json（全量）reqdoc ${prev.summary.reqdoc.rate}%（${prev.summary.reqdoc.pass}/${prev.summary.reqdoc.total}）`,
+        ]
+      : [
+          `整体   ${prev.summary.overall.rate}% → ${overall.rate}%`,
+          ...(prev.summary.sdlc.total > 0 ? [`sdlc   ${prev.summary.sdlc.rate}% → ${sdlc.rate}%`] : []),
+          ...(prev.summary.reqdoc.total > 0 ? [`reqdoc ${prev.summary.reqdoc.rate}% → ${reqdoc.rate}%`] : []),
+        ]
     // 质量飞轮 P0：baseline→new 的 PRD 渲染产出逐维对比（打分卡八维平均分）
     let scoreRegressed = false
     if (prev.summary.score && report.summary.score) {
@@ -212,6 +234,11 @@ if (variant === "new") {
     }
     console.log(`\n=== 对比(baseline → new) ===\n${lines.join("\n")}`)
     // 回归判定（合入门槛，见 session-management.md 13.x）：整体通过率回退 或 任一打分卡维度回退即不合格。
+    // 子集运行口径错位，判定无意义——直接拒绝判定，避免用噪声当合入门槛。
+    if (scopeMismatch && process.argv.includes("--fail-on-regression")) {
+      console.error("\n⚠ 子集运行不做回归判定（口径与 baseline 不可比）。请跑全量后再判定。")
+      process.exit(1)
+    }
     const rateRegressed = overall.rate < prev.summary.overall.rate
     if (process.argv.includes("--fail-on-regression") && (rateRegressed || scoreRegressed)) {
       console.error("\n❌ 评测回归：通过率或打分卡八维分数相对 baseline 出现回退，不合入。")
