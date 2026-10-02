@@ -12,11 +12,17 @@
 import { mkdir, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { tool, type ToolDefinition } from "@opencode-ai/plugin"
-import { getDefinition, featuresAppendViolation, hasFeatureScopedSlots, type ReqdocFeature } from "sm-shared"
+import {
+  getDefinition,
+  featuresAppendViolation,
+  hasFeatureScopedSlots,
+  type ReqdocFeature,
+} from "sm-shared"
 import type { Store } from "../db"
 import { WorkflowOpError } from "../workflow-ops"
 import { sanitizeDirName } from "./reqdoc-dirs"
 import { readKb } from "./reqdoc-kb-tools"
+import { templateUnavailableNotice } from "sm-shared"
 import { projectRoot } from "../fs-safe"
 
 const z = tool.schema
@@ -86,7 +92,15 @@ export function createReqdocFeatureTools(store: Store): Record<string, ToolDefin
       const list = features
         .map((f) => `  ${f.no}. ${f.name}（${f.priority === "high" ? "高" : f.priority === "medium" ? "中" : "低"}）`)
         .join("\n")
-      return `✅ 已确认 ${created} 个功能点（写入 06_功能点 目录，并预建 07_需求规格产出 同名子目录）：\n${list}\n接下来按《业务需求说明书》模板逐功能点生成文档，内容来源标注 [文档]/[问答]/[缺省]。`
+      // 模板不可用时这句「接下来按模板生成」是空承诺——功能点照样能记（不依赖 schema），
+      // 但后续组装必失败。与 ingest/answer 同口径置顶说明，避免用户以为流程能走完。
+      const unavailable = templateUnavailableNotice()
+      return [
+        unavailable ?? "",
+        `✅ 已确认 ${created} 个功能点（写入 06_功能点 目录，并预建 07_需求规格产出 同名子目录）：\n${list}\n接下来按《业务需求说明书》模板逐功能点生成文档，内容来源标注 [文档]/[问答]/[缺省]。`,
+      ]
+        .filter(Boolean)
+        .join("\n")
     },
   })
 

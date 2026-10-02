@@ -10,6 +10,7 @@ import {
   matchMemory,
   requiredSlots,
   templateDrift,
+  templateUnavailableNotice,
   currentInProgressStage,
   getDefinition,
   reviewRecord,
@@ -123,6 +124,10 @@ export function buildSystemFragment(
       const filled = req.filter((a) => kb.slots.some((x) => x.address === a && x.status === "confirmed")).length
       // 换模板提示放在状态条：它是跨轮唯一持久的可见位置，回执会滚出上下文。
       // 措辞面向模型（07-业务口语 第 3 节），转述给业务时由模型翻译。
+      // 模板读不到 → 本轮问不出任何内容、也录不进任何条目。必须说清真因，
+      // 否则用户只会看到「必填 0/0」并以为是自己没填够。
+      const unavailable = templateUnavailableNotice()
+      if (unavailable) parts.push("", `# ⚠ 需求书模板不可用`, "", unavailable)
       const drift = templateDrift(kb)
       if (drift) parts.push("", `# ⚠ 模板结构已更换`, "", drift)
       parts.push(

@@ -506,6 +506,22 @@ export function templateSchemaOrEmpty(): TemplateSchema {
   return templateSchema() ?? EMPTY_SCHEMA
 }
 
+/**
+ * 模板不可读时的**一句话说明**（可读版错误文案），供提示类路径告知真因。
+ *
+ * 存在的理由：模板坏掉时用户看到的是「必填叶子为 0，请补齐槽位」，而
+ * `reqdoc_ingest` 收不了任何地址、`deriveQuestions` 问不出任何问题——
+ * 三重锁死且唯一出路是条死路。提示类路径必须能说「不是你要补，是模板读不到」。
+ */
+export function templateUnavailableNotice(): string | null {
+  if (templateSchema() !== null) return null
+  return (
+    "⚠ **需求书模板读不到**（插件安装可能不完整，或 docs/reqdoc-prd-template.md 被移动/删除）。" +
+    "此时无法确定该问哪些内容、也无法录入任何条目——**请先修复插件安装**，之后重新打开本会话即可继续。" +
+    "本次已填的槽位不会丢失。"
+  )
+}
+
 // ---------------------------------------------------------------------------
 // 地址派生：槽位地址空间完全由 schema 决定（不再有写死的正则与魔数）
 // ---------------------------------------------------------------------------

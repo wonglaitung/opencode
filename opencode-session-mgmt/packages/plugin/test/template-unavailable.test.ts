@@ -14,7 +14,7 @@
  *   宁可请求失败，也不能悄悄产出一份章节结构不明的交付件——那会让手改检测、
  *   幂等校验、定稿溯源三条防线同时失效且无人察觉。
  */
-import { existsSync, renameSync } from "node:fs"
+import { existsSync, readFileSync, renameSync } from "node:fs"
 import { join } from "node:path"
 import { afterAll, describe, expect, test } from "bun:test"
 import {
@@ -26,6 +26,7 @@ import {
   requiredSlots,
   slotCoverage,
   templateSchemaOrEmpty,
+  templateUnavailableNotice,
 } from "sm-shared"
 import { assembleDoc } from "sm-shared"
 import { buildPrdSkeleton, parseRenderStructure } from "sm-shared"
@@ -62,6 +63,7 @@ const P = ${JSON.stringify(TEMPLATE)}
 const s = await import("/data/opencode/opencode-session-mgmt/packages/shared/src/reqdoc-slots.ts")
 const a = await import("/data/opencode/opencode-session-mgmt/packages/shared/src/reqdoc-assemble.ts")
 const r = await import("/data/opencode/opencode-session-mgmt/packages/shared/src/reqdoc-render.ts")
+const sch = await import("/data/opencode/opencode-session-mgmt/packages/shared/src/reqdoc-template-schema.ts")
 const f = [{no:1,name:"名单排查",priority:"high",confirmedAt:1}]
 const out = {}
 const t = (k, fn) => { try { out[k] = { ok: true, v: fn() } } catch (e) { out[k] = { ok: false, v: String(e.message).slice(0,40) } } }
@@ -72,6 +74,8 @@ t("deriveQuestions", () => s.deriveQuestions(f).all.length)
 t("assembleDoc", () => { const x = a.assembleDoc([], [], null); return x === null ? "null" : "obj" })
 t("parseRenderStructure", () => r.parseRenderStructure("## x").ok)
 t("buildPrdSkeleton", () => { const x = r.buildPrdSkeleton("x", f); return x === null ? "null" : "md" })
+t("noticePresent", () => sch.templateUnavailableNotice() === null ? "null" : "notice")
+t("askCount", () => s.deriveQuestions(f).all.length)
 console.log(JSON.stringify(out))
 `
 
@@ -85,6 +89,27 @@ describe("模板不可读：软硬分界", () => {
     expect(out.kbGate.ok).toBe(true)
     expect(out.kbGate.v).toBe(false) // 必填集为空 → 门禁必不过（安全方向）
     expect(out.deriveQuestions.ok).toBe(true)
+  })
+
+  test("模板不可用时给出可操作说明（否则用户被指向 ingest 这条死路）", () => {
+    const out = probeTemplateMissing()
+    // 死路证据：必填 0 → ingest 收不了地址 → 开放项问不出东西
+    expect(out.askCount.v).toBe(0)
+    // 提示确实出现（文案内容在正常进程内直接断言，见下一条）
+    expect(out.noticePresent.v).toBe("notice")
+  })
+
+  test("提示文案说清真因与出路，且承诺不丢已填内容", () => {
+    // 文案常量在模板不可读时才返回内容，故此处断言**源码文本**（子进程已验证那时它非 null）。
+    // 死路闭环靠这几句话把用户引向「修复安装」，缺任何一句都会退回「是不是我没填够」。
+    const src = readFileSync(
+      join(import.meta.dir, "..", "..", "shared", "src", "reqdoc-template-schema.ts"),
+      "utf8",
+    )
+    expect(src).toContain("需求书模板读不到")
+    expect(src).toContain("请先修复插件安装")
+    expect(src).toContain("本次已填的槽位不会丢失")
+    expect(src).toContain("无法确定该问哪些内容")
   })
 
   test("硬路径全部抛错，让用户报障而非产出结构不明的交付件", () => {

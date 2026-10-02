@@ -32,6 +32,7 @@ import {
   requireTemplateSchema,
   schemaAddressSpace,
   templateSchema,
+  templateUnavailableNotice,
   templateDrift,
   type ContainerDecl,
   type ReqdocFeature,
@@ -321,7 +322,8 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
       const cov = kbCoverage(kb)
       const lines = derived.batch.map((q) => `  - ${q.address}${q.guess ? `（默认：${q.guess}）` : ""}`)
       return [
-        // 漂移告警置顶：地址空间变了时下面所有地址都可能失效，先说这件事
+        // 模板不可用置顶（比漂移更前置：连地址都无从谈起），其次漂移告警
+        templateUnavailableNotice() ?? "",
         templateDrift(saved.kb ?? {}) ?? "",
         `📥 已提交 ${args.slots.length} 个槽位（均为待确认 draft）；已写入 ${KB_DIR}/。`,
         `覆盖率：${cov}；本轮该填 ${derived.batch.length}/${derived.all.length} 项：`,
@@ -439,6 +441,7 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
         l2: hits.l2,
       })
       return [
+        templateUnavailableNotice() ?? "",
         templateDrift(saved.kb ?? {}) ?? "",
         `✅ 已确认 \`${args.address}\`（来源 ${args.source}${args.reason ? `：${args.reason}` : ""}）。`,
         `覆盖率：${kbCoverage(kb)}；剩余本轮该填 ${derived.batch.length} 项。`,
@@ -557,6 +560,9 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
         byChapter.set(ch, [...(byChapter.get(ch) ?? []), s.address])
       }
       return [
+        // 模板不可用时本工具派生出的 target 恒为空，用户会看到「（无待确认项）」
+        // 然后莫名以为基线已沿用——那是空承诺，须说清真因。
+        templateUnavailableNotice() ?? "",
         args.confirm === true
           ? `✅ 已按业务授权承认基线「${base}」：${pending.length} 项由待确认转为已确认${already > 0 ? `（另有 ${already} 项本就已确认，未重复处理）` : ""}。`
           : `🔎 预演：若确认，将把「${base}」派生的 ${pending.length} 项由待确认转为已确认${already > 0 ? `（另有 ${already} 项已是已确认，不动）` : ""}。`,
@@ -621,6 +627,7 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
       // 提示路径先抛、掩盖了真正该报的组装失败——顺序依赖，显式说明以防后人踩。
       const policyMiss = requireTemplateSchema().unresolvedPolicy
       return [
+        templateUnavailableNotice() ?? "",
         templateDrift(kb) ?? "",
         policyMiss.length > 0
           ? `⚠ 政策与模板不匹配：${policyMiss.length} 个小节标题在模板里找不到（${policyMiss.join("、")}）` +
