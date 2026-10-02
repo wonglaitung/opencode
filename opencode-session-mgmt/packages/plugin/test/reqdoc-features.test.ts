@@ -111,4 +111,82 @@ describe("reqdoc_confirm_features", () => {
     ).rejects.toThrow(/仅用于 reqdoc/)
     store.close()
   })
+
+  // ---- 纯追加护栏（Step 3）----
+  const F = (name: string, priority: "high" | "medium" | "low" = "high") => ({ name, priority })
+
+  /** 建「已有 2 个功能点、且 5.1.1.1 已有槽位」的迭代态（此时重排已有实际后果）。 */
+  async function iterativeState() {
+    const worktree = mkdtempSync(join(tmpdir(), "reqdoc-feat-iter-"))
+    const store = Store.memory(() => "reqdoc")
+    const ctx = { worktree, sessionID: "s1" } as never
+    await createReqdocKbTools(store).reqdoc_ingest!.execute(
+      {
+        features: [F("名单排查"), F("模型打分", "low")],
+        slots: [{ address: "5.1.1.1", kind: "prose", content: "输入：客户号、证件号", source: "文档" }],
+      } as never,
+      ctx,
+    )
+    return { worktree, store, ctx, tools: createReqdocFeatureTools(store) }
+  }
+
+  test("已有功能点槽位时：把新功能插到中间 → 拒绝，且清单原样不动", async () => {
+    const { store, ctx, tools } = await iterativeState()
+    await expect(
+      tools.reqdoc_confirm_features!.execute({ features: [F("名单排查"), F("批量导出"), F("模型打分", "low")] } as never, ctx),
+    ).rejects.toThrow(/必须纯追加/)
+    // 关键：拒绝必须发生在写入之前——否则「报错但已改」等于没护栏
+    expect(store.get("s1")!.workflow!.kb!.features.map((f) => f.name)).toEqual(["名单排查", "模型打分"])
+    store.close()
+  })
+
+  test("已有功能点槽位时：改名 / 删减 / 重排一律拒绝（三种都试，防只挡一种）", async () => {
+    const { store, ctx, tools } = await iterativeState()
+    await expect(
+      tools.reqdoc_confirm_features!.execute({ features: [F("名单排查"), F("模型打分2", "low")] } as never, ctx),
+    ).rejects.toThrow(/第 2 项期望/)
+    await expect(
+      tools.reqdoc_confirm_features!.execute({ features: [F("名单排查")] } as never, ctx),
+    ).rejects.toThrow(/清单被截断/)
+    await expect(
+      tools.reqdoc_confirm_features!.execute({ features: [F("模型打分", "low"), F("名单排查")] } as never, ctx),
+    ).rejects.toThrow(/必须纯追加/)
+    expect(store.get("s1")!.workflow!.kb!.features.map((f) => f.name)).toEqual(["名单排查", "模型打分"])
+    store.close()
+  })
+
+  test("已有功能点槽位时：末尾追加放行，且新增功能点真的进了必填地址与目录", async () => {
+    const { worktree, store, ctx, tools } = await iterativeState()
+    await tools.reqdoc_confirm_features!.execute(
+      { features: [F("名单排查"), F("模型打分", "low"), F("批量导出", "medium")] } as never,
+      ctx,
+    )
+    const kb = store.get("s1")!.workflow!.kb!
+    expect(kb.features.map((f) => f.name)).toEqual(["名单排查", "模型打分", "批量导出"])
+    // 新功能点带来新的必填地址，且旧地址不动（这才是「只追加」的真实含义）
+    const addrs = deriveQuestions(kb.features, { slots: kb.slots }).all.map((q) => q.address)
+    expect(addrs).toContain("5.3.1.1")
+    expect(kb.slots.some((s) => s.address === "5.1.1.1" && s.content.includes("客户号"))).toBe(true)
+    expect(readdirSync(join(worktree, "06_功能点")).sort()).toEqual(["1_名单排查", "2_模型打分", "3_批量导出"])
+    store.close()
+  })
+
+  test("拆解阶段（尚无功能点槽位）仍可任意重排——否则 prd 前的正常调整会被卡死", async () => {
+    const worktree = mkdtempSync(join(tmpdir(), "reqdoc-feat-"))
+    const store = Store.memory(() => "reqdoc")
+    const ctx = { worktree, sessionID: "s1" } as never
+    await createReqdocKbTools(store).reqdoc_ingest!.execute(
+      {
+        features: [F("名单排查"), F("模型打分")],
+        slots: [{ address: "3.1", kind: "prose", content: "背景", source: "文档" }],
+      } as never,
+      ctx,
+    )
+    await createReqdocFeatureTools(store).reqdoc_confirm_features!.execute(
+      { features: [F("模型打分"), F("名单排查")] } as never,
+      ctx,
+    )
+    expect(store.get("s1")!.workflow!.kb!.features.map((f) => f.name)).toEqual(["模型打分", "名单排查"])
+    store.close()
+  })
 })

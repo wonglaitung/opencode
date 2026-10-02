@@ -16,6 +16,8 @@ import {
   deriveOpenQuestions,
   deriveQuestions,
   docAddrOf,
+  featuresAppendViolation,
+  hasFeatureScopedSlots,
   isContainerAddr,
   isDocAddr,
   kbGate,
@@ -341,5 +343,47 @@ describe("槽位内核 · 边界行为锁定（审查 B2/B3/C1）", () => {
     const g = kbGate(allLeaves, oneFeature, { threshold: 1 })
     expect(g.pass).toBe(false)
     expect(g.reasons.join()).toContain("必填容器未覆盖")
+  })
+})
+
+
+describe("槽位内核 · 功能点清单纯追加（地址按序号索引）", () => {
+  const F = (name: string, priority: "high" | "medium" | "low" = "high") => ({ name, priority })
+  const OLD = (name: string, priority: "high" | "medium" | "low" = "high"): ReqdocFeature => ({
+    no: 0,
+    name,
+    priority,
+    confirmedAt: 1,
+  })
+
+  test("拆解阶段（无功能点槽位）放行任意调整——硬拒绝会把模型卡死", () => {
+    expect(featuresAppendViolation([OLD("A"), OLD("B")], [F("B"), F("A")], false)).toBeNull()
+    expect(featuresAppendViolation([OLD("A"), OLD("B")], [F("B")], false)).toBeNull()
+  })
+
+  test("已有功能点槽位时：末尾追加与改优先级放行（优先级不进地址）", () => {
+    expect(featuresAppendViolation([OLD("A"), OLD("B")], [F("A"), F("B"), F("C")], true)).toBeNull()
+    expect(featuresAppendViolation([OLD("A"), OLD("B")], [F("A", "low"), F("B")], true)).toBeNull()
+  })
+
+  test("已有功能点槽位时：插入/删除/改名/重排一律拒绝，文案须带修复指引与后果", () => {
+    const insert = featuresAppendViolation([OLD("A"), OLD("B")], [F("A"), F("新"), F("B")], true)!
+    expect(insert).toContain("必须纯追加")
+    expect(insert).toContain("第 2 项期望「B」")
+    expect(insert).toContain("末尾追加")
+    const rename = featuresAppendViolation([OLD("A"), OLD("B")], [F("A"), F("B2")], true)!
+    expect(rename).toContain("第 2 项期望「B」，收到「B2」")
+    const drop = featuresAppendViolation([OLD("A"), OLD("B")], [F("A")], true)!
+    expect(drop).toContain("清单被截断")
+    // 措辞必须说清后果，否则模型会被当成格式要求去绕过
+    expect(rename).toContain("地址漂移")
+    expect(rename).toContain("业务被迫重述")
+  })
+
+  test("hasFeatureScopedSlots 只认功能点地址域（5.{序号}.*）", () => {
+    expect(hasFeatureScopedSlots([confirmed("3.1")])).toBe(false)
+    expect(hasFeatureScopedSlots([confirmed("4.1.CRD")])).toBe(false)
+    expect(hasFeatureScopedSlots([confirmed("5.1.1.1")])).toBe(true)
+    expect(hasFeatureScopedSlots([confirmed("5.2.2.1.客户号")])).toBe(true)
   })
 })

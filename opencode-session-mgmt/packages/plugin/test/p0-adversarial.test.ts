@@ -14,6 +14,7 @@ import { join } from "node:path"
 import { deriveQuestions, kbGate, matchMemory, requiredSlots, writeL1Term, writeL2Fact } from "sm-shared"
 import { Store } from "../src/db"
 import { createReqdocKbTools } from "../src/tools/reqdoc-kb-tools"
+import { createReqdocFeatureTools } from "../src/tools/reqdoc-features"
 import { buildStateBar } from "../src/prompt"
 import { materialEvidence } from "../src/tools/reqdoc-scan"
 import { createReviewTools } from "../src/tools/review"
@@ -1184,6 +1185,83 @@ describe("L1 免问项的落定指引（免问 ≠ 已覆盖）", () => {
     const md = readFileSync(join(worktree, "07_需求规格产出/1_名单排查/PRD.md"), "utf8")
     expect(md).toContain("- **CLD**：贷后分类标签")
     expect(md).toContain("4.1 术语定义 [问答]")
+    store.close()
+  })
+})
+
+describe("Step 3 · 增量护栏（打回已确认 = 静默把业务逼回重述）", () => {
+  const F = (name: string, priority: "high" | "medium" | "low" = "high") => ({ name, priority })
+
+  test("★ ingest 不得把已确认槽位打回 draft：整批拒绝并指路 reqdoc_answer", async () => {
+    const worktree = mkdtempSync(join(tmpdir(), "sm-step3-"))
+    const store = Store.memory(() => "reqdoc")
+    const ctx = { sessionID: "r1", worktree } as never
+    const tools = createReqdocKbTools(store)
+    await tools.reqdoc_answer!.execute({ address: "3.1", content: "信贷审批流程优化", source: "文档" } as never, ctx)
+
+    // 迭代时最容易犯的错：把旧稿/上一版 PRD 整篇重新 ingest
+    await expect(
+      tools.reqdoc_ingest!.execute(
+        {
+          slots: [
+            { address: "3.2", kind: "prose", content: "新段落", source: "文档" },
+            { address: "3.1", kind: "prose", content: "整篇重提的旧内容", source: "文档" },
+          ],
+        } as never,
+        ctx,
+      ),
+    ).rejects.toThrow(/已确认的槽位：3\.1/)
+
+    const kb = store.get("r1")!.workflow!.kb!
+    // 关键：已确认内容与状态必须原样保留（静默跳过会让模型以为改成功、实际没改）
+    const s31 = kb.slots.find((s) => s.address === "3.1")!
+    expect(s31.status).toBe("confirmed")
+    expect(s31.content).toBe("信贷审批流程优化")
+    // 同批的新地址也不写入（整批拒绝，不做半截写入）
+    expect(kb.slots.some((s) => s.address === "3.2")).toBe(false)
+    store.close()
+  })
+
+  test("★ 合法出路：改已确认内容走 reqdoc_answer（保持 confirmed，不掉覆盖率）", async () => {
+    const worktree = mkdtempSync(join(tmpdir(), "sm-step3-"))
+    const store = Store.memory(() => "reqdoc")
+    const ctx = { sessionID: "r1", worktree } as never
+    const tools = createReqdocKbTools(store)
+    await tools.reqdoc_answer!.execute({ address: "3.1", content: "旧内容", source: "文档" } as never, ctx)
+    const before = kbGate(store.get("r1")!.workflow!.kb!.slots, store.get("r1")!.workflow!.kb!.features, {}).coverage
+    await tools.reqdoc_answer!.execute({ address: "3.1", content: "新内容", source: "文档" } as never, ctx)
+    const kb = store.get("r1")!.workflow!.kb!
+    const s31 = kb.slots.find((s) => s.address === "3.1")!
+    expect(s31.content).toBe("新内容")
+    expect(s31.status).toBe("confirmed")
+    // 覆盖率不掉——这正是「用 answer 而不是 ingest」的意义
+    expect(kbGate(kb.slots, kb.features, {}).coverage.leafFilled).toBe(before.leafFilled)
+    store.close()
+  })
+
+  test("★ 两处写 features 的工具共用同一条纯追加校验（措辞与判定必须一致）", async () => {
+    const worktree = mkdtempSync(join(tmpdir(), "sm-step3-"))
+    const store = Store.memory(() => "reqdoc")
+    const ctx = { sessionID: "r1", worktree } as never
+    const kbTools = createReqdocKbTools(store)
+    await kbTools.reqdoc_ingest!.execute(
+      {
+        features: [F("名单排查"), F("模型打分", "low")],
+        slots: [{ address: "5.1.1.1", kind: "prose", content: "输入：客户号", source: "文档" }],
+      } as never,
+      ctx,
+    )
+    // 同一违规分别走两个工具：都必须被拒，且提示指向同一件事
+    await expect(
+      kbTools.reqdoc_ingest!.execute({ features: [F("模型打分", "low"), F("名单排查")] } as never, ctx),
+    ).rejects.toThrow(/必须纯追加/)
+    await expect(
+      createReqdocFeatureTools(store).reqdoc_confirm_features!.execute(
+        { features: [F("模型打分", "low"), F("名单排查")] } as never,
+        ctx,
+      ),
+    ).rejects.toThrow(/必须纯追加/)
+    expect(store.get("r1")!.workflow!.kb!.features.map((f) => f.name)).toEqual(["名单排查", "模型打分"])
     store.close()
   })
 })

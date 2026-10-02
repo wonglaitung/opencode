@@ -19,6 +19,8 @@ import {
   STOP_ASK_AFTER,
   advanceAskCounts,
   deriveQuestions,
+  featuresAppendViolation,
+  hasFeatureScopedSlots,
   isValidSlotAddr,
   matchMemory,
   writeL1Term,
@@ -167,14 +169,19 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
       const saved = store.mutateWorkflow(context.sessionID, (workflow) => {
         requireReqdoc(workflow, "reqdoc_ingest")
         const kb = readKb(workflow)
-        // 功能点：给了就以它为准（首次或修正）
+        // 功能点：给了就以它为准（首次或追加）。**纯追加校验**：地址按序号索引，
+        // 已有槽位落在功能点地址域后再插入/删除/改名会让地址漂移 → 已确认内容错位、
+        // 门禁判成未填 → 业务被迫重述整份需求。措辞与 reqdoc_confirm_features 共用同一份。
         if (args.features && args.features.length > 0) {
-          kb.features = args.features.map((f, i) => ({
+          const next = args.features.map((f, i) => ({
             no: i + 1,
             name: f.name,
             priority: f.priority,
             confirmedAt: Date.now(),
           }))
+          const violation = featuresAppendViolation(kb.features, next, hasFeatureScopedSlots(kb.slots))
+          if (violation) throw new WorkflowOpError(violation)
+          kb.features = next
         }
         // 容器声明合并
         kb.containers = { ...(kb.containers ?? {}), ...(args.containers ?? {}) }
@@ -200,6 +207,20 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
               `"4.1"/"5.k.2.1": {required:false, reason:"<理由>"}；② 它其实属于某个已有章节 → 归到该章节的具体地址。\n` +
               `**不要凭空造一个"附注/附录"章节**——本模板没有这种章节，凭空新增的内容不会出现在 PRD 里，等于悄悄丢失；` +
               `若两类都归不进去，如实告诉业务「这段内容模板装不下」，由业务决定删掉还是另立需求，不要自行处置。`,
+          )
+        }
+        // 已确认槽位不可被 ingest 打回 draft：ingest 对提交的地址一律记 draft 并把 askCount
+        // 归零，整篇重提旧稿会把已确认内容静默打回、覆盖率崩塌、业务被迫重述。
+        // 这里**整批拒绝**而不是静默跳过——静默跳过会让模型以为改成功、实际没改，
+        // 而 PRD 只渲染槽位，漏掉的更新会一路静默到交付件（与「无静默失败」相悖）。
+        const alreadyConfirmed = args.slots
+          .filter((s) => kb.slots.some((y) => y.address === s.address && y.status === "confirmed"))
+          .map((s) => s.address)
+        if (alreadyConfirmed.length > 0) {
+          throw new WorkflowOpError(
+            `本批包含已确认的槽位：${alreadyConfirmed.join("、")}。\n` +
+              `reqdoc_ingest 对提交的地址一律记为待确认（并把 askCount 归零），用它改已确认内容会让业务被迫重述。\n` +
+              `请把这些地址从本批移除；确需修改已确认内容，改用 reqdoc_answer(address, content, source)（它保持已确认）。`,
           )
         }
         // 槽位合并：同地址覆盖（status 由服务端强制 draft，模型不能自称已确认）

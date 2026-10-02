@@ -12,7 +12,7 @@
 import { mkdir, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { tool, type ToolDefinition } from "@opencode-ai/plugin"
-import { getDefinition, type ReqdocFeature } from "sm-shared"
+import { getDefinition, featuresAppendViolation, hasFeatureScopedSlots, type ReqdocFeature } from "sm-shared"
 import type { Store } from "../db"
 import { WorkflowOpError } from "../workflow-ops"
 import { sanitizeDirName } from "./reqdoc-dirs"
@@ -57,6 +57,9 @@ export function createReqdocFeatureTools(store: Store): Record<string, ToolDefin
           note: f.note,
         }))
         const kb = readKb(workflow)
+        // 纯追加校验放在写入之前：地址按序号索引，重排会让既有槽位地址漂移（静默大面积重问）
+        const violation = featuresAppendViolation(kb.features, records, hasFeatureScopedSlots(kb.slots))
+        if (violation) throw new WorkflowOpError(violation)
         kb.features = records
         kb.updatedAt = Date.now()
         workflow.kb = kb

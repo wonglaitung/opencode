@@ -555,3 +555,42 @@ export function advanceAskCounts(
   for (const addr of shown) next[addr] = (next[addr] ?? 0) + 1
   return next
 }
+
+/** 槽位是否落在功能点地址域（`5.{序号}.*`：5.k.1.1 必填叶子、5.k.2.1.<字段> 容器叶子）。
+ *  用它判断「功能点清单被重排是否已有实际后果」——没有槽位时重排只是改目录，无副作用。 */
+export function hasFeatureScopedSlots(slots: readonly ReqdocSlot[]): boolean {
+  return slots.some((s) => /^5\.\d+\./.test(s.address))
+}
+
+/**
+ * 功能点清单纯追加校验：返回 `null` 表示通过，否则返回可直接展示的错误文案（含修复指引）。
+ *
+ * 背景：功能点地址 `5.{序号}.*` **按序号索引**，而 `reqdoc_confirm_features` 与
+ * `reqdoc_ingest(features:)` 都是「整体替换 + 按序重编号」。一旦已有槽位落在功能点地址域，
+ * 插入/删除/改名/重排都会让既有槽位地址漂移、内容错位，门禁判成未填 → 业务被迫重述整份需求，
+ * 且全程无报错说明原因（历史缺陷：这两处曾各写一份功能点列表，见 reqdoc-features 头注）。
+ *
+ * `hasFeatureSlots=false`（拆解阶段尚无功能点槽位）时放行任意调整——那正是 prd 前
+ * 与业务反复调整清单的正常窗口，硬拒绝会把模型卡死。优先级可改（不进地址）。
+ *
+ * 两处写功能点的工具共用本函数与同一份措辞：同一约束两处各写一遍必然漂移。
+ */
+export function featuresAppendViolation(
+  old: readonly ReqdocFeature[],
+  next: readonly { name: string; priority: ReqdocFeature["priority"] }[],
+  hasFeatureSlots: boolean,
+): string | null {
+  if (!hasFeatureSlots) return null
+  for (let i = 0; i < old.length; i++) {
+    if (next[i]?.name === old[i].name) continue
+    const got = next[i]?.name ?? "（清单被截断，未提交这一项）"
+    return (
+      `功能点清单必须纯追加：第 ${i + 1} 项期望「${old[i].name}」，收到「${got}」。\n` +
+      `功能点地址按序号索引（5.{序号}.*），插入/删除/改名/重排会让已确认槽位的地址漂移、内容错位，` +
+      `门禁判成未填 → 业务被迫重述整份需求，且不会报错说明原因。\n` +
+      `要加功能请传「原清单 + 末尾追加」，如 ${JSON.stringify([...old.map((f) => f.name), "新功能名"])}；` +
+      `优先级可以改（不进地址），顺序不可以。当前已有 ${old.length} 个功能点地址带槽位，故不接受重排。`
+    )
+  }
+  return null
+}
