@@ -206,18 +206,16 @@ test("reqdoc 完成：提示 /new + revisit，无 git 门禁相关文案", () =>
       const s = createWorkflowState("reqdoc")
       applyTransition(s, "goal", "enter", 1)
       const text = buildSystemFragment(s, {}, [], NO_OVERLAY)
-      // r8 承载分支判定（两分支）：二=改已有需求（自己的稿/上一版定稿）→ 问清改什么、只优化那部分；一=全新流程（目录空或只有参考件）
+      // r8 承载分支判定（两分支）：二=改已有需求（自己的稿/上一版定稿）→ 问清改什么、只优化那部分；一=全新流程（目录为空）
       expect(text).toContain("先判定走哪个分支")
       expect(text).toContain("分支二（改已有需求）")
-      expect(text).toContain("问清「这次要改什么」")
+      expect(text).toContain("只问「旧稿未覆盖的必填项 + 新增功能点」")
       expect(text).toContain("分支一（全新流程）")
-      expect(text).toContain("参考_")
       // 分流并入既有那一次提问，不得为分流单独多问一轮（用户零额外打断）
       expect(text).toContain("不要为此单独多问一轮")
-      // r35 三条红线：追加末尾 / 不得整篇重提 / 参考件语义
+      // r35 两条红线：追加末尾 / 不得整篇重提
       expect(text).toContain("功能点只能追加到末尾")
       expect(text).toContain("不得把旧稿/上一版 PRD 整篇重新 `reqdoc_ingest`")
-      expect(text).toContain("不作记忆匹配证据、不消缺口、不计入溯源")
     })
 
     test("sdlc implementation 阶段 → 注入 global + implementation(代码期)，不含 design/reqdoc", () => {
@@ -342,48 +340,5 @@ describe("buildStateBar · 知识库覆盖（2c）", () => {
     const s = createWorkflowState("reqdoc")
     const bar = buildStateBar(s, "prd")
     expect(bar).toContain("知识库：未建")
-  })
-})
-
-describe("★ 状态条跨轮持久提示：本次增量范围（Step 6）", () => {
-  const withScope = () => {
-    const s = createWorkflowState("reqdoc")
-    applyTransition(s, "goal", "enter", 1)
-    const features = [{ no: 1, name: "名单排查", priority: "high" as const, confirmedAt: 1 }]
-    s.kb = {
-      slots: [{ kind: "prose" as const, address: "3.1", content: "x", source: "文档" as const, status: "draft" as const }],
-      features,
-      scope: [
-        { target: "3.1", intent: "改写" as const, note: "背景要重写" },
-        { target: "new-feature", intent: "新增" as const },
-      ],
-      baselineSnapshot: { file: "00_初稿需求书/初稿_旧需求.md", slots: [], features, at: 1 },
-      containers: {},
-      askCounts: {},
-      updatedAt: 1,
-    }
-    return s
-  }
-
-  test("范围与基线都进状态条：压缩上下文后仍知道「这次要改什么」", () => {
-    const bar = buildStateBar(withScope(), "goal")
-    expect(bar).toContain("本次增量范围 2 项")
-    expect(bar).toContain("改写 3.1")
-    expect(bar).toContain("新增 new-feature")
-    expect(bar).toContain("已承认基线 初稿_旧需求.md")
-    expect(bar).toContain("范围外已确认的内容不再问")
-  })
-
-  test("还没承认基线时要明说（否则模型以为旧稿内容已被沿用）", () => {
-    const s = withScope()
-    delete s.kb!.baselineSnapshot
-    const bar = buildStateBar(s, "goal")
-    expect(bar).toContain("尚未承认基线")
-  })
-
-  test("无范围时不出现该行（分支一不添噪音）", () => {
-    const s = createWorkflowState("reqdoc")
-    applyTransition(s, "goal", "enter", 1)
-    expect(buildStateBar(s, "goal")).not.toContain("本次增量范围")
   })
 })

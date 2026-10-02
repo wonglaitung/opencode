@@ -403,100 +403,6 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
     },
   })
 
-  const reqdoc_scope = tool({
-    description:
-      "reqdoc 增量范围声明：**业务说「这次要改什么」之后调用一次**，把范围记进知识库，" +
-      "并把范围内已确认的地址重新打开（改回待确认）——之后「本轮该填」只会问范围内这些，" +
-      "范围外已确认的内容不会被重问。\n" +
-      "**这不是过滤器，别自己过滤提问**：范围内 → 重新问；范围外已确认 → 不问；" +
-      "范围外仍未覆盖的必填项 → 照旧进「本轮该填」（模板必填不由范围声明豁免，否则业务一句「只改这两处」" +
-      "就能把其余章节的覆盖门禁一并免掉）。\n" +
-      "target 用服务端给的地址（如 `3.1`、`4.1.CRD`、`5.3.1.1`）；要**新增功能点**用 `new-feature`，" +
-      "并另调 `reqdoc_confirm_features` 传「原清单 + 末尾追加的新功能」（只能追加末尾）。\n" +
-      "**业务说「本次不做某一项」不要写进范围**（没有「删除」这个意图）：那属于「本次不涉及」，" +
-      "用 reqdoc_answer(source=缺省, reason=...) 显式收口，它才计入覆盖；本工具只能重新打开已确认的地址。\n" +
-      "声明完请把范围逐条向业务复述确认（业务说的和记下来的必须一致）。仅 reqdoc 工作流有效。",
-    args: {
-      scope: z
-        .array(
-          z.object({
-            target: z.string().describe("要改的地址（如 3.1 / 4.1.CRD / 5.3.1.1），或 new-feature（新增功能点）"),
-            intent: z.enum(["改写", "新增"]).describe("该地址本轮要重新确认（两者机械效果相同，区别只在向业务复述时的措辞）"),
-            note: z.string().optional().describe("业务原话摘要（回显给业务核对）"),
-          }),
-        )
-        .min(1)
-        .describe("本轮要改的范围（至少一项）"),
-      declare_complete: z
-        .boolean()
-        .optional()
-        .describe("业务明确确认「就改这些」（可传业务确认的原话摘要）——确认后请在回执里复述范围给业务核对"),
-    },
-    async execute(args, context) {
-      const root = projectRoot(context)
-      const reopened: string[] = []
-      const saved = store.mutateWorkflow(context.sessionID, (workflow) => {
-        requireReqdoc(workflow, "reqdoc_scope")
-        const kb = readKb(workflow)
-        const bad = args.scope
-          .map((s) => s.target)
-          .filter((t) => t !== "new-feature" && !isValidSlotAddr(t, kb.features) && !kb.slots.some((y) => y.address === t))
-        if (bad.length > 0) {
-          throw new WorkflowOpError(
-            `范围里有非法地址：${bad.join("、")}。\n` +
-              `地址必须来自「本轮该填」清单或已有槽位；新增功能点写 new-feature。`,
-          )
-        }
-        // 机械效果：范围内已确认的地址重新打开 → 自然回到「本轮该填」；删除项置 retired
-        for (const item of args.scope) {
-          if (item.target === "new-feature") continue
-          const hit = kb.slots.find((y) => y.address === item.target)
-          if (!hit || hit.status !== "confirmed") continue
-          hit.status = "draft"
-          hit.askCount = 0
-          if (kb.askCounts) delete kb.askCounts[item.target]
-          reopened.push(item.target)
-        }
-        kb.scope = args.scope
-        kb.updatedAt = Date.now()
-        workflow.kb = kb
-      })
-      const kb = readKb(saved)
-      await writeKbFiles(root, kb)
-      const derived = deriveQuestions(kb.features, {
-        slots: kb.slots,
-        askCounts: kb.askCounts,
-        decls: kb.containers,
-        candidates: kb.candidates,
-      })
-      const inScope = new Set(kb.scope?.map((s) => s.target) ?? [])
-      // 范围外的未覆盖必填项也要显式列出——不列出来就等于默认它不存在，
-      // 而它们会在进 prd / 定稿时被门禁拦下，模型到那时才发现已经晚了。
-      const outOfScope = derived.all.filter((q) => !inScope.has(q.address)).map((q) => q.address)
-      const newFeatures = kb.scope?.filter((s) => s.target === "new-feature").length ?? 0
-      return [
-        `📌 已记录本次增量范围 ${kb.scope!.length} 项${
-          args.declare_complete ? "（业务已明确确认「就改这些」）" : "（业务尚未逐条确认，务必先向业务复述确认）"
-        }：`,
-        ...kb.scope!.map((s) => `  - ${s.intent} ${s.target}${s.note ? `（业务原话：${s.note}）` : ""}`),
-        reopened.length > 0 ? `↻ 已重新打开（改回待确认，本轮会问业务）${reopened.length} 项：${reopened.join("、")}` : "",
-        newFeatures > 0
-          ? `➕ 含 ${newFeatures} 个新增功能点：请调 reqdoc_confirm_features 传「原清单 + 末尾追加」，只追加末尾`
-          : "",
-        outOfScope.length > 0
-          ? `⚠ 范围外仍有 ${outOfScope.length} 项必填内容没确认（模板必填，不因本次范围而免除）：${outOfScope.join("、")}\n` +
-            `  这些也要逐项收口——业务确实不涉及的用 reqdoc_answer(source=缺省, reason=...)，其余正常确认。`
-          : "✅ 范围外必填项均已确认",
-        derived.batch.length > 0 ? `本轮该填 ${derived.batch.length} 项（范围外的缺口也算在内）` : "",
-        "请把上面的范围逐条复述给业务核对；确认无误再继续提问。" +
-          "业务说「本次不做某一项」时不要写进范围（本工具只能重新打开已确认的地址）：" +
-          "那种情况用 reqdoc_answer(source=缺省, reason=...) 显式收口，它才计入覆盖。",
-      ]
-        .filter(Boolean)
-        .join("\n")
-    },
-  })
-
   const reqdoc_adopt_baseline = tool({
     description:
       "reqdoc 承认基线：把一份**已有需求书**（业务自己写的初稿，或本流程上一版 PRD）派生出的槽位" +
@@ -739,7 +645,7 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
     },
   })
 
-  return { reqdoc_ingest, reqdoc_answer, reqdoc_scope, reqdoc_adopt_baseline, reqdoc_assemble, reqdoc_memory_recall }
+  return { reqdoc_ingest, reqdoc_answer, reqdoc_adopt_baseline, reqdoc_assemble, reqdoc_memory_recall }
 }
 
 /** 覆盖率文本（状态条与工具返回共用口径）。 */

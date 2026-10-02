@@ -452,12 +452,7 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
           const diff = diffAgainstBaseline(saved.kb)
           // revision 0 = 初始定稿（1.0）；revisit 重做后定稿 = 修订行（1.<revision>）
           if (!preApproved) {
-            await appendChangeRecordToPrd(
-              root,
-              rel,
-              saved.stages[getDefinition(saved.type).reviewStage!].revision ?? 0,
-              diff ? baselineDiffSummary(diff) : undefined,
-            )
+            await appendChangeRecordToPrd(root, rel, saved.stages[getDefinition(saved.type).reviewStage!].revision ?? 0)
           }
           await copyPrdToIterDir(root, saved)
           changeDiff = diff
@@ -495,10 +490,6 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
       const changeNote = !changeDiff
         ? ""
         : `\n📋 本次变更（相对基线 ${saved.kb?.baselineSnapshot?.file?.split("/").pop() ?? "基线"}）：${baselineDiffSummary(changeDiff)}` +
-          (changeDiff.outsideScope.length > 0
-            ? `\n  ⚠ 另有 ${changeDiff.outsideScope.length} 项改动不在你声明的范围内：${changeDiff.outsideScope.join("、")}——` +
-              `请向业务说明这些是顺手改的，确认是否接受。`
-            : "") +
           `\n  请把上面这份清单转述给业务（这是评审要看的，不必让业务自己对比新旧两版）。`
       return (
         `✅ 审查阶段通过（清单 ${def.checklist.length}/${def.checklist.length}，片段定论 ${total}/${total}）` +
@@ -704,12 +695,7 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
 
   /** 变更记录自动填充（best-effort）：把本次定稿写入 PRD「第二章 文档变更过程」表。
    * 已有表则在分隔行后插一行；缺表则于章节内建表（表头 + 分隔 + 首行）。 */
-  async function appendChangeRecordToPrd(
-    root: string,
-    rel: string,
-    revision: number,
-    changeSummary?: string,
-  ): Promise<void> {
+  async function appendChangeRecordToPrd(root: string, rel: string, revision: number): Promise<void> {
     try {
       const abs = resolveWithinWorktree(root, rel)
       const md = await Bun.file(abs).text()
@@ -718,9 +704,7 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
       if (sectionIdx === -1) return
       const version = `1.${revision}`
       const date = new Date().toISOString().slice(0, 10)
-      // 有基线快照时，「变更说明」写实际改了哪些（业务评审要看的就是这个，
-      // 而不是「重做后修订定稿」这种等于没说的说法）；无快照才是首次定稿口径。
-      const content = changeSummary ?? (revision === 0 ? "初始定稿" : "重做后修订定稿")
+      const content = revision === 0 ? "初始定稿" : "重做后修订定稿"
       const row = `| ${version} | ${content} | ${date} | 业务+AI 代笔 | |`
       const lines = md.split(/\r?\n/)
       // 已有变更记录表：在分隔行后插一行

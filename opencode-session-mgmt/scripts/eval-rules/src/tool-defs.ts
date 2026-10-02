@@ -369,36 +369,6 @@ export const EVAL_TOOLS: OpenAITool[] = [
   {
     type: "function",
     function: {
-      name: "reqdoc_scope",
-      description:
-        "reqdoc 增量范围声明：业务说「这次要改什么」之后调用一次，把范围记进知识库，" +
-        "并把范围内已确认的地址重新打开（改回待确认）——之后「本轮该填」只会问范围内这些，范围外已确认的内容不会被重问。" +
-        "范围外仍未覆盖的必填项照旧进「本轮该填」（模板必填不由范围声明豁免）。仅 reqdoc 工作流有效。",
-      parameters: {
-        type: "object",
-        properties: {
-          scope: {
-            type: "array",
-            description: "本轮要改的范围（至少一项）",
-            items: {
-              type: "object",
-              properties: {
-                target: str("要改的地址（如 3.1 / 4.1.CRD / 5.3.1.1），或 new-feature（新增功能点）"),
-                intent: { type: "string", enum: ["改写", "新增"], description: "该地址本轮要重新确认" },
-                note: { type: "string", description: "业务原话摘要（回显给业务核对）" },
-              },
-              required: ["target", "intent"],
-            },
-          },
-          declare_complete: { type: "boolean", description: "业务明确确认「就改这些」" },
-        },
-        required: ["scope"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
       name: "reqdoc_adopt_baseline",
       description:
         "reqdoc 承认基线：把一份已有需求书派生出的槽位一次性确认为已确认，业务不必把稿里已有的内容再说一遍。" +

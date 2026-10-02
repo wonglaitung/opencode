@@ -231,17 +231,6 @@ export function buildStateBar(workflow: WorkflowState, stage: string | null): st
           `${open.l1Applied.length > 0 ? `；已采信历史记忆 ${open.l1Applied.length} 项待你落定（不必再问）：${open.l1Applied.join("、")}` : ""}`,
       )
     }
-    // 本次增量范围：回执是一次性的，而「这次要改什么」跨轮必须还在——
-    // 否则模型压缩上下文后只记得「有范围」却不知道是哪些，会去重问范围外的旧内容。
-    if (kb.scope && kb.scope.length > 0) {
-      lines.push(
-        `本次增量范围 ${kb.scope.length} 项（范围外已确认的内容不再问）：` +
-          kb.scope.map((s) => `${s.intent} ${s.target}`).join("、") +
-          (kb.baselineSnapshot
-            ? `；已承认基线 ${kb.baselineSnapshot.file.split("/").pop() ?? kb.baselineSnapshot.file}`
-            : "；尚未承认基线（稿里已有的内容仍会被逐项追问）"),
-      )
-    }
   } else if (getDefinition(workflow.type).type === "reqdoc") {
     lines.push("知识库：未建（请先 reqdoc_ingest 提交需求内容槽位）")
   }

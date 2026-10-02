@@ -431,16 +431,6 @@ describe("槽位内核 · 变更清单（分支二：相对基线到底改了哪
     expect(d.added).toEqual([])
   })
 
-  test("范围外的改动被单独标出（只告警不拦截：顺手改相关表述不该卡死定稿）", () => {
-    const d = diffAgainstBaseline({
-      slots: [S("3.1", "改"), S("3.2", "顺手改"), S("5.3.1.1", "新增")],
-      features: [],
-      scope: [{ target: "3.1" }],
-      baselineSnapshot: { slots: [S("3.1", "原"), S("3.2", "原2")], features: [] },
-    })!
-    expect(d.outsideScope).toEqual(["3.2", "5.3.1.1"])
-  })
-
   test("摘要一行说清（回执与第二章「变更说明」共用，避免两处措辞漂移）", () => {
     const d = diffAgainstBaseline({
       slots: [S("3.1", "改"), S("5.3.1.1", "新")],

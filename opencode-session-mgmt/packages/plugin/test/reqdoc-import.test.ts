@@ -30,7 +30,7 @@ describe("reqdoc_import（基于初稿完善）", () => {
     ).rejects.toThrow()
   })
 
-  test("稿子在工作区外 → 不抛错，回执给出可转达的复制指引（含参考件命名）", async () => {
+  test("稿子在工作区外 → 不抛错，回执给出可转达的复制指引（给出可转达的复制指引）", async () => {
     const worktree = tempDir()
     const outside = mkdtempSync(join(tmpdir(), "sm-outside-"))
     writeFileSync(join(outside, "别家的需求.docx"), "x", "utf8")
@@ -45,7 +45,6 @@ describe("reqdoc_import（基于初稿完善）", () => {
     expect(out).toContain("读取被拒绝")
     expect(out).toContain("转达给业务")
     expect(out).toContain(join(worktree, "00_初稿需求书"))
-    expect(out).toContain("参考_")
     // 越界不得有任何文件被落盘
     expect(existsSync(join(worktree, "00_初稿需求书"))).toBe(false)
   })

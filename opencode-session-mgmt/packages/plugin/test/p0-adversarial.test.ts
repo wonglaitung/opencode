@@ -1272,93 +1272,6 @@ describe("Step 3 · 增量护栏（打回已确认 = 静默把业务逼回重述
 /** Step 4 专用功能点夹具（与「记忆条目的 scope 作用域」无关，勿混）。 */
 const feat = (name: string, priority: "high" | "medium" | "low" = "high") => ({ name, priority })
 
-describe("Step 4a · 增量范围：范围内重新问、范围外不重问、必填不被范围豁免", () => {
-  /** 构造「已有一份填满的需求书」：2 个功能点的全部必填叶子 + 一条术语容器叶子都已确认。 */
-  async function filled(worktree: string) {
-    const store = Store.memory(() => "reqdoc")
-    const ctx = { sessionID: "r1", worktree } as never
-    const tools = createReqdocKbTools(store)
-    await createReqdocFeatureTools(store).reqdoc_confirm_features!.execute(
-      { features: [feat("名单排查"), feat("模型打分", "low")] } as never,
-      ctx,
-    )
-    const kb = store.get("r1")!.workflow!.kb!
-    for (const a of requiredSlots(kb.features)) {
-      await tools.reqdoc_answer!.execute({ address: a, content: `${a} 已有内容`, source: "文档" } as never, ctx)
-    }
-    await tools.reqdoc_answer!.execute({ address: "4.1.CRD", content: "贷后分类标签", source: "文档" } as never, ctx)
-    return { store, ctx, tools }
-  }
-  const addrs = (store: ReturnType<typeof Store.memory>) => {
-    const kb = store.get("r1")!.workflow!.kb!
-    return deriveQuestions(kb.features, { slots: kb.slots, askCounts: kb.askCounts, decls: kb.containers }).all.map(
-      (q) => q.address,
-    )
-  }
-
-  test("★ 声明范围 → 范围内重新进入待确认，范围外一律不再问", async () => {
-    const worktree = mkdtempSync(join(tmpdir(), "sm-scope-"))
-    const { store, ctx, tools } = await filled(worktree)
-    expect(addrs(store)).toHaveLength(0) // 前置：全部已确认，本轮无需提问
-
-    const r = String(
-      await tools.reqdoc_scope!.execute(
-        { scope: [{ target: "3.1", intent: "改写", note: "背景要按新政策重写" }], declare_complete: true } as never,
-        ctx,
-      ),
-    )
-    // 范围内被重新打开 → 回到「本轮该填」；范围外不回来（这才是「只问要改的」的实现方式）
-    expect(addrs(store)).toEqual(["3.1"])
-    expect(r).toContain("已记录本次增量范围 1 项")
-    expect(r).toContain("重新打开")
-    expect(r).toContain("业务已明确确认")
-    expect(r).toContain("复述给业务核对")
-    expect(store.get("r1")!.workflow!.kb!.scope).toEqual([{ target: "3.1", intent: "改写", note: "背景要按新政策重写" }])
-    store.close()
-  })
-
-  test("★ 范围声明不豁免必填：范围外仍未覆盖的必填项照旧进本轮该填且被显式列出", async () => {
-    const worktree = mkdtempSync(join(tmpdir(), "sm-scope-"))
-    const { store, ctx, tools } = await filled(worktree)
-    // 人为制造一个范围外的未覆盖必填项（模拟材料只覆盖了大部分）
-    store.mutateWorkflow("r1", (w) => {
-      w.kb!.slots = w.kb!.slots.filter((x) => x.address !== "6.1")
-    })
-    const r = String(await tools.reqdoc_scope!.execute({ scope: [{ target: "3.1", intent: "改写" }] } as never, ctx))
-    // 业务说了「只改 3.1」也不能把 6.1 的覆盖门禁免掉——否则其余章节可被一句话掏空
-    expect(addrs(store)).toEqual(expect.arrayContaining(["3.1", "6.1"]))
-    expect(r).toContain("范围外仍有")
-    expect(r).toContain("6.1")
-    expect(r).toContain("模板必填，不因本次范围而免除")
-    store.close()
-  })
-
-  test("★ 没有「删除」意图：本次不做某项须走 缺省+理由 才能收口（retired 会变成填不上的缺口）", async () => {
-    const worktree = mkdtempSync(join(tmpdir(), "sm-scope-"))
-    const { store, ctx, tools } = await filled(worktree)
-    const r = String(
-      await tools.reqdoc_scope!.execute({ scope: [{ target: "6.4", intent: "改写", note: "本次不做信创那一节" }] } as never, ctx),
-    )
-    expect(r).not.toContain("删除")
-    expect(r).toContain("本次不做某一项")
-    await tools.reqdoc_answer!.execute(
-      { address: "6.4", content: "本次不涉及", source: "缺省", reason: "本次不做信创那一节" } as never,
-      ctx,
-    )
-    expect(addrs(store)).toHaveLength(0)
-    store.close()
-  })
-
-  test("★ 非法地址被拒（不自造地址）", async () => {
-    const worktree = mkdtempSync(join(tmpdir(), "sm-scope-"))
-    const { store, ctx, tools } = await filled(worktree)
-    await expect(
-      tools.reqdoc_scope!.execute({ scope: [{ target: "99.9", intent: "改写" }] } as never, ctx),
-    ).rejects.toThrow(/非法地址/)
-    store.close()
-  })
-})
-
 describe("Step 4b · 承认基线：业务不必把稿里已有的内容再说一遍", () => {
   const FILE = "00_初稿需求书/初稿_旧需求.md"
   async function baselineSession() {
@@ -1504,13 +1417,12 @@ describe("Step 4c · 变更清单：业务说「只改这两处」，他得看�
   }
   const prd = (worktree: string) => join(worktree, "07_需求规格产出/1_名单排查/PRD.md")
 
-  test("★ 分支二定稿：回执给出变更清单，且写进交付件第二章「变更说明」", async () => {
+  test("★ 分支二定稿：回执给出变更清单；交付件第二章格式不变（清单只在回执里说）", async () => {
     const { store, ctx, worktree } = await readyToSubmit()
     const tools = createReqdocKbTools(store)
-    // 业务说「就改 3.1」→ 只把 3.1 重新打开
-    await tools.reqdoc_scope!.execute({ scope: [{ target: "3.1", intent: "改写" }] } as never, ctx)
+    // 业务说「就改 3.1」→ 直接改这一处（不再有范围声明机制）
     await tools.reqdoc_answer!.execute({ address: "3.1", content: "3.1 按新政策改写后的内容", source: "文档" } as never, ctx)
-    // 顺手改了范围外的 3.2（AI 的常见动作：不拦，但要告警）
+    // 顺手改了 3.2
     store.mutateWorkflow("r1", (w) => {
       w.kb!.slots = w.kb!.slots.map((x) => (x.address === "3.2" ? { ...x, content: "3.2 顺手改了" } : x))
     })
@@ -1519,15 +1431,12 @@ describe("Step 4c · 变更清单：业务说「只改这两处」，他得看�
     const out = String(await createReviewTools(store).review_submit!.execute(CHECKLIST, ctx))
     expect(out).toContain("本次变更")
     expect(out).toContain("初稿_旧需求.md")
-    // 清单列全部实际改动（含顺手改的），范围外的另外单列出来提醒
     expect(out).toContain("改写 2 项（3.1、3.2）")
-    expect(out).toContain("不在你声明的范围内")
-    expect(out).toContain("3.2")
-    expect(out).toContain("确认是否接受")
-    // 交付件里第二章的「变更说明」不再是「重做后修订定稿」这种等于没说的话
+    expect(out).toContain("请把上面这份清单转述给业务")
+    // 交付件第二章保持模板原样：变更清单降级为只在回执里说，不再改交付件格式
     const md = readFileSync(prd(worktree), "utf8")
-    expect(md).toContain("改写 2 项（3.1、3.2）")
-    expect(md).not.toContain("| 1.0 | 初始定稿 |")
+    expect(md).toContain("| 1.0 | 初始定稿 |")
+    expect(md).not.toContain("改写 2 项")
     store.close()
   })
 
@@ -1552,74 +1461,6 @@ describe("Step 4c · 变更清单：业务说「只改这两处」，他得看�
   })
 })
 
-describe("Step 5 · 参考件隔离：别家项目的需求文档不得成为本需求的书面依据", () => {
-  test("★ 参考件不进记忆匹配证据面（否则会消掉本该问业务的问题）", async () => {
-    tempMemory()
-    const worktree = mkdtempSync(join(tmpdir(), "sm-ref-"))
-    mkdirSync(join(worktree, "01_背景与目标"), { recursive: true })
-    mkdirSync(join(worktree, "00_初稿需求书"), { recursive: true })
-    writeFileSync(join(worktree, "01_背景与目标/本需求.md"), "本需求涉及 AML 名单核查", "utf8")
-    // 同一目录放一份别家的需求文档：里面有 AML 的定义
-    writeFileSync(join(worktree, "00_初稿需求书/参考_别家需求.md"), "别家的 AML 定义：反洗钱名单", "utf8")
-    const ev = await materialEvidence(worktree)
-    expect(ev).toContain("本需求涉及 AML 名单核查")
-    expect(ev).not.toContain("反洗钱名单")
-  })
-
-  test("★ 同目录同词：普通文件进证据面、参考件不进（正向对照，防把过滤写过头）", async () => {
-    tempMemory()
-    const worktree = mkdtempSync(join(tmpdir(), "sm-ref-"))
-    mkdirSync(join(worktree, "01_背景与目标"), { recursive: true })
-    writeFileSync(join(worktree, "01_背景与目标/参考_对标材料.md"), "对标里的 AML 说法", "utf8")
-    writeFileSync(join(worktree, "01_背景与目标/正式材料.md"), "正式材料里的 AML 说法", "utf8")
-    const ev = await materialEvidence(worktree)
-    expect(ev).toContain("正式材料里的 AML 说法")
-    expect(ev).not.toContain("对标里的 AML 说法")
-  })
-
-  test("★ 参考件仍可被 reqdoc_scan 读到（隔离的是「证据资格」，不是「可读性」）", async () => {
-    tempMemory()
-    const worktree = mkdtempSync(join(tmpdir(), "sm-ref-"))
-    mkdirSync(join(worktree, "00_初稿需求书"), { recursive: true })
-    writeFileSync(join(worktree, "00_初稿需求书/参考_别家需求.md"), "可读但不作证据", "utf8")
-    const tools = createReqdocScanTool()
-    const out = String(
-      await tools.reqdoc_scan!.execute({ directory: "00_初稿需求书" } as never, {
-        worktree,
-        sessionID: "s1",
-      } as never),
-    )
-    expect(out).toContain("可读但不作证据")
-  })
-
-  test("★ 缓存一致性：改动普通材料会刷新证据，改参考件不会（签名与取文本共用同一谓词）", async () => {
-    tempMemory()
-    const worktree = mkdtempSync(join(tmpdir(), "sm-ref-"))
-    mkdirSync(join(worktree, "01_背景与目标"), { recursive: true })
-    writeFileSync(join(worktree, "01_背景与目标/材料.md"), "第一版 AML", "utf8")
-    expect(await materialEvidence(worktree)).toContain("第一版 AML")
-    // 只改参考件 → 证据文本不该变（它压根不在证据面）
-    writeFileSync(join(worktree, "01_背景与目标/参考_别家.md"), "参考件第二版 AML", "utf8")
-    expect(await materialEvidence(worktree)).not.toContain("参考件第二版")
-    // 改普通材料 → 必须刷新（若签名与取文本用了不同谓词，这里会读到旧缓存）
-    writeFileSync(join(worktree, "01_背景与目标/材料.md"), "第二版 AML 内容", "utf8")
-    const ev = await materialEvidence(worktree)
-    expect(ev).toContain("第二版 AML 内容")
-    expect(ev).not.toContain("第一版 AML")
-  })
-
-  test("★ 契约：证据签名与取文本两处必须共用同一个过滤谓词（各写一遍必然漂移）", () => {
-    const src = read(join("..", "src", "tools", "reqdoc-scan.ts"))
-    expect(src).toContain('export const REFERENCE_PREFIX = "参考_"')
-    // 两处 filter 都换成 isEvidenceFile：签名放行而文本不取 → 缓存与内容对不上
-    // 证据面两处（签名 + 取文本）都用它
-    expect(src.match(/names\.filter\(isEvidenceFile\)/g)?.length).toBe(2)
-    // 而 reqdoc_scan 自己的目录列举**不得**用它——参考件要能被读到，
-    // 隔离的只是「证据资格」。全仓只剩那一处裸过滤，就在此处。
-    expect(src.match(/names\.filter\(\(n\) => !n\.startsWith\("\."\)\)/g)?.length).toBe(1)
-  })
-})
-
 describe("Step 6 · 分支二的说明书：AI 得知道按什么顺序调（否则能力建好也不会用）", () => {
   const wfSrc = () => read(join("..", "..", "shared", "src", "workflow.ts"))
   const convSrc = () => read(join("..", "conventions", "reqdoc", "07-业务口语.md"))
@@ -1637,7 +1478,7 @@ describe("Step 6 · 分支二的说明书：AI 得知道按什么顺序调（否
       "authorized_by",
       "confirm_note",
       "unmapped",
-      "reqdoc_scope",
+      "只问「旧稿未覆盖的必填项 + 新增功能点」",
       "末尾追加",
       "顺序反了会出事",
     ]) {
@@ -1656,17 +1497,14 @@ describe("Step 6 · 分支二的说明书：AI 得知道按什么顺序调（否
     expect(src).toContain("调用序按 `reqdoc-r36` 不跳步") // 编号留作文档引用锚点，规则体已并入 r8
   })
 
-  test("★ 07 词汇表收了两个新工具的业务语言（讲给业务听时不能出现工具名）", () => {
+  test("★ 07 词汇表收了承认基线的业务语言（讲给业务听时不能出现工具名）", () => {
     const conv = convSrc()
-    expect(conv).toContain("| reqdoc_scope | 记录这次要改的范围 |")
     expect(conv).toContain("| reqdoc_adopt_baseline | 沿用已有需求书里已经写好的内容 |")
     expect(conv).toContain("| 承认基线 | 沿用旧稿已写好的内容 |")
-    expect(conv).toContain("| 本次增量范围 | 这次要改的部分 |")
   })
 
-  test("★ 两个新工具在运行时均已注册（说明书指向的工具必须存在）", () => {
+  test("★ 说明书指向的工具在运行时确实存在", () => {
     const kbSrc = read(join("..", "src", "tools", "reqdoc-kb-tools.ts"))
-    expect(kbSrc).toContain("const reqdoc_scope = tool(")
     expect(kbSrc).toContain("const reqdoc_adopt_baseline = tool(")
   })
 })

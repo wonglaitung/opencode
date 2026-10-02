@@ -605,8 +605,6 @@ export interface BaselineDiff {
   removed: string[]
   /** 相对基线新增的功能点名称（末尾追加的那些） */
   featuresAdded: string[]
-  /** 落在声明范围之外的改动地址（只告警不拦截——顺手改了相关表述不该被门禁卡死） */
-  outsideScope: string[]
 }
 
 /**
@@ -621,14 +619,13 @@ export interface BaselineDiff {
 export function diffAgainstBaseline(kb: {
   slots: readonly ReqdocSlot[]
   features: readonly ReqdocFeature[]
-  scope?: readonly { target: string }[]
   baselineSnapshot?: { slots: ReqdocSlot[]; features: ReqdocFeature[] }
 }): BaselineDiff | null {
   const snap = kb.baselineSnapshot
   if (!snap) return null
   const before = new Map(snap.slots.map((s) => [s.address, s]))
   const after = new Map(kb.slots.map((s) => [s.address, s]))
-  const diff: BaselineDiff = { added: [], changed: [], removed: [], featuresAdded: [], outsideScope: [] }
+  const diff: BaselineDiff = { added: [], changed: [], removed: [], featuresAdded: [] }
   for (const [addr, now] of after) {
     if (now.status !== "confirmed") continue
     const prev = before.get(addr)
@@ -645,17 +642,14 @@ export function diffAgainstBaseline(kb: {
   }
   const oldNames = new Set(snap.features.map((f) => f.name))
   diff.featuresAdded = kb.features.filter((f) => !oldNames.has(f.name)).map((f) => f.name)
-  const inScope = new Set(kb.scope?.map((s) => s.target) ?? [])
-  diff.outsideScope = [...diff.added, ...diff.changed].filter((a) => !inScope.has(a))
   const byAddr = (x: string, y: string) => x.localeCompare(y, "en")
   diff.added.sort(byAddr)
   diff.changed.sort(byAddr)
   diff.removed.sort(byAddr)
-  diff.outsideScope.sort(byAddr)
   return diff
 }
 
-/** 变更清单的一行式摘要（回执与第二章「变更说明」共用，避免两处措辞漂移）。 */
+/** 变更清单的一行式摘要（定稿回执用，业务评审就看这一句）。 */
 export function baselineDiffSummary(diff: BaselineDiff): string {
   const parts: string[] = []
   if (diff.featuresAdded.length > 0) parts.push(`新增功能点 ${diff.featuresAdded.length} 个（${diff.featuresAdded.join("、")}）`)
