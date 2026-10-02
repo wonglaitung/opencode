@@ -245,9 +245,9 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
           ? `🧠 已采信历史记忆，免问 ${derived.l1Applied.length} 项（定义来自过往需求中业务的复述；不在本轮清单、不必再问，由你直接 reqdoc_answer 落定，source=问答）：${derived.l1Applied.join("、")}`
           : "",
         hits.l2.length > 0
-          ? `🧠 L2 组织知识命中 ${hits.l2.length} 项（**不消缺口**，仅作默认值请业务点头）：${hits.l2.map((f) => f.content).join("；")}`
+          ? `🧠 共享知识命中 ${hits.l2.length} 项（不消缺口，仅作默认值；仍要确认一次，问时带上默认值）：${hits.l2.map((f) => f.content).join("；")}`
           : "",
-        "→ 逐项请业务确认后用 reqdoc_answer 落定；不要直接编辑 PRD 文件。",
+        "→ 清单里的项逐条确认后用 reqdoc_answer 落定；不要直接编辑 PRD 文件。",
       ]
         .filter(Boolean)
         .join("\n")

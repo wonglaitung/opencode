@@ -14,6 +14,7 @@ import { join } from "node:path"
 import { deriveQuestions, kbGate, matchMemory, requiredSlots, writeL1Term, writeL2Fact } from "sm-shared"
 import { Store } from "../src/db"
 import { createReqdocKbTools } from "../src/tools/reqdoc-kb-tools"
+import { buildStateBar } from "../src/prompt"
 import { materialEvidence } from "../src/tools/reqdoc-scan"
 import { createReviewTools } from "../src/tools/review"
 
@@ -1080,8 +1081,23 @@ describe("L1 免问项的落定指引（免问 ≠ 已覆盖）", () => {
     const bar = read(join("..", "src", "prompt.ts"))
     const barLine = (bar.match(/已采信历史记忆[^\n]*/) ?? [])[0] ?? ""
     expect(barLine).toContain("待你落定")
+    // 地址必须带上：回执一次性，状态条是唯一持久提示——跨轮只剩数量会让模型反查无门（转而反问业务）
+    expect(barLine).toContain("open.l1Applied.join")
     expect(barLine).not.toContain("reqdoc_answer")
     expect(barLine).not.toContain("L1 ")
+    // L2 回执与尾行同步清理（只改 L1 = 同一失败模式修一半）
+    expect(kbSrc).toContain("🧠 共享知识命中")
+    expect(kbSrc).not.toContain("L2 组织知识命中")
+    expect(kbSrc).not.toContain("请业务点头")
+    expect(kbSrc).not.toContain("逐项请业务确认")
+  })
+
+  test("★ 07 第 3 节口径：状态条面向模型，讲给业务听时按第 1 节翻译", () => {
+    const conv = read(join("..", "conventions", "reqdoc", "07-业务口语.md"))
+    expect(conv).toContain("**面向模型**")
+    expect(conv).toContain("不要为了\"说人话\"删掉或改写状态条")
+    // 旧口径「状态条一律业务语言」已废——它会逼掉模型行动所需的地址与门禁原因
+    expect(conv).not.toContain("状态条中的技术信息一律用业务语言展示")
   })
 
   test("★ r33③ 载明 source=问答；r30 对冲「不算降级」", () => {
@@ -1113,6 +1129,11 @@ describe("L1 免问项的落定指引（免问 ≠ 已覆盖）", () => {
     )
     expect(out).toContain("已采信历史记忆")
     expect(out).toContain("reqdoc_answer 落定")
+
+    // 状态条是唯一持久提示（回执一次性）：跨轮必须仍带着地址，否则模型反查无门
+    const liveBar = buildStateBar(store.get("r1")!.workflow!, "edge")
+    expect(liveBar).toContain("已采信历史记忆 1 项待你落定")
+    expect(liveBar).toContain("4.1.CLD")
 
     const kb = () => store.get("r1")!.workflow!.kb!
     // 免问项确实不在清单里、且没被自动落定
