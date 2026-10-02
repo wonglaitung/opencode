@@ -231,6 +231,13 @@ export function buildStateBar(workflow: WorkflowState, stage: string | null): st
           `${open.l1Applied.length > 0 ? `；已采信历史记忆 ${open.l1Applied.length} 项待你落定（不必再问）：${open.l1Applied.join("、")}` : ""}`,
       )
     }
+    // 已承认基线（分支二）：回执是一次性的，而「这批内容业务已经授权过了」必须在状态条里一直在——
+    // 否则压缩上下文后模型只剩「覆盖率很高」却不知道为什么满的，会把旧稿内容重新问一遍，
+    // 恰好破坏「旧稿已有内容不必再说」这个承诺。措辞直接可转述（不点工具名）。
+    if (kb.baselineSnapshot) {
+      const file = kb.baselineSnapshot.file.split("/").pop() ?? kb.baselineSnapshot.file
+      lines.push(`已承认基线 ${file}：稿里已有的内容已沿用并经业务授权，不要再逐项问业务`)
+    }
   } else if (getDefinition(workflow.type).type === "reqdoc") {
     lines.push("知识库：未建（请先 reqdoc_ingest 提交需求内容槽位）")
   }

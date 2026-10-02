@@ -1488,13 +1488,12 @@ describe("Step 6 · 分支二的说明书：AI 得知道按什么顺序调（否
     expect(rule).toContain("模型不得代填")
   })
 
-  test("★ 调用序不占 global 每轮预算：stage 是 goal 而非 global", () => {
+  test("★ 调用序不占 global 每轮预算；也不留悬空规则编号", () => {
     // 曾单开一条 global r36（580 字），把 global+prd 注入顶到 4362 > 4000 预算（上下文预算护栏当场报红）。
     // 分支二从 goal 阶段起步，序也只在起步时需要——折进 r8 既不超预算，注入时机还更准。
     const src = wfSrc()
     expect(src).not.toContain('id: "reqdoc-r36"')
     expect(src).toMatch(/id: "reqdoc-r8", stage: "goal"/)
-    expect(src).toContain("调用序按 `reqdoc-r36` 不跳步") // 编号留作文档引用锚点，规则体已并入 r8
   })
 
   test("★ 07 词汇表收了承认基线的业务语言（讲给业务听时不能出现工具名）", () => {

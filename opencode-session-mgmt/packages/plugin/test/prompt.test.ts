@@ -342,3 +342,42 @@ describe("buildStateBar · 知识库覆盖（2c）", () => {
     expect(bar).toContain("知识库：未建")
   })
 })
+
+describe("★ 对抗审查修复：基线提示必须是跨轮持久提示（P2-1）", () => {
+  const baselineState = () => {
+    const s = createWorkflowState("reqdoc")
+    applyTransition(s, "goal", "enter", 1)
+    const features = [{ no: 1, name: "名单排查", priority: "high" as const, confirmedAt: 1 }]
+    s.kb = {
+      slots: [{ kind: "prose" as const, address: "3.1", content: "x", source: "文档" as const, status: "confirmed" as const }],
+      features,
+      // 承认基线后覆盖率很高，但状态条若不说明「为什么满的」，压缩上下文的模型会把旧稿内容重问一遍
+      baselineSnapshot: { file: "00_初稿需求书/初稿_旧需求.md", slots: [], features, at: 1 },
+      containers: {},
+      askCounts: {},
+      updatedAt: 1,
+    }
+    return s
+  }
+
+  test("已承认基线 → 状态条必须写明「不要再逐项问业务」", () => {
+    const bar = buildStateBar(baselineState(), "goal")
+    expect(bar).toContain("已承认基线 初稿_旧需求.md")
+    expect(bar).toContain("不要再逐项问业务")
+  })
+
+  test("未承认基线 → 不出现该行（分支一不添噪音）", () => {
+    const s = baselineState()
+    delete s.kb!.baselineSnapshot
+    expect(buildStateBar(s, "goal")).not.toContain("已承认基线")
+  })
+
+  test("r8 提示别被「必填容器未覆盖」带偏（P2-2：容器是聚合判定）", () => {
+    const s = baselineState()
+    s.kb!.containers = { "5.1.2.1": { required: false, reason: "无字段" } }
+    const text = buildSystemFragment(s, {}, [], "/tmp/opencode-sm-conv-not-exist")
+    expect(text).toContain("别被状态条的「必填容器未覆盖」带偏")
+    expect(text).toContain("聚合判定")
+    expect(text).toContain("不要因为容器报未就绪就把旧稿里已写着的术语与字段重问一遍")
+  })
+})
