@@ -29,7 +29,20 @@ export function createReqdocImportTool(): Record<string, ToolDefinition> {
         .describe("初稿文件或目录路径（相对项目根，或绝对路径；须在需求资料工作区内）"),
     },
     async execute(args, context) {
-      const full = resolveWithinWorktree(projectRoot(context), args.path)
+      const root = projectRoot(context)
+      // 越界拒绝是安全护栏（fs-safe），不动它；这里只把冷冰冰的报错换成业务看得懂的下一步。
+      let full: string
+      try {
+        full = resolveWithinWorktree(root, args.path)
+      } catch {
+        return (
+          `⚠ 稿子不在需求资料工作区内，读取被拒绝：${args.path}\n` +
+          `请把下列内容转达给业务，并停下来等它把文件复制进来（**不要自行假设稿子内容继续推进**）：\n` +
+          `  · 业务自己写的初稿 / 本流程上一版定稿 → 复制到 ${join(root, REQDOC_DRAFT_DIR)}/ 目录后导入\n` +
+          `  · 别家项目的文档、对标材料 → 复制到 ${join(root, REQDOC_DRAFT_DIR)}/ 并以「参考_」开头命名，只作参考、不作证据\n` +
+          `业务复制好后给出新路径，再调 reqdoc_import。`
+        )
+      }
       if (!existsSync(full)) {
         throw new Error(`初稿路径 ${args.path} 不存在或不可读，请确认路径（文件或目录）。`)
       }

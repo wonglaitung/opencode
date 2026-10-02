@@ -1065,6 +1065,22 @@ describe("L1 免问项的落定指引（免问 ≠ 已覆盖）", () => {
     expect(answerDesc).not.toContain("只接受派生清单给出的地址")
   })
 
+  test("★ 增量红线进工具描述：功能点只能追加末尾、不得整篇重提（两处写 features 的工具都要有）", () => {
+    const kbSrc = read(join("..", "src", "tools", "reqdoc-kb-tools.ts"))
+    const ingestDesc = kbSrc.slice(kbSrc.indexOf("reqdoc_ingest = tool"), kbSrc.indexOf("args:"))
+    // 工具描述是 model-only 且每次请求都在（不分阶段、不进时间线）——红线必须落在这里，不能只靠阶段规则
+    expect(ingestDesc).toContain("只提交「本轮该填」清单里的地址")
+    expect(ingestDesc).toContain("绝不整篇重提")
+    expect(ingestDesc).toContain("已确认槽位静默打回草稿")
+    const featSrc = read(join("..", "src", "tools", "reqdoc-features.ts"))
+    const confirmDesc = featSrc.slice(featSrc.indexOf("reqdoc_confirm_features = tool"), featSrc.indexOf("args:"))
+    expect(confirmDesc).toContain("整体替换")
+    expect(confirmDesc).toContain("末尾追加")
+    // 两处写 features 的工具语义一致，否则模型按哪个都行 → 分叉入口重现
+    const ingestFeat = kbSrc.slice(kbSrc.indexOf("features: z"), kbSrc.indexOf("candidates: z"))
+    expect(ingestFeat).toContain("末尾追加")
+  })
+
   test("★ 回执/状态栏只报事实：不带门禁因果、不错位指称", () => {
     const kbSrc = read(join("..", "src", "tools", "reqdoc-kb-tools.ts"))
     const notes = kbSrc.match(/🧠 已采信历史记忆[^`]*/g) ?? []

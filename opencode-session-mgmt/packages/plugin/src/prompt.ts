@@ -52,6 +52,14 @@ export function buildSystemFragment(
       "⚑ 开始下一个需求：提醒开发者执行 /new 保持统计隔离（勿在本会话复用，否则统计混入已完成需求）。",
       "修改本需求：调用 workflow_revisit 回退到对应阶段。",
     )
+    if (def.type === "reqdoc") {
+      // 需求迭代（加功能）是本工作流最常被误选成「/new 开新需求」的路径——选错等于让业务把整份需求重述一遍。
+      parts.push(
+        "在这份需求上新增功能：调用 workflow_revisit(stage=prd) 回到需求规格书阶段，" +
+          "功能点只能在原清单末尾追加（见 r35 ①），已确认槽位保持不变，" +
+          "只就新增部分向业务提问；**不要用 /new 重开**（会丢掉全部已确认槽位）。",
+      )
+    }
     if (conventions) {
       parts.push("", `# 《${def.type} 编写规约》自遵循清单（插件按工作流阶段自动送达）`, "", conventions)
     }

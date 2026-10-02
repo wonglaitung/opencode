@@ -70,13 +70,27 @@ describe("buildSystemFragment", () => {
     expect(text).toContain("提交状态：allowed")
   })
 
-  test("reqdoc 完成：提示 /new + revisit，无 git 门禁相关文案", () => {
-    const text = buildSystemFragment(completeReqdoc())
-    expect(text).toContain("/new")
-    expect(text).toContain("workflow_revisit")
-    expect(text).not.toContain("commit_gate_check")
-    expect(text).not.toContain("尚未开始")
-  })
+test("reqdoc 完成：提示 /new + revisit，无 git 门禁相关文案", () => {
+      const text = buildSystemFragment(completeReqdoc())
+      expect(text).toContain("/new")
+      expect(text).toContain("workflow_revisit")
+      expect(text).not.toContain("commit_gate_check")
+      expect(text).not.toContain("尚未开始")
+    })
+
+    test("★ reqdoc 完成：给出「新增功能」第三动作，并点名不要用 /new 重开", () => {
+      const text = buildSystemFragment(completeReqdoc())
+      // 迭代最常被误选成 /new（丢掉全部已确认槽位 → 业务被迫重述整份需求），故须显式给出正确动作
+      expect(text).toContain("在这份需求上新增功能")
+      expect(text).toContain("workflow_revisit(stage=prd)")
+      expect(text).toContain("末尾追加")
+      expect(text).toContain("不要用 /new 重开")
+    })
+
+    test("sdlc 完成：不出 reqdoc 的迭代动作（阶段动作按类型隔离）", () => {
+      const text = buildSystemFragment(completeSdlc())
+      expect(text).not.toContain("在这份需求上新增功能")
+    })
 
   test("进行中 stuck 警告仅在非完成态注入", () => {
     const s = createWorkflowState("sdlc")
@@ -186,6 +200,21 @@ describe("buildSystemFragment", () => {
       expect(text).toContain("《reqdoc 编写规约》自遵循清单")
       expect(text).toContain("显式 in scope") // goal 阶段：范围与边界
       expect(text).not.toContain("术语须引用原文") // rules 阶段：不注入
+    })
+
+    test("★ 已有稿分流（r8）+ 增量红线（r35）：goal 阶段即可见，且不新增一轮问答", () => {
+      const s = createWorkflowState("reqdoc")
+      applyTransition(s, "goal", "enter", 1)
+      const text = buildSystemFragment(s, {}, [], NO_OVERLAY)
+      // r8 承载分流判定：分三类（自己的稿/上一版定稿 → 接着完善；别家文档 → 参考件；空 → 常规）
+      expect(text).toContain("先判定其定位再选路径")
+      expect(text).toContain("参考_")
+      // 分流并入既有那一次提问，不得为分流单独多问一轮（用户零额外打断）
+      expect(text).toContain("不要为此单独多问一轮")
+      // r35 三条红线：追加末尾 / 不得整篇重提 / 参考件语义
+      expect(text).toContain("功能点只能追加到末尾")
+      expect(text).toContain("不得把旧稿/上一版 PRD 整篇重新 `reqdoc_ingest`")
+      expect(text).toContain("不作记忆匹配证据、不消缺口、不计入溯源")
     })
 
     test("sdlc implementation 阶段 → 注入 global + implementation(代码期)，不含 design/reqdoc", () => {

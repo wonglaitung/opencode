@@ -119,7 +119,10 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
       `一次最多 ${QUESTIONS_PER_TURN} 项。` +
       "**返回里「已采信历史记忆」列出的地址不在清单里、也不要再问业务**——服务端已替你免问，" +
       "由你随后直接 reqdoc_answer 落定，**source 一律用「问答」**（定义出自业务过往口述，材料只出现该词、" +
-      "并未给出定义；标「文档」等于在交付件上做不实溯源）。不落定则必填容器覆盖不过。仅 reqdoc 工作流有效。",
+      "并未给出定义；标「文档」等于在交付件上做不实溯源）。不落定则必填容器覆盖不过。" +
+      "**只提交「本轮该填」清单里的地址——绝不整篇重提**：ingest 对每个提交的地址一律记为 draft 并把 askCount 归零，" +
+      "把旧稿/上一版 PRD 整篇重新提交会让已确认槽位静默打回草稿、覆盖率崩塌、业务被迫重述整份需求；" +
+      "要改已有槽位的内容用 reqdoc_answer（它保持 confirmed）。仅 reqdoc 工作流有效。",
     args: {
       slots: z
         .array(
@@ -141,7 +144,11 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
           }),
         )
         .optional()
-        .describe("功能点清单（首次提交时给；已确认过则省略）"),
+        .describe(
+          "功能点清单（首次提交时给；已确认过则省略）。与 reqdoc_confirm_features 同为「整体替换 + 按序重编号」语义，" +
+            "**给已有需求加功能时必须传「原清单 + 末尾追加的新功能」，不得插在中间、不得删除或改名**" +
+            "（既有槽位地址 `5.{序号}.*` 按序号索引，改动会让地址漂移、业务被要求重述整份需求）。",
+        ),
       candidates: z
         .record(z.string(), z.array(z.string()))
         .optional()
