@@ -16,7 +16,7 @@ import { Store } from "../src/db"
 import { createReqdocKbTools } from "../src/tools/reqdoc-kb-tools"
 import { createReqdocFeatureTools } from "../src/tools/reqdoc-features"
 import { buildStateBar } from "../src/prompt"
-import { materialEvidence } from "../src/tools/reqdoc-scan"
+import { createReqdocScanTool, materialEvidence } from "../src/tools/reqdoc-scan"
 import { createReviewTools } from "../src/tools/review"
 
 const CHECKLIST = {
@@ -25,6 +25,9 @@ const CHECKLIST = {
   edgeCoverage: true,
   resolution: true,
 } as never
+
+/** 读仓库内源码（文本契约断言用）。 */
+const read = (rel: string) => readFileSync(join(import.meta.dir, rel), "utf8")
 
 function tempMemory(): string {
   const home = mkdtempSync(join(tmpdir(), "sm-p0-"))
@@ -1546,5 +1549,73 @@ describe("Step 4c · 变更清单：业务说「只改这两处」，他得看�
     const out = String(await createReviewTools(store).review_submit!.execute(CHECKLIST, ctx))
     expect(out).toContain("内容与基线一致")
     store.close()
+  })
+})
+
+describe("Step 5 · 参考件隔离：别家项目的需求文档不得成为本需求的书面依据", () => {
+  test("★ 参考件不进记忆匹配证据面（否则会消掉本该问业务的问题）", async () => {
+    tempMemory()
+    const worktree = mkdtempSync(join(tmpdir(), "sm-ref-"))
+    mkdirSync(join(worktree, "01_背景与目标"), { recursive: true })
+    mkdirSync(join(worktree, "00_初稿需求书"), { recursive: true })
+    writeFileSync(join(worktree, "01_背景与目标/本需求.md"), "本需求涉及 AML 名单核查", "utf8")
+    // 同一目录放一份别家的需求文档：里面有 AML 的定义
+    writeFileSync(join(worktree, "00_初稿需求书/参考_别家需求.md"), "别家的 AML 定义：反洗钱名单", "utf8")
+    const ev = await materialEvidence(worktree)
+    expect(ev).toContain("本需求涉及 AML 名单核查")
+    expect(ev).not.toContain("反洗钱名单")
+  })
+
+  test("★ 同目录同词：普通文件进证据面、参考件不进（正向对照，防把过滤写过头）", async () => {
+    tempMemory()
+    const worktree = mkdtempSync(join(tmpdir(), "sm-ref-"))
+    mkdirSync(join(worktree, "01_背景与目标"), { recursive: true })
+    writeFileSync(join(worktree, "01_背景与目标/参考_对标材料.md"), "对标里的 AML 说法", "utf8")
+    writeFileSync(join(worktree, "01_背景与目标/正式材料.md"), "正式材料里的 AML 说法", "utf8")
+    const ev = await materialEvidence(worktree)
+    expect(ev).toContain("正式材料里的 AML 说法")
+    expect(ev).not.toContain("对标里的 AML 说法")
+  })
+
+  test("★ 参考件仍可被 reqdoc_scan 读到（隔离的是「证据资格」，不是「可读性」）", async () => {
+    tempMemory()
+    const worktree = mkdtempSync(join(tmpdir(), "sm-ref-"))
+    mkdirSync(join(worktree, "00_初稿需求书"), { recursive: true })
+    writeFileSync(join(worktree, "00_初稿需求书/参考_别家需求.md"), "可读但不作证据", "utf8")
+    const tools = createReqdocScanTool()
+    const out = String(
+      await tools.reqdoc_scan!.execute({ directory: "00_初稿需求书" } as never, {
+        worktree,
+        sessionID: "s1",
+      } as never),
+    )
+    expect(out).toContain("可读但不作证据")
+  })
+
+  test("★ 缓存一致性：改动普通材料会刷新证据，改参考件不会（签名与取文本共用同一谓词）", async () => {
+    tempMemory()
+    const worktree = mkdtempSync(join(tmpdir(), "sm-ref-"))
+    mkdirSync(join(worktree, "01_背景与目标"), { recursive: true })
+    writeFileSync(join(worktree, "01_背景与目标/材料.md"), "第一版 AML", "utf8")
+    expect(await materialEvidence(worktree)).toContain("第一版 AML")
+    // 只改参考件 → 证据文本不该变（它压根不在证据面）
+    writeFileSync(join(worktree, "01_背景与目标/参考_别家.md"), "参考件第二版 AML", "utf8")
+    expect(await materialEvidence(worktree)).not.toContain("参考件第二版")
+    // 改普通材料 → 必须刷新（若签名与取文本用了不同谓词，这里会读到旧缓存）
+    writeFileSync(join(worktree, "01_背景与目标/材料.md"), "第二版 AML 内容", "utf8")
+    const ev = await materialEvidence(worktree)
+    expect(ev).toContain("第二版 AML 内容")
+    expect(ev).not.toContain("第一版 AML")
+  })
+
+  test("★ 契约：证据签名与取文本两处必须共用同一个过滤谓词（各写一遍必然漂移）", () => {
+    const src = read(join("..", "src", "tools", "reqdoc-scan.ts"))
+    expect(src).toContain('export const REFERENCE_PREFIX = "参考_"')
+    // 两处 filter 都换成 isEvidenceFile：签名放行而文本不取 → 缓存与内容对不上
+    // 证据面两处（签名 + 取文本）都用它
+    expect(src.match(/names\.filter\(isEvidenceFile\)/g)?.length).toBe(2)
+    // 而 reqdoc_scan 自己的目录列举**不得**用它——参考件要能被读到，
+    // 隔离的只是「证据资格」。全仓只剩那一处裸过滤，就在此处。
+    expect(src.match(/names\.filter\(\(n\) => !n\.startsWith\("\."\)\)/g)?.length).toBe(1)
   })
 })

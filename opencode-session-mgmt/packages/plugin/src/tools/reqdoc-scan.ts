@@ -110,6 +110,19 @@ const MATERIAL_EVIDENCE_DIRS = REQDOC_DIRS.filter((d) => !d.startsWith("06_") &&
 /** 证据总量上限（与 scan 的单次预算同量级，防止多目录累加爆上下文/状态体积）。 */
 const MAX_EVIDENCE_CHARS = 40_000
 
+/** 参考件文件名前缀：别家项目 / 对标材料——只作阅读参考，不属本需求的事实。 */
+export const REFERENCE_PREFIX = "参考_"
+
+/**
+ * 证据面文件判定（**签名与取文本必须共用这一个谓词**）：
+ * 默认凡在 00~05 的文件都算证据，别家项目的需求文档混进来会被当成本需求的
+ * 书面依据去消缺口——该问业务的问题因此不问。靠 `参考_` 前缀区分。
+ * 两处各写一遍过滤必然漂移（签名放行、文本不取 → 缓存与内容对不上）。
+ */
+function isEvidenceFile(name: string): boolean {
+  return !name.startsWith(".") && !name.startsWith(REFERENCE_PREFIX)
+}
+
 /** root → { 指纹, 文本 }。材料在两次调用之间被业务替换时指纹变化即重读。 */
 const EVIDENCE_CACHE = new Map<string, { sig: string; text: string }>()
 
@@ -123,7 +136,7 @@ async function evidenceSignature(root: string): Promise<string> {
     } catch {
       continue
     }
-    for (const name of names.filter((n) => !n.startsWith(".")).sort()) {
+    for (const name of names.filter(isEvidenceFile).sort()) {
       try {
         const st = await stat(resolveWithinWorktree(root, join(dir, name)))
         parts.push(`${dir}/${name}:${st.mtimeMs}:${st.size}`)
@@ -148,7 +161,7 @@ export async function materialEvidence(root: string): Promise<string> {
     } catch {
       continue
     }
-    for (const name of names.filter((n) => !n.startsWith(".")).sort()) {
+    for (const name of names.filter(isEvidenceFile).sort()) {
       const text = await extractFile(resolveWithinWorktree(root, join(dir, name)))
       parts.push(text)
       total += text.length
