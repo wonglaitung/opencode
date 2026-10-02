@@ -26,7 +26,14 @@ const HARDCODE = /\d+\.\d+(?:\.\d+)*(?:\.[A-Z][A-Za-z]+)?/g
 
 /** 形状记号：尖括号占位、花括号变量、`k`/`序号`/`N` 之类的泛指。 */
 function isShape(hit: string, full: string): boolean {
-  const at = full.indexOf(hit)
+  return isShapeAt(hit, full, full.indexOf(hit))
+}
+
+/**
+ * 形状/引用判定。**必须显式传命中位置**——原先内部用 `full.indexOf(hit)`，
+ * 同一字符串里地址重复出现时，后者会拿首次出现的上下文来判断，既可能误放行也可能误报。
+ */
+function isShapeAt(hit: string, full: string, at: number): boolean {
   // 占位豁免必须**命中点局部**：只有紧贴命中片段的占位记号才说明「这一段是形状」。
   // 曾经按整串判定（含占位即全串放行），漏判「必填 5.1.2.13（参考 <容器地址>）」与
   // 「{序号}.* 的 5.1」——真实地址藏在占位旁边照样放行，等于没有护栏。
@@ -83,7 +90,7 @@ function scan(file: string): { file: string; hit: string }[] {
   for (const lit of stringLiterals(file)) {
     for (const m of lit.matchAll(HARDCODE)) {
       if (m[0].length < 3) continue // 单段数字不是地址
-      if (isShape(m[0], lit)) continue
+      if (isShapeAt(m[0], lit, m.index)) continue
       out.push({ file: file.split("/").pop()!, hit: m[0] })
     }
   }
@@ -92,31 +99,38 @@ function scan(file: string): { file: string; hit: string }[] {
 
 /** 取一个字符串字面量里**未被豁免**的硬编码命中（正向对照用）。 */
 function caught(literal: string): string[] {
-  return [...literal.matchAll(HARDCODE)].filter((m) => !isShape(m[0], literal)).map((m) => m[0])
+  return [...literal.matchAll(HARDCODE)].filter((m) => !isShapeAt(m[0], literal, m.index)).map((m) => m[0])
 }
 
-/** Markdown 规约扫描：反引号包裹的算占位示意（合规），括号包裹的算设计文档章节引用。 */
-function scanMarkdown(file: string): { file: string; hit: string }[] {
-  const src = readFileSync(file, "utf8")
-  const out: { file: string; hit: string }[] = []
+/**
+ * Markdown 规约的命中判定：返回**未被豁免**的地址命中。
+ * 真实文件扫描与测试对照共用同一函数，避免逻辑复制两份。
+ * 只做 markdown 特有豁免（代码块形状片段、`P0.1` 阶段编号），其余语法特征
+ * （设计引用 / 章节量词 / SLO 数值）一律回落 `isShapeAt`——两侧判据必须同源，
+ * SLO 就曾漂移过一次（只有 markdown 侧有豁免，TS 源码侧照报）。
+ */
+function mdHits(src: string): string[] {
+  const out: string[] = []
   for (const m of src.matchAll(HARDCODE)) {
     if (m[0].length < 3) continue
-    // 前文窗口取 12 字符：判据要跨过引号（`"P0.1 前置条件"` 的 P 落在命中点前 2 字符）
     const before = src.slice(Math.max(0, m.index - 12), m.index)
-    if (before.endsWith("`") && src[m.index + m[0].length] === "`") continue
-    if (/[（(]\s*$/.test(before)) continue
-    // `P0.1 前置条件` 里的 P+数字是项目/阶段编号（AGENTS.md 分级约定），非模板地址。
-    // 命中点紧跟在 `P` 之后，故判据形如 `/P$/`（before 以 P 结尾）。
+    // 反引号只豁免**形状**片段（`<容器地址>.<名称>`、`{序号}.*`）；纯数字地址写在反引号里
+    // 同样是写死——`` 必填容器 `5.1.2.13` `` 换模板后一样误导，不能因为排版成代码就放过
+    if (before.endsWith("`") && src[m.index + m[0].length] === "`") {
+      const open = src.lastIndexOf("`", m.index - 1)
+      const close = src.indexOf("`", m.index + m[0].length)
+      if (/[<>{}]|序号|占位|名称/.test(src.slice(open + 1, close))) continue
+    }
+    // 命中点紧跟在 `P` 之后（`"P0.1 前置条件"`）：项目/阶段编号（AGENTS.md 分级约定），非模板地址
     if (/P$/.test(before)) continue
-    // 形如「6.3 分支」「2.11 接口与数据源」出现在引号/反引号内时，多半是设计引用或示意
-    if (/[「『"']/.test(before) && /\s$/.test(before)) continue
-    // SLO 数值不是地址：`可用性99.9%`、`响应<2s`、`并发≥1000`——紧邻量词/百分号即放行
-    const after = src.slice(m.index + m[0].length, m.index + m[0].length + 2)
-    if (/[%％]/.test(after) || /[%％]$/.test(before)) continue
-    if (/^\s*(毫秒|秒|次|万|%)/.test(after)) continue
-    out.push({ file: file.split("/").pop()!, hit: m[0] })
+    if (isShapeAt(m[0], src, m.index)) continue
+    out.push(m[0])
   }
   return out
+}
+
+function scanMarkdown(file: string): { file: string; hit: string }[] {
+  return mdHits(readFileSync(file, "utf8")).map((hit) => ({ file: file.split("/").pop()!, hit }))
 }
 
 const PLUGIN_SRC = join(import.meta.dir, "..", "src")
@@ -189,6 +203,30 @@ describe("模型可见文本不得写死模板地址", () => {
       "可用性99.9%，响应<2s",
     ])
       expect(caught(lit)).toEqual([])
+  })
+
+  test("markdown 侧正向对照：反引号只豁免形状片段，纯数字地址仍被抓", () => {
+    // 回归：曾把「反引号包裹」整体放行，于是 `` 必填容器 `5.1.2.13` `` 这类
+    // 排版成代码的真地址被放过——形状记号与真地址只差代码块里有没有占位符。
+    expect(mdHits("形状记号：`<容器地址>.<名称>` 与 `{序号}.*` 合法")).toEqual([])
+    expect(mdHits("必填容器 `5.1.2.13` 不得为空")).toContain("5.1.2.13")
+    expect(mdHits("用 `reqdoc_assemble` 填 5.1.2.13")).toContain("5.1.2.13")
+  })
+
+  test("同一字符串里地址重复出现时，逐处按自己的上下文判定", () => {
+    // 回归：isShape 曾用 `full.indexOf(hit)` 取上下文，重复出现时后者拿前者的上下文判断
+    expect(caught("第 2.3 节之后必填 2.3")).toEqual(["2.3"])
+    expect(mdHits("第 2.3 节之后必填 2.3")).toEqual(["2.3"])
+  })
+
+  test("markdown 侧反向对照：阶段编号 / SLO / 章节引用不得误报", () => {
+    for (const md of [
+      '"P0.1 前置条件" → 直接说要求',
+      "可用性99.9%，响应<2s，并发≥1000",
+      "详见设计 2.2 与（3.4 逃生口）",
+      "对应第 2.3 节",
+    ])
+      expect(mdHits(md)).toEqual([])
   })
 
   test("扫描覆盖所有插件源文件（防新增文件漏扫）", () => {
