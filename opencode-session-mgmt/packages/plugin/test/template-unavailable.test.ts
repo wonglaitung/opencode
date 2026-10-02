@@ -57,6 +57,30 @@ function probeTemplateMissing(): Record<string, { ok: boolean; v: unknown }> {
   }
 }
 
+/** 子进程探针：模板不可读下逐阶段构建状态条，看提示是否出现。 */
+function probeTemplateMissingStages(): Record<string, boolean> {
+  renameSync(TEMPLATE, BAK)
+  try {
+    const script = `
+const { buildSystemFragment } = await import("/data/opencode/opencode-session-mgmt/packages/plugin/src/prompt.ts")
+const { createWorkflowState } = await import("/data/opencode/opencode-session-mgmt/packages/shared/src/workflow.ts")
+const out = {}
+for (const st of ["goal","rules","edge","prd"]) {
+  const wf = createWorkflowState("reqdoc")
+  wf.stage = st
+  wf.kb = { slots: [], features: [{no:1,name:"X",priority:"high",confirmedAt:1}], containers:{}, askCounts:{}, updatedAt:0 }
+  out[st] = String(buildSystemFragment(wf)).includes("需求书模板不可用")
+}
+console.log(JSON.stringify(out))
+`
+    const proc = Bun.spawnSync(["bun", "-e", script], { stdout: "pipe", stderr: "pipe" })
+    if (proc.exitCode !== 0) throw new Error(`子进程失败: ${proc.stderr.toString().slice(0, 200)}`)
+    return JSON.parse(proc.stdout.toString()) as Record<string, boolean>
+  } finally {
+    restore()
+  }
+}
+
 /** 子进程脚本：模板不可读下逐项探软/硬路径，把结果打成 JSON。 */
 const SCRIPT = `
 const P = ${JSON.stringify(TEMPLATE)}
@@ -118,6 +142,39 @@ describe("模板不可读：软硬分界", () => {
     expect(out.parseRenderStructure.ok).toBe(false)
     expect(out.buildPrdSkeleton.ok).toBe(false)
     expect(out.assembleDoc.v).toContain("模板不可读")
+  })
+})
+
+describe("提示的载体与覆盖范围（受众核查）", () => {
+  // 上游实证：插件工具回执在 TUI 默认不渲染
+  // （packages/tui/src/routes/session/index.tsx 的 generic_tool_output_visibility 默认 false），
+  // 桌面端 GenericTool 根本不渲染 output。故**状态条是唯一可靠载体**——
+  // 它无条件进 system prompt（prompt.ts 的 system.transform），模型每轮必读。
+  // 若把提示只挂在回执上，用户默认看不到。
+  test("提示挂在阶段无关处：goal/rules/edge/prd 四个阶段都出现", () => {
+    const src = readFileSync(join(import.meta.dir, "..", "src", "prompt.ts"), "utf8")
+    const at = src.indexOf("templateUnavailableNotice()")
+    const prdBranch = src.indexOf('stage === "prd"')
+    // 提示的调用点必须在 prd 分支**之前**（否则只在 prd 阶段出现）
+    expect(at).toBeGreaterThan(-1)
+    expect(prdBranch).toBeGreaterThan(-1)
+    expect(at).toBeLessThan(prdBranch)
+  })
+
+  test("模板不可用时四个阶段的状态条都带提示（子进程实测）", () => {
+    const out = probeTemplateMissingStages()
+    for (const stage of ["goal", "rules", "edge", "prd"]) {
+      expect(out[stage]).toBe(true)
+    }
+  })
+
+  test("sdlc 工作流不注入该提示（记忆/提示都不得影响 sdlc）", () => {
+    const src = readFileSync(join(import.meta.dir, "..", "src", "prompt.ts"), "utf8")
+    // 提示被 def.type === "reqdoc" 包着，不应出现在 sdlc 路径
+    const guarded = src.indexOf('def.type === "reqdoc"')
+    const call = src.indexOf("templateUnavailableNotice()")
+    expect(guarded).toBeGreaterThan(-1)
+    expect(guarded).toBeLessThan(call)
   })
 })
 

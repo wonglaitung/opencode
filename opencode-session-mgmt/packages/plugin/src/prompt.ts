@@ -102,6 +102,17 @@ export function buildSystemFragment(
   }
   parts.push("", buildStateBar(workflow, stage))
 
+  // 模板不可用：**阶段无关**的告警。原先挂在 prd 分支里是错的——模板坏掉时
+  // reqdoc_ingest 已不可用（地址判不合法），用户此时多在 goal/rules 阶段，
+  // 恰恰最需要知道「不是你要补，是模板读不到」，而那正是提示被关住的地方。
+  // 载体是状态条（唯一无条件进 system prompt 的路径）：插件工具回执在 TUI 默认
+  // 不渲染（见上游 routes/session/index.tsx 的 generic_tool_output_visibility
+  // 默认 false），不能指望用户从回执里看到。
+  if (def.type === "reqdoc") {
+    const unavailable = templateUnavailableNotice()
+    if (unavailable) parts.push("", "# ⚠ 需求书模板不可用", "", unavailable)
+  }
+
   // PRD 产出指引（重构 2c）：prd 阶段注入槽位流程。
   // 模板逐字落实由服务端 reqdoc_assemble 投影保证，模型只负责把槽位内容写对，不读模板、不手写产物。
   if (def.type === "reqdoc" && stage === "prd") {
@@ -124,10 +135,6 @@ export function buildSystemFragment(
       const filled = req.filter((a) => kb.slots.some((x) => x.address === a && x.status === "confirmed")).length
       // 换模板提示放在状态条：它是跨轮唯一持久的可见位置，回执会滚出上下文。
       // 措辞面向模型（07-业务口语 第 3 节），转述给业务时由模型翻译。
-      // 模板读不到 → 本轮问不出任何内容、也录不进任何条目。必须说清真因，
-      // 否则用户只会看到「必填 0/0」并以为是自己没填够。
-      const unavailable = templateUnavailableNotice()
-      if (unavailable) parts.push("", `# ⚠ 需求书模板不可用`, "", unavailable)
       const drift = templateDrift(kb)
       if (drift) parts.push("", `# ⚠ 模板结构已更换`, "", drift)
       parts.push(
