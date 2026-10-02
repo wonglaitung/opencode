@@ -258,7 +258,7 @@ flowchart TD
 | 字段 | 内容 |
 |---|---|
 | `slots` | 槽位数组（唯一事实源）。每项 `{ address, kind: prose\|term\|field, content, source: 文档\|问答\|缺省, status: draft\|confirmed\|conflict\|retired, reason?, ref?, askCount? }` |
-| `features` | 已确认功能点（沿用 `workflow.features`，由 `reqdoc_confirm_features` 确认、`reqdoc_ingest(features)` 可更新）——决定必填槽位集 |
+| `features` | 已确认功能点（**功能点单一事实源**：`reqdoc_confirm_features` 与 `reqdoc_ingest(features:)` 都写这里）——决定必填槽位集 `5.{序号}.*`。顶层 `workflow.features` 仅为 kb 建立前的初始化输入，kb 一旦存在即被清空（历史缺陷：两工具各写一份，kb 建立后 `reqdoc_confirm_features` 对地址体系无效却仍按新列表重建 06/07 目录，导致目录、槽位地址、门禁三者不一致） |
 | `containers` | 容器声明 `{ [addr]: { required: boolean, reason? } }`（如 `4.1`、`5.k.2.1` 声明 `required: false` 表示本次无术语/无结构化字段，须给 reason） |
 | `askCounts` | 地址 → 连续出现在开放项的轮次（追问终止用，`STOP_ASK_AFTER=2`） |
 

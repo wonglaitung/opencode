@@ -1,8 +1,13 @@
 /**
  * reqdoc 功能点拆解工具（重构核心：prd 前置功能点拆解 + 业务确认）。
  * reqdoc_confirm_features —— AI 综合 goal/rules/edge 收集的信息拟功能点清单，
- * 向业务展示确认后调用本工具记录（写入 workflow.features，随汇报上行），
+ * 向业务展示确认后调用本工具记录（写入 **kb.features**，功能点单一事实源），
  * 并在 06_功能点 下为每个功能点建子目录（N_名称/）作为渲染来源区。
+ *
+ * 事实源说明：槽位地址 `5.{序号}.*`、kbGate、组装、review 全部从 `kb.features` 派生
+ * （见 reqdoc-kb-tools.readKb）。历史缺陷：本工具曾写入 `workflow.features`，而
+ * `reqdoc_ingest(features:)` 写入 `kb.features` —— kb 建立后本工具的写入对地址体系无效，
+ * 却仍按新列表重建 06/07 目录，造成目录、槽位地址、门禁三者不一致。
  */
 import { mkdir, writeFile } from "node:fs/promises"
 import { join } from "node:path"
@@ -11,6 +16,7 @@ import { getDefinition, type ReqdocFeature } from "sm-shared"
 import type { Store } from "../db"
 import { WorkflowOpError } from "../workflow-ops"
 import { sanitizeDirName } from "./reqdoc-dirs"
+import { readKb } from "./reqdoc-kb-tools"
 import { projectRoot } from "../fs-safe"
 
 const z = tool.schema
@@ -46,13 +52,21 @@ export function createReqdocFeatureTools(store: Store): Record<string, ToolDefin
           confirmedAt: Date.now(),
           note: f.note,
         }))
-        workflow.features = records
+        const kb = readKb(workflow)
+        kb.features = records
+        kb.updatedAt = Date.now()
+        workflow.kb = kb
+        // 清掉顶层遗留列表：全仓唯一的读者是 readKb 的「kb 尚未建立」兜底，kb 一旦建立就不可达。
+        // 留着它等于埋一份日后可能被误读的旧列表——本缺陷正是两份各写各的造成的。
+        delete workflow.features
       })
+      // 目录与回执一律读 kb.features——与槽位地址、门禁、组装同源
+      const features = saved.kb?.features ?? []
       // 为每个功能点在 06_功能点 下建子目录（AI 工作区，幂等不覆盖），并预建 07_需求规格产出 同名子目录
       // （模板外成果落盘位：附_流程图/、测试用例/、界面草图/ 与最终 PRD，见 reqdoc-r20 归档要求）。
       let created = 0
       const root = projectRoot(context)
-      for (const f of saved.features ?? []) {
+      for (const f of features) {
         const dir = join(root, "06_功能点", `${f.no}_${sanitizeDirName(f.name)}`)
         await mkdir(dir, { recursive: true })
         await writeFile(
@@ -62,7 +76,7 @@ export function createReqdocFeatureTools(store: Store): Record<string, ToolDefin
         await mkdir(join(root, "07_需求规格产出", `${f.no}_${sanitizeDirName(f.name)}`), { recursive: true })
         created++
       }
-      const list = (saved.features ?? [])
+      const list = features
         .map((f) => `  ${f.no}. ${f.name}（${f.priority === "high" ? "高" : f.priority === "medium" ? "中" : "低"}）`)
         .join("\n")
       return `✅ 已确认 ${created} 个功能点（写入 06_功能点 目录，并预建 07_需求规格产出 同名子目录）：\n${list}\n接下来按《业务需求说明书》模板逐功能点生成文档，内容来源标注 [文档]/[问答]/[缺省]。`

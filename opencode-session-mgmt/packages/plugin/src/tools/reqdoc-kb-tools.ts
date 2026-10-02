@@ -54,7 +54,14 @@ function requireReqdoc(workflow: { type: string }, toolName: string) {
 }
 
 /** 取当前 KB 状态；未初始化时返回空壳（功能点来自旧 features 字段，保证必填集可派生）。 */
-function readKb(workflow: {
+/**
+ * 取知识库状态——**功能点的唯一事实源在 `kb.features`**。
+ * `workflow.features` 只是 `kb` 尚未建立时的初始化输入：kb 一旦存在，`readKb` 只认 `kb.features`
+ * （槽位地址、kbGate、组装、review、统计全部从它派生）。任何写功能点的地方都必须走 kb，
+ * 写 `workflow.features` 会造成「目录按新列表建、地址体系仍是旧列表」的分叉。
+ * 导出供 reqdoc_confirm_features 复用，保证 KB 初始字段只有一处定义。
+ */
+export function readKb(workflow: {
   kb?: ReqdocKbState
   features?: { no: number; name: string; priority: "high" | "medium" | "low"; confirmedAt: number }[]
 }): ReqdocKbState {
