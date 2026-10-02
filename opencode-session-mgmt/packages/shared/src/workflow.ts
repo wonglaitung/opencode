@@ -288,6 +288,22 @@ export interface WorkflowState {
  * reqdoc 知识库状态（槽位 + 功能点 + 追问轮次）。
  * slots 是唯一事实源——PRD 文档是它的投影（`assembleDoc`），二者不一致即视为构建产物过期。
  */
+/** 增量范围的一项（分支二：改已有需求时，业务口述「这次要改什么」）。 */
+export interface ReqdocScopeItem {
+  /** 目标地址（如 `3.1` / `4.1.CRD` / `5.3.1.1`），或 `new-feature`（新增功能点，须另调 reqdoc_confirm_features 末尾追加） */
+  target: string
+  /**
+   * 改什么：`改写`/`新增` = 该地址本轮要重新确认（已确认的会被重新打开）。
+   * 两者机械效果相同（重新打开），区别只在于向业务复述时的措辞。
+   *
+   * **不设「删除」**：业务说「本次不做这一节」的正确做法是 `reqdoc_answer(source=缺省, reason=…)`——
+   * 它显式收口并计入覆盖；而 retired 不在 requiredSlots 里，删掉只会让该项变成永远填不上的缺口。
+   */
+  intent: "改写" | "新增"
+  /** 业务原话摘要（一句话，回显在回执与变更清单里，便于业务核对「你说的就是这个吧」） */
+  note?: string
+}
+
 export interface ReqdocKbState {
   /** 全部槽位（含 draft/confirmed/conflict/retired） */
   slots: import("./reqdoc-slots").ReqdocSlot[]
@@ -316,6 +332,28 @@ export interface ReqdocKbState {
    *  定稿校验/变更记录/溯源回填都按它定位产物——否则用户传了 `source=需求规格书V2.md`
    *  就会与硬编码的 `PRD.md` 脱节，导致定稿永久报「未找到产物」（P1-d）。 */
   assembledFile?: string
+  /**
+   * 本轮增量范围（业务口述「这次要改什么」，由 `reqdoc_scope` 写入）。
+   *
+   * 它**不是提问过滤器**，而是「把范围内已确认的地址重新打开（draft）」的记录：
+   * 范围内 → 重新进入「本轮该填」由业务重新确认；范围外 → 保持 confirmed 不被重问。
+   * 范围外若仍有未覆盖的必填项，照旧进「本轮该填」——**模板必填不由范围声明豁免**，
+   * 否则业务说「只改这两处」就能把整份需求书其余章节的覆盖门禁一并免掉。
+   */
+  scope?: ReqdocScopeItem[]
+  /**
+   * 承认基线时冻结的槽位快照（`reqdoc_adopt_baseline(confirm=true)` 写入，只冻一次）。
+   *
+   * 为什么必须有：`kb.slots` 是**原地覆盖**的（`reqdoc_answer` 直接改同地址），系统不留历史，
+   * 因此定稿时无法回答「这次到底改了哪些内容」。变更清单以本快照为基准。
+   */
+  baselineSnapshot?: {
+    /** 被承认的基线文件（相对项目根），用于溯源 */
+    file: string
+    slots: import("./reqdoc-slots").ReqdocSlot[]
+    features: ReqdocFeature[]
+    at: number
+  }
   updatedAt: number
 }
 

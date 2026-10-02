@@ -369,6 +369,69 @@ export const EVAL_TOOLS: OpenAITool[] = [
   {
     type: "function",
     function: {
+      name: "reqdoc_scope",
+      description:
+        "reqdoc 增量范围声明：业务说「这次要改什么」之后调用一次，把范围记进知识库，" +
+        "并把范围内已确认的地址重新打开（改回待确认）——之后「本轮该填」只会问范围内这些，范围外已确认的内容不会被重问。" +
+        "范围外仍未覆盖的必填项照旧进「本轮该填」（模板必填不由范围声明豁免）。仅 reqdoc 工作流有效。",
+      parameters: {
+        type: "object",
+        properties: {
+          scope: {
+            type: "array",
+            description: "本轮要改的范围（至少一项）",
+            items: {
+              type: "object",
+              properties: {
+                target: str("要改的地址（如 3.1 / 4.1.CRD / 5.3.1.1），或 new-feature（新增功能点）"),
+                intent: { type: "string", enum: ["改写", "新增"], description: "该地址本轮要重新确认" },
+                note: { type: "string", description: "业务原话摘要（回显给业务核对）" },
+              },
+              required: ["target", "intent"],
+            },
+          },
+          declare_complete: { type: "boolean", description: "业务明确确认「就改这些」" },
+        },
+        required: ["scope"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "reqdoc_adopt_baseline",
+      description:
+        "reqdoc 承认基线：把一份已有需求书派生出的槽位一次性确认为已确认，业务不必把稿里已有的内容再说一遍。" +
+        "不带 confirm 先调一次做预演（返回将确认的清单与覆盖率变化）；确认时必须给 authorized_by 与 confirm_note，模型不得代填。" +
+        "不会豁免任何必填项：基线没覆盖到的必填地址照旧进「本轮该填」。仅 reqdoc 工作流有效。",
+      parameters: {
+        type: "object",
+        properties: {
+          file: str("基线文件路径（相对项目根；槽位的 ref 须指向它）"),
+          addresses: { type: "array", items: { type: "string" }, description: "要确认的地址；省略 = 全部 ref 指向该文件且仍待确认的槽位" },
+          confirm: { type: "boolean", description: "省略 = 预演（只报清单）；true = 执行" },
+          authorized_by: str("confirm=true 时必填：确认人（业务方），模型不得代填"),
+          confirm_note: str("confirm=true 时必填：业务确认原话摘要，模型不得代填"),
+          unmapped: {
+            type: "array",
+            description: "必须申报（可为空数组）：稿里有、但本模板装不下的内容及处置",
+            items: {
+              type: "object",
+              properties: {
+                excerpt: str("稿里有、但模板装不下的内容（原文摘录）"),
+                disposition: str("处置：本次不纳入（理由）/ 归入某地址 / 待业务决定"),
+              },
+              required: ["excerpt", "disposition"],
+            },
+          },
+        },
+        required: ["file", "unmapped"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "reqdoc_memory_recall",
       description:
         "reqdoc 定稿记忆回顾：把本次收集到的组织知识候选（系统名/接口/产品线等）逐条列给业务**勾选**，" +

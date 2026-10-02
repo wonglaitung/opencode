@@ -1265,3 +1265,199 @@ describe("Step 3 · 增量护栏（打回已确认 = 静默把业务逼回重述
     store.close()
   })
 })
+
+/** Step 4 专用功能点夹具（与「记忆条目的 scope 作用域」无关，勿混）。 */
+const feat = (name: string, priority: "high" | "medium" | "low" = "high") => ({ name, priority })
+
+describe("Step 4a · 增量范围：范围内重新问、范围外不重问、必填不被范围豁免", () => {
+  /** 构造「已有一份填满的需求书」：2 个功能点的全部必填叶子 + 一条术语容器叶子都已确认。 */
+  async function filled(worktree: string) {
+    const store = Store.memory(() => "reqdoc")
+    const ctx = { sessionID: "r1", worktree } as never
+    const tools = createReqdocKbTools(store)
+    await createReqdocFeatureTools(store).reqdoc_confirm_features!.execute(
+      { features: [feat("名单排查"), feat("模型打分", "low")] } as never,
+      ctx,
+    )
+    const kb = store.get("r1")!.workflow!.kb!
+    for (const a of requiredSlots(kb.features)) {
+      await tools.reqdoc_answer!.execute({ address: a, content: `${a} 已有内容`, source: "文档" } as never, ctx)
+    }
+    await tools.reqdoc_answer!.execute({ address: "4.1.CRD", content: "贷后分类标签", source: "文档" } as never, ctx)
+    return { store, ctx, tools }
+  }
+  const addrs = (store: ReturnType<typeof Store.memory>) => {
+    const kb = store.get("r1")!.workflow!.kb!
+    return deriveQuestions(kb.features, { slots: kb.slots, askCounts: kb.askCounts, decls: kb.containers }).all.map(
+      (q) => q.address,
+    )
+  }
+
+  test("★ 声明范围 → 范围内重新进入待确认，范围外一律不再问", async () => {
+    const worktree = mkdtempSync(join(tmpdir(), "sm-scope-"))
+    const { store, ctx, tools } = await filled(worktree)
+    expect(addrs(store)).toHaveLength(0) // 前置：全部已确认，本轮无需提问
+
+    const r = String(
+      await tools.reqdoc_scope!.execute(
+        { scope: [{ target: "3.1", intent: "改写", note: "背景要按新政策重写" }], declare_complete: true } as never,
+        ctx,
+      ),
+    )
+    // 范围内被重新打开 → 回到「本轮该填」；范围外不回来（这才是「只问要改的」的实现方式）
+    expect(addrs(store)).toEqual(["3.1"])
+    expect(r).toContain("已记录本次增量范围 1 项")
+    expect(r).toContain("重新打开")
+    expect(r).toContain("业务已明确确认")
+    expect(r).toContain("复述给业务核对")
+    expect(store.get("r1")!.workflow!.kb!.scope).toEqual([{ target: "3.1", intent: "改写", note: "背景要按新政策重写" }])
+    store.close()
+  })
+
+  test("★ 范围声明不豁免必填：范围外仍未覆盖的必填项照旧进本轮该填且被显式列出", async () => {
+    const worktree = mkdtempSync(join(tmpdir(), "sm-scope-"))
+    const { store, ctx, tools } = await filled(worktree)
+    // 人为制造一个范围外的未覆盖必填项（模拟材料只覆盖了大部分）
+    store.mutateWorkflow("r1", (w) => {
+      w.kb!.slots = w.kb!.slots.filter((x) => x.address !== "6.1")
+    })
+    const r = String(await tools.reqdoc_scope!.execute({ scope: [{ target: "3.1", intent: "改写" }] } as never, ctx))
+    // 业务说了「只改 3.1」也不能把 6.1 的覆盖门禁免掉——否则其余章节可被一句话掏空
+    expect(addrs(store)).toEqual(expect.arrayContaining(["3.1", "6.1"]))
+    expect(r).toContain("范围外仍有")
+    expect(r).toContain("6.1")
+    expect(r).toContain("模板必填，不因本次范围而免除")
+    store.close()
+  })
+
+  test("★ 没有「删除」意图：本次不做某项须走 缺省+理由 才能收口（retired 会变成填不上的缺口）", async () => {
+    const worktree = mkdtempSync(join(tmpdir(), "sm-scope-"))
+    const { store, ctx, tools } = await filled(worktree)
+    const r = String(
+      await tools.reqdoc_scope!.execute({ scope: [{ target: "6.4", intent: "改写", note: "本次不做信创那一节" }] } as never, ctx),
+    )
+    expect(r).not.toContain("删除")
+    expect(r).toContain("本次不做某一项")
+    await tools.reqdoc_answer!.execute(
+      { address: "6.4", content: "本次不涉及", source: "缺省", reason: "本次不做信创那一节" } as never,
+      ctx,
+    )
+    expect(addrs(store)).toHaveLength(0)
+    store.close()
+  })
+
+  test("★ 非法地址被拒（不自造地址）", async () => {
+    const worktree = mkdtempSync(join(tmpdir(), "sm-scope-"))
+    const { store, ctx, tools } = await filled(worktree)
+    await expect(
+      tools.reqdoc_scope!.execute({ scope: [{ target: "99.9", intent: "改写" }] } as never, ctx),
+    ).rejects.toThrow(/非法地址/)
+    store.close()
+  })
+})
+
+describe("Step 4b · 承认基线：业务不必把稿里已有的内容再说一遍", () => {
+  const FILE = "00_初稿需求书/初稿_旧需求.md"
+  async function baselineSession() {
+    const worktree = mkdtempSync(join(tmpdir(), "sm-base-"))
+    mkdirSync(join(worktree, "00_初稿需求书"), { recursive: true })
+    writeFileSync(join(worktree, FILE), "旧需求正文", "utf8")
+    const store = Store.memory(() => "reqdoc")
+    const ctx = { sessionID: "r1", worktree } as never
+    const tools = createReqdocKbTools(store)
+    await createReqdocFeatureTools(store).reqdoc_confirm_features!.execute({ features: [feat("名单排查")] } as never, ctx)
+    return { worktree, store, ctx, tools }
+  }
+
+  test("★ 预演 → 业务授权 → 执行：确认后不再问稿里已有的内容，基线没覆盖的必填项照旧要问", async () => {
+    const { store, ctx, tools } = await baselineSession()
+    const all = requiredSlots(store.get("r1")!.workflow!.kb!.features)
+    const covered = all.slice(0, 5)
+    const uncovered = all.slice(5)
+    // 旧稿只覆盖一部分——好验证「承认基线不豁免必填」
+    await tools.reqdoc_ingest!.execute(
+      {
+        slots: covered.map((address) => ({
+          address,
+          kind: "prose" as const,
+          content: `${address} 来自旧稿`,
+          source: "文档" as const,
+          ref: FILE,
+        })),
+      } as never,
+      ctx,
+    )
+
+    const dry = String(await tools.reqdoc_adopt_baseline!.execute({ file: FILE, unmapped: [] } as never, ctx))
+    expect(dry).toContain("预演")
+    expect(dry).toContain("第 3 章") // 按章分组，业务看的是「哪一块」
+    expect(store.get("r1")!.workflow!.kb!.slots.every((x) => x.status === "draft")).toBe(true) // 预演不改状态
+
+    // 执行必须给业务授权，否则拒绝——模型不得代填理由（照 force_kb/force_reason 先例）
+    await expect(
+      tools.reqdoc_adopt_baseline!.execute({ file: FILE, confirm: true, unmapped: [] } as never, ctx),
+    ).rejects.toThrow(/模型不得代填/)
+
+    await tools.reqdoc_adopt_baseline!.execute(
+      { file: FILE, confirm: true, authorized_by: "张业务", confirm_note: "旧稿已对过，没问题", unmapped: [] } as never,
+      ctx,
+    )
+    const after = store.get("r1")!.workflow!.kb!
+    expect(covered.every((a) => after.slots.find((x) => x.address === a)!.status === "confirmed")).toBe(true)
+    // 快照冻住 = 变更清单的基准（kb.slots 原地覆盖，系统不留历史）
+    expect(after.baselineSnapshot!.file).toBe(FILE)
+    expect(after.baselineSnapshot!.slots).toHaveLength(covered.length)
+    const left = deriveQuestions(after.features, { slots: after.slots, decls: after.containers }).all.map((q) => q.address)
+    expect(left).toEqual(expect.arrayContaining(uncovered))
+    expect(left).not.toContain(covered[0])
+    store.close()
+  })
+
+  test("★ 非文档来源不得冒充基线（防不实溯源：旧需求说辞被写成书面依据）", async () => {
+    const { store, ctx, tools } = await baselineSession()
+    // 凭记忆免问落定的那批是 [问答] 且没有 ref
+    await tools.reqdoc_answer!.execute({ address: "3.1", content: "凭记忆落定的背景", source: "问答" } as never, ctx)
+    await expect(
+      tools.reqdoc_adopt_baseline!.execute(
+        { file: FILE, addresses: ["3.1"], confirm: true, authorized_by: "张业务", confirm_note: "对过", unmapped: [] } as never,
+        ctx,
+      ),
+    ).rejects.toThrow(/不能作为基线确认/)
+    store.close()
+  })
+
+  test("★ 无归宿内容必须申报：unmapped 逐条回显，并点明不会进需求书", async () => {
+    const { store, ctx, tools } = await baselineSession()
+    const first = requiredSlots(store.get("r1")!.workflow!.kb!.features).slice(0, 2)
+    await tools.reqdoc_ingest!.execute(
+      {
+        slots: first.map((address) => ({
+          address,
+          kind: "prose" as const,
+          content: `${address} 来自旧稿`,
+          source: "文档" as const,
+          ref: FILE,
+        })),
+      } as never,
+      ctx,
+    )
+    const r = String(
+      await tools.reqdoc_adopt_baseline!.execute(
+        {
+          file: FILE,
+          unmapped: [
+            { excerpt: "附录A 数据口径说明", disposition: "本次不纳入（属于数据治理专项）" },
+            { excerpt: "培训计划", disposition: "待业务决定" },
+          ],
+        } as never,
+        ctx,
+      ),
+    )
+    expect(r).toContain("已申报")
+    expect(r).toContain("附录A 数据口径说明")
+    expect(r).toContain("本次不纳入（属于数据治理专项）")
+    expect(r).toContain("待业务决定")
+    expect(r).toContain("不会进入需求书")
+    store.close()
+  })
+})
