@@ -15,6 +15,8 @@ import {
   containerDeclViolations,
   deriveOpenQuestions,
   deriveQuestions,
+  baselineDiffSummary,
+  diffAgainstBaseline,
   docAddrOf,
   featuresAppendViolation,
   hasFeatureScopedSlots,
@@ -385,5 +387,78 @@ describe("槽位内核 · 功能点清单纯追加（地址按序号索引）", 
     expect(hasFeatureScopedSlots([confirmed("4.1.CRD")])).toBe(false)
     expect(hasFeatureScopedSlots([confirmed("5.1.1.1")])).toBe(true)
     expect(hasFeatureScopedSlots([confirmed("5.2.2.1.客户号")])).toBe(true)
+  })
+})
+
+describe("槽位内核 · 变更清单（分支二：相对基线到底改了哪些）", () => {
+  const S = (address: string, content: string, status: ReqdocSlot["status"] = "confirmed"): ReqdocSlot => ({
+    kind: "prose",
+    address,
+    content,
+    source: "文档",
+    status,
+  })
+  const FN = (name: string): ReqdocFeature => ({ no: 0, name, priority: "high", confirmedAt: 1 })
+
+  test("无基线快照 → null（分支一全新需求没有「变更」可言）", () => {
+    expect(diffAgainstBaseline({ slots: [S("3.1", "a")], features: [FN("A")] })).toBeNull()
+  })
+
+  test("逐地址分出新增/改写/不再需要，并单独列出新增功能点", () => {
+    const d = diffAgainstBaseline({
+      slots: [S("3.1", "改过的"), S("3.2", "原有"), S("3.3", "x"), S("6.4", "本次不涉及", "retired"), S("5.3.1.1", "新增"), S("7.1", "临时项", "retired")],
+      features: [FN("名单排查"), FN("批量导出")],
+      baselineSnapshot: {
+        slots: [S("3.1", "原来的"), S("3.2", "原有"), S("3.3", "x"), S("6.4", "信创要求")],
+        features: [FN("名单排查")],
+      },
+    })!
+    expect(d.added).toEqual(["5.3.1.1"])
+    expect(d.changed).toEqual(["3.1"])
+    expect(d.removed).toEqual(["6.4"])
+    expect(d.featuresAdded).toEqual(["批量导出"])
+    // 基线里没有、只是被标成不再需要的地址，既不算新增也不算「不再需要」
+    expect([...d.added, ...d.removed]).not.toContain("7.1")
+  })
+
+  test("草稿不算已交付的改动（否则清单里混半成品）", () => {
+    const d = diffAgainstBaseline({
+      slots: [S("3.1", "改过的"), S("3.2", "半成品", "draft")],
+      features: [],
+      baselineSnapshot: { slots: [S("3.1", "原来的")], features: [] },
+    })!
+    expect(d.changed).toEqual(["3.1"])
+    expect(d.added).toEqual([])
+  })
+
+  test("范围外的改动被单独标出（只告警不拦截：顺手改相关表述不该卡死定稿）", () => {
+    const d = diffAgainstBaseline({
+      slots: [S("3.1", "改"), S("3.2", "顺手改"), S("5.3.1.1", "新增")],
+      features: [],
+      scope: [{ target: "3.1" }],
+      baselineSnapshot: { slots: [S("3.1", "原"), S("3.2", "原2")], features: [] },
+    })!
+    expect(d.outsideScope).toEqual(["3.2", "5.3.1.1"])
+  })
+
+  test("摘要一行说清（回执与第二章「变更说明」共用，避免两处措辞漂移）", () => {
+    const d = diffAgainstBaseline({
+      slots: [S("3.1", "改"), S("5.3.1.1", "新")],
+      features: [FN("A"), FN("B")],
+      baselineSnapshot: { slots: [S("3.1", "原")], features: [FN("A")] },
+    })!
+    const s = baselineDiffSummary(d)
+    expect(s).toContain("新增功能点 1 个（B）")
+    expect(s).toContain("新增内容 1 项（5.3.1.1）")
+    expect(s).toContain("改写 1 项（3.1）")
+    expect(
+      baselineDiffSummary(
+        diffAgainstBaseline({
+          slots: [S("3.1", "同")],
+          features: [],
+          baselineSnapshot: { slots: [S("3.1", "同")], features: [] },
+        })!,
+      ),
+    ).toContain("内容与基线一致")
   })
 })

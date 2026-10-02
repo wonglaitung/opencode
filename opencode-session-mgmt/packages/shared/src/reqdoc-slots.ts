@@ -594,3 +594,73 @@ export function featuresAppendViolation(
   }
   return null
 }
+
+/** 相对基线的差异（分支二定稿时给业务看「这次到底改了什么」）。 */
+export interface BaselineDiff {
+  /** 基线里没有、本轮新增并已确认的地址 */
+  added: string[]
+  /** 基线里有、本轮内容被改写的地址 */
+  changed: string[]
+  /** 基线里已确认、本轮不再需要的地址（retired 或消失） */
+  removed: string[]
+  /** 相对基线新增的功能点名称（末尾追加的那些） */
+  featuresAdded: string[]
+  /** 落在声明范围之外的改动地址（只告警不拦截——顺手改了相关表述不该被门禁卡死） */
+  outsideScope: string[]
+}
+
+/**
+ * 基线差异：拿承认基线时冻结的快照与当前知识库逐地址比对。
+ *
+ * 为什么必须有快照：`kb.slots` 是**原地覆盖**的（`reqdoc_answer` 直接改同地址），
+ * 系统不留历史，定稿时无法回答「这次改了哪些」。承认基线时冻结一次（`baselineSnapshot`）。
+ *
+ * 只认 `confirmed`：草稿不算「已交付的改动」，否则清单里会混进半成品。
+ * 无快照（分支一全新需求）返回 null——没有基线就没有「变更」可言。
+ */
+export function diffAgainstBaseline(kb: {
+  slots: readonly ReqdocSlot[]
+  features: readonly ReqdocFeature[]
+  scope?: readonly { target: string }[]
+  baselineSnapshot?: { slots: ReqdocSlot[]; features: ReqdocFeature[] }
+}): BaselineDiff | null {
+  const snap = kb.baselineSnapshot
+  if (!snap) return null
+  const before = new Map(snap.slots.map((s) => [s.address, s]))
+  const after = new Map(kb.slots.map((s) => [s.address, s]))
+  const diff: BaselineDiff = { added: [], changed: [], removed: [], featuresAdded: [], outsideScope: [] }
+  for (const [addr, now] of after) {
+    if (now.status !== "confirmed") continue
+    const prev = before.get(addr)
+    if (!prev) {
+      diff.added.push(addr)
+      continue
+    }
+    if (prev.content !== now.content) diff.changed.push(addr)
+  }
+  for (const [addr, prev] of before) {
+    if (prev.status !== "confirmed") continue
+    const now = after.get(addr)
+    if (!now || now.status === "retired") diff.removed.push(addr)
+  }
+  const oldNames = new Set(snap.features.map((f) => f.name))
+  diff.featuresAdded = kb.features.filter((f) => !oldNames.has(f.name)).map((f) => f.name)
+  const inScope = new Set(kb.scope?.map((s) => s.target) ?? [])
+  diff.outsideScope = [...diff.added, ...diff.changed].filter((a) => !inScope.has(a))
+  const byAddr = (x: string, y: string) => x.localeCompare(y, "en")
+  diff.added.sort(byAddr)
+  diff.changed.sort(byAddr)
+  diff.removed.sort(byAddr)
+  diff.outsideScope.sort(byAddr)
+  return diff
+}
+
+/** 变更清单的一行式摘要（回执与第二章「变更说明」共用，避免两处措辞漂移）。 */
+export function baselineDiffSummary(diff: BaselineDiff): string {
+  const parts: string[] = []
+  if (diff.featuresAdded.length > 0) parts.push(`新增功能点 ${diff.featuresAdded.length} 个（${diff.featuresAdded.join("、")}）`)
+  if (diff.added.length > 0) parts.push(`新增内容 ${diff.added.length} 项（${diff.added.join("、")}）`)
+  if (diff.changed.length > 0) parts.push(`改写 ${diff.changed.length} 项（${diff.changed.join("、")}）`)
+  if (diff.removed.length > 0) parts.push(`不再需要 ${diff.removed.length} 项（${diff.removed.join("、")}）`)
+  return parts.length > 0 ? parts.join("；") : "内容与基线一致（本次无实际改动）"
+}

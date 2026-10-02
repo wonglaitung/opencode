@@ -18,9 +18,12 @@ import {
   getDefinition,
   parseRenderStructure,
   deriveQuestions,
+  diffAgainstBaseline,
+  baselineDiffSummary,
   kbDigest,
   kbGate,
   reviewRecord,
+  type BaselineDiff,
   type ComprehensionRecord,
   type ReqdocFeature,
   type RenderStructure,
@@ -278,6 +281,8 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
       if (args.force_kb && !args.force_reason) {
         throw new WorkflowOpError("force_kb=true 必须同时给 force_reason（理由须由业务给出，模型不得代填）")
       }
+      /** 分支二定稿时「这次改了哪些」的差异（无基线快照 = null = 分支一全新需求）。 */
+      let changeDiff: BaselineDiff | null = null
       // 组装产物读取（2c）：槽位是唯一事实源，产物只是投影——定稿只需重读产物比对内嵌摘要。
       // 来源记账/篡改检测等 Option A 机制随 reqdoc_patch 一并退役。
       let liveRender: RenderStructure | undefined
@@ -442,11 +447,20 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
         try {
           const root = projectRoot(context)
           const rel = prdRelPath(root, saved.kb.features, saved.kb.assembledFile)
+          // 分支二（改已有需求）：与承认基线时的快照逐地址比对，得出「这次到底改了什么」。
+          // 无快照 = 分支一全新需求 → 无变更可言，返回 null。
+          const diff = diffAgainstBaseline(saved.kb)
           // revision 0 = 初始定稿（1.0）；revisit 重做后定稿 = 修订行（1.<revision>）
           if (!preApproved) {
-            await appendChangeRecordToPrd(root, rel, saved.stages[getDefinition(saved.type).reviewStage!].revision ?? 0)
+            await appendChangeRecordToPrd(
+              root,
+              rel,
+              saved.stages[getDefinition(saved.type).reviewStage!].revision ?? 0,
+              diff ? baselineDiffSummary(diff) : undefined,
+            )
           }
           await copyPrdToIterDir(root, saved)
+          changeDiff = diff
         } catch {
           // best-effort：交付件后处理失败不影响定稿
         }
@@ -476,6 +490,16 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
           ? `\n⚠ 仍有 ${locked.length} 个文件被人工锁定（${locked.join("、")}）。` +
             `请询问开发者是否已完成手工修改，明确确认后逐个调用 unlock_file 解锁。`
           : ""
+      // 分支二变更清单：业务说「只改这两处」，他就该看到「实际改了什么」——
+      // 这是「不重问旧内容」这套设计敢成立的信任基础。措辞按 07 业务口语：可直接转述给业务。
+      const changeNote = !changeDiff
+        ? ""
+        : `\n📋 本次变更（相对基线 ${saved.kb?.baselineSnapshot?.file?.split("/").pop() ?? "基线"}）：${baselineDiffSummary(changeDiff)}` +
+          (changeDiff.outsideScope.length > 0
+            ? `\n  ⚠ 另有 ${changeDiff.outsideScope.length} 项改动不在你声明的范围内：${changeDiff.outsideScope.join("、")}——` +
+              `请向业务说明这些是顺手改的，确认是否接受。`
+            : "") +
+          `\n  请把上面这份清单转述给业务（这是评审要看的，不必让业务自己对比新旧两版）。`
       return (
         `✅ 审查阶段通过（清单 ${def.checklist.length}/${def.checklist.length}，片段定论 ${total}/${total}）` +
         (rate !== null ? `，一次通过率 ${rate}%` : "") +
@@ -484,7 +508,7 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
         (saved.commit.status === "allowed"
           ? `\n⚑ 工作流已完成，请提醒开发者执行 /new 开始下一个需求（保持统计隔离）。`
           : "") +
-        lockedNote + lazyNote + recallNote
+        lockedNote + lazyNote + recallNote + changeNote
       )
     },
   })
@@ -680,7 +704,12 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
 
   /** 变更记录自动填充（best-effort）：把本次定稿写入 PRD「第二章 文档变更过程」表。
    * 已有表则在分隔行后插一行；缺表则于章节内建表（表头 + 分隔 + 首行）。 */
-  async function appendChangeRecordToPrd(root: string, rel: string, revision: number): Promise<void> {
+  async function appendChangeRecordToPrd(
+    root: string,
+    rel: string,
+    revision: number,
+    changeSummary?: string,
+  ): Promise<void> {
     try {
       const abs = resolveWithinWorktree(root, rel)
       const md = await Bun.file(abs).text()
@@ -689,7 +718,9 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
       if (sectionIdx === -1) return
       const version = `1.${revision}`
       const date = new Date().toISOString().slice(0, 10)
-      const content = revision === 0 ? "初始定稿" : "重做后修订定稿"
+      // 有基线快照时，「变更说明」写实际改了哪些（业务评审要看的就是这个，
+      // 而不是「重做后修订定稿」这种等于没说的说法）；无快照才是首次定稿口径。
+      const content = changeSummary ?? (revision === 0 ? "初始定稿" : "重做后修订定稿")
       const row = `| ${version} | ${content} | ${date} | 业务+AI 代笔 | |`
       const lines = md.split(/\r?\n/)
       // 已有变更记录表：在分隔行后插一行

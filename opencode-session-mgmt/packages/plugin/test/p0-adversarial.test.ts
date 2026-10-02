@@ -1461,3 +1461,90 @@ describe("Step 4b · 承认基线：业务不必把稿里已有的内容再说�
     store.close()
   })
 })
+
+describe("Step 4c · 变更清单：业务说「只改这两处」，他得看到「实际改了什么」", () => {
+  /** 走到可定稿状态：前四阶段已通过、必填全确认、容器已声明、PRD 已组装。 */
+  async function readyToSubmit() {
+    tempMemory()
+    const store = Store.memory(() => "reqdoc" as const)
+    const worktree = mkdtempSync(join(tmpdir(), "sm-chg-"))
+    mkdirSync(join(worktree, "00_初稿需求书"), { recursive: true })
+    writeFileSync(join(worktree, "00_初稿需求书/初稿_旧需求.md"), "旧需求正文", "utf8")
+    const FILE = "00_初稿需求书/初稿_旧需求.md"
+    store.mutateWorkflow("r1", (w) => {
+      for (const n of ["goal", "rules", "edge", "prd"]) w.stages[n].status = "approved"
+      w.stages.review.status = "in_progress"
+      const features = [{ no: 1, name: "名单排查", priority: "medium" as const, confirmedAt: 1000 }]
+      w.kb = {
+        // 基线 = 旧稿派生出来的全部内容（快照冻结在 baselineSnapshot）
+        slots: requiredSlots(features).map((a) => ({
+          kind: "prose" as const, address: a, content: `${a} 旧稿内容`,
+          source: "文档" as const, status: "confirmed" as const, ref: FILE,
+        })),
+        features,
+        containers: { "4.1": { required: false, reason: "无术语" }, "5.1.2.1": { required: false, reason: "无字段" } },
+        baselineSnapshot: {
+          file: FILE,
+          slots: requiredSlots(features).map((a) => ({
+            kind: "prose" as const, address: a, content: `${a} 旧稿内容`,
+            source: "文档" as const, status: "confirmed" as const, ref: FILE,
+          })),
+          features,
+          at: 1,
+        },
+        askCounts: {},
+        updatedAt: 1,
+      }
+    })
+    const ctx = { sessionID: "r1", worktree } as never
+    return { store, ctx, worktree, FILE }
+  }
+  const prd = (worktree: string) => join(worktree, "07_需求规格产出/1_名单排查/PRD.md")
+
+  test("★ 分支二定稿：回执给出变更清单，且写进交付件第二章「变更说明」", async () => {
+    const { store, ctx, worktree } = await readyToSubmit()
+    const tools = createReqdocKbTools(store)
+    // 业务说「就改 3.1」→ 只把 3.1 重新打开
+    await tools.reqdoc_scope!.execute({ scope: [{ target: "3.1", intent: "改写" }] } as never, ctx)
+    await tools.reqdoc_answer!.execute({ address: "3.1", content: "3.1 按新政策改写后的内容", source: "文档" } as never, ctx)
+    // 顺手改了范围外的 3.2（AI 的常见动作：不拦，但要告警）
+    store.mutateWorkflow("r1", (w) => {
+      w.kb!.slots = w.kb!.slots.map((x) => (x.address === "3.2" ? { ...x, content: "3.2 顺手改了" } : x))
+    })
+    await tools.reqdoc_assemble!.execute({} as never, ctx)
+
+    const out = String(await createReviewTools(store).review_submit!.execute(CHECKLIST, ctx))
+    expect(out).toContain("本次变更")
+    expect(out).toContain("初稿_旧需求.md")
+    // 清单列全部实际改动（含顺手改的），范围外的另外单列出来提醒
+    expect(out).toContain("改写 2 项（3.1、3.2）")
+    expect(out).toContain("不在你声明的范围内")
+    expect(out).toContain("3.2")
+    expect(out).toContain("确认是否接受")
+    // 交付件里第二章的「变更说明」不再是「重做后修订定稿」这种等于没说的话
+    const md = readFileSync(prd(worktree), "utf8")
+    expect(md).toContain("改写 2 项（3.1、3.2）")
+    expect(md).not.toContain("| 1.0 | 初始定稿 |")
+    store.close()
+  })
+
+  test("★ 分支一（无基线快照）不给变更清单——全新需求没有「相对基线」可言", async () => {
+    const { store, ctx } = await readyToSubmit()
+    store.mutateWorkflow("r1", (w) => {
+      delete w.kb!.baselineSnapshot
+    })
+    await createReqdocKbTools(store).reqdoc_assemble!.execute({} as never, ctx)
+    const out = String(await createReviewTools(store).review_submit!.execute(CHECKLIST, ctx))
+    expect(out).toContain("审查阶段通过")
+    expect(out).not.toContain("本次变更")
+    store.close()
+  })
+
+  test("★ 无实际改动时不谎报：清单明说「与基线一致」", async () => {
+    const { store, ctx } = await readyToSubmit()
+    await createReqdocKbTools(store).reqdoc_assemble!.execute({} as never, ctx)
+    const out = String(await createReviewTools(store).review_submit!.execute(CHECKLIST, ctx))
+    expect(out).toContain("内容与基线一致")
+    store.close()
+  })
+})
