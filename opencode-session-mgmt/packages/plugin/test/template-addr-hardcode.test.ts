@@ -20,6 +20,7 @@ import { join } from "node:path"
 import ts from "typescript"
 import { getDefinition } from "sm-shared"
 
+
 /** 具体模板地址字面量：至少两段全数字（`5.1`、`5.1.2.13`）或带大写后缀的容器叶子（`4.1.CRD`）。 */
 const HARDCODE = /\d+\.\d+(?:\.\d+)*(?:\.[A-Z][A-Za-z]+)?/g
 
@@ -80,6 +81,30 @@ function scan(file: string): { file: string; hit: string }[] {
   return out
 }
 
+/** Markdown 规约扫描：反引号包裹的算占位示意（合规），括号包裹的算设计文档章节引用。 */
+function scanMarkdown(file: string): { file: string; hit: string }[] {
+  const src = readFileSync(file, "utf8")
+  const out: { file: string; hit: string }[] = []
+  for (const m of src.matchAll(HARDCODE)) {
+    if (m[0].length < 3) continue
+    // 前文窗口取 12 字符：判据要跨过引号（`"P0.1 前置条件"` 的 P 落在命中点前 2 字符）
+    const before = src.slice(Math.max(0, m.index - 12), m.index)
+    if (before.endsWith("`") && src[m.index + m[0].length] === "`") continue
+    if (/[（(]\s*$/.test(before)) continue
+    // `P0.1 前置条件` 里的 P+数字是项目/阶段编号（AGENTS.md 分级约定），非模板地址。
+    // 命中点紧跟在 `P` 之后，故判据形如 `/P$/`（before 以 P 结尾）。
+    if (/P$/.test(before)) continue
+    // 形如「6.3 分支」「2.11 接口与数据源」出现在引号/反引号内时，多半是设计引用或示意
+    if (/[「『"']/.test(before) && /\s$/.test(before)) continue
+    // SLO 数值不是地址：`可用性99.9%`、`响应<2s`、`并发≥1000`——紧邻量词/百分号即放行
+    const after = src.slice(m.index + m[0].length, m.index + m[0].length + 2)
+    if (/[%％]/.test(after) || /[%％]$/.test(before)) continue
+    if (/^\s*(毫秒|秒|次|万|%)/.test(after)) continue
+    out.push({ file: file.split("/").pop()!, hit: m[0] })
+  }
+  return out
+}
+
 const PLUGIN_SRC = join(import.meta.dir, "..", "src")
 const SHARED_SRC = join(import.meta.dir, "..", "..", "shared", "src")
 
@@ -103,6 +128,30 @@ describe("模型可见文本不得写死模板地址", () => {
       ...scan(join(PLUGIN_SRC, "prompt.ts")),
     ]
     expect(out).toEqual([])
+  })
+
+  test("规约文件（conventions）不得写死模板地址", () => {
+    // 规约随工作流注入 system prompt，是**模型可见文本**。此前 07-业务口语 第 3 节
+    // 用 `4.1` / `5.1.2.1` 示范状态条长什么样——换模板后这些编号不存在了，
+    // 而模型可能照抄。已改为占位示意 + 显式「以清单为准」。
+    const dir = join(import.meta.dir, "..", "conventions")
+    const out = Array.from(new Bun.Glob("**/*.md").scanSync({ cwd: dir, absolute: false })).flatMap((f) =>
+      scanMarkdown(join(dir, f)),
+    )
+    expect(out).toEqual([])
+  })
+
+  test("注入文本（渲染后）零模板地址残留——规约与规则一起验", async () => {
+    // 最终防线：把渲染器真正吐给模型的那段文本拿来扫。
+    // 规则与规约任一处漏改，这里都会红——它们都是模型可见面。
+    // 动态 import：scenarios.ts 自身有既存类型告警（status:"pending" 非 ReqdocSlot），
+    // 静态引入会把那份告警带进本包的 typecheck。动态加载让运行时可用而不污染类型检查。
+    const { SCENARIOS } = await import("../../../scripts/eval-rules/src/scenarios")
+    const { renderNew } = await import("../../../scripts/eval-rules/src/render-new")
+    const sc = (SCENARIOS as unknown as { workflowType: string; state: unknown }[]).find((x) => x.workflowType === "reqdoc")!
+    const injected = String(renderNew(sc.state as never))
+    const leaked = injected.match(/(?<![\w.$\{`<])\b[45]\.\d+(\.\d+)*\b(?!`)/g) ?? []
+    expect([...new Set(leaked)]).toEqual([])
   })
 
   test("扫描覆盖所有插件源文件（防新增文件漏扫）", () => {

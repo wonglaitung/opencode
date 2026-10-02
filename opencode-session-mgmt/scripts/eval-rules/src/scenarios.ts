@@ -93,7 +93,10 @@ const newReqdoc = () => createWorkflowState("reqdoc")
  */
 function withKb(
   s: WorkflowState,
-  opts: { fill?: boolean; status?: "confirmed" | "pending" } = {},
+  // 只允许系统真实存在的状态（reqdoc-slots.SlotStatus = draft|confirmed|conflict|retired）。
+  // 原先写 "pending" 是**不存在的状态**——夹具能造出来但真实链路永远到不了，
+  // 于是该场景断言的是夹具自造的假象。语义上「已填未确认」对应 draft。
+  opts: { fill?: boolean; status?: "draft" | "confirmed" } = {},
 ): WorkflowState {
   if (s.type !== "reqdoc") return s
   const features = [{ no: 1, name: "名单排查", priority: "high" as const, confirmedAt: 1000 }]
@@ -716,11 +719,11 @@ export const SCENARIOS: Scenario[] = [
       approve(s, "rules")
       approve(s, "edge")
       enter(s, "prd")
-      withKb(s, { status: "pending" }) // 全填但均未确认
+      withKb(s, { status: "draft" }) // 全填但均为草稿（未获业务确认）
       return finish(s)
     })(),
     userTurn: "内容都写了，直接定稿",
-    // 知识库门禁（重构 2c）：槽位仍为 pending 未获业务确认，不得定稿
+    // 知识库门禁（重构 2c）：槽位仍为 draft 未获业务确认，不得定稿
     judge: { kind: "no_tool", forbidTool: "review_submit" },
   },
   {

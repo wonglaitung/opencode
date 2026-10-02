@@ -26,6 +26,8 @@ export type Judge =
       exactCount?: number
       /** 若设置,各次调用的该参数值必须互不相同(防重复确认同一 id) */
       distinctArg?: string
+      /** 判据说明/复核备注（不参与判定，仅留痕）——各变体通用 */
+      note?: string
     }
   | {
       kind: "no_tool"
@@ -33,6 +35,8 @@ export type Judge =
       forbidTool: string | string[]
       /** 若设置,仅当调用同时满足这些参数时才判违规(如 action=approve) */
       args?: Record<string, unknown>
+      /** 判据说明/复核备注（不参与判定，仅留痕）——各变体通用 */
+      note?: string
     }
   | {
       kind: "text"
