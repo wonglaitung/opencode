@@ -9,7 +9,7 @@ import { mkdtempSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { describe, expect, test } from "bun:test"
-import { schemaFingerprint } from "sm-shared"
+import { requireTemplateSchema, schemaAddressSpace } from "sm-shared"
 import { Store } from "../src/db"
 import { createReqdocKbTools } from "../src/tools/reqdoc-kb-tools"
 import { createReqdocFeatureTools } from "../src/tools/reqdoc-features"
@@ -44,7 +44,7 @@ describe("换模板告警接线", () => {
       ),
     )
     expect(out).not.toContain("模板结构已更换")
-    expect(store.get("s1")!.workflow!.kb!.templateFingerprint).toBeTruthy()
+    expect(store.get("s1")!.workflow!.kb!.templateAddressSpace).toBeTruthy()
     store.close()
   })
 
@@ -54,7 +54,7 @@ describe("换模板告警接线", () => {
     await seed(store, feat, ctx)
     // 模拟换模板：把 kb 里记录的指纹改掉（等价于磁盘上的模板被换过）
     store.mutateWorkflow("s1", (w) => {
-      if (w.kb) w.kb.templateFingerprint = "0000000000000000"
+      if (w.kb) w.kb.templateAddressSpace = "fc=99|leaf=9.9|cont=9.9|sub=9.9"
     })
     const out = String(
       await kb.reqdoc_ingest!.execute(
@@ -74,7 +74,7 @@ describe("换模板告警接线", () => {
     const { store, kb, feat, ctx } = setup(worktree)
     await seed(store, feat, ctx)
     store.mutateWorkflow("s1", (w) => {
-      if (w.kb) w.kb.templateFingerprint = "0000000000000000"
+      if (w.kb) w.kb.templateAddressSpace = "fc=99|leaf=9.9|cont=9.9|sub=9.9"
     })
     const out = String(await kb.reqdoc_assemble!.execute({} as never, ctx))
     expect(out).toContain("模板结构已更换")
@@ -85,17 +85,17 @@ describe("换模板告警接线", () => {
     const worktree = mkdtempSync(join(tmpdir(), "reqdoc-drift-once-"))
     const { store, kb, feat, ctx } = setup(worktree)
     await seed(store, feat, ctx)
-    const first = store.get("s1")!.workflow!.kb!.templateFingerprint
+    const first = store.get("s1")!.workflow!.kb!.templateAddressSpace
     expect(first).toBeTruthy()
     // 手工改成别的值后再跑一次 ingest —— 不应被 readKb 改回真实指纹
     store.mutateWorkflow("s1", (w) => {
-      if (w.kb) w.kb.templateFingerprint = "deadbeefdeadbeef"
+      if (w.kb) w.kb.templateAddressSpace = "fc=98|leaf=8.8|cont=8.8|sub=8.8"
     })
     await kb.reqdoc_ingest!.execute(
       { slots: [{ address: "3.6", kind: "prose", content: "x", source: "问答" }] } as never,
       ctx,
     )
-    expect(store.get("s1")!.workflow!.kb!.templateFingerprint).toBe("deadbeefdeadbeef")
+    expect(store.get("s1")!.workflow!.kb!.templateAddressSpace).toBe("fc=98|leaf=8.8|cont=8.8|sub=8.8")
     store.close()
   })
 
@@ -103,8 +103,8 @@ describe("换模板告警接线", () => {
     const worktree = mkdtempSync(join(tmpdir(), "reqdoc-drift-real-"))
     const { store, feat, ctx } = setup(worktree)
     await seed(store, feat, ctx)
-    const recorded = store.get("s1")!.workflow!.kb!.templateFingerprint
-    expect(recorded).toBe(schemaFingerprint((await import("sm-shared")).requireTemplateSchema()))
+    const recorded = store.get("s1")!.workflow!.kb!.templateAddressSpace
+    expect(recorded).toBe(schemaAddressSpace(requireTemplateSchema()))
     store.close()
   })
 })

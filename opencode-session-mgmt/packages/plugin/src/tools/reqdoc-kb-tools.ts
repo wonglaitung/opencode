@@ -30,7 +30,7 @@ import {
   getDefinition,
   requiredSlots,
   requireTemplateSchema,
-  schemaFingerprint,
+  schemaAddressSpace,
   templateDrift,
   type ContainerDecl,
   type ReqdocFeature,
@@ -117,12 +117,12 @@ export function readKb(workflow: {
       askCounts: {},
       updatedAt: 0,
     } satisfies ReqdocKbState)
-  // 首次建库时记下模板结构指纹，供 `templateDrift` 检测「换了模板还在填旧地址」。
+  // 首次建库时记下模板的必填地址空间，供 `templateDrift` 检测「换了模板还在填旧地址」。
   // 只记一次：后续模板变更不得改写，否则漂移检测会自我抹平。
-  // 此处**不落盘** kb.json（指纹随工作流状态走，与 evidence 同理）。
-  if (!kb.templateFingerprint) {
+  // 此处**不落盘** kb.json（随工作流状态走，与 evidence 同理）。
+  if (!kb.templateAddressSpace) {
     try {
-      kb.templateFingerprint = schemaFingerprint(requireTemplateSchema())
+      kb.templateAddressSpace = schemaAddressSpace(requireTemplateSchema())
     } catch {
       // 模板不可读时留给下游显式报错，这里不吞（readKb 是读路径，不该抛）
     }

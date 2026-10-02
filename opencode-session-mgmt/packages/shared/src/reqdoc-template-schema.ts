@@ -486,41 +486,101 @@ export function requireTemplateSchema(): TemplateSchema {
 }
 
 /**
- * 模板**结构**指纹（换模板检测用）。
+ * 模板**必填地址空间**的规范化串（存进 kb 供换模板检测）。
  *
- * 只覆盖「槽位地址空间」——章序/小节 key/容器/必填集/功能点子节——
- * **不含标题与正文**：改个措辞不该被判成换模板（那会让业务白白重走一遍），
- * 只有真正动了编号与结构才算。换模板后指纹变化，用于告诉业务「请开新会话」。
+ * 只列「已确认槽位可能挂上去」的地址：必填叶子 + 容器 + 功能点子节相对键 + 功能点章号。
+ * **不含标题与正文**：改措辞不该被判成换模板。
+ *
+ * 为什么存这个串而不是哈希：换模板检测要回答的是**旧槽位还在不在**，
+ * 那是个集合包含关系（旧 ⊆ 新？），哈希表达不了。存串才能做成员判定——
+ * 「必填集变大」只是多答一节，不必惊动业务；「变小或改址」才是旧槽位作废。
+ * 代价是 kb 多存几百字节，可接受（evidence 材料原文进的是几十 KB）。
  */
-export function schemaFingerprint(schema: TemplateSchema): string {
-  const shape = [
-    schema.featureChapter === null ? "fc:none" : `fc:${schema.featureChapter}`,
-    ...schema.chapters.map((c) => `${c.number}:${c.sections.map((s) => s.key).join(",")}`),
-    `cont:${schema.chapterContainers.join(",")}|${schema.featureContainerRels.join(",")}`,
-    `req:${schema.requiredSubRels.join(",")}`,
-  ].join(";")
-  return createHash("sha256").update(shape, "utf8").digest("hex").slice(0, 16)
+export function schemaAddressSpace(schema: TemplateSchema): string {
+  return [
+    `fc=${schema.featureChapter ?? "none"}`,
+    `leaf=${[...schema.docSectionAddrs].sort().join(",")}`,
+    `cont=${[...schema.chapterContainers, ...schema.featureContainerRels].sort().join(",")}`,
+    `sub=${schema.requiredSubRels.join(",")}`,
+  ].join("|")
 }
 
 /**
- * 换模板检测：模板结构指纹与知识库首次记录的不一致即返回告警文案，一致（或尚未记录）返回 null。
+ * 换模板检测：**旧会话里已确认的槽位，在新模板下是否已失效**。
+ * 返回告警文案；未失效（含必填集变大、或仅改措辞）返回 null。
+ *
+ * 判据是**集合包含**而非指纹相等：`旧必填叶子 ⊆ 新必填叶子` 且 `旧容器 ⊆ 新容器`
+ * 且功能点章号未变 → 旧槽位全部仍可用，只当多了几节要问，不惊动业务。
+ * 章内小节在 reqdoc 里本就全必填（`requiredSlots` 即从 `docSectionAddrs` 派生），
+ * 所以机构"加一节"会让必填集变大——那不是漂移，别让业务为此重走一遍需求。
  *
  * **只报不自动清**（显式重置）：`kb.slots` 是唯一事实源、原地覆盖不留历史，
  * 自动清空等于替业务决定"这轮问答不算数"；而跨版本搬地址要判断
  * 「旧内容在新模板的哪一节算数」，服务端无法校验语义（与导入旧稿同一类问题）。
  * 故只提示，业务开新会话重走。
+ *
+ * **本函数永不抛错**：模板不可读时返回 null（当作无漂移）。它被状态条即
+ * system prompt 构建路径调用，一次抛错会让整个请求失败——与 pdfjs 静态 import
+ * 拖垮插件加载是同一类事故（AGENTS.md 有记载）。模板不可读本身已由
+ * `requireTemplateSchema` 在组装等真正需要结构的路径上报错并报障，
+ * 不该由这个「提示」函数重复抛。
  */
-export function templateDrift(kb: { templateFingerprint?: string }): string | null {
-  const recorded = kb.templateFingerprint
+export function templateDrift(kb: { templateAddressSpace?: string }): string | null {
+  const recorded = kb.templateAddressSpace
   if (!recorded) return null
-  const now = schemaFingerprint(requireTemplateSchema())
+  let now: string
+  try {
+    now = schemaAddressSpace(requireTemplateSchema())
+  } catch {
+    return null
+  }
   if (now === recorded) return null
+  const lost = lostAddresses(recorded, now)
+  if (lost.length === 0) return null
+  // 旧记录格式被改坏（版本不兼容/手工编辑）时**不报**：那时比对的是垃圾与真实，
+  // 任何"差异"都是假的。让业务被一条无法解释的告警逼着重走一遍，比漏报糟得多。
+  // 真正需要迁的场合由「章号变了/地址没了」这类可解释的差异触发。
+  if (!isAddressSpace(recorded) || !isAddressSpace(now)) return null
   return (
-    "⚠ **模板结构已更换**（本会话的槽位地址基于旧模板，新模板可能没有对应小节，" +
-    "继续填会出现「地址非法」或内容落不进交付件）。**建议开新会话重走本需求**" +
-    "（业务侧 /new；旧交付件已归档在 07_需求规格产出/，不会被覆盖）。" +
-    "若确认只是改了措辞、编号未变，可忽略本提示。"
+    `⚠ **模板结构已更换**，本会话已确认的 ${lost.length} 个小节在新模板下已不存在` +
+    `（${lost.slice(0, 6).join("、")}${lost.length > 6 ? " 等" : ""}）——继续填会出现「地址非法」或内容落不进交付件。` +
+    `**建议开新会话重走本需求**（旧交付件已归档在 07_需求规格产出/，不会被覆盖）。` +
+    `若确认只是机构改了措辞、没动结构，可忽略本提示。` +
+    // 转述边界：这段会出现在状态条里，模型照讲就会把「槽位地址」「07_需求规格产出」
+    // 念给业务（07-业务口语 第 1 节禁用「槽位」）。明说怎么讲，避免又造一处口径分裂。
+    `（向业务转述时只讲三件事：模板换了、已经写好的那份不会丢、建议换个会话重新走；` +
+    `不要提「槽位」「地址」「小节」这些内部说法与目录名。）`
   )
+}
+
+/** 地址空间串是否格式完好（四段齐全、fc 非 none 以外的值合法）。 */
+function isAddressSpace(s: string): boolean {
+  return /^fc=\S+\|leaf=\S*\|cont=\S*\|sub=\S*$/.test(s) && s.split("|").length === 4
+}
+
+/** 旧地址空间里、在新地址空间中已失效的叶子与容器地址。 */
+function lostAddresses(recorded: string, now: string): string[] {
+  const parse = (s: string): { leaf: Set<string>; cont: Set<string>; sub: Set<string>; fc: string } => {
+    const get = (k: string): string[] =>
+      (s.split("|").find((p) => p.startsWith(`${k}=`)) ?? "").slice(k.length + 1).split(",").filter(Boolean)
+    return {
+      leaf: new Set(get("leaf")),
+      cont: new Set(get("cont")),
+      sub: new Set(get("sub")),
+      fc: (s.split("|").find((p) => p.startsWith("fc=")) ?? "fc=none").slice(3),
+    }
+  }
+  const a = parse(recorded)
+  const b = parse(now)
+  // 功能点章号变了 → 全部功能点地址作废（无法逐个比对，保守全部报）
+  if (a.fc !== b.fc) return [`功能点章 ${a.fc} → ${b.fc}（功能点下所有地址作废）`]
+  const lost: string[] = []
+  for (const x of a.leaf) if (!b.leaf.has(x)) lost.push(x)
+  for (const c of a.cont) if (!b.cont.has(c)) lost.push(`容器 ${c}`)
+  // 功能点必填子节也要比：漏这条会让「模板删掉某个必填子节（如清算处理）」不报警，
+  // 而旧会话里挂在该子节的 confirmed 槽位会静默变成孤儿（对抗审查实测）。
+  for (const s of a.sub) if (!b.sub.has(s)) lost.push(`功能点子节 ${s}`)
+  return lost.sort()
 }
 
 /** 功能点子小节的绝对地址：第 bi 块（0 起）的 `g.s` → `5.{bi+1}.g.s`（章号取自模板）。 */
