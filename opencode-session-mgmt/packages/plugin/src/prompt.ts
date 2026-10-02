@@ -9,6 +9,7 @@ import {
   kbGate,
   matchMemory,
   requiredSlots,
+  templateDrift,
   currentInProgressStage,
   getDefinition,
   reviewRecord,
@@ -120,6 +121,10 @@ export function buildSystemFragment(
     } else {
       const req = requiredSlots(kb.features)
       const filled = req.filter((a) => kb.slots.some((x) => x.address === a && x.status === "confirmed")).length
+      // 换模板提示放在状态条：它是跨轮唯一持久的可见位置，回执会滚出上下文。
+      // 措辞面向模型（07-业务口语 第 3 节），转述给业务时由模型翻译。
+      const drift = templateDrift(kb)
+      if (drift) parts.push("", `# ⚠ 模板结构已更换`, "", drift)
       parts.push(
         "",
         "# 需求知识库流程（重构 2c：PRD 由服务端从槽位投影生成，不要手写产物）",

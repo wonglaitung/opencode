@@ -30,6 +30,8 @@ import {
   getDefinition,
   requiredSlots,
   requireTemplateSchema,
+  schemaFingerprint,
+  templateDrift,
   type ContainerDecl,
   type ReqdocFeature,
   type MemoryFact,
@@ -106,15 +108,26 @@ export function readKb(workflow: {
   kb?: ReqdocKbState
   features?: { no: number; name: string; priority: "high" | "medium" | "low"; confirmedAt: number }[]
 }): ReqdocKbState {
-  return (
-    workflow.kb ?? {
+  const kb: ReqdocKbState =
+    workflow.kb ??
+    ({
       slots: [],
       features: workflow.features ?? [],
       containers: {},
       askCounts: {},
       updatedAt: 0,
+    } satisfies ReqdocKbState)
+  // 首次建库时记下模板结构指纹，供 `templateDrift` 检测「换了模板还在填旧地址」。
+  // 只记一次：后续模板变更不得改写，否则漂移检测会自我抹平。
+  // 此处**不落盘** kb.json（指纹随工作流状态走，与 evidence 同理）。
+  if (!kb.templateFingerprint) {
+    try {
+      kb.templateFingerprint = schemaFingerprint(requireTemplateSchema())
+    } catch {
+      // 模板不可读时留给下游显式报错，这里不吞（readKb 是读路径，不该抛）
     }
-  )
+  }
+  return kb
 }
 
 /** 写知识库双文件（`.kb.json` 机器态 + `知识库.md` 人可读账本）。 */
@@ -317,6 +330,8 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
       const cov = kbCoverage(kb)
       const lines = derived.batch.map((q) => `  - ${q.address}${q.guess ? `（默认：${q.guess}）` : ""}`)
       return [
+        // 漂移告警置顶：地址空间变了时下面所有地址都可能失效，先说这件事
+        templateDrift(saved.kb ?? {}) ?? "",
         `📥 已提交 ${args.slots.length} 个槽位（均为待确认 draft）；已写入 ${KB_DIR}/。`,
         `覆盖率：${cov}；本轮该填 ${derived.batch.length}/${derived.all.length} 项：`,
         ...(lines.length ? lines : ["  （无——全部槽位已确认）"]),
@@ -433,6 +448,7 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
         l2: hits.l2,
       })
       return [
+        templateDrift(saved.kb ?? {}) ?? "",
         `✅ 已确认 \`${args.address}\`（来源 ${args.source}${args.reason ? `：${args.reason}` : ""}）。`,
         `覆盖率：${kbCoverage(kb)}；剩余本轮该填 ${derived.batch.length} 项。`,
         derived.unclosed.length > 0 ? `⚠ 仍未收口：${derived.unclosed.join("、")}` : "",
@@ -607,7 +623,15 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
       store.mutateWorkflow(context.sessionID, (w) => {
         if (w.kb) w.kb.assembledFile = fileName
       })
+      // 政策与模板不匹配（如机构改了模板小节标题）：必须让业务看见——
+      // 否则被跳过的必填项一路静默到定稿，表现为「明明没问却门禁拦下」。
+      const policyMiss = requireTemplateSchema().unresolvedPolicy
       return [
+        templateDrift(kb) ?? "",
+        policyMiss.length > 0
+          ? `⚠ 政策与模板不匹配：${policyMiss.length} 个小节标题在模板里找不到（${policyMiss.join("、")}）` +
+            `——可能机构改了模板标题。已跳过对应必填项，不计入本轮覆盖率；若这些维度本次仍需要，请在模板里恢复该标题或告知业务。`
+          : "",
         `🧩 已组装 PRD：${outDir}/${args.source ?? "PRD.md"}（${result.md.length} 字符）。`,
         `结构指纹：功能点 ${kb.features.length} 个、小节 ${result.fingerprint.subSections.length} 个、来源标签 ${Object.keys(result.fingerprint.tags).length} 处。`,
         result.omittedContainers.length > 0 ? `省略的空容器节：${result.omittedContainers.join("、")}` : "",

@@ -22,6 +22,7 @@
  * 本阶段（阶段 A）**不改动任何生产路径**：常量仍在原处消费，本文件只提供
  * 解析结果与「解析结果 vs 现有常量」的双向差异报告，供测试与后续阶段 B 切换。
  */
+import { createHash } from "node:crypto"
 import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 
@@ -481,6 +482,44 @@ export function requireTemplateSchema(): TemplateSchema {
   throw new Error(
     `reqdoc 模板不可读：已探测 ${templateCandidates().length} 个候选路径（相对插件目录 ../../../docs、../../docs、运行目录 docs/）均未找到 ${TEMPLATE_FILENAME}。` +
       "这属于安装损坏而非可降级情形——请重新安装插件包。",
+  )
+}
+
+/**
+ * 模板**结构**指纹（换模板检测用）。
+ *
+ * 只覆盖「槽位地址空间」——章序/小节 key/容器/必填集/功能点子节——
+ * **不含标题与正文**：改个措辞不该被判成换模板（那会让业务白白重走一遍），
+ * 只有真正动了编号与结构才算。换模板后指纹变化，用于告诉业务「请开新会话」。
+ */
+export function schemaFingerprint(schema: TemplateSchema): string {
+  const shape = [
+    schema.featureChapter === null ? "fc:none" : `fc:${schema.featureChapter}`,
+    ...schema.chapters.map((c) => `${c.number}:${c.sections.map((s) => s.key).join(",")}`),
+    `cont:${schema.chapterContainers.join(",")}|${schema.featureContainerRels.join(",")}`,
+    `req:${schema.requiredSubRels.join(",")}`,
+  ].join(";")
+  return createHash("sha256").update(shape, "utf8").digest("hex").slice(0, 16)
+}
+
+/**
+ * 换模板检测：模板结构指纹与知识库首次记录的不一致即返回告警文案，一致（或尚未记录）返回 null。
+ *
+ * **只报不自动清**（显式重置）：`kb.slots` 是唯一事实源、原地覆盖不留历史，
+ * 自动清空等于替业务决定"这轮问答不算数"；而跨版本搬地址要判断
+ * 「旧内容在新模板的哪一节算数」，服务端无法校验语义（与导入旧稿同一类问题）。
+ * 故只提示，业务开新会话重走。
+ */
+export function templateDrift(kb: { templateFingerprint?: string }): string | null {
+  const recorded = kb.templateFingerprint
+  if (!recorded) return null
+  const now = schemaFingerprint(requireTemplateSchema())
+  if (now === recorded) return null
+  return (
+    "⚠ **模板结构已更换**（本会话的槽位地址基于旧模板，新模板可能没有对应小节，" +
+    "继续填会出现「地址非法」或内容落不进交付件）。**建议开新会话重走本需求**" +
+    "（业务侧 /new；旧交付件已归档在 07_需求规格产出/，不会被覆盖）。" +
+    "若确认只是改了措辞、编号未变，可忽略本提示。"
   )
 }
 
