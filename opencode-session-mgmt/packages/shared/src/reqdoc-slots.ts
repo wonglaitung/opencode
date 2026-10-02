@@ -18,7 +18,7 @@ import {
   featureAddr,
   isFeatureAddr,
   isFeatureSubAddr,
-  requireTemplateSchema,
+  templateSchemaOrEmpty,
   TERM_CONTAINER_TITLE,
   type TemplateSchema,
 } from "./reqdoc-template-schema"
@@ -69,7 +69,7 @@ export const QUESTIONS_PER_TURN = 8
 // ---------------------------------------------------------------------------
 
 /** 剥掉子键取文档地址：`4.1.CRD` → `4.1`；`5.1.2.1.客户号` → `5.1.2.1`；无子键原样返回。 */
-export function docAddrOf(slotAddr: string, schema: TemplateSchema = requireTemplateSchema()): string {
+export function docAddrOf(slotAddr: string, schema: TemplateSchema = templateSchemaOrEmpty()): string {
   const i = slotAddr.lastIndexOf(".")
   if (i < 0) return slotAddr
   const head = slotAddr.slice(0, i)
@@ -78,19 +78,19 @@ export function docAddrOf(slotAddr: string, schema: TemplateSchema = requireTemp
 }
 
 /** 取子键：`4.1.CRD` → `CRD`；无子键返回 null。 */
-export function slotSubKey(slotAddr: string, schema: TemplateSchema = requireTemplateSchema()): string | null {
+export function slotSubKey(slotAddr: string, schema: TemplateSchema = templateSchemaOrEmpty()): string | null {
   const doc = docAddrOf(slotAddr, schema)
   return doc === slotAddr ? null : slotAddr.slice(doc.length + 1)
 }
 
 /** 是否为文档地址（模板声明的章内小节，或模板声明组号内的功能点子小节）。
  *  判定依据全部来自模板解析结果，不再有写死的章号/组号正则。 */
-export function isDocAddr(addr: string, schema: TemplateSchema = requireTemplateSchema()): boolean {
+export function isDocAddr(addr: string, schema: TemplateSchema = templateSchemaOrEmpty()): boolean {
   return isContainerAddr(addr, schema) || schema.docSectionAddrs.has(addr) || isFeatureSubAddr(schema, addr)
 }
 
 /** 是否容器地址（章级容器如术语定义，或功能点级字段容器如 `{章}.k.g.s`）。 */
-export function isContainerAddr(addr: string, schema: TemplateSchema = requireTemplateSchema()): boolean {
+export function isContainerAddr(addr: string, schema: TemplateSchema = templateSchemaOrEmpty()): boolean {
   const s = schema
   if (s.chapterContainers.includes(addr)) return true
   const segs = addr.split(".")
@@ -118,7 +118,7 @@ export function isContainerAddr(addr: string, schema: TemplateSchema = requireTe
 export function isValidSlotAddr(
   addr: string,
   features: readonly ReqdocFeature[],
-  schema: TemplateSchema = requireTemplateSchema(),
+  schema: TemplateSchema = templateSchemaOrEmpty(),
 ): boolean {
   if (!addr || addr.length > 80) return false
   // 这两处必须传 schema：漏传会退回真实模板，使显式传入的 schema 只生效一半
@@ -150,12 +150,12 @@ export function isValidSlotAddr(
 // ---------------------------------------------------------------------------
 
 /** 章内必填小节（去 meta 章——即无小节的表格式章、去容器）。 */
-export function requiredChapterAddrs(schema: TemplateSchema = requireTemplateSchema()): string[] {
+export function requiredChapterAddrs(schema: TemplateSchema = templateSchemaOrEmpty()): string[] {
   return [...schema.docSectionAddrs]
 }
 
 /** 功能点级必填**叶子**（第 bi 块，bi 从 0 起）：政策声明的必填子节（不含容器）。 */
-export function requiredFeatureLeafAddrs(bi: number, schema: TemplateSchema = requireTemplateSchema()): string[] {
+export function requiredFeatureLeafAddrs(bi: number, schema: TemplateSchema = templateSchemaOrEmpty()): string[] {
   return schema.requiredSubRels.map((rel) => featureAddr(schema, bi, rel))
 }
 
@@ -169,7 +169,7 @@ export function requiredFeatureLeafAddrs(bi: number, schema: TemplateSchema = re
  */
 export function requiredSlots(
   features: readonly ReqdocFeature[],
-  schema: TemplateSchema = requireTemplateSchema(),
+  schema: TemplateSchema = templateSchemaOrEmpty(),
 ): string[] {
   const s = schema
   const out: string[] = []
@@ -188,7 +188,7 @@ export function requiredSlots(
 /** 全部必填容器（聚合判定，不进开放项）。 */
 export function requiredContainers(
   features: readonly ReqdocFeature[],
-  schema: TemplateSchema = requireTemplateSchema(),
+  schema: TemplateSchema = templateSchemaOrEmpty(),
 ): string[] {
   const s = schema
   return [
@@ -490,7 +490,7 @@ function deriveAll(
           : undefined
       out.push({
         address: addr,
-        kind: isTermContainer(container, opts.schema ?? requireTemplateSchema()) ? "term" : "field",
+        kind: isTermContainer(container, opts.schema ?? templateSchemaOrEmpty()) ? "term" : "field",
         askCount: askCountOf(addr, slots, opts.askCounts),
         ...(guess ? { guess, from: l2.length && !term ? "memory-L2" : "memory-L1" } : {}),
       })
@@ -584,7 +584,7 @@ export function advanceAskCounts(
  *  用它判断「功能点清单被重排是否已有实际后果」——没有槽位时重排只是改目录，无副作用。 */
 export function hasFeatureScopedSlots(
   slots: readonly ReqdocSlot[],
-  schema: TemplateSchema = requireTemplateSchema(),
+  schema: TemplateSchema = templateSchemaOrEmpty(),
 ): boolean {
   return slots.some((x) => isFeatureAddr(schema, x.address))
 }

@@ -464,6 +464,48 @@ export function templateSchema(): TemplateSchema | null {
   return cachedSchema
 }
 
+/**
+ * 空结构：模板不可读时的降级值，让「只出提示」的路径继续返回结果而不是抛错。
+ *
+ * **仅供提示类路径使用**（状态条、工具回执、覆盖率展示、漂移检测）——
+ * 这些每轮都会被系统提示构建路径调到，模板不可读时抛一次就是整个请求失败，
+ * 与 pdfjs 静态 import 拖垮插件加载同一类事故（AGENTS.md 有记载）。
+ *
+ * **绝不可用于需要真实结构的路径**：组装（产物章节、来源标签）、定稿校验、
+ * 渲染结构校验——那些地方必须让 `requireTemplateSchema` 抛出，由用户报障，
+ * 宁可请求失败也不能悄悄产出一份结构不明的交付件。
+ */
+export const EMPTY_SCHEMA: TemplateSchema = {
+  chapters: [],
+  featureChapter: null,
+  featureSubs: [],
+  chapterContainers: [],
+  featureContainerRels: [],
+  requiredSubRels: [],
+  taggedSubRels: [],
+  unresolvedPolicy: [],
+  warnings: [],
+  docSectionAddrs: new Set(),
+  allSectionAddrs: new Set(),
+  subTitleByRel: new Map(),
+  taggedSubs: [],
+  featureGroups: [],
+}
+
+/**
+ * 模板结构 schema，**模板不可读时降级为空结构**（提示类路径专用）。
+ *
+ * 与 `requireTemplateSchema` 的分工：
+ * - 提示类（状态条 / 回执 / 覆盖率 / 漂移检测）→ 用本函数，绝不抛；
+ * - 产物类（组装 / 定稿 / 渲染校验）→ 用 `requireTemplateSchema`，必须抛。
+ *
+ * 降级为空结构时必填集为空、覆盖率 0%、门禁必不通过——这些都是**安全方向**
+ * （看起来「什么都没填」而不是「看起来填完了」），不会误导用户以为能定稿。
+ */
+export function templateSchemaOrEmpty(): TemplateSchema {
+  return templateSchema() ?? EMPTY_SCHEMA
+}
+
 // ---------------------------------------------------------------------------
 // 地址派生：槽位地址空间完全由 schema 决定（不再有写死的正则与魔数）
 // ---------------------------------------------------------------------------

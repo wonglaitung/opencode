@@ -31,6 +31,7 @@ import {
   requiredSlots,
   requireTemplateSchema,
   schemaAddressSpace,
+  templateSchema,
   templateDrift,
   type ContainerDecl,
   type ReqdocFeature,
@@ -57,7 +58,7 @@ const z = tool.schema
  * 取不到模板时退化为不含具体编号的通用文案（宁可少示例，不给错示例）。
  */
 function addrHint(): { leaf: string; feature: string; termContainer: string; fieldContainer: string; termLeaf: string; fieldLeaf: string } {
-  const s = templateSchemaSafe()
+  const s = templateSchema()
   if (!s) return { leaf: "", feature: "", termContainer: "", fieldContainer: "", termLeaf: "", fieldLeaf: "" }
   const leaf = [...s.docSectionAddrs][0] ?? ""
   const ch = s.featureChapter
@@ -72,15 +73,6 @@ function addrHint(): { leaf: string; feature: string; termContainer: string; fie
     fieldContainer,
     termLeaf: termContainer ? `${termContainer}.CRD` : "",
     fieldLeaf: fieldContainer ? `${fieldContainer}.客户号` : "",
-  }
-}
-
-/** 取 schema，不抛错（工具描述在注册期求值，不能因模板缺失导致插件加载失败）。 */
-function templateSchemaSafe() {
-  try {
-    return requireTemplateSchema()
-  } catch {
-    return null
   }
 }
 
@@ -121,11 +113,10 @@ export function readKb(workflow: {
   // 只记一次：后续模板变更不得改写，否则漂移检测会自我抹平。
   // 此处**不落盘** kb.json（随工作流状态走，与 evidence 同理）。
   if (!kb.templateAddressSpace) {
-    try {
-      kb.templateAddressSpace = schemaAddressSpace(requireTemplateSchema())
-    } catch {
-      // 模板不可读时留给下游显式报错，这里不吞（readKb 是读路径，不该抛）
-    }
+    const s = templateSchema()
+    // 模板不可读时不记地址空间：留待组装等硬路径显式报错。readKb 每轮被调，
+    // 绝不能在这里抛（同 templateDrift 的理由）。
+    if (s) kb.templateAddressSpace = schemaAddressSpace(s)
   }
   return kb
 }
@@ -625,6 +616,9 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
       })
       // 政策与模板不匹配（如机构改了模板小节标题）：必须让业务看见——
       // 否则被跳过的必填项一路静默到定稿，表现为「明明没问却门禁拦下」。
+      // 位置在 `assembleInto` **之后**是刻意的：模板不可读时上面已经抛了硬错误，
+      //这里只轮得到「模板可读但政策对不上」这一种。挪到 assemble 之前会变成
+      // 提示路径先抛、掩盖了真正该报的组装失败——顺序依赖，显式说明以防后人踩。
       const policyMiss = requireTemplateSchema().unresolvedPolicy
       return [
         templateDrift(kb) ?? "",
