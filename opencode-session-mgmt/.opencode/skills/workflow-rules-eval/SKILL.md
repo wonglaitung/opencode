@@ -41,7 +41,7 @@ description: Use when running or analyzing the rule-following evaluation baselin
 
 ## 文件布局
 
-- `src/scenarios.ts`：场景定义（46 个：sdlc s1-s22 + reqdoc r1-r24，每场景 = name + workflowType + 状态夹具 state + userTurn + judge）
+- `src/scenarios.ts`：场景定义（48 个：sdlc s1-s22 + reqdoc r1-r26，每场景 = name + workflowType + 状态夹具 state + userTurn + judge）
 - `src/render-baseline.ts` / `src/render-new.ts`：两种注入格式的渲染器
 - `src/judge.ts`：判定逻辑——行为类 `tool`/`no_tool`/`text`（两工作流共用），产出类 `score`/`render`（仅 reqdoc）
 - `src/score.ts`：reqdoc 五维确定性评分器 `scorePrd()`（镜像 `REQDOC_SCORE_DIMS` 扣分标准，非 LLM 判卷）
@@ -109,6 +109,8 @@ EVAL_BASE_URL=http://localhost:8086/v1 EVAL_MODEL=/models/qwen3 EVAL_MAX_TOKENS=
 失败场景逐个归因按「规则措辞 / 判定口径 / 场景二义性」三类——**优先调脚本与判定口径**，规则文本保持简洁（弱模型对复杂措辞极敏感，为单模型把规则写细实测伤害弱模型）。弱模型是主要回归面，多模型验证防过拟合。
 
 **两条高频归因（近两轮实测沉淀）**：
+- **改判定先跑自检**——`judge-selfcheck.ts` 会在每次评测（含 dry）前证明新判据真的会红，任一项失灵即中止并指名。新增点路径判据（`argsNonEmpty` / `forbidArgsPresent`）时**必须**往里加用例：路径写错时正向断言是「恒失败」（安全），禁止存在类断言是「恒通过」（危险，产出一份全绿但无意义的报告）。原有 `args` 只做 `actual[k] === v` 引用相等，**判不了嵌套对象**（如 `restated_term.business_quote`），别拿它断言嵌套字段。
+- **评测工具镜像是简化版，改真实工具要同步**——`src/tool-defs.ts` 只暴露评测需要的字段与描述。真实工具新增字段（如 `restated_term.business_quote`）而镜像没跟上，模型就无从调用，相关场景会**恒失败**且看不出是镜像缺字段还是模型不听话。断言某个参数前先确认镜像里有它。
 - **超长截断不是规则回退**——`finish_reason: length` 且无工具调用，说明模型把 token 花在长篇分析上没走到工具，**与注入文本无关**。判别方法：用冻结的 baseline 夹具跑**同一场景**对照，若 baseline 同样 `length`，则该场景失败与本次改动无关，不要据此回滚或改注入文本。本地 qwen3（`localhost:8086`）在长 system prompt（~9k 字符）下必截断，2048/4096 均如此，且长请求还会连续超时——**该端点不适合做真实模型验收**，需要稳定端点时优先换远端（见上）。
 - **子集结果不参与验收**——`--name` / `--workflow` 的落盘文件名带过滤后缀并记 `partial`，通过率口径与全量 baseline 不可比（对比只报绝对值，`--fail-on-regression` 直接拒绝判定）。真实验收必须跑全量。
 - **判定关键词须与规则要求的语言自洽**——reqdoc-r2 禁止技术词、要求业务语言，r6 判定却查「超时/驳回/失败/补单」等技术词，模型按规则用业务说法（「连点提交/断网」）就匹配不上；判定词表须用规则同侧语言。

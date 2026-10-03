@@ -1533,7 +1533,7 @@ I-1 的措辞降级只是**承认**开口，没有堵上——证据仍是模型
 
 `bun typecheck` + `bun test`；提交推送 + `sync-bundle.sh` 同步 Windows bundle。
 
-> **`eval:dry` 的预期失败窗口**：46 个场景的夹具直接构造已删状态
+> **`eval:dry` 的预期失败窗口**：48 个场景的夹具直接构造已删状态
 > （`scenarios.ts:559/576/688/704` 写 `s.score = score({...})`）并断言 `reqdoc_score` 工具调用。
 > **`WorkflowState.score` 在阶段 2c 删除后，这些断言立即失效**，`eval:dry` 预期失败，
 > 直到场景重写完才恢复——故场景重写必须**早于 2c**（建议随 2b 一并做）。2a/2b 的验证不依赖 `eval:dry`，

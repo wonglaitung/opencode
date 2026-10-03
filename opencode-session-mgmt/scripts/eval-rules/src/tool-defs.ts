@@ -361,6 +361,19 @@ export const EVAL_TOOLS: OpenAITool[] = [
           content: str("业务确认后的内容（业务语言，不照搬口语）"),
           source: { type: "string", enum: ["文档", "问答", "缺省"], description: "来源：文档 / 问答（业务口述）/ 缺省（本次不涉及）" },
           reason: { type: "string", description: "source=缺省 时必填（如「本次无清算处理」）" },
+          restated_term: {
+            type: "object",
+            description:
+              "【记忆】仅当业务**主动口头解释了某个缩写/简称**时才填，且 business_quote 必填——" +
+              "下一个需求材料出现该词将直接采信、不再追问。**业务只是点了「同意默认」时绝对不要填**，静默接受不入库。",
+            properties: {
+              term: str("业务刚刚口头复述释义的缩写/简称（如 CRD）"),
+              definition: str("业务给出的释义（用业务原话，不要臆测润色）"),
+              kind: { type: "string", enum: ["行业通用", "系统口径", "内部简称"], description: "分类：内部简称=行内叫法；系统口径=本系统约定；行业通用=通用行话" },
+              business_quote: str("**业务刚才的原话**（照抄听到的那句，不要改写成书面语）——模型不得代填，留空按拒写处理"),
+            },
+            required: ["term", "definition", "kind", "business_quote"],
+          },
         },
         required: ["address", "content", "source"],
       },

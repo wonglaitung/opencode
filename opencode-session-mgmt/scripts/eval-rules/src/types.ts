@@ -26,6 +26,13 @@ export type Judge =
       exactCount?: number
       /** 若设置,各次调用的该参数值必须互不相同(防重复确认同一 id) */
       distinctArg?: string
+      /** 若设置,这些**点路径**字段必须在某次调用里是非空字符串(如
+       *  "restated_term.business_quote")。用于断言嵌套字段真有内容——
+       *  `args` 只能做 `actual[k] === v` 的引用相等,判不了嵌套对象。 */
+      argsNonEmpty?: string[]
+      /** 若设置,这些点路径字段在**任何一次**调用里都不得有值(防模型多传不该传的字段,
+       *  如业务只是点了「同意默认」却仍带 restated_term)。 */
+      forbidArgsPresent?: string[]
       /** 判据说明/复核备注（不参与判定，仅留痕）——各变体通用 */
       note?: string
     }
@@ -95,6 +102,8 @@ export interface Scenario {
   /** 模拟开发者/业务的当前发言 */
   userTurn: string
   judge: Judge
+  /** 判据意图一句话（不参与判定，仅留痕；配对场景靠它说明「正向/反向」） */
+  note?: string
 }
 
 export interface ToolCall {

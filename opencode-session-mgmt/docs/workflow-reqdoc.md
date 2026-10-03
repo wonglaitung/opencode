@@ -275,6 +275,8 @@ flowchart TD
 - **静默点默认不入库**——`origin=accepted_default` / `inferred` 一律拒写（`isPollutingOrigin`），错误定义不跨需求传播；写入只发生在 `reqdoc_answer(restated_term=...)`（业务主动复述释义 → L1）与定稿后的 `reqdoc_memory_recall`（业务勾选 → L2/L4）。
 - **L1 写入必须带业务原话 `business_quote`（对抗审查第九轮）**——`restated_term.business_quote` 必填，留空按**拒写**处理（`writeL1Term` 返回 `missing_quote`，回执说清真因与出路），**不静默入库**。理由是**污染成本不对称**：L1 命中即免问，而免问项只需模型自己 `reqdoc_answer` 落定（source=问答）、**业务全程不参与**——一条伪造的「业务复述」可以永久消掉未来需求里一个本该问的问题，而旧格式条目里只有模型的释义、无从追查谁说的。这与 `force_kb.force_reason`、`reqdoc_adopt_baseline.confirm_note` 同一原则：**理由/凭据必须来自业务，模型不得代填**；`origin` 由服务端钉死为 `restated`（杜绝「点默认也入库」）只是**必要不充分**——它管住了「凭什么入库」，管不住「业务是否真说过」。凭据原样落库（两端空白裁掉）以备审计，`MemoryTerm.businessQuote` 为 optional，旧条目读取不受影响。
 
+**评测已覆盖（r25/r26 一正一反）**：真实模型跑不跑得动这条 Previously 只有工具侧单测证明「不给就拒」，没有证明弱模型会主动给。故新增两个 reqdoc 场景——r25 业务口头复述缩写 → 必须调 `reqdoc_answer` 且 `restated_term.business_quote` **非空**；r26 只是点了「同意默认」→ **不得带** `restated_term`（静默点不入库这条防污染红线的直接探针）。为此两件事是前提：① 判定器补点路径判据 `argsNonEmpty` / `forbidArgsPresent`（原有 `args` 只做 `actual[k] === v` 引用相等，判不了嵌套对象）；② 评测的 `reqdoc_answer` 工具镜像此前是简化版、**根本没有** `restated_term`，模型无从调用，已补齐并与真实工具契约一致（含 `business_quote` 必填）。判据自检见 9.8。
+
 **同名不同义不静默覆盖**：材料/记忆释义冲突时交业务裁决（`writeL1Term` 返回 conflict 提示），且**冲突优先于记忆**——材料有原文就不取记忆。
 
 **地址空间**：prose 槽位地址即模板小节号（`3.1`~`3.6`、`4.2`、`6.1`~`6.4`、`7.1`/`7.2`、`5.k.1.1`、`5.k.1.2`、`5.k.2.3`…`5.k.2.13`）；term/field 槽位带子键（`4.1.CRD`、`5.1.2.1.客户号`）。**必填集从模板 schema 派生，不人工枚举**：章节级必填小节（去 meta 章、去容器）13 个 + 每功能点 10 个叶子（`5.k.1.1` 简要概述 + 映射字段叶子 `1.2`/`2.3`/`2.6`/`2.7`/`2.8`/`2.9`/`2.11`/`2.12`/`2.13`；`2.1` 是容器不入叶子集）——**1 个功能点共 23 个必填叶子 + 2 个必填容器**（`4.1`、`5.1.2.1`），3 个功能点共 43 叶子 + 4 容器。

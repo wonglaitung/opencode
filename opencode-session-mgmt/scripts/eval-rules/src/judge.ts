@@ -17,6 +17,16 @@ import {
 import { scorePrd, type PrdScore } from "./score"
 
 /** 参数子集匹配:judge.args 的每一项都须等于调用实参(实参缺键视为不匹配)。 */
+/** 按点路径取值：`restated_term.business_quote` → args.restated_term?.business_quote。 */
+function pick(args: Record<string, unknown>, path: string): unknown {
+  return path.split(".").reduce<unknown>((v, k) => (typeof v === "object" && v !== null ? (v as Record<string, unknown>)[k] : undefined), args)
+}
+
+function isNonEmptyString(args: Record<string, unknown>, path: string): boolean {
+  const v = pick(args, path)
+  return typeof v === "string" && v.trim() !== ""
+}
+
 function argsMatch(expect: Record<string, unknown> | undefined, actual: Record<string, unknown>): boolean {
   if (!expect) return true
   return Object.entries(expect).every(([k, v]) => actual[k] === v)
@@ -46,6 +56,22 @@ export function judgeScenario(judge: Judge, out: ModelOutput): { pass: boolean; 
               detail: `${judge.expectTool} 的 ${k} 未覆盖期望元素 ${JSON.stringify(want)}(实际:${matched.map((c) => JSON.stringify(c.args[k])).join("、")})`,
             }
           }
+        }
+      }
+      // 嵌套字段非空断言：args 只能引用相等，判不了 restated_term 这类对象字段
+      for (const path of judge.argsNonEmpty ?? []) {
+        if (!matched.some((c) => isNonEmptyString(c.args, path))) {
+          return {
+            pass: false,
+            detail: `${judge.expectTool} 的 ${path} 缺失或为空(实际:${matched.map((c) => JSON.stringify(pick(c.args, path))).join("、")})`,
+          }
+        }
+      }
+      // 存在性禁止：业务只是点了「同意默认」时，不该出现凭据类字段
+      for (const path of judge.forbidArgsPresent ?? []) {
+        const bad = matched.filter((c) => pick(c.args, path) !== undefined)
+        if (bad.length > 0) {
+          return { pass: false, detail: `${judge.expectTool} 不该带 ${path}(实际:${JSON.stringify(pick(bad[0]!.args, path))})` }
         }
       }
       if (judge.exactCount !== undefined && matched.length !== judge.exactCount) {

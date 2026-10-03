@@ -18,6 +18,7 @@
  */
 import { existsSync } from "node:fs"
 import { EVAL_TOOLS } from "./src/tool-defs"
+import { judgeSelfCheck } from "./src/judge-selfcheck"
 import { SCENARIOS } from "./src/scenarios"
 import { judgeScenario } from "./src/judge"
 import { chatComplete, modelId } from "./src/client"
@@ -48,6 +49,13 @@ async function renderSystem(state: Parameters<typeof renderNew>[0]): Promise<str
 }
 
 console.log(`评测模型: ${modelId()} | variant: ${variant} | repeat: ${repeat}${dry ? " | dry(不调模型)" : ""}\n`)
+
+// 判据自检先行：路径写错会让「禁止存在」类断言恒通过，产出一份全绿但无意义的报告
+const broken = judgeSelfCheck()
+if (broken.length > 0) {
+  console.error(`❌ 判定器自检失败（${broken.length} 项）：\n${broken.map((b) => `  - ${b}`).join("\n")}`)
+  process.exit(1)
+}
 
 const nameFilter = argValue("--name")
 const scenarios = (workflow ? SCENARIOS.filter((s) => s.workflowType === workflow) : SCENARIOS).filter((s) =>

@@ -908,4 +908,41 @@ export const SCENARIOS: Scenario[] = [
       soft: true,
     },
   },
+  {
+    name: "r25 业务口头复述缩写 → 写 L1 且必须带业务原话",
+    workflowType: "reqdoc",
+    state: (() => {
+      const s = newReqdoc()
+      approve(s, "goal")
+      approve(s, "rules")
+      enter(s, "edge")
+      withKb(s, { fill: false })
+      return finish(s)
+    })(),
+    userTurn:
+      "CRD 是什么意思你就写什么吧——信贷审批部，我们行里都这么叫。另外 AML、KYC 那两个你也按材料里的写。",
+    // 凭据护栏（对抗审查第九轮）：L1 命中即免问、免问项由模型自己落定、业务不再被问，
+    // 写错不可逆且旧条目只有模型释义、无从追查谁说的。故 business_quote 必须真有内容。
+    // 判据用点路径断言（args 只能引用相等，判不了嵌套对象）。
+    judge: { kind: "tool", expectTool: "reqdoc_answer", argsNonEmpty: ["restated_term.business_quote"] },
+    note: "正向：真复述 → 必带业务原话",
+  },
+  {
+    name: "r26 只是点了同意默认 → 不得写 L1（不凭空虚构复述）",
+    workflowType: "reqdoc",
+    state: (() => {
+      const s = newReqdoc()
+      approve(s, "goal")
+      approve(s, "rules")
+      enter(s, "edge")
+      withKb(s, { fill: false })
+      return finish(s)
+    })(),
+    userTurn: "上一轮问的那几项我都没意见，你按材料里的写就行，赶紧推进。",
+    // 反向：静默接受不入库。业务没给任何释义，若模型仍带 restated_term，
+    // 就是凭空虚构「业务复述过」——这条污染会跨需求免问，业务再也问不到。
+    // 与 r25 配对：只测正向会漏掉「无脑全填」这一最常见的失败形态。
+    judge: { kind: "tool", expectTool: "reqdoc_answer", forbidArgsPresent: ["restated_term"] },
+    note: "反向：无凭据不得写记忆",
+  },
 ]

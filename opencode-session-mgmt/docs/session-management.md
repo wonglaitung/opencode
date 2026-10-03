@@ -1547,12 +1547,18 @@ bun run scripts/eval-rules/run.ts --variant new              # 改造后 → res
 
 ### 9.7 场景集
 
-46 个场景（sdlc s1-s22 + reqdoc r1-r24），覆盖关键规则：基线录入、确认后 approve、无确认不 approve、回到XX→revisit、审查逐段不批量、前序未完成不 submit、提交前查门禁、完成后提示 /new 与开新需求、空档态继续、审查全流程、open_ide 手工锁定与解锁、reqdoc 渐进引导 / 双通道功能点拆解 / 打分卡门禁 / 评分 / 追问 / 渲染。
+48 个场景（sdlc s1-s22 + reqdoc r1-r26），覆盖关键规则：基线录入、确认后 approve、无确认不 approve、回到XX→revisit、审查逐段不批量、前序未完成不 submit、提交前查门禁、完成后提示 /new 与开新需求、空档态继续、审查全流程、open_ide 手工锁定与解锁、reqdoc 渐进引导 / 双通道功能点拆解 / 打分卡门禁 / 评分 / 追问 / 渲染。
 
 - **sdlc 场景 s1-s22 明细**（含完成态 /new、空档态继续、审查全流程、open_ide 锁定、SDLC 完结解锁）见 **workflow-sdlc.md 8 章**。
-- **reqdoc 场景 r1-r24 明细**（渐进引导、双通道功能点拆解、打分卡门禁、评分模式、追问可测化、渲染可测化）与质量飞轮见 **workflow-reqdoc.md 10 章**。
+- **reqdoc 场景 r1-r26 明细**（渐进引导、双通道功能点拆解、打分卡门禁、评分模式、追问可测化、渲染可测化、L1 记忆凭据正反一对）与质量飞轮见 **workflow-reqdoc.md 10 章**。
 
 ### 9.8 判定方式（rule-based，不用 LLM judge）
+
+**判据自检先行**：每次跑评测（含 `--dry`）都先跑一遍 `judge-selfcheck.ts`，证明新判据
+真的会红再开跑。理由是点路径判据（`argsNonEmpty` / `forbidArgsPresent`）写错路径时，
+对正向断言是「恒失败」（吵闹但安全），对**禁止存在**的断言却是「恒通过」（安静且
+危险）——场景永远绿，给的是假 assurance，而它护的正是「静默点默认不入库」这条
+防污染红线。任一项失灵即中止并指名该项。
 
 判定类分两类：**behavior 类**（`tool_use` / `no_tool` / `text`，断言「模型调了什么工具、怎么调、回复含什么」，sdlc 与 reqdoc 全部场景共用）与 **output 类**（`score` 质量飞轮 P0 / `render` 质量飞轮 P2，断言「模型渲染产出的 PRD 文本质量」，**reqdoc 专属**——reqdoc 用它将「通过/不通过」升级为 0-100 八维度量，sdlc 不跑 output 类、只走 behavior 类的通过率）。
 
