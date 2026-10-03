@@ -204,14 +204,13 @@ export function requiredContainers(
 /**
  * 某地址的有效槽位（排除 retired——已作废留痕不计覆盖，6.2.1.1）。
  *
- * **schema 必须逐层透传**：`docAddrOf` 缺省取已加载的真实模板，一旦漏传，
- * 异构模板下就算的是另一套地址空间（对照 `isValidSlotAddr` 里的同源告警）。
+ * **schema 必填（不给缺省值）**：`docAddrOf` 缺省取已加载的真实模板，一旦漏传，
+ * 异构模板下算的就是另一套地址空间（对照 `isValidSlotAddr` 里的同源告警）。
+ * 本函数私有、无外部调用者，故不必给缺省值——把兜底口堵在最低层，
+ * 漏传即刻编译报错。导出函数仍留缺省值：调用点约 83 处（测试占多），强制显式
+ * 会把噪声摊到每一处测试，收益不抵成本。
  */
-function activeSlots(
-  slots: readonly ReqdocSlot[],
-  addr: string,
-  schema: TemplateSchema = templateSchemaOrEmpty(),
-): ReqdocSlot[] {
+function activeSlots(slots: readonly ReqdocSlot[], addr: string, schema: TemplateSchema): ReqdocSlot[] {
   return slots.filter((s) => docAddrOf(s.address, schema) === addr && s.status !== "retired")
 }
 
@@ -482,12 +481,13 @@ function deriveAll(
   const l1Applied: string[] = []
 
   // 1) 必填叶子（容器不进来——6.2.1.1）
-  for (const addr of requiredSlots(features, opts.schema ?? templateSchemaOrEmpty())) {
-    if (leafCovered(slots, addr, opts.schema ?? templateSchemaOrEmpty())) continue
+  const schema = opts.schema ?? templateSchemaOrEmpty()
+  for (const addr of requiredSlots(features, schema)) {
+    if (leafCovered(slots, addr, schema)) continue
     out.push({
       address: addr,
       kind: "prose",
-      askCount: askCountOf(addr, slots, opts.askCounts, opts.schema),
+      askCount: askCountOf(addr, slots, schema, opts.askCounts),
     })
   }
 
@@ -495,8 +495,7 @@ function deriveAll(
   for (const [container, list] of Object.entries(opts.candidates ?? {})) {
     for (const name of list) {
       const addr = `${container}.${name}`
-      if (activeSlots(slots, addr, opts.schema ?? templateSchemaOrEmpty()).some((s) => s.status === "confirmed"))
-        continue
+      if (activeSlots(slots, addr, schema).some((s) => s.status === "confirmed")) continue
       const term = l1.find((t) => t.term === name)
       // L1 消缺口：内部简称已被业务复述确认过；行业通用属正常行话、允许使用（3.2）
       if (term && (term.kind === "内部简称" || term.kind === "行业通用")) {
@@ -515,7 +514,7 @@ function deriveAll(
       out.push({
         address: addr,
         kind: isTermContainer(container, opts.schema ?? templateSchemaOrEmpty()) ? "term" : "field",
-        askCount: askCountOf(addr, slots, opts.askCounts, opts.schema),
+        askCount: askCountOf(addr, slots, schema, opts.askCounts),
         ...(guess ? { guess, from: l2.length && !term ? "memory-L2" : "memory-L1" } : {}),
       })
     }
@@ -552,11 +551,11 @@ function isTermContainer(addr: string, schema: TemplateSchema): boolean {
 function askCountOf(
   addr: string,
   slots: readonly ReqdocSlot[],
+  schema: TemplateSchema,
   askCounts?: Readonly<Record<string, number>>,
-  schema?: TemplateSchema,
 ): number {
   if (askCounts && addr in askCounts) return askCounts[addr]!
-  const slot = activeSlots(slots, addr, schema ?? templateSchemaOrEmpty())[0]
+  const slot = activeSlots(slots, addr, schema)[0]
   return slot?.askCount ?? 0
 }
 
