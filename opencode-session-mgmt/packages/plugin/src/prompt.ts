@@ -256,7 +256,10 @@ export function buildStateBar(workflow: WorkflowState, stage: string | null): st
       lines.push(`已承认基线 ${file}：稿里已有的内容已沿用并经业务授权，不要再逐项问业务`)
     }
   } else if (getDefinition(workflow.type).type === "reqdoc") {
-    lines.push("知识库：未建（请先 reqdoc_ingest 提交需求内容槽位）")
+    // 状态条不点工具名（07-业务口语 第 3 节）：它面向模型、会被模型照讲给业务，
+    // 而「reqdoc_ingest」对业务毫无意义。动作指令在 reqdoc_ingest 的工具描述里
+    // （model-only、每次请求都在），状态条只报事实 + 一句可转述的提示。
+    lines.push("知识库：未建（请先把需求内容提交进来，逐项请业务确认后落定）")
   }
   const iteration = workflow.quality.iterationCount ?? 0
   if (iteration > 0) {

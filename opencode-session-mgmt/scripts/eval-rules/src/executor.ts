@@ -25,6 +25,15 @@ import { createReqdocFeatureTools } from "../../../packages/plugin/src/tools/req
 import { createWorkflowTools } from "../../../packages/plugin/src/tools/workflow"
 import { createReviewTools } from "../../../packages/plugin/src/tools/review"
 import { REQDOC_DIRS } from "../../../packages/plugin/src/tools/reqdoc-dirs"
+import { createReqdocInitTool } from "../../../packages/plugin/src/tools/reqdoc-dirs"
+import { createReqdocExportTool } from "../../../packages/plugin/src/tools/reqdoc-export"
+import { createReqdocImportTool } from "../../../packages/plugin/src/tools/reqdoc-import"
+import { createReqdocScanTool } from "../../../packages/plugin/src/tools/reqdoc-scan"
+import { createReqdocConventionReviewTool } from "../../../packages/plugin/src/tools/reqdoc-review-conventions"
+import { createWorkflowStartTools } from "../../../packages/plugin/src/tools/workflow-start"
+// 注：`open_ide` / `unlock_file` / `list_locked_files` 需要宿主 IDE 注册表，评测环境没有，
+// 故**故意不注册**——由 exec-selfcheck 的覆盖率检查把缺口显式报出来，而不是让模型
+// 调到一半拿到「未实现」。sdlc 的锁定类场景因此不适合在执行模式下跑。
 
 /** 工具结果回灌用的协议消息（assistant 工具调用 / tool 结果）。 */
 export interface PriorMessage {
@@ -63,6 +72,32 @@ export interface ExecResult {
 }
 
 const OUT_DIR = "07_需求规格产出"
+
+type ToolLike = { execute: (args: unknown, ctx: unknown) => Promise<unknown> }
+
+/**
+ * 工具实现注册表 —— **必须覆盖 `EVAL_TOOLS` 里的每一个工具**。
+ *
+ * 漏接的后果不是「少一个功能」，而是**评测结果失真且看不出失真**：模型调用未实现的工具
+ * 会拿到一句「评测环境未实现该工具」，于是它以为调用失败、就此停下。实测 r1 就是这样塌的：
+ * 模型说「先初始化工作流」→ `workflow_start` 未接 → 模型改口「然后一步步来」、一个问题都不问。
+ * 这类假失败会被当成「规则没效果」，把排查引向完全错误的方向。
+ * 故 `exec-selfcheck` 会在每次执行模式评测前核对覆盖率，缺一个就中止。
+ */
+export function buildRegistry(store: Store): Record<string, ToolLike | undefined> {
+  return {
+    ...createReqdocKbTools(store),
+    ...createReqdocFeatureTools(store),
+    ...createWorkflowTools(store),
+    ...createWorkflowStartTools(store),
+    ...createReviewTools(store),
+    ...createReqdocInitTool(),
+    ...createReqdocImportTool(),
+    ...createReqdocExportTool(),
+    ...createReqdocScanTool(),
+    ...createReqdocConventionReviewTool(),
+  } as Record<string, ToolLike | undefined>
+}
 
 /** 建临时工作区：按目录契约建 00~07 骨架（材料目录空，记忆与产物落盘于此）。 */
 function makeWorktree(): string {
@@ -140,12 +175,7 @@ export async function executeTurns(
   try {
     seed(store, sessionID, state)
     const ctx = { worktree: root, sessionID } as never
-    const registry: Record<string, { execute: (args: unknown, ctx: unknown) => Promise<unknown> } | undefined> = {
-      ...createReqdocKbTools(store),
-      ...createReqdocFeatureTools(store),
-      ...createWorkflowTools(store),
-      ...createReviewTools(store),
-    }
+    const registry = buildRegistry(store)
     const prior: PriorMessage[] = []
     const allCalls: ToolCall[] = []
     const allTexts: string[] = []

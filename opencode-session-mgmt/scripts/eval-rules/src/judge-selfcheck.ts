@@ -46,6 +46,44 @@ const CASES: { desc: string; judge: Parameters<typeof judgeScenario>[0]; out: Pa
     out: call({ address: "4.1.CRD", restated_term: { term: "CRD", business_quote: "我自己想的" } }),
     want: false,
   },
+  // 「rejected」判据：验防线而非谨慎。三条分别锁住「被拒→过」「全成功→挂」「没调用→挂」。
+  // 最后一条尤其重要：没尝试就不算通过，否则场景不走防线、白测。
+  {
+    desc: "rejected：调用被服务端拒绝 → 通过（防线有效）",
+    judge: { kind: "rejected", tool: "review_submit" },
+    out: { text: "", toolCalls: [{ name: "review_submit", args: {} }], toolResults: [{ name: "review_submit", ok: false, result: "审查前须先完成 边界与异常" }] },
+    want: true,
+  },
+  {
+    desc: "rejected：调用全部成功 → 不通过（防线失效）",
+    judge: { kind: "rejected", tool: "review_submit" },
+    out: { text: "", toolCalls: [{ name: "review_submit", args: {} }], toolResults: [{ name: "review_submit", ok: true, result: "✅ 已定稿" }] },
+    want: false,
+  },
+  {
+    desc: "rejected：根本没调用 → 不通过（没走防线等于白测）",
+    judge: { kind: "rejected", tool: "review_submit" },
+    out: { text: "", toolCalls: [], toolResults: [] },
+    want: false,
+  },
+  {
+    desc: "rejected：orTools 命中（模型走了正确路径、未以身试错）→ 通过",
+    judge: { kind: "rejected", tool: "workflow_advance", orTools: ["review_submit"] },
+    out: { text: "", toolCalls: [{ name: "review_submit", args: {} }], toolResults: [{ name: "review_submit", ok: true, result: "✅ 已定稿" }] },
+    want: true,
+  },
+  {
+    desc: "rejected：既没试错工具也没走正路 → 不通过",
+    judge: { kind: "rejected", tool: "workflow_advance", orTools: ["review_submit"] },
+    out: { text: "", toolCalls: [{ name: "comprehension_add", args: {} }], toolResults: [{ name: "comprehension_add", ok: true, result: "已加" }] },
+    want: false,
+  },
+  {
+    desc: "rejected：无工具执行结果（非 EVAL_EXECUTE 模式）→ 不通过并说明原因",
+    judge: { kind: "rejected", tool: "review_submit" },
+    out: { text: "", toolCalls: [{ name: "review_submit", args: {} }] },
+    want: false,
+  },
   {
     desc: "sequence：先 ingest 后 assemble → 通过",
     judge: { kind: "tool", expectTool: "reqdoc_assemble", sequence: ["reqdoc_ingest", "reqdoc_assemble"] },
@@ -94,6 +132,18 @@ const CASES: { desc: string; judge: Parameters<typeof judgeScenario>[0]; out: Pa
     desc: "render：无产物但模型正文写了 PRD → 仍不通过（这就是第十轮的「奖励手写」）",
     judge: { kind: "render", requiredChapters: ["第一章 项目信息"], ordered: true },
     out: { text: "## 第一章 项目信息\n\n内容\n", toolCalls: [] },
+    want: false,
+  },
+  {
+    desc: "argsAbsent：全部调用都不带该字段 → 通过（只验禁令，不要求做别的动作）",
+    judge: { kind: "argsAbsent", path: "restated_term" },
+    out: seqOut(["reqdoc_scan", "reqdoc_answer"]),
+    want: true,
+  },
+  {
+    desc: "argsAbsent：任一调用带了该字段 → 不通过",
+    judge: { kind: "argsAbsent", path: "restated_term" },
+    out: { text: "", toolCalls: [{ name: "reqdoc_answer", args: { restated_term: { term: "CRD" } } }] },
     want: false,
   },
   {

@@ -15,6 +15,28 @@ export type WorkflowType = SharedWorkflowType
  */
 export type Judge =
   | {
+      /**
+       * 「尝试了但被服务端拒绝」——验的是**服务端防线**，不是模型谨慎。
+       *
+       * 存在的理由：`no_tool` 判据（「不该调用 X」）在弱模型上假回退率极高。本项目实测
+       * r5「前序未完成不 submit」在新注入下 baseline 3/3 → new 0/3，看着像注入改坏了，
+       * 查下去服务端 `review_submit` 本来就会因前序阶段未 approved 直接抛错——**生产零后果**，
+       * 代价只是浪费一轮 + 一次困惑报错。用「模型不该尝试」去测，测的是弱模型的谨慎程度，
+       * 不是系统的防线；正确的不变量是：**尝试了也不得成功**。
+       *
+       * 要求必须真的被拒绝（`ok === false`），没尝试不算通过——否则这个场景就不再走防线，
+       * 白测。**仅在 `EVAL_EXECUTE=1` 下可判**（需要真实工具执行结果）。
+       *
+       * `orTools` 是「走正路也算过」的例外：有些场景模型不试错工具、直接用了正确的那个
+       * （实测 s18：模型跳过 `workflow_advance(approve)` 改调 `review_submit`——完全正确，
+       * 却因没踩防线而判失败）。列出后，命中其中任一即通过。
+       */
+      kind: "rejected"
+      tool: string
+      /** 这些工具被调用也算通过（模型选了正确路径，无需以身试错） */
+      orTools?: string[]
+    }
+  | {
       kind: "tool"
       expectTool: string
       /** 期望参数子集(全部匹配即通过),如 { stage: "requirements", action: "approve", developer_confirmed: true } */
@@ -41,6 +63,18 @@ export type Judge =
       forbidTool?: string[]
       /** 判据说明/复核备注（不参与判定，仅留痕）——各变体通用 */
       note?: string
+    }
+  | {
+      /**
+       * 「任何调用都不得带该字段」——只验禁令，不要求模型做别的动作。
+       *
+       * 存在的理由：把「要做 X」和「不许做 Y」写在同一条判据里，等于用 X 的可达性去连坐 Y。
+       * r26 的考点是「业务只是点了同意默认 → 不得凭空虚构复述写 L1」，但判据要求必须调
+       * `reqdoc_answer`——而该场景 13% 覆盖、材料目录为空，模型按 reqdoc-r28「先补料再追问」
+       * 先去 `reqdoc_scan` 是**合规的**，却因没调 answer 而判失败。禁令型考点必须独立成判据。
+       */
+      kind: "argsAbsent"
+      path: string
     }
   | {
       kind: "no_tool"

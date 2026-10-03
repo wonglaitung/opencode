@@ -263,8 +263,14 @@ describe("WorkflowDefinition 注册表（3.2）", () => {
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r6" && r.text.includes("默认推荐"))).toBe(true)
     // 阶段可见性（质量飞轮）：reqdoc-r25 通用规则，驱动模型每轮开头展示阶段 + 点名确认
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r25" && r.text.includes("第 N/Y 步") && r.text.includes("点名阶段"))).toBe(true)
-    // 投放/口述 决定阶段无关（质量飞轮）：reqdoc-r26 通用规则，目标阶段被跳过时仍须每轮提出二选一并停下，不得直接追问
-    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r26" && r.stage === "global" && r.text.includes("二选一") && r.text.includes("停下等待") && r.text.includes("不得自行浓缩"))).toBe(true)
+    // 投放/口述 决定阶段无关（质量飞轮）：reqdoc-r26 通用规则，目标阶段被跳过时仍须每轮提出二选一。
+    // 措辞要点（对抗审查第十二轮）：二选一必须收敛成「本轮最多 5 问里的第一问」，**不得**写成
+    // 「不得先抛其它问题」——那与 reqdoc-r2「单次提问最多 5 个、每个必须附 A/B/C + 默认推荐」
+    // 直接冲突，弱模型会二选一遵守（实测照「只问这一句就停」执行，r1 判据 0/3 全塌）。
+    // 故断言的是「并入本轮 5 问 + 按 r2 格式」而非「停下等待」。
+    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r26" && r.stage === "global" && r.text.includes("二选一") && r.text.includes("不得自行浓缩") && r.text.includes("最多 5 问") && r.text.includes("【默认推荐项】"))).toBe(true)
+    // 冲突面必须显式说明：不许再出现「不得先抛其它问题」这类与追问规则打架的措辞
+    expect(REQDOC.rules.some((r) => r.text.includes("不得先抛其它问题"))).toBe(false)
     expect(SDLC.rules.some((r) => r.id === "sdlc-r13" && r.text.includes("第 N/Y 步") && r.text.includes("点名阶段"))).toBe(true)
     // stagePurpose（阶段一句话目的，数据驱动、可扩展）
     expect(REQDOC.stagePurpose).toBeDefined()

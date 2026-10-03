@@ -34,6 +34,30 @@ function argsMatch(expect: Record<string, unknown> | undefined, actual: Record<s
 
 export function judgeScenario(judge: Judge, out: ModelOutput): { pass: boolean; detail: string; score?: PrdScore } {
   switch (judge.kind) {
+    case "rejected": {
+      // 验防线而非谨慎：必须真的调了、且被服务端拒绝
+      if (!out.toolResults) {
+        return { pass: false, detail: `需 EVAL_EXECUTE=1 才能判定「调用是否被拒」（当前无工具执行结果）` }
+      }
+      const hits = out.toolResults.filter((t) => t.name === judge.tool)
+      if (hits.length === 0) {
+        // 走正路也算过：模型不试错工具、直接用了正确的那个，不该判失败
+        const right = (judge.orTools ?? []).filter((t) => out.toolResults.some((r) => r.name === t))
+        if (right.length > 0) return { pass: true, detail: `✓ 未试 ${judge.tool}，直接走了 ${right.join("、")}` }
+        return { pass: false, detail: `未调用 ${judge.tool}（实际:${out.toolCalls.map((c) => c.name).join("、") || "无"}）` }
+      }
+      const rejected = hits.filter((t) => !t.ok)
+      if (rejected.length === 0) {
+        return {
+          pass: false,
+          detail: `${judge.tool} 被调用 ${hits.length} 次且**全部成功**——防线失效（期望服务端拒绝）`,
+        }
+      }
+      return {
+        pass: true,
+        detail: `✓ ${judge.tool} 被服务端拒绝 ${rejected.length}/${hits.length} 次：${rejected[0]!.result.slice(0, 80)}`,
+      }
+    }
     case "tool": {
       const matched = out.toolCalls.filter((c) => c.name === judge.expectTool)
       if (matched.length === 0) {
@@ -108,6 +132,16 @@ export function judgeScenario(judge: Judge, out: ModelOutput): { pass: boolean; 
       }
       const countNote = judge.exactCount !== undefined ? `(恰好${judge.exactCount}次)` : ""
       return { pass: true, detail: `✓ ${judge.expectTool} ${JSON.stringify(judge.args ?? {})}${countNote}` }
+    }
+
+    case "argsAbsent": {
+      const bad = out.toolCalls.filter((c) => pick(c.args, judge.path) !== undefined)
+      if (bad.length > 0)
+        return {
+          pass: false,
+          detail: `${bad.map((c) => c.name).join("、")} 不该带 ${judge.path}（实际:${JSON.stringify(pick(bad[0]!.args, judge.path))}）`,
+        }
+      return { pass: true, detail: `✓ 任何调用都未带 ${judge.path}` }
     }
 
     case "no_tool": {

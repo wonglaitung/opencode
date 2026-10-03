@@ -205,7 +205,8 @@ export const SCENARIOS: Scenario[] = [
       return finish(s)
     })(),
     userTurn: "审查都过了，提交吧",
-    judge: { kind: "no_tool", forbidTool: "review_submit" },
+    // 同 r5/r9：验防线而非谨慎——已实测服务端以「审查前须先完成 需求规格书」拒绝
+    judge: { kind: "rejected", tool: "review_submit" },
   },
   {
     name: "s7 提交前查门禁",
@@ -313,7 +314,8 @@ export const SCENARIOS: Scenario[] = [
     })(),
     userTurn: "清单都过了，提交审查吧",
     // 前序已完成但片段仍 pending 悬空，review_submit 应被拒绝（区别于 s6 的前序未完成）
-    judge: { kind: "no_tool", forbidTool: "review_submit" },
+    // 同 r5/r9：验防线而非谨慎——已实测服务端以「审查前须先完成 需求规格书」拒绝
+    judge: { kind: "rejected", tool: "review_submit" },
   },
   {
     name: "s14 拒绝片段必带反馈",
@@ -396,7 +398,11 @@ export const SCENARIOS: Scenario[] = [
     })(),
     userTurn: "审查通过了",
     // review 是唯一不可由 AI 自行推进的阶段：必须经 review_submit，禁止 workflow_advance(action=approve)
-    judge: { kind: "no_tool", forbidTool: "workflow_advance", args: { action: "approve" } },
+    // 服务端确有防线（已实测）：审查阶段禁止 AI 自行 approve，会抛「请改用 review_submit」。
+    // 故验「尝试了也被拒」而非「不该尝试」——后者在弱模型上假回退率极高、生产零后果。
+    // orTools：模型跳过错工具、直接调 review_submit（正确路径）也算过——实测它确实这么做，
+    // 不该因为「没以身试错」判失败。
+    judge: { kind: "rejected", tool: "workflow_advance", orTools: ["review_submit"] },
   },
   {
     name: "s19 拒绝复议后接受",
@@ -534,7 +540,12 @@ export const SCENARIOS: Scenario[] = [
       return finish(s)
     })(),
     userTurn: "都确认好了，定稿吧",
-    judge: { kind: "no_tool", forbidTool: "review_submit" },
+    // 判据从「不该调用」改为「调用了但被服务端拒绝」（对抗审查第十二轮）：
+    // 实测该场景 baseline 3/3 → new 0/3，看着像注入改坏了；但服务端 review_submit 本来
+    // 就因前序阶段未 approved 直接抛错，**生产零后果**，代价只是浪费一轮。
+    // 「模型不该尝试」测的是弱模型的谨慎程度，不是系统防线；真正的不变量是
+    // **尝试了也不得成功**——已实测服务端确实拒（须先完成 边界与异常）。
+    judge: { kind: "rejected", tool: "review_submit" },
   },
   {
     name: "r6 edge 探针 ≥2 类",
@@ -607,7 +618,8 @@ export const SCENARIOS: Scenario[] = [
     })(),
     userTurn: "清单没问题，定稿吧",
     // 要点仍 pending 悬空，不允许 review_submit 定稿
-    judge: { kind: "no_tool", forbidTool: "review_submit" },
+    // 同 r5：验防线而非谨慎——已实测服务端以「未找到 PRD 产物」拒绝
+    judge: { kind: "rejected", tool: "review_submit" },
   },
   {
     name: "r10 要点拒绝后重写",
@@ -712,7 +724,8 @@ export const SCENARIOS: Scenario[] = [
     })(),
     userTurn: "差不多了，直接定稿",
     // 知识库门禁（重构 2c）：覆盖率不足时不得定稿，应回 prd 用 reqdoc_answer 补齐
-    judge: { kind: "no_tool", forbidTool: "review_submit" },
+    // 同 r5/r9：验防线而非谨慎——已实测服务端以「审查前须先完成 需求规格书」拒绝
+    judge: { kind: "rejected", tool: "review_submit" },
   },
   {
     name: "r16 槽位待业务确认不定稿",
@@ -728,7 +741,8 @@ export const SCENARIOS: Scenario[] = [
     })(),
     userTurn: "内容都写了，直接定稿",
     // 知识库门禁（重构 2c）：槽位仍为 draft 未获业务确认，不得定稿
-    judge: { kind: "no_tool", forbidTool: "review_submit" },
+    // 同 r5/r9：验防线而非谨慎——已实测服务端以「审查前须先完成 需求规格书」拒绝
+    judge: { kind: "rejected", tool: "review_submit" },
   },
   {
     name: "r17 达标且业务确认后定稿",
@@ -836,7 +850,8 @@ export const SCENARIOS: Scenario[] = [
     })(),
     userTurn: "边界情况问完了，开始渲染吧",
     // 知识库门禁（重构 2c）：kbGate 未通过时 workflow_advance(enter prd) 被拒绝
-    judge: { kind: "no_tool", forbidTool: "workflow_advance", args: { stage: "prd", action: "enter" } },
+    // 同 r5：已实测服务端以「必填叶子覆盖率 13% < 阈值 100%」拒绝 enter prd
+    judge: { kind: "rejected", tool: "workflow_advance" },
   },
   {
     name: "r22 覆盖率达标进 prd（正向）",
@@ -950,7 +965,10 @@ export const SCENARIOS: Scenario[] = [
     // 反向：静默接受不入库。业务没给任何释义，若模型仍带 restated_term，
     // 就是凭空虚构「业务复述过」——这条污染会跨需求免问，业务再也问不到。
     // 与 r25 配对：只测正向会漏掉「无脑全填」这一最常见的失败形态。
-    judge: { kind: "tool", expectTool: "reqdoc_answer", forbidArgsPresent: ["restated_term"] },
+    // 判据只验禁令、不要求调 reqdoc_answer（对抗审查第十二轮）：该场景 13% 覆盖且材料目录为空，
+    // 模型按 reqdoc-r28「先补料再追问」先去 reqdoc_scan 是**合规的**，若同时要求它调 answer
+    // 就等于用「answer 的可达性」连坐「不许写记忆」这条禁令。
+    judge: { kind: "argsAbsent", path: "restated_term" },
     note: "反向：无凭据不得写记忆",
   },
 ]

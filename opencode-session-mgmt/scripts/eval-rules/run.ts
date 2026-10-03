@@ -58,6 +58,21 @@ async function renderSystem(state: Parameters<typeof renderNew>[0]): Promise<str
 
 console.log(`评测模型: ${modelId()} | variant: ${variant} | repeat: ${repeat}${dry ? " | dry(不调模型)" : ""}\n`)
 
+// **冻结参照保护**：baseline.json 是入库的对照快照（SKILL.md 明确「不要重跑 baseline
+// 覆盖参照，否则对比失效」）。此前只防住了子集跑覆写（子集会落带后缀的独立文件名），
+// **全量跑 baseline 仍会直接覆写它**——我这次就踩了：想跑全量对照，顺手
+// `--variant baseline` 没加 `--workflow`，冻结参照被覆盖，只能从 git 恢复。
+// 故：全量 baseline 默认拒绝写入，须显式 `EVAL_ALLOW_BASELINE_OVERWRITE=1`。
+if (variant === "baseline" && !workflow && !dry && process.env.EVAL_ALLOW_BASELINE_OVERWRITE !== "1") {
+  console.error(
+    "❌ 拒绝覆写冻结参照 baseline.json。\n" +
+      "   它是入库的对照快照，重跑会让历史对比全部失效（SKILL.md 有此纪律）。\n" +
+      "   · 只想做同口径对照 → 加 --workflow reqdoc|sdlc，落独立文件（baseline.reqdoc.json 等）\n" +
+      "   · 确实要重冻结基线 → 显式 EVAL_ALLOW_BASELINE_OVERWRITE=1，并 git add -f 入库",
+  )
+  process.exit(1)
+}
+
 // 判据自检先行：路径写错会让「禁止存在」类断言恒通过，产出一份全绿但无意义的报告
 const broken = judgeSelfCheck()
 if (broken.length > 0) {

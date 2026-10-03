@@ -14,7 +14,9 @@
 import { parseRenderStructure } from "sm-shared"
 import { requiredSlots } from "../../../packages/shared/src/reqdoc-slots.ts"
 import { judgeScenario } from "./judge.ts"
-import { executeTurns } from "./executor.ts"
+import { executeTurns, buildRegistry } from "./executor.ts"
+import { Store } from "../../../packages/plugin/src/db"
+import { EVAL_TOOLS } from "./tool-defs.ts"
 import type { ModelOutput, WorkflowState } from "./types.ts"
 
 const NOOP: ModelOutput = { text: "", toolCalls: [] }
@@ -92,7 +94,25 @@ export async function execSelfCheck(): Promise<string[]> {
     if (scored.score === undefined) fails.push("判据接线：score 判据未给出分数（产物未进入评分）")
   }
 
-  // 3) 死循环检测
+  // 3) 工具覆盖率：`EVAL_TOOLS` 里每个工具都必须有真实实现，否则评测结果失真且看不出失真
+  const probeStore = Store.memory(() => "reqdoc")
+  const registry = buildRegistry(probeStore)
+  const KNOWN_GAPS = new Set(["open_ide", "unlock_file", "list_locked_files"])
+  const all = (EVAL_TOOLS as { function: { name: string } }[]).map((t) => t.function.name)
+  const missing = all.filter((n) => !registry[n])
+  const unexpected = missing.filter((n) => !KNOWN_GAPS.has(n))
+  probeStore.close()
+  if (unexpected.length > 0)
+    fails.push(
+      `工具覆盖：${unexpected.length} 个评测工具没有真实实现（${unexpected.join("、")}）——模型调到会拿到「未实现」并停下，` +
+        `表现为「规则没效果」的假失败。补 packages/plugin/src/tools 的对应 create* 工厂。`,
+    )
+  // 已知缺口不阻断，但要显式记着：open_ide 系列需要宿主 IDE 注册表，评测环境没有，
+  // 故 sdlc 的锁定类场景不适合在执行模式下跑（会拿到「未实现」而停）。
+  if (missing.length > 0)
+    console.warn(`⚠ ${missing.length} 个工具在评测环境无真实实现（${missing.join("、")}）——相关场景的结果不可信`)
+
+  // 4) 死循环检测
   // 每一轮都发同一个调用（参数完全相同）——这才是弱模型的真实死循环形态（实测 qwen3 连发 4 次）
   const looped = await executeTurns(state, async () => ({
     text: "",

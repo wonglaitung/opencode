@@ -381,3 +381,87 @@ describe("★ 对抗审查修复：基线提示必须是跨轮持久提示（P2-
     expect(text).toContain("不要因为容器报未就绪就把旧稿里已写着的术语与字段重问一遍")
   })
 })
+
+/**
+ * 状态条不得出现工具名（`buildStateBar` 护栏）。
+ *
+ * 状态条是唯一无条件进 system prompt 的载体，面向模型、但**会被模型照讲给业务**——
+ * 「请先 reqdoc_ingest 提交需求内容槽位」这句里的工具名对业务毫无意义，而工具描述里
+ * 本来就有动作指令（model-only、每次请求都在），状态条只需报事实 + 可转述的提示
+ * （07-业务口语 第 3 节）。
+ *
+ * 覆盖各分支：未建库 / 未就绪 / 门禁通过 / 漂移告警 / 完成态 / sdlc 与 reqdoc 两流。
+ */
+describe("buildStateBar 不得泄漏工具名", () => {
+  const TOOL_NAMES = [
+    "reqdoc_ingest",
+    "reqdoc_answer",
+    "reqdoc_assemble",
+    "reqdoc_scan",
+    "reqdoc_confirm_features",
+    "reqdoc_adopt_baseline",
+    "reqdoc_memory_recall",
+    "reqdoc_export",
+    "reqdoc_import",
+    "reqdoc_init",
+    "reqdoc_review_conventions",
+    "workflow_advance",
+    "workflow_revisit",
+    "workflow_baseline",
+    "workflow_start",
+    "review_submit",
+    "comprehension_confirm",
+    "comprehension_add",
+    "comprehension_ask",
+    "comprehension_reject",
+    "comprehension_rewrite",
+    "commit_gate_check",
+    "open_ide",
+    "unlock_file",
+  ]
+
+  function statesUnderTest(): { label: string; wf: WorkflowState; stage: string }[] {
+    const out: { label: string; wf: WorkflowState; stage: string }[] = []
+    // sdlc：未开始 / 进行中 / 完成态
+    const sd = createWorkflowState("sdlc")
+    out.push({ label: "sdlc/未开始", wf: sd, stage: "requirements" })
+    applyTransition(sd, "requirements", "enter", 1)
+    out.push({ label: "sdlc/进行中", wf: sd, stage: "requirements" })
+    out.push({ label: "sdlc/完成态", wf: completeSdlc(), stage: "review" })
+    // reqdoc：未建库 / 建库未就绪 / 门禁通过 / 漂移告警 / 完成态
+    const rd = createWorkflowState("reqdoc")
+    out.push({ label: "reqdoc/未建库", wf: rd, stage: "goal" })
+    const features = [{ no: 1, name: "名单排查", priority: "high" as const, confirmedAt: 1 }]
+    rd.kb = {
+      slots: [],
+      features,
+      containers: {},
+      candidates: {},
+      askCounts: {},
+      updatedAt: 1,
+      templateAddressSpace: "fc=5|leaf=3.1,4.1|cont=4.1,5.1.2.1|sub=1.1,2.3",
+    }
+    applyTransition(rd, "goal", "enter", 1)
+    out.push({ label: "reqdoc/建库未就绪", wf: rd, stage: "goal" })
+    // 漂移：把记录地址空间改成与现模板不相交
+    rd.kb.templateAddressSpace = "fc=9|leaf=9.1,9.2|cont=9.3|sub=1.1"
+    out.push({ label: "reqdoc/漂移告警", wf: rd, stage: "goal" })
+    out.push({ label: "reqdoc/完成态", wf: completeReqdoc(), stage: "review" })
+    return out
+  }
+
+  test("各分支状态条都不含工具名", () => {
+    for (const { label, wf, stage } of statesUnderTest()) {
+      const bar = buildStateBar(wf, stage)
+      const leaked = TOOL_NAMES.filter((t) => bar.includes(t))
+      expect([label, ...leaked]).toEqual([label]) // 失败时消息里能看到泄漏了哪些
+    }
+  })
+
+  test("未建库提示仍保留可转述的行动指向（不能只删成空壳）", () => {
+    const bar = buildStateBar(createWorkflowState("reqdoc"), "goal")
+    expect(bar).toContain("知识库：未建")
+    expect(bar).toMatch(/提交|落定|确认/) // 模型仍看得出该干什么
+    expect(bar).not.toMatch(/槽位/) // 「槽位」要转述给业务，属第 1 节禁用词
+  })
+})
