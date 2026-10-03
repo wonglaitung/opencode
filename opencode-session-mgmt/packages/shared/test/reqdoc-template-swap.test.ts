@@ -186,8 +186,45 @@ describe("换模板端到端：只改 md，派生全部跟随", () => {
     expect(slotCoverage([], features, {}, h).uncoveredContainers).toEqual(["2.2", "3.1.2.1"])
   })
 
+  test("骨架生成：多功能点逐块穷举校验（比「两个功能点」更强，逐块核对全部深标题）", () => {
+    // 下面那条「两个功能点」用例抽查了第 2 块的两个子节；这条是它的穷举版：
+    // 每个块的**全部**深标题都必须属于本块，且正文行不得残留首块号。
+    // 起因是原有用例只跑 1 个功能点——`buildPrdSkeleton` 的重编号分支
+    // （按首块章号把块内 `{章}.{首块序号}` 前缀换成新序号）在单块下永不触发，等于没测。
+    // 机构 B 模板功能点章是 3、样例块写作 3.1/3.2，第二个功能点必须整块变成 3.2。
+    // 切法：按 `### 3.<数字> ` 全切，parts[0] 是首块之前的前缀，parts[k] 才是第 k 块。
+    // （只按 3.1 切会把后面所有块都算进第一块——断言看起来在测重编号，实际在测切法。）
+    const feats = [
+      { no: 1, name: "名单排查", priority: "high" as const, confirmedAt: 1 },
+      { no: 2, name: "批量导入", priority: "medium" as const, confirmedAt: 2 },
+      { no: 3, name: "导出报表", priority: "low" as const, confirmedAt: 3 },
+    ]
+    const md = skeletonOf(HETERO, feats, h)
+    expect(md).not.toBeNull()
+    const parts = (md ?? "").split(/^### 3\.\d+ /m)
+    expect(parts).toHaveLength(4) // 前缀 + 3 块
+    for (const k of [1, 2, 3]) {
+      const heads = (parts[k] ?? "").split("\n").filter((l) => /^#{4,6}\s/.test(l))
+      expect(heads.length).toBeGreaterThan(0)
+      // 块内标题层级里的编号必须全属于本块（`#### 3.k.1`、`##### 3.k.2.3`）
+      expect(heads.filter((l) => !new RegExp(`^#{4,6}\\s3\\.${k}\\.`).test(l))).toEqual([])
+      // 正文行不得残留首块号 3.1（单块用例永远测不到这点）。
+      // 断言要排除子串误报：`3.3.1` 里含 `3.1`，故要求两侧不是数字也不是点。
+      if (k !== 1)
+        expect(
+          (parts[k] ?? "")
+            .split("\n")
+            .filter((l) => !/^#{1,6}\s/.test(l))
+            .join("\n"),
+        ).not.toMatch(/(?<![\d.])3\.1(?![\d.])/)
+    }
+    expect(md).toContain("### 3.2 批量导入")
+    expect(md).toContain("### 3.3 导出报表")
+  })
+
   test("骨架生成：新模板一个功能点块即可（不再要求写死第 2 个样例块）", () => {
-    // 机构 B 的模板只有 3.1 一个样例块——旧实现会因找不到第二个块而返回 null。
+    // 只提交 1 个功能点时也要能投影（旧实现要求找到第二个样例块，否则返回 null）。
+    // 机构 B 的模板有 3.1 / 3.2 两个样例块，投影只取首块，故 3.2 不得残留在输出里。
     const md = skeletonOf(HETERO, [{ no: 1, name: "名单排查", priority: "high", confirmedAt: 1 }], h)
     expect(md).not.toBeNull()
     expect(md).toContain("### 3.1 名单排查")
