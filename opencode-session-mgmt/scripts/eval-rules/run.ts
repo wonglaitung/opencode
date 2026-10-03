@@ -19,6 +19,8 @@
 import { existsSync } from "node:fs"
 import { EVAL_TOOLS } from "./src/tool-defs"
 import { judgeSelfCheck } from "./src/judge-selfcheck"
+import { executeTurns } from "./src/executor"
+import { execSelfCheck } from "./src/exec-selfcheck"
 import { SCENARIOS } from "./src/scenarios"
 import { judgeScenario } from "./src/judge"
 import { chatComplete, modelId } from "./src/client"
@@ -41,6 +43,12 @@ if (variantRaw !== "baseline" && variantRaw !== "new") {
 const variant = variantRaw as "baseline" | "new"
 const repeat = Math.max(1, Number(argValue("--repeat") ?? "1") || 1)
 const dry = process.argv.includes("--dry")
+/**
+ * 执行真实工具（`EVAL_EXECUTE=1`）。渲染/五维分判据成立的前提：模型的动作真的过了
+ * 服务端校验，产物真的落盘。关掉时只看模型正文与工具名——那套口径在第十轮被判定为
+ * 「奖励手写产物」，故 render/score 判据在无产物时一律判不通过。
+ */
+const EXECUTE = process.env.EVAL_EXECUTE === "1"
 const workflowRaw = argValue("--workflow")
 const workflow = workflowRaw === "sdlc" || workflowRaw === "reqdoc" ? workflowRaw : undefined
 
@@ -55,6 +63,16 @@ const broken = judgeSelfCheck()
 if (broken.length > 0) {
   console.error(`❌ 判定器自检失败（${broken.length} 项）：\n${broken.map((b) => `  - ${b}`).join("\n")}`)
   process.exit(1)
+}
+
+// 执行链路自检（不调模型）：渲染/五维分判据接的是 reqdoc_assemble 的真实产物，
+// 链路坏掉时症状是「渲染场景一律判未产出组装件」——那时该怀疑执行器，不是模型
+if (EXECUTE) {
+  const execFails = await execSelfCheck()
+  if (execFails.length > 0) {
+    console.error(`❌ 执行链路自检失败（${execFails.length} 项）：\n${execFails.map((b) => `  - ${b}`).join("\n")}`)
+    process.exit(1)
+  }
 }
 
 const nameFilter = argValue("--name")
@@ -92,14 +110,30 @@ for (const sc of scenarios) {
   for (let i = 0; i < repeat; i++) {
     let out: ModelOutput
     try {
-      out = await chatComplete(system, sc.userTurn, EVAL_TOOLS)
+      if (!EXECUTE) {
+        out = await chatComplete(system, sc.userTurn, EVAL_TOOLS)
+      } else {
+        // 多轮：模型出调用 → 真实工具跑 → 结果回灌 → 续跑，直至无调用或达轮数上限
+        const turn = await chatComplete(
+          system,
+          sc.userTurn,
+          EVAL_TOOLS,
+        ).then((first) => executeTurns(sc.state, async (prior) => (prior.length === 0 ? first : chatComplete(system, sc.userTurn, EVAL_TOOLS, prior))))
+        // 判据看全部轮次（见 executor 的 allCalls 注释：只看最后一轮会把「已完成」判成未调用）
+        out = {
+          text: turn.allTexts.join("\n"),
+          toolCalls: turn.allCalls,
+          artifact: turn.artifact,
+          toolResults: turn.toolResults,
+        }
+      }
     } catch (err) {
       // 单次请求彻底失败（重试耗尽）不中断整轮评测：记为失败并继续下一场景
       console.error(`   └ 第 ${i + 1} 次请求失败(重试耗尽):${err instanceof Error ? err.message.slice(0, 120) : String(err)}`)
       lastDetail = `请求失败:${err instanceof Error ? err.message.slice(0, 120) : String(err)}`
       continue
     }
-    if (captureOutput) outputs.push(out.text)
+    if (captureOutput) outputs.push(out.artifact ?? out.text)
     const r = judgeScenario(sc.judge, out)
     if (r.pass) pass++
     lastDetail = r.detail

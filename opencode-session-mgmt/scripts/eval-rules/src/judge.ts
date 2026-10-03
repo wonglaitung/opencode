@@ -162,8 +162,10 @@ export function judgeScenario(judge: Judge, out: ModelOutput): { pass: boolean; 
     }
 
     case "score": {
-      const prd = scorePrd(out.text)
-      const markers = judge.renderMarkers.filter((m) => out.text.includes(m))
+      // 同 render：优先评真实产物，无产物即不通过（详见 render 分支注释）
+      if (!out.artifact) return { pass: false, detail: "✗ 未产出组装件，无法评 PRD 质量" }
+      const prd = scorePrd(out.artifact)
+      const markers = judge.renderMarkers.filter((m) => out.artifact!.includes(m))
       const noMarker = markers.length === 0
       const okTotal = prd.total >= judge.minTotal
       const okMax = Object.entries(judge.dimMax ?? {}).every(
@@ -200,8 +202,15 @@ export function judgeScenario(judge: Judge, out: ModelOutput): { pass: boolean; 
     }
 
     case "render": {
-      // 渲染 diff 判定(质量飞轮 P2)：同源 parseRenderStructure 解析模型回复文本
-      const struct = parseRenderStructure(out.text)
+      // 渲染 diff 判定(质量飞轮 P2)：同源 parseRenderStructure 解析文本
+      //
+      // **优先读真实产物**（`artifact`，仅 EVAL_EXECUTE=1 时有）：PRD 由服务端
+      // reqdoc_assemble 投影生成、规则明令模型不得手写产物，所以渲染质量只能从产物评。
+      // 没有产物时回落模型正文——但那正是第十轮认定为「奖励违规」的口径，
+      // 故回落时判据如实判不通过，不给「模型自己写了也算」留后门。
+      const struct = parseRenderStructure(out.artifact ?? out.text)
+      if (!out.artifact && out.text.trim() !== "")
+        return { pass: false, detail: "✗ 未产出组装件（评测器未执行工具或模型没调 reqdoc_assemble），无法评渲染质量" }
       const required = judge.requiredChapters ?? reqdocChapters().map((c) => c.title)
       const fails: string[] = []
       const observations: string[] = []

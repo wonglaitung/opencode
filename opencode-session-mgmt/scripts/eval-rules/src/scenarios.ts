@@ -96,12 +96,16 @@ function withKb(
   // 只允许系统真实存在的状态（reqdoc-slots.SlotStatus = draft|confirmed|conflict|retired）。
   // 原先写 "pending" 是**不存在的状态**——夹具能造出来但真实链路永远到不了，
   // 于是该场景断言的是夹具自造的假象。语义上「已填未确认」对应 draft。
-  opts: { fill?: boolean; status?: "draft" | "confirmed" } = {},
+  // empty: 槽位全空——给「模型要把真实内容提交进来」的场景用。原先一律预填 `${地址} 内容`
+  // 占位文字并标 confirmed，而规则明令 ingest 不得把已确认槽位打回 draft，于是模型**无法**
+  // 把 userTurn 里的真实内容写进去：产物里永远是占位符，评出来的质量分毫无意义
+  // （r18 实测 flowClosure 0/20、edgeControl 0/22 就是这么来的）。夹具必须与规则自洽。
+  opts: { fill?: boolean; status?: "draft" | "confirmed"; empty?: boolean } = {},
 ): WorkflowState {
   if (s.type !== "reqdoc") return s
   const features = [{ no: 1, name: "名单排查", priority: "high" as const, confirmedAt: 1000 }]
   const req = requiredSlots(features)
-  const filled = opts.fill === false ? req.slice(0, 3) : req
+  const filled = opts.empty ? [] : opts.fill === false ? req.slice(0, 3) : req
   s.kb = {
     slots: filled.map((address) => ({
       kind: "prose" as const,
@@ -746,7 +750,7 @@ export const SCENARIOS: Scenario[] = [
   {
     // 评分模式（质量飞轮 P0）：材料齐全，渲染产物理应高分——八维自评 100 与产出度量的各维
     // 下限对齐。场景区分度对照 r19：同样是渲染，材料齐 vs 缺料，scorePrd 八维应有明显落差。
-    name: "r18 材料齐全 → 交服务端组装成稿（不手写产物）",
+    name: "r18 材料齐全 → 组装成稿并评真实产物质量（高分）",
     workflowType: "reqdoc",
     state: (() => {
       const s = newReqdoc()
@@ -754,7 +758,9 @@ export const SCENARIOS: Scenario[] = [
       approve(s, "rules")
       approve(s, "edge")
       enter(s, "prd")
-      withKb(s) // 槽位全确认（重构 2c：门禁读 kbGate，不再读打分卡）
+      // 槽位留空：真实内容要由模型按 userTurn 提交进来（预填占位文字会与「ingest 不得
+      // 把已确认槽位打回 draft」冲突，导致产物里永远是占位符、质量分失真——见 withKb 注释）
+      withKb(s, { empty: true })
       s.features = [
         { no: 1, name: "柜台跨行转账", priority: "high", confirmedAt: 1000 },
         { no: 2, name: "转账进度查询", priority: "medium", confirmedAt: 1000 },
@@ -763,12 +769,18 @@ export const SCENARIOS: Scenario[] = [
     })(),
     userTurn:
       "都齐了，组装吧。系统是柜台跨行转账：使用角色是柜员和客户，目标是缩短单笔处理时间到 3 分钟以内、降低柜面压力。主流程：柜员点击发起转账，系统校验后处理，成功后通知客户并归档。异常：网络超时自动冲正、同一笔交易被重复点击需去重、失败重试有上限。数据安全：手机号脱敏展示、关键操作留痕并复核。权限：仅本支行柜员与复核员可查看。",
-    // 口径重定义（对抗审查第十轮）：原判据是「模型正文里渲染出模板结构 + 五维总分达标」，
-    // 但重构 2c 之后规则明令「PRD 由服务端从槽位投影生成，不要手写产物」，且评测器**不执行
-    // 工具**（ModelOutput 只有 text + toolCalls），根本看不到 reqdoc_assemble 的返回。
-    // 于是**遵守规则的模型必然失败**——指标在惩罚合规，且加强「不要手写」这条规则会让分数下降。
-    // 改为判定「是否把组装交给服务端」：这才是模型职责范围内、且规则要求的动作。
-    judge: { kind: "tool", expectTool: "reqdoc_assemble" },
+    // 口径演进（对抗审查第十、十一轮）：
+    // 第十轮发现原判据「模型正文里渲染出 PRD + 五维分」在奖励手写产物（规则明令不得手写、
+    // 评测器又不执行工具），先降级为「期望 reqdoc_assemble」。
+    // 第十一轮让评测器**执行真实工具**（EVAL_EXECUTE=1），产物真实落盘，故恢复质量判据：
+    // 这次评的是 `reqdoc_assemble` 的**真实产物**（render/score 判据只认 artifact）。
+    // 阈值沿用原值（minTotal 60 / 三维下限），保证与第十轮之前的历史分数可比。
+    judge: {
+      kind: "score",
+      renderMarkers: ["业务需求说明书", "功能点"],
+      minTotal: 60,
+      dimMin: { businessValue: 5, edgeControl: 15, authority: 5 },
+    },
   },
   {
     // 评分模式（质量飞轮 P0）：材料缺异常与权限，渲染必须「不杜撰」——异常维应低分，
@@ -855,7 +867,9 @@ export const SCENARIOS: Scenario[] = [
       approve(s, "rules")
       approve(s, "edge")
       enter(s, "prd")
-      withKb(s) // 槽位全确认（重构 2c：门禁读 kbGate，不再读打分卡）
+      // 槽位留空：真实内容要由模型按 userTurn 提交进来（预填占位文字会与「ingest 不得
+      // 把已确认槽位打回 draft」冲突，导致产物里永远是占位符、质量分失真——见 withKb 注释）
+      withKb(s, { empty: true })
       s.features = [
         { no: 1, name: "柜台跨行转账", priority: "high", confirmedAt: 1000 },
         { no: 2, name: "转账进度查询", priority: "medium", confirmedAt: 1000 },

@@ -25,13 +25,23 @@ export function modelId(): string {
   return MODEL
 }
 
-export async function chatComplete(system: string, user: string, tools: unknown[]): Promise<ModelOutput> {
+/**
+ * @param prior 已发生的对话（含 assistant 工具调用与 tool 结果）。多轮续跑时由执行器累积传入——
+ *   模型侧按 tool_call_id 与 tool 结果配对，所以必须原样回灌协议字段，不能只传文本。
+ */
+export async function chatComplete(
+  system: string,
+  user: string,
+  tools: unknown[],
+  prior: { role: string; content?: string; tool_calls?: unknown; tool_call_id?: string }[] = [],
+): Promise<ModelOutput> {
   const body = JSON.stringify({
     model: MODEL,
     temperature: 0,
     max_tokens: MAX_TOKENS,
     messages: [
       { role: "system", content: system },
+      ...prior,
       { role: "user", content: user },
     ],
     tools,
@@ -77,7 +87,7 @@ export async function chatComplete(system: string, user: string, tools: unknown[
       } catch {
         // JSON 解析容错:弱模型偶尔输出残缺 JSON,记为 {} 让判定侧显式失败
       }
-      return { name: c.function?.name ?? "", args }
+      return { name: c.function?.name ?? "", args, id: c.id }
     })
     // 推理模型(reasoning_content)可能把正文放 thinking 或 content 为空(reasoning 占满 max_tokens)。
     // text 类判定需兜底:content 为空时回退 reasoning_content。tool 类判定只看 tool_calls,不受影响。

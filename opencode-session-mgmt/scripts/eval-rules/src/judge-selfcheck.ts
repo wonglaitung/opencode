@@ -76,17 +76,28 @@ const CASES: { desc: string; judge: Parameters<typeof judgeScenario>[0]; out: Pa
     out: seqOut(["comprehension_add", "reqdoc_assemble"]),
     want: false,
   },
-  // 休眠路径防腐：render / score 判据自第十轮起无场景产出（渲染质量要等评测器学会执行
-  // reqdoc_assemble、拿到真实产物才能测），但代码还在。留两条最小用例，免得将来重新
-  // 启用时静默腐坏——这类「没场景覆盖的判据」正是最容易烂在没人看见的地方。
+  // render 判据现在**只认真实产物**（artifact，由 EVAL_EXECUTE=1 执行 reqdoc_assemble 得到）：
+  // PRD 由服务端投影生成、规则明令模型不得手写产物，所以「模型正文里有 PRD」不再算数。
+  // 三条用例分别锁住：有产物→按产物判；无产物但正文有 PRD→**仍不通过**（不给手写留后门）；
+  // 无产物且正文为空→不通过。
   {
-    desc: "render（休眠路径）：正文有要求章节则结构达标",
+    desc: "render：产物章节齐全则结构达标",
     judge: { kind: "render", requiredChapters: ["第一章 项目信息", "第二章 文档变更过程"], ordered: true, minFeatures: 1 },
-    out: { text: "## 第一章 项目信息\n\n内容\n\n## 第二章 文档变更过程\n\n### 5.1 柜台转账\n\n- 功能点编号：1\n", toolCalls: [] },
+    out: {
+      text: "",
+      artifact: "## 第一章 项目信息\n\n内容\n\n## 第二章 文档变更过程\n\n### 5.1 柜台转账\n\n- 功能点编号：1\n",
+      toolCalls: [],
+    },
     want: true,
   },
   {
-    desc: "render（休眠路径）：正文无章节则不通过（防恒通过）",
+    desc: "render：无产物但模型正文写了 PRD → 仍不通过（这就是第十轮的「奖励手写」）",
+    judge: { kind: "render", requiredChapters: ["第一章 项目信息"], ordered: true },
+    out: { text: "## 第一章 项目信息\n\n内容\n", toolCalls: [] },
+    want: false,
+  },
+  {
+    desc: "render：无产物且正文无章节 → 不通过（防恒通过）",
     judge: { kind: "render", requiredChapters: ["第一章 项目信息"], ordered: true },
     out: { text: "我认为需求已经很清楚了。", toolCalls: [] },
     want: false,

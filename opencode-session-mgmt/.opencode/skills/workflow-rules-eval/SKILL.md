@@ -36,6 +36,7 @@ description: Use when running or analyzing the rule-following evaluation baselin
 - `EVAL_MODEL`：评测模型 id，默认 `/models/qwen3`（本地 vLLM）
 - `EVAL_MAX_TOKENS`：输出上限，默认 2048；推理模型（deepseek-*-flash）显式 4096 留 thinking 空间；**长 reasoning 模型（deepseek-v4-pro-0813）实测须 16384**——4096 下 thinking 截断、content 与 tool_calls 双双为空被误判「未调用」
 - `EVAL_TIMEOUT_MS`：单请求超时（默认 180000）；长输出场景须提至 300000，网络/超时错误自动重试 3 次
+- `EVAL_EXECUTE=1`：**执行真实工具**（真实内存 Store + 临时工作区 + 真实工具实现），多轮回灌后从工作区读回组装产物。`render` / `score` 判据**只认 `artifact`**——PRD 由服务端 `reqdoc_assemble` 投影生成、规则明令模型不得手写产物，所以渲染质量只能从真实产物评；没有产物即判不通过（不给「模型自己写了也算」留后门）。不带这个开关时 render/score 判据一律判「未产出组装件」，这是预期而非 bug。启用后须跑执行链路自检（`EVAL_EXECUTE=1 ... --dry`，不调模型）。
 - `EVAL_DISABLE_THINKING=1`：带 `chat_template_kwargs:{enable_thinking:false}` 关掉思考模式。**按模型开关**：Qwen3 系默认开思考，会先写一大段「Let me organize…」再动手，实测长 system prompt 下必然把 `max_tokens` 耗在分析上、`finish=length` 且零工具调用（等不到工具就超时），评测根本测不出规则遵循；关掉后同一场景 53s / `finish=stop`，行为可测。deepseek 等推理模型**关掉反而更差**（失去推理空间），故默认不开。
 
 当前主力远端模型：`deepseek-v4-pro-0813`（token-plan 端点）；本地弱模型：`/models/qwen3`（vLLM 8086）。
@@ -110,6 +111,8 @@ EVAL_BASE_URL=http://localhost:8086/v1 EVAL_MODEL=/models/qwen3 EVAL_MAX_TOKENS=
 失败场景逐个归因按「规则措辞 / 判定口径 / 场景二义性」三类——**优先调脚本与判定口径**，规则文本保持简洁（弱模型对复杂措辞极敏感，为单模型把规则写细实测伤害弱模型）。弱模型是主要回归面，多模型验证防过拟合。
 
 **两条高频归因（近两轮实测沉淀）**：
+- **执行模式下判据要看全部轮次**——期望的调用常发生在**更早的轮次**（第一轮调完工具，第二轮无调用只做收尾）。只看最后一轮会把「已完成」判成「未调用」；我第一版就这么错，26 个 reqdoc 场景里 12 个假失败。
+- **弱模型在工具回灌后会loop得更凶**——实测 r14 在执行模式下连发 25 次 `comprehension_add`（非执行模式只发 6 次）。执行器据此做了**重复调用检测**（参数完全相同即停，并如实标记 `looped`），但注意：把「重复调用」的结果如实回灌**并不能**让模型停下来，它会无视继续重复——所以别指望靠提示语救。
 - **判据不得奖励违规行为**——第十轮发现 r18/r19/r23/r24 四个场景要求「模型正文里渲染出 PRD」，而现行规则明令「PRD 由服务端从槽位投影生成，不要手写产物」，且评测器**从不执行工具**（`ModelOutput` 只有 `text` + `toolCalls`），根本看不到 `reqdoc_assemble` 的返回。**遵守规则的模型必然失败**，等于指标在惩罚合规：加强「不要手写」这条规则会让分数**下降**，`--fail-on-regression` 还会因此拦住正确的改动。已改为「是否把组装交给服务端」口径（见 scenarios.ts 注释）。
 - **改判据前先问「这条要求单轮做得到吗」**——同轮我改完第一版又把 13% 覆盖、20 个开放项的场景判成「期望 reqdoc_assemble」，这是**第二次犯同类错误**：拿单轮做不到的事去判，模型失败不是因为不听话，而是因为流程本来就要多轮（ingest → 逐项确认 → assemble）。判「工具调用」时尤其危险，看起来客观、实则常在惩罚合理的分轮。
 - **端点只顾写分析不动手时，用「强制工具」探针把「啰嗦」与「不听话」分开**——症状是每次都 `finish=length` 且零工具调用（本地 qwen3 在长 system prompt 下必然如此）。三步降维：① 正常跑确认超时/截断；② 把 system prompt 缩到一行、保留同一套 tool defs 与 userTurn——若仍截断，说明与注入大小无关；③ `tool_choice` 指定具体函数强制调用，再套用同一个 judge。此时拿到的是**诊断信号而非评测数据**（绕过了状态条与规则注入，也剥夺了模型的选择权），只回答「模型真动手时会不会照契约填」，不能进报告。实测：qwen3 在 r25/r26 上自由裁量必然截断，强制调 `reqdoc_answer` 后两个场景的判定都正确（该填 `business_quote` 时填了、只是同意默认时没填）——即规则遵循没问题，测不了的是端点。

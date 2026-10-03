@@ -115,11 +115,24 @@ export interface Scenario {
 export interface ToolCall {
   name: string
   args: Record<string, unknown>
+  /** OpenAI 兼容协议的工具调用 id——多轮回灌 tool 结果时必需（model 侧按 id 配对） */
+  id?: string
 }
 
 export interface ModelOutput {
   text: string
   toolCalls: ToolCall[]
+  /**
+   * 真实产物内容（仅 `EVAL_EXECUTE=1` 时有）：执行工具后从工作区读到的组装产物。
+   *
+   * 存在的理由：PRD 由服务端 `reqdoc_assemble` 投影生成，**模型正文里不该有 PRD**
+   * （规则明令「不要手写产物」）。所以渲染质量/五维分只能从真实产物评——
+   * 没有这个字段，render/score 判据就只能去读模型正文，等于奖励手写产物。
+   * 判据侧一律按 `artifact ?? text` 取，缺产物时回落正文（并让 render 判据如实判不通过）。
+   */
+  artifact?: string
+  /** 执行工具时每个调用的结果（工具名 → 回执或错误文案），供诊断与「调用是否被拒」类判定 */
+  toolResults?: { name: string; ok: boolean; result: string }[]
 }
 
 export interface ScenarioResult {
