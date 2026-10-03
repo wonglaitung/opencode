@@ -201,14 +201,27 @@ export function requiredContainers(
 // 6.2.1 覆盖判定：叶子 confirmed + 容器聚合
 // ---------------------------------------------------------------------------
 
-/** 某地址的有效槽位（排除 retired——已作废留痕不计覆盖，6.2.1.1）。 */
-function activeSlots(slots: readonly ReqdocSlot[], addr: string): ReqdocSlot[] {
-  return slots.filter((s) => docAddrOf(s.address) === addr && s.status !== "retired")
+/**
+ * 某地址的有效槽位（排除 retired——已作废留痕不计覆盖，6.2.1.1）。
+ *
+ * **schema 必须逐层透传**：`docAddrOf` 缺省取已加载的真实模板，一旦漏传，
+ * 异构模板下就算的是另一套地址空间（对照 `isValidSlotAddr` 里的同源告警）。
+ */
+function activeSlots(
+  slots: readonly ReqdocSlot[],
+  addr: string,
+  schema: TemplateSchema = templateSchemaOrEmpty(),
+): ReqdocSlot[] {
+  return slots.filter((s) => docAddrOf(s.address, schema) === addr && s.status !== "retired")
 }
 
 /** 叶子覆盖：存在 `confirmed` 槽位（只认 confirmed——draft 不消缺口，防刷覆盖率，6.2.1）。 */
-export function leafCovered(slots: readonly ReqdocSlot[], addr: string): boolean {
-  return activeSlots(slots, addr).some((s) => s.status === "confirmed")
+export function leafCovered(
+  slots: readonly ReqdocSlot[],
+  addr: string,
+  schema: TemplateSchema = templateSchemaOrEmpty(),
+): boolean {
+  return activeSlots(slots, addr, schema).some((s) => s.status === "confirmed")
 }
 
 /**
@@ -222,8 +235,9 @@ export function containerCovered(
   slots: readonly ReqdocSlot[],
   addr: string,
   decl?: ContainerDecl,
+  schema: TemplateSchema = templateSchemaOrEmpty(),
 ): boolean {
-  const children = activeSlots(slots, addr)
+  const children = activeSlots(slots, addr, schema)
   if (children.some((s) => s.status === "confirmed")) return true
   if (children.length > 0) return false
   return decl?.required === false && Boolean(decl.reason)
@@ -233,6 +247,7 @@ export function containerCovered(
 export function containerDeclViolations(
   slots: readonly ReqdocSlot[],
   decls: Readonly<Record<string, ContainerDecl>>,
+  schema: TemplateSchema = templateSchemaOrEmpty(),
 ): string[] {
   const out: string[] = []
   for (const [addr, decl] of Object.entries(decls)) {
@@ -241,7 +256,7 @@ export function containerDeclViolations(
       out.push(`容器 ${addr} 声明 required:false 但未给理由`)
       continue
     }
-    if (activeSlots(slots, addr).length > 0) {
+    if (activeSlots(slots, addr, schema).length > 0) {
       out.push(`容器 ${addr} 有候选子项却声明 required:false（仅候选为空时允许）`)
     }
   }
@@ -267,11 +282,12 @@ export function slotCoverage(
   slots: readonly ReqdocSlot[],
   features: readonly ReqdocFeature[],
   decls: Readonly<Record<string, ContainerDecl>> = {},
+  schema: TemplateSchema = templateSchemaOrEmpty(),
 ): SlotCoverage {
-  const leaves = requiredSlots(features)
-  const containers = requiredContainers(features)
-  const leafFilled = leaves.filter((a) => leafCovered(slots, a)).length
-  const uncoveredContainers = containers.filter((a) => !containerCovered(slots, a, decls[a]))
+  const leaves = requiredSlots(features, schema)
+  const containers = requiredContainers(features, schema)
+  const leafFilled = leaves.filter((a) => leafCovered(slots, a, schema)).length
+  const uncoveredContainers = containers.filter((a) => !containerCovered(slots, a, decls[a], schema))
   return {
     leafTotal: leaves.length,
     leafFilled,
@@ -303,10 +319,13 @@ export function kbGate(
     /** 6.3 停问项与 6.4 conflict 项：地址列表 */
     unclosed?: readonly string[]
     force?: boolean
+    /** 模板结构；缺省取已加载的模板。异构模板场景必须显式传入，否则覆盖率按真实模板算。 */
+    schema?: TemplateSchema
   } = {},
 ): GateResult {
   const decls = opts.decls ?? {}
-  const coverage = slotCoverage(slots, features, decls)
+  const schema = opts.schema ?? templateSchemaOrEmpty()
+  const coverage = slotCoverage(slots, features, decls, schema)
   const reasons: string[] = []
   const threshold = opts.threshold ?? 1
 
@@ -324,14 +343,14 @@ export function kbGate(
   }
   // 未收口项：需 force
   const unclosed = (opts.unclosed ?? []).filter((a) => {
-    const s = activeSlots(slots, a)
+    const s = activeSlots(slots, a, schema)
     return s.length === 0 || s.every((x) => x.status !== "confirmed")
   })
   if (unclosed.length > 0 && !opts.force) {
     reasons.push(`存在未收口项（停问/conflict）：${unclosed.join("、")}`)
   }
   // 防绕过
-  reasons.push(...containerDeclViolations(slots, decls))
+  reasons.push(...containerDeclViolations(slots, decls, schema))
 
   return { pass: reasons.length === 0, coverage, reasons }
 }
@@ -463,16 +482,21 @@ function deriveAll(
   const l1Applied: string[] = []
 
   // 1) 必填叶子（容器不进来——6.2.1.1）
-  for (const addr of requiredSlots(features)) {
-    if (leafCovered(slots, addr)) continue
-    out.push({ address: addr, kind: "prose", askCount: askCountOf(addr, slots, opts.askCounts) })
+  for (const addr of requiredSlots(features, opts.schema ?? templateSchemaOrEmpty())) {
+    if (leafCovered(slots, addr, opts.schema ?? templateSchemaOrEmpty())) continue
+    out.push({
+      address: addr,
+      kind: "prose",
+      askCount: askCountOf(addr, slots, opts.askCounts, opts.schema),
+    })
   }
 
   // 2) 容器候选子项：L1 命中消缺口；行业通用不要求定义；L2 命中带默认猜测
   for (const [container, list] of Object.entries(opts.candidates ?? {})) {
     for (const name of list) {
       const addr = `${container}.${name}`
-      if (activeSlots(slots, addr).some((s) => s.status === "confirmed")) continue
+      if (activeSlots(slots, addr, opts.schema ?? templateSchemaOrEmpty()).some((s) => s.status === "confirmed"))
+        continue
       const term = l1.find((t) => t.term === name)
       // L1 消缺口：内部简称已被业务复述确认过；行业通用属正常行话、允许使用（3.2）
       if (term && (term.kind === "内部简称" || term.kind === "行业通用")) {
@@ -491,7 +515,7 @@ function deriveAll(
       out.push({
         address: addr,
         kind: isTermContainer(container, opts.schema ?? templateSchemaOrEmpty()) ? "term" : "field",
-        askCount: askCountOf(addr, slots, opts.askCounts),
+        askCount: askCountOf(addr, slots, opts.askCounts, opts.schema),
         ...(guess ? { guess, from: l2.length && !term ? "memory-L2" : "memory-L1" } : {}),
       })
     }
@@ -529,9 +553,10 @@ function askCountOf(
   addr: string,
   slots: readonly ReqdocSlot[],
   askCounts?: Readonly<Record<string, number>>,
+  schema?: TemplateSchema,
 ): number {
   if (askCounts && addr in askCounts) return askCounts[addr]!
-  const slot = activeSlots(slots, addr)[0]
+  const slot = activeSlots(slots, addr, schema ?? templateSchemaOrEmpty())[0]
   return slot?.askCount ?? 0
 }
 

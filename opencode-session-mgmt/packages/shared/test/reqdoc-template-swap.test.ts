@@ -10,6 +10,7 @@
  * 这里证明的是**以后换模板不必改代码**。
  */
 import { describe, expect, test } from "bun:test"
+import { deriveQuestions, isValidSlotAddr, kbGate, slotCoverage } from "../src/reqdoc-slots"
 import {
   assembleOf,
   docSectionAddrsOf,
@@ -164,6 +165,25 @@ describe("换模板端到端：只改 md，派生全部跟随", () => {
 
   test("章内必填小节按新编号派生，且排除容器", () => {
     expect([...docSectionAddrsOf(h)]).toEqual(["2.1", "2.3", "4.1"])
+  })
+
+  test("开放项/覆盖率/门禁必须跟随异构模板——不得漏传 schema 退回真实模板", () => {
+    // 回归：`deriveAll`、`slotCoverage`、`kbGate`、`activeSlots` 一度都漏传 schema，
+    // 于是「该问什么」清单、覆盖率分母、未覆盖容器全按**真实模板**算。后果是死路：
+    // 模型按状态条给的 3.x…7.x 去问业务、reqdoc_ingest 按异构模板校验后全部拒绝，
+    // 而状态条永远显示「待确认 N 项」——模型反复重试无门。
+    const features = [{ no: 1, name: "名单排查", priority: "high" as const, confirmedAt: 1 }]
+    const q = deriveQuestions(features, { schema: h, slots: [] })
+    expect(q.all.length).toBeGreaterThan(0)
+    // 逐项断言：开放项必须在异构模板下合法，且全部落在新地址空间内
+    expect(q.all.filter((x) => !isValidSlotAddr(x.address, features, h))).toEqual([])
+    expect(q.all.some((x) => x.address.startsWith("5."))).toBe(false)
+    // 覆盖率分母按异构模板，而非真实模板
+    expect(slotCoverage([], features, {}, h).leafTotal).toBe(requiredSlotsOf(h, features).length)
+    expect(slotCoverage([], features, {}, h).leafTotal).not.toBe(
+      slotCoverage([], features, {}, undefined).leafTotal,
+    )
+    expect(slotCoverage([], features, {}, h).uncoveredContainers).toEqual(["2.2", "3.1.2.1"])
   })
 
   test("骨架生成：新模板一个功能点块即可（不再要求写死第 2 个样例块）", () => {
