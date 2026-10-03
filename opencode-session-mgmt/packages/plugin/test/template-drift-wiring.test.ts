@@ -13,6 +13,8 @@ import { requireTemplateSchema, schemaAddressSpace } from "sm-shared"
 import { Store } from "../src/db"
 import { createReqdocKbTools } from "../src/tools/reqdoc-kb-tools"
 import { createReqdocFeatureTools } from "../src/tools/reqdoc-features"
+import { createWorkflowTools } from "../src/tools/workflow"
+import { createReviewTools } from "../src/tools/review"
 
 function setup(worktree: string) {
   const store = Store.memory(() => "reqdoc")
@@ -105,6 +107,86 @@ describe("换模板告警接线", () => {
     await seed(store, feat, ctx)
     const recorded = store.get("s1")!.workflow!.kb!.templateAddressSpace
     expect(recorded).toBe(schemaAddressSpace(requireTemplateSchema()))
+    store.close()
+  })
+})
+
+/**
+ * 门禁真因前置：**模板已更换**与**模板不可读**是同一类死路，必须先说真因。
+ *
+ * 回归：`workflow_advance` 的 prd 门禁早就为「模板不可读」备了真因文案，
+ * 「模板已更换」却是同一段代码形状里的漏网之鱼——此时必填集按新模板算，
+ * 已确认的旧地址一条都不计入覆盖率，而默认文案仍让模型「用 reqdoc_ingest /
+ * reqdoc_answer 补齐」。补齐旧地址服务端照收（isValidSlotAddr 对已入库地址留了
+ * 后门）、覆盖率却不动，于是模型反复补齐反复撞墙，比直接报错更难查。
+ */
+describe("门禁真因前置（模板已更换）", () => {
+  /** 造一个「已漂移」的知识库：地址空间改成一个当前模板里不存在的编号集。 */
+  function seedDrifted(store: ReturnType<typeof Store.memory>, features: { no: number; name: string; priority: "high"; confirmedAt: number }[]) {
+    store.mutateWorkflow("s1", (w) => {
+      w.kb = {
+        slots: [
+          { kind: "prose", address: "3.1", content: "信贷审批部（CRD）流程优化", source: "文档", status: "confirmed" },
+        ],
+        features,
+        containers: {},
+        candidates: {},
+        askCounts: {},
+        updatedAt: 1,
+        // 与当前模板必填集不相交 → 必判漂移
+        templateAddressSpace: "fc=9|leaf=9.1,9.2|cont=9.3|sub=1.1",
+      }
+    })
+  }
+
+  test("workflow_advance 进 prd：报模板已更换，而不是让模型去补齐", async () => {
+    const worktree = mkdtempSync(join(tmpdir(), "reqdoc-drift-gate-"))
+    const store = Store.memory(() => "reqdoc")
+    seedDrifted(store, [{ no: 1, name: "名单排查", priority: "high", confirmedAt: 1000 }])
+    const wf = createWorkflowTools(store)
+    const ctx = { worktree, sessionID: "s1" } as never
+    store.mutateWorkflow("s1", (w) => {
+      w.stages.goal!.status = "approved"
+      w.stages.rules!.status = "approved"
+      w.stages.edge!.status = "approved"
+    })
+    let msg = ""
+    try {
+      await wf.workflow_advance!.execute({ stage: "prd", action: "enter" } as never, ctx)
+    } catch (e) {
+      msg = String(e)
+    }
+    // 真因前置 + 不给死路指令
+    expect(msg).toMatch(/模板结构已更换/)
+    expect(msg).not.toMatch(/reqdoc_ingest 补齐槽位/)
+    // 覆盖率算式单独出现时毫无意义，必须同时说明「补旧地址也不涨」
+    expect(msg).toMatch(/不会提高覆盖率|不计入必填覆盖率/)
+    store.close()
+  })
+
+  test("review_submit 定稿：同样先说模板已更换", async () => {
+    const worktree = mkdtempSync(join(tmpdir(), "reqdoc-drift-submit-"))
+    const store = Store.memory(() => "reqdoc")
+    seedDrifted(store, [{ no: 1, name: "名单排查", priority: "high", confirmedAt: 1000 }])
+    store.mutateWorkflow("s1", (w) => {
+      for (const n of ["goal", "rules", "edge", "prd"]) w.stages[n]!.status = "approved"
+    })
+    const ctx = { worktree, sessionID: "s1" } as never
+    let msg = ""
+    try {
+      await createReviewTools(store).review_submit!.execute(
+        {
+          checklist: [],
+          comprehension: [],
+          self_check: { hallucination: false, scope_creep: false, unverified: false },
+        } as never,
+        ctx,
+      )
+    } catch (e) {
+      msg = String(e)
+    }
+    expect(msg).toMatch(/模板结构已更换/)
+    expect(msg).not.toMatch(/请用 reqdoc_answer 补齐/)
     store.close()
   })
 })

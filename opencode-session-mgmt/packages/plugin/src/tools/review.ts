@@ -23,6 +23,7 @@ import {
   kbDigest,
   kbGate,
   reviewRecord,
+  templateGateCauseNotice,
   type BaselineDiff,
   type ComprehensionRecord,
   type ReqdocFeature,
@@ -337,6 +338,10 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
             threshold: 1,
           })
           if (!gate.pass) {
+            // 真因优先（同 workflow_advance 的 prd 门禁）：模板不可读、或模板已更换时，
+            // 「补齐」都是死路——前者必填集为空、后者补旧地址不计入覆盖率。
+            const cause = templateGateCauseNotice(kb)
+            if (cause) throw new WorkflowOpError(cause)
             throw new WorkflowOpError(
               `需求知识库未就绪：${gate.reasons.join("；")}。` +
                 `覆盖率 ${gate.coverage.leafFilled}/${gate.coverage.leafTotal} 必填槽位。` +

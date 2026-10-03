@@ -10,7 +10,7 @@ import {
   deriveQuestions,
   getDefinition,
   kbGate,
-  templateUnavailableNotice,
+  templateGateCauseNotice,
   type WorkflowState,
 } from "sm-shared"
 import type { Store } from "../db"
@@ -100,12 +100,12 @@ export function createWorkflowTools(store: Store): Record<string, ToolDefinition
             threshold: 1,
           })
           if (!gate.pass) {
-            // 模板读不到时必填集必为空、ingest 必然收地址失败、开放项也问不出东西——
-            // 此时默认文案会把用户指向「用 ingest 补齐」这条死路，必须先说真因。
-            const unavailable = templateUnavailableNotice()
+            // 真因优先：模板读不到、或模板已更换时，默认文案都会把人指向
+            // 「补齐槽位」这条死路（前者必填集为空、后者补旧地址不算覆盖），必须先说真因。
+            const cause = templateGateCauseNotice(kb)
             throw new WorkflowOpError(
-              (unavailable ?? `需求知识库未就绪：${gate.reasons.join("；")}。`) +
-                (unavailable
+              (cause ?? `需求知识库未就绪：${gate.reasons.join("；")}。`) +
+                (cause
                   ? ""
                   : `请用 reqdoc_ingest 补齐槽位、reqdoc_answer 逐项确认；确实无法补齐的，` +
                     `可 workflow_advance(stage=prd, action=enter, force_kb=true, force_reason=<业务给的理由>) 放行。`),
