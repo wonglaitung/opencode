@@ -275,6 +275,12 @@ flowchart TD
 - **静默点默认不入库**——`origin=accepted_default` / `inferred` 一律拒写（`isPollutingOrigin`），错误定义不跨需求传播；写入只发生在 `reqdoc_answer(restated_term=...)`（业务主动复述释义 → L1）与定稿后的 `reqdoc_memory_recall`（业务勾选 → L2/L4）。
 - **L1 写入必须带业务原话 `business_quote`（对抗审查第九轮）**——`restated_term.business_quote` 必填，留空按**拒写**处理（`writeL1Term` 返回 `missing_quote`，回执说清真因与出路），**不静默入库**。理由是**污染成本不对称**：L1 命中即免问，而免问项只需模型自己 `reqdoc_answer` 落定（source=问答）、**业务全程不参与**——一条伪造的「业务复述」可以永久消掉未来需求里一个本该问的问题，而旧格式条目里只有模型的释义、无从追查谁说的。这与 `force_kb.force_reason`、`reqdoc_adopt_baseline.confirm_note` 同一原则：**理由/凭据必须来自业务，模型不得代填**；`origin` 由服务端钉死为 `restated`（杜绝「点默认也入库」）只是**必要不充分**——它管住了「凭什么入库」，管不住「业务是否真说过」。凭据原样落库（两端空白裁掉）以备审计，`MemoryTerm.businessQuote` 为 optional，旧条目读取不受影响。
 
+**对抗复审第十轮（评测判据在奖励违规）**：真实评测（关闭思考模式后端点才可用，见 10 章）暴露出四个渲染场景 r18/r19/r23/r24 的判据要求「模型正文里渲染出 PRD、拿五维分」——而规则明令「PRD 由服务端从槽位投影生成，不要手写产物」，评测器又从不执行工具（`ModelOutput` 只有 `text` + `toolCalls`），看不到 `reqdoc_assemble` 的返回。**遵守规则的模型必然失败**：这不是模型不听话，是判据在惩罚合规；加强「不要手写」这条规则反而会让分数下降，`--fail-on-regression` 会因此拦住正确的改动。已按「组装后验证」口径重定义为四件模型职责范围内、且规则要求的动作：r18 齐料 → 交服务端组装；r19 缺料（13% 覆盖/20 开放项）→ 继续收集槽位、不提前组装；r23 改既有内容 → 走 `reqdoc_answer` 再重新组装（顺序门禁 + 禁止整篇重提，否则产物摘要过期、定稿三重校验会拒）；r24 缺料 → 收进槽位，不得用 `comprehension_add` 绕过（实测最隐蔽的失败形态）。为此判定器新增 `sequence`（子序列顺序门禁）与 `tool.forbidTool` 两类判据，均有自检用例。
+
+**代价（须记录）**：PRD 质量五维分（质量飞轮 P0）与 render 判据自此**无场景产出**——渲染质量只能从 `reqdoc_assemble` 的真实返回里评，而评测器还不执行工具。判据代码保留并补了自检用例防静默腐坏；恢复该指标的前置条件是让评测器执行工具。
+
+**同口径真实评测结果（本地 qwen3，`EVAL_DISABLE_THINKING=1`，26 场景）**：baseline（旧注入快照）**12/26 = 46%**，new **20/26 = 77%**。九个场景转好（r2/r7/r10/r18/r19/r20/r24/r25/r26），**一个真实回退：r5「前序未完成不 submit」baseline 3/3 → new 0/3**（repeat=3 复核，非噪声）。诊断：规则文本与状态条「提交状态：blocked（未完成：prd、review）」**都在**，但状态条重构后同一事实改用业务语言嵌进长条（原始 JSON → 业务语言），显著性下降，弱模型不再据此收手。该回退归因于**状态条重构本身**（`renderBaseline` 镜像的是重构前快照），非本轮改动；修法需改措辞并重跑 baseline，按 P2 交用户拍板。
+
 **评测已覆盖（r25/r26 一正一反）**：真实模型跑不跑得动这条 Previously 只有工具侧单测证明「不给就拒」，没有证明弱模型会主动给。故新增两个 reqdoc 场景——r25 业务口头复述缩写 → 必须调 `reqdoc_answer` 且 `restated_term.business_quote` **非空**；r26 只是点了「同意默认」→ **不得带** `restated_term`（静默点不入库这条防污染红线的直接探针）。为此两件事是前提：① 判定器补点路径判据 `argsNonEmpty` / `forbidArgsPresent`（原有 `args` 只做 `actual[k] === v` 引用相等，判不了嵌套对象）；② 评测的 `reqdoc_answer` 工具镜像此前是简化版、**根本没有** `restated_term`，模型无从调用，已补齐并与真实工具契约一致（含 `business_quote` 必填）。判据自检见 9.8。
 
 **同名不同义不静默覆盖**：材料/记忆释义冲突时交业务裁决（`writeL1Term` 返回 conflict 提示），且**冲突优先于记忆**——材料有原文就不取记忆。

@@ -74,6 +74,29 @@ export function judgeScenario(judge: Judge, out: ModelOutput): { pass: boolean; 
           return { pass: false, detail: `${judge.expectTool} 不该带 ${path}(实际:${JSON.stringify(pick(bad[0]!.args, path))})` }
         }
       }
+      // 替代路径禁令：期望调 assemble，但不许用别的工具绕过（实测有模型连发 comprehension_add）
+      const forbidden = out.toolCalls.filter((c) => (judge.forbidTool ?? []).includes(c.name))
+      if (forbidden.length > 0) {
+        return {
+          pass: false,
+          detail: `不该调用 ${forbidden.map((c) => c.name).join("、")}（期望走 ${judge.expectTool}）`,
+        }
+      }
+      // 顺序门禁：子序列匹配（允许中间夹别的调用）。「先补齐再组装」这类要求
+      // 靠单工具断言判不出来——调了 assemble 不代表槽位是齐的。
+      for (const seq of [judge.sequence ?? []]) {
+        const names = out.toolCalls.map((c) => c.name)
+        let at = -1
+        const missing = seq.filter((want) => {
+          const found = names.indexOf(want, at + 1)
+          if (found < 0) return true
+          at = found
+          return false
+        })
+        if (missing.length) {
+          return { pass: false, detail: `工具顺序不对：期望 ${seq.join(" → ")}，缺 ${missing.join("、")}（实际 ${names.join("→") || "无"}）` }
+        }
+      }
       if (judge.exactCount !== undefined && matched.length !== judge.exactCount) {
         return { pass: false, detail: `${judge.expectTool} 应恰好调用 ${judge.exactCount} 次,实际 ${matched.length} 次` }
       }

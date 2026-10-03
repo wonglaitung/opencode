@@ -1,7 +1,8 @@
 /**
  * 打 OpenAI 兼容 /chat/completions(非流式、temperature 0)。
  * 环境变量: EVAL_BASE_URL(默认 http://localhost:8086/v1) / EVAL_API_KEY / EVAL_MODEL(默认 /models/qwen3)
- *          / EVAL_MAX_TOKENS(默认 2048,推理模型显式 4096) / EVAL_TIMEOUT_MS(默认 180000)。
+ *          / EVAL_MAX_TOKENS(默认 2048,推理模型显式 4096) / EVAL_TIMEOUT_MS(默认 180000)
+ *          / EVAL_DISABLE_THINKING(设 1 时带 chat_template_kwargs:{enable_thinking:false})。
  * 用 Bun 内建 fetch,零新增依赖——评测只判 tool_use,裸参数比高层 SDK 的断言 API 更可控。
  */
 import type { ModelOutput, ToolCall } from "./types"
@@ -13,6 +14,12 @@ const MODEL = process.env.EVAL_MODEL ?? "/models/qwen3"
 // 慢速弱模型（本地 qwen3.6 ~16 tok/s）默认 2048,过长输出会拖到超时。
 const MAX_TOKENS = Number(process.env.EVAL_MAX_TOKENS ?? "2048")
 const REQUEST_TIMEOUT_MS = Number(process.env.EVAL_TIMEOUT_MS ?? "180000")
+// 思考模式开关：Qwen3 系默认开思考，会先写一大段「Let me organize…」再动手——
+// 实测本地 qwen3 在长 system prompt 下必然把 max_tokens 耗在这段分析上、finish=length
+// 且零工具调用（等不到工具就超时），评测根本测不出规则遵循。关掉后同一场景 53s /
+// finish=stop，行为可测。**按模型开关**：deepseek 等推理模型关了会失去推理空间，
+// 反而更差，故默认不开、由调用方按模型显式传。
+const DISABLE_THINKING = process.env.EVAL_DISABLE_THINKING === "1"
 
 export function modelId(): string {
   return MODEL
@@ -29,6 +36,7 @@ export async function chatComplete(system: string, user: string, tools: unknown[
     ],
     tools,
     tool_choice: "auto",
+    ...(DISABLE_THINKING ? { chat_template_kwargs: { enable_thinking: false } } : {}),
   })
   // 弱/推理模型单请求可达 50s+,vLLM 排队时更久;带显式超时并在网络/超时错误时重试,
   // 避免评测中途崩溃(曾因偶发 TimeoutError 中断全量)。HTTP 4xx/5xx 为服务端判定,不重试。
