@@ -229,6 +229,29 @@ describe("模型可见文本不得写死模板地址", () => {
       expect(mdHits(md)).toEqual([])
   })
 
+  test("禁「章号.占位符」混合形态——地址护栏正则抓不到的那一类", () => {
+    // `5.{序号}.*` 这类写法逃过了 HARDCODE（要求点后接数字），但它同样是**模型可见**
+    // 文本里的写死章号：换模板后章号会变，模型照着错误章号填地址就是死路。
+    // 合法形状记号是 `{序号}.*` 或 `<容器地址>.<名称>`——都不以数字打头，故此处可无条件禁。
+    const banned = /\d+\.\{/
+    for (const [root, name] of [
+      [PLUGIN_SRC, "plugin"],
+      [SHARED_SRC, "shared"],
+    ] as const) {
+      for (const f of Array.from(new Bun.Glob("**/*.ts").scanSync({ cwd: root, absolute: false }))) {
+        const file = join(root, f)
+        for (const lit of stringLiterals(file)) {
+          const m = lit.match(banned)
+          if (m) expect(`${name}/${f}: ${m[0]} in ${JSON.stringify(lit.slice(0, 40))}`).toBe("")
+        }
+      }
+    }
+    // 正向对照：合法形状写法确实不触发
+    expect(banned.test("{序号}.*")).toBe(false)
+    expect(banned.test("<容器地址>.<名称>")).toBe(false)
+    expect(banned.test("5.{序号}.*")).toBe(true)
+  })
+
   test("扫描覆盖所有插件源文件（防新增文件漏扫）", () => {
     // 白名单式扫描必然漏：新增一个含模型可见文案的工具文件就会逃过。
     // 改为「扫全部 src/**/*.ts」，靠 isShape 排除注释与设计文档编号。
