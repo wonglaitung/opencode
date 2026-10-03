@@ -5,7 +5,7 @@ description: Use when running or analyzing the rule-following evaluation baselin
 
 # 规则遵循度评测与质量飞轮（eval-rules）
 
-量化两个度量：① 弱模型对注入规则的遵循度（**通过率**，sdlc 与 reqdoc 共用）；② reqdoc 打分卡五维 PRD 质量分（**0-100 五维度量**，reqdoc 专属）。改前跑 baseline（冻结快照），改后跑 new，对比通过率与五维分数，数据驱动决定回滚或调整注入文本。方法论单一事实源见 `plugin-guide/eval-driven-rule-iteration.md`；reqdoc 质量飞轮机制见 `docs/workflow-reqdoc.md` 10 章；运行方式与改动分级决策图见 `docs/session-management.md` 13.1 / 13.6。
+量化两个度量：① 弱模型对注入规则的遵循度（**通过率**，sdlc 与 reqdoc 共用）；② reqdoc 打分卡五维 PRD 质量分（**0-100 五维度量**，reqdoc 专属）。改前跑 baseline（冻结快照），改后跑 new，对比通过率与五维分数，数据驱动决定回滚或调整注入文本。方法论单一事实源见 `docs/session-management.md` 第 9 章 9.7/9.8（本 skill 只讲怎么跑与踩过的坑）；reqdoc 质量飞轮机制见 `docs/workflow-reqdoc.md` 10 章；运行方式与改动分级决策图见 `docs/session-management.md` 13.1 / 13.6。
 
 ## 入口
 
@@ -119,6 +119,8 @@ EVAL_BASE_URL=http://localhost:8086/v1 EVAL_MODEL=/models/qwen3 EVAL_MAX_TOKENS=
 - **`AbortSignal.timeout` 超时会打印一整坨 DOMException**（`QUOTA_EXCEEDED_ERR` / `TIMEOUT_ERR` 之类枚举），看起来像服务端返回了诡异错误，其实就是超时（code 23 = `TIMEOUT_ERR`）。捕获后打 `e.name` / `e.code` / `e.message` 即可确认，别被枚举列表误导成协议问题。
 - **改判定先跑自检**——`judge-selfcheck.ts` 会在每次评测（含 dry）前证明新判据真的会红，任一项失灵即中止并指名。新增点路径判据（`argsNonEmpty` / `forbidArgsPresent`）时**必须**往里加用例：路径写错时正向断言是「恒失败」（安全），禁止存在类断言是「恒通过」（危险，产出一份全绿但无意义的报告）。原有 `args` 只做 `actual[k] === v` 引用相等，**判不了嵌套对象**（如 `restated_term.business_quote`），别拿它断言嵌套字段。
 - **评测工具镜像是简化版，改真实工具要同步**——`src/tool-defs.ts` 只暴露评测需要的字段与描述。真实工具新增字段（如 `restated_term.business_quote`）而镜像没跟上，模型就无从调用，相关场景会**恒失败**且看不出是镜像缺字段还是模型不听话。断言某个参数前先确认镜像里有它。
+- **存档分数与新分数不可直接比**——`baseline.json` 是在当时的设置（端点/思考开关/max_tokens/执行模式/判据）下测出来的。改过任一项就要重跑 baseline 取同口径对照；子集运行落独立文件名，不覆盖冻结参照。疑似回退用 `--repeat 3` 复核，n=1 不可信。
+- **模型不动手 ≠ 端点坏了**——先穷举结构性开关（`EVAL_DISABLE_THINKING`、chat template、max_tokens），再下「环境不可用」的结论。qwen3 的两个已知坑见 deployment.md。
 - **超长截断不是规则回退**——`finish_reason: length` 且无工具调用，说明模型把 token 花在长篇分析上没走到工具，**与注入文本无关**。判别方法：用冻结的 baseline 夹具跑**同一场景**对照，若 baseline 同样 `length`，则该场景失败与本次改动无关，不要据此回滚或改注入文本。本地 qwen3（`localhost:8086`）在长 system prompt（~9k 字符）下必截断，2048/4096 均如此，且长请求还会连续超时——**该端点不适合做真实模型验收**，需要稳定端点时优先换远端（见上）。
 - **子集结果不参与验收**——`--name` / `--workflow` 的落盘文件名带过滤后缀并记 `partial`，通过率口径与全量 baseline 不可比（对比只报绝对值，`--fail-on-regression` 直接拒绝判定）。真实验收必须跑全量。
 - **判定关键词须与规则要求的语言自洽**——reqdoc-r2 禁止技术词、要求业务语言，r6 判定却查「超时/驳回/失败/补单」等技术词，模型按规则用业务说法（「连点提交/断网」）就匹配不上；判定词表须用规则同侧语言。
