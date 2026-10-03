@@ -106,6 +106,7 @@ describe("3.6 · L1 消缺口 / L2 不消缺口", () => {
     // 业务复述 → 写 L1（origin 由服务端固定为 restated）
     const w = writeL1Term("CRD", "信贷审批部", {
       kind: "内部简称", scope: "org", origin: "restated", fromProject: "信贷系统改造",
+      businessQuote: "业务说：CRD 就是信贷审批部",
     })
     expect(w.ok).toBe(true)
 
@@ -176,19 +177,33 @@ describe("3.6 · 防污染写入", () => {
   })
 
   test("业务复述（restated）可写，且写后可被命中", () => {
-    const r = writeL1Term("CRD", "信贷审批部", { kind: "内部简称", scope: "org", origin: "restated", fromProject: "信贷系统改造" })
+    const r = writeL1Term("CRD", "信贷审批部", { kind: "内部简称", scope: "org", origin: "restated", businessQuote: "业务原话：「信贷审批部」就是 CRD", fromProject: "信贷系统改造" })
     expect(r.ok).toBe(true)
     expect(matchMemory("需求里用了 CRD").l1.map((t) => t.definition)).toEqual(["信贷审批部"])
   })
 
   test("★ 同名不同义不静默覆盖（交业务裁决）", () => {
-    writeL1Term("CRD", "信贷审批部", { kind: "内部简称", scope: "org", origin: "restated", fromProject: "p1" })
-    const r = writeL1Term("CRD", "容器运行时声明", { kind: "行业通用", scope: "org", origin: "restated", fromProject: "p2" })
+    writeL1Term("CRD", "信贷审批部", { kind: "内部简称", scope: "org", origin: "restated", businessQuote: "业务原话：「信贷审批部」就是 CRD", fromProject: "p1" })
+    const r = writeL1Term("CRD", "容器运行时声明", { kind: "行业通用", scope: "org", origin: "restated", businessQuote: "业务原话：「信贷审批部」就是 CRD", fromProject: "p2" })
     expect(r).toEqual({ ok: false, reason: "conflict", existing: "信贷审批部" })
   })
 
+  test("★ restated 缺业务原话 → 拒写（凭据不可省）", () => {
+    // 污染成本不对称：L1 命中即免问、免问项由模型自己落定、业务不再被问，
+    // 旧格式条目里只有模型的释义、无从追查谁说的。故 restated 必须带业务原话。
+    for (const businessQuote of [undefined, "", "  "]) {
+      expect(
+        writeL1Term("CRD", "信贷审批部", { kind: "内部简称", scope: "org", origin: "restated", businessQuote, fromProject: "p" }),
+      ).toEqual({ ok: false, reason: "missing_quote" })
+    }
+    // 拒写后记忆里不得凭空多出条目
+    expect(matchMemory("需求里用了 CRD").l1.map((t) => t.definition)).not.toContain("信贷审批部")
+    // 非 restated 的 origin 本就被污染源拒写，不受凭据影响
+    expect(writeL1Term("X", "Y", { kind: "内部简称", scope: "org", origin: "inferred", fromProject: "p" }).ok).toBe(false)
+  })
+
   test("重复写入相同定义视为幂等（不算冲突）", () => {
-    writeL1Term("CRD", "信贷审批部", { kind: "内部简称", scope: "org", origin: "restated", fromProject: "p1" })
-    expect(writeL1Term("CRD", "信贷审批部", { kind: "内部简称", scope: "org", origin: "restated", fromProject: "p1" }).ok).toBe(true)
+    writeL1Term("CRD", "信贷审批部", { kind: "内部简称", scope: "org", origin: "restated", businessQuote: "业务原话：「信贷审批部」就是 CRD", fromProject: "p1" })
+    expect(writeL1Term("CRD", "信贷审批部", { kind: "内部简称", scope: "org", origin: "restated", businessQuote: "业务原话：「信贷审批部」就是 CRD", fromProject: "p1" }).ok).toBe(true)
   })
 })

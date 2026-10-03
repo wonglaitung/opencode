@@ -190,9 +190,17 @@ export function writeL1Term(
     scope: MemoryTerm["scope"]
     origin: MemoryTerm["origin"]
     fromProject: string
+    /**
+     * 业务原话。`origin=restated`（业务主动复述）时**必填**：该 origin 的污染后果是
+     * 跨需求免问且业务不再被问，属不可逆，故要求留下可追查的凭据，与 force_reason /
+     * confirm_note 同一原则。空字符串按缺省处理并拒写。
+     */
+    businessQuote?: string
   },
-): { ok: true; path: string } | { ok: false; reason: "polluting_origin" } | { ok: false; reason: "conflict"; existing: string } {
+): { ok: true; path: string } | { ok: false; reason: "polluting_origin" } | { ok: false; reason: "missing_quote" } | { ok: false; reason: "conflict"; existing: string } {
   if (isPollutingOrigin(opts.origin)) return { ok: false, reason: "polluting_origin" }
+  // restated 必须带业务原话——否则「业务真的说过」无从证明，条目只有模型的释义
+  if (opts.origin === "restated" && !opts.businessQuote?.trim()) return { ok: false, reason: "missing_quote" }
   const dir = join(memoryRoot(), "l1-glossary")
   const path = join(dir, safeFileName(term))
   const existing = readJsonDir<MemoryTerm>("l1-glossary", isL1Entry).find((t) => t.term === term)
@@ -207,6 +215,7 @@ export function writeL1Term(
     origin: opts.origin,
     confirmedAt: Date.now(),
     fromProject: opts.fromProject,
+    ...(opts.businessQuote?.trim() ? { businessQuote: opts.businessQuote.trim() } : {}),
   }
   mkdirSync(dir, { recursive: true })
   writeFileSync(path, JSON.stringify(entry, null, 2) + "\n", "utf8")

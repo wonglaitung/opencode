@@ -390,6 +390,16 @@ export interface MemoryTerm {
   origin: "restated" | "accepted_default" | "explicit" | "inferred"
   confirmedAt: number
   fromProject: string
+  /**
+   * 业务原话（origin=restated 时必填，写入即校验）。
+   *
+   * 存在的理由是**污染成本不对称**：L1 命中即免问，而免问项只需模型自己
+   * `reqdoc_answer` 落定、业务全程不参与——一条伪造的「业务复述」可以永久消掉
+   * 未来需求里一个本该问的问题，且旧格式条目里只有模型的释义、无从追查谁说的。
+   * 与 `force_kb.force_reason` / `adopt_baseline.confirm_note` 同构：理由必须来自
+   * 业务，模型不得代填。旧条目无此字段（optional），仅影响可审计性、不影响读取。
+   */
+  businessQuote?: string
   retired?: boolean
 }
 

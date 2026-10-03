@@ -44,7 +44,7 @@ function dropMaterial(worktree: string, text: string) {
 describe("P0-1 · 记忆链路在生产路径真的接通", () => {
   test("★ reqdoc_ingest 传 candidates → 工具返回 L1 消缺口（不再是死代码）", async () => {
     tempMemory()
-    writeL1Term("CRD", "信贷审批部", { kind: "内部简称", scope: "org", origin: "restated", fromProject: "p" })
+    writeL1Term("CRD", "信贷审批部", { kind: "内部简称", scope: "org", origin: "restated", businessQuote: "业务原话：「信贷审批部」就是 CRD", fromProject: "p" })
     const store = Store.memory(() => "reqdoc" as const)
     const worktree = mkdtempSync(join(tmpdir(), "sm-p0w-"))
     // 证据 = 材料原文（方案 C）：术语须出现在业务投放的材料里，而非模型转述的槽位正文
@@ -86,7 +86,7 @@ describe("P0-1 · 记忆链路在生产路径真的接通", () => {
 
   test("★ 门禁不因记忆放行（打 review_submit 生产路径；复审 T-2：上一版手工调 kbGate，纯自证）", async () => {
     tempMemory()
-    writeL1Term("CRD", "信贷审批部", { kind: "内部简称", scope: "org", origin: "restated", fromProject: "p" })
+    writeL1Term("CRD", "信贷审批部", { kind: "内部简称", scope: "org", origin: "restated", businessQuote: "业务原话：「信贷审批部」就是 CRD", fromProject: "p" })
     const store = Store.memory(() => "reqdoc" as const)
     const features = [{ no: 1, name: "名单排查", priority: "high" as const, confirmedAt: 1000 }]
     store.mutateWorkflow("r1", (w) => {
@@ -215,7 +215,7 @@ describe("P0-2 · 重组装 diff 不可绕过", () => {
 describe("P0-3 · 记忆库健壮性", () => {
   test("★ 路径穿越（term 含 ../）→ 写入被约束在记忆目录内", () => {
     const home = tempMemory()
-    const r = writeL1Term("../../pwned", "x", { kind: "内部简称", scope: "org", origin: "restated", fromProject: "p" })
+    const r = writeL1Term("../../pwned", "x", { kind: "内部简称", scope: "org", origin: "restated", businessQuote: "业务原话：「信贷审批部」就是 CRD", fromProject: "p" })
     expect(r.ok).toBe(true)
     expect((r as { path: string }).path.startsWith(join(home, "memory"))).toBe(true)
     // 不得逃到记忆目录之外
@@ -234,7 +234,7 @@ describe("P0-3 · 记忆库健壮性", () => {
   test("★ 词边界：2 字母缩写不再误命中长词内部", () => {
     tempMemory()
     for (const [t, d] of [["IT", "信息技术"], ["CI", "持续集成"], ["卡", "卡片管理"], ["CRD", "信贷审批部"]] as const) {
-      writeL1Term(t, d, { kind: "内部简称", scope: "org", origin: "restated", fromProject: "p" })
+      writeL1Term(t, d, { kind: "内部简称", scope: "org", origin: "restated", businessQuote: "业务原话：「信贷审批部」就是 CRD", fromProject: "p" })
     }
     // 这段材料一个术语都没提（曾误命中 4 个）
     expect(
@@ -347,7 +347,7 @@ describe("P1 · 记忆写入必须在校验之后", () => {
   }
   const withTerm = (address: string, source: string, reason?: string) => ({
     address, content: "x", source, reason,
-    restated_term: { term: "CRD", definition: "信贷审批部", kind: "内部简称" as const },
+    restated_term: { term: "CRD", definition: "信贷审批部", kind: "内部简称" as const, business_quote: "业务说：CRD 是信贷审批部" },
   })
 
   test("★ [缺省] 无 reason 失败后记忆库为空", async () => {
@@ -544,7 +544,7 @@ describe("P2 · CLI 与插件记忆根同源", () => {
     const home = mkdtempSync(join(tmpdir(), "sm-p2cli-"))
     process.env.SM_MEMORY_HOME = join(home, "memory")
     const { writeL1Term } = await import("sm-shared")
-    writeL1Term("CRD", "信贷审批部", { kind: "内部简称", scope: "org", origin: "restated", fromProject: "CLI同源测试" })
+    writeL1Term("CRD", "信贷审批部", { kind: "内部简称", scope: "org", origin: "restated", businessQuote: "业务原话：「信贷审批部」就是 CRD", fromProject: "CLI同源测试" })
 
     const { runMemory } = await import("../../cli/src/commands/memory")
     // CLI 用 process.stdout.write（不是 console.log），必须捕获真正的出口
@@ -587,7 +587,7 @@ describe("P2 · CLI 与插件记忆根同源", () => {
 describe("N-3 · 中文术语必须命中", () => {
   const seed = (terms: [string, string, "内部简称" | "行业通用"][]) => {
     const home = tempMemory()
-    for (const [t, d, k] of terms) writeL1Term(t, d, { kind: k, scope: "org", origin: "restated", fromProject: "p" })
+    for (const [t, d, k] of terms) writeL1Term(t, d, { kind: k, scope: "org", origin: "restated", businessQuote: "业务原话：「信贷审批部」就是 CRD", fromProject: "p" })
     return home
   }
 
@@ -661,7 +661,7 @@ describe("N-4 · 子键不得注入 markdown 结构", () => {
 describe("N-5 · 候选不得自证", () => {
   test("★ 槽位正文无该术语时，candidates 填了也不消缺口", async () => {
     tempMemory()
-    writeL1Term("CRD", "信贷审批部", { kind: "内部简称", scope: "org", origin: "restated", fromProject: "p" })
+    writeL1Term("CRD", "信贷审批部", { kind: "内部简称", scope: "org", origin: "restated", businessQuote: "业务原话：「信贷审批部」就是 CRD", fromProject: "p" })
     const store = Store.memory(() => "reqdoc" as const)
     const worktree = mkdtempSync(join(tmpdir(), "sm-n5-"))
     const out = String(
@@ -681,7 +681,7 @@ describe("N-5 · 候选不得自证", () => {
 
   test("正文含该术语时正常消缺口（正向）", async () => {
     tempMemory()
-    writeL1Term("CRD", "信贷审批部", { kind: "内部简称", scope: "org", origin: "restated", fromProject: "p" })
+    writeL1Term("CRD", "信贷审批部", { kind: "内部简称", scope: "org", origin: "restated", businessQuote: "业务原话：「信贷审批部」就是 CRD", fromProject: "p" })
     const store = Store.memory(() => "reqdoc" as const)
     const worktree = mkdtempSync(join(tmpdir(), "sm-n5b-"))
     dropMaterial(worktree, "信贷审批部（CRD）负责流程优化。")
@@ -882,7 +882,7 @@ describe("I-1 · 记忆证据源不可由模型书写", () => {
   // 方案 C 落地后：证据是材料原文，模型写的槽位正文不再能制造命中。
   test("★ 模型写了否定句也拿不到记忆免问（材料不含该词）", async () => {
     tempMemory()
-    writeL1Term("CCB", "某系统", { kind: "内部简称", scope: "org", origin: "restated", fromProject: "p" })
+    writeL1Term("CCB", "某系统", { kind: "内部简称", scope: "org", origin: "restated", businessQuote: "业务原话：「信贷审批部」就是 CRD", fromProject: "p" })
     const store = Store.memory(() => "reqdoc" as const)
     const worktree = mkdtempSync(join(tmpdir(), "sm-i1-"))
     // 材料里没有 CCB，模型却在槽位正文写「与 CCB 无关」——不得触发
@@ -905,7 +905,7 @@ describe("I-1 · 记忆证据源不可由模型书写", () => {
 
   test("★ 材料确实含该词时照常免问（正向对照：换源没把记忆打没）", async () => {
     tempMemory()
-    writeL1Term("CCB", "某系统", { kind: "内部简称", scope: "org", origin: "restated", fromProject: "p" })
+    writeL1Term("CCB", "某系统", { kind: "内部简称", scope: "org", origin: "restated", businessQuote: "业务原话：「信贷审批部」就是 CRD", fromProject: "p" })
     const store = Store.memory(() => "reqdoc" as const)
     const worktree = mkdtempSync(join(tmpdir(), "sm-i1b-"))
     dropMaterial(worktree, "本需求需对接 CCB 系统获取客户号。")
@@ -1008,7 +1008,7 @@ describe("C · 证据换源的两个失效路径", () => {
     )
   const withCCB = async () => {
     tempMemory()
-    writeL1Term("CCB", "某系统", { kind: "内部简称", scope: "org", origin: "restated", fromProject: "p" })
+    writeL1Term("CCB", "某系统", { kind: "内部简称", scope: "org", origin: "restated", businessQuote: "业务原话：「信贷审批部」就是 CRD", fromProject: "p" })
     const store = Store.memory(() => "reqdoc" as const)
     const worktree = mkdtempSync(join(tmpdir(), "sm-c-"))
     return { store, worktree }
@@ -1026,7 +1026,7 @@ describe("C · 证据换源的两个失效路径", () => {
 
   test("★ 07 产物不作证据（否则自证面挪回原位）", async () => {
     tempMemory()
-    writeL1Term("CCB", "某系统", { kind: "内部简称", scope: "org", origin: "restated", fromProject: "p" })
+    writeL1Term("CCB", "某系统", { kind: "内部简称", scope: "org", origin: "restated", businessQuote: "业务原话：「信贷审批部」就是 CRD", fromProject: "p" })
     const store = Store.memory(() => "reqdoc" as const)
     const worktree = mkdtempSync(join(tmpdir(), "sm-c2-"))
     // 只有组装产物含 CCB（正是由槽位正文生成的），材料目录全空
@@ -1141,7 +1141,7 @@ describe("L1 免问项的落定指引（免问 ≠ 已覆盖）", () => {
 
   test("★ 跟着回执走能解卡：免问 → 落定 → 容器覆盖", async () => {
     tempMemory()
-    writeL1Term("CLD", "贷后分类标签", { kind: "内部简称", scope: "org", origin: "restated", fromProject: "p" })
+    writeL1Term("CLD", "贷后分类标签", { kind: "内部简称", scope: "org", origin: "restated", businessQuote: "业务原话：「信贷审批部」就是 CRD", fromProject: "p" })
     const store = Store.memory(() => "reqdoc" as const)
     const worktree = mkdtempSync(join(tmpdir(), "sm-l1fill-"))
     dropMaterial(worktree, "名单排查按 CLD 过滤。")

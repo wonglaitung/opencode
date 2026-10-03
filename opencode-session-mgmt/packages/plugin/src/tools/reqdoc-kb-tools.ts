@@ -361,10 +361,17 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
           term: z.string().describe("业务刚刚口头复述释义的缩写/简称（如 CRD）"),
           definition: z.string().describe("业务给出的释义（用业务原话，不要臆测润色）"),
           kind: z.enum(["行业通用", "系统口径", "内部简称"]).describe("分类：内部简称=行内叫法；系统口径=本系统约定；行业通用=通用行话"),
+          business_quote: z
+            .string()
+            .describe(
+              "**业务刚才的原话**（照抄听到的那句，不要改写成书面语）——与 force_reason / confirm_note 同一原则：**模型不得代填**。" +
+                "L1 命中即免问、免问项由你自己落定、业务不再被问，写错会跨需求永久传播，故必须留可追查的凭据；" +
+                "留空按拒写处理，不会静默入库。",
+            ),
         })
         .optional()
         .describe(
-          "【记忆】仅当业务**主动口头解释了某个缩写/简称**时才填（origin=restated）。" +
+          "【记忆】仅当业务**主动口头解释了某个缩写/简称**时才填（origin=restated），且 business_quote 必填。" +
             "下一个需求材料出现该词将直接采信、不再追问。**业务只是点了「同意默认」时绝对不要填**——" +
             "静默接受不入库，否则错误定义会跨需求传播。",
         ),
@@ -409,20 +416,27 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
       })
       // 记忆写入（3.6.1 ①）：业务复述 → 立即写 L1。origin 固定 restated——
       // 模型无法自行指定 origin，杜绝「点默认也入库」的污染路径。
+      // business_quote（业务原话）必填：L1 命中即免问、免问项由模型自己落定、
+      // 业务不再被问，污染不可逆且旧格式条目里只有模型的释义、无从追查谁说的。
       const mem = args.restated_term
         ? writeL1Term(args.restated_term.term, args.restated_term.definition, {
             kind: args.restated_term.kind,
             scope: "org",
             origin: "restated",
             fromProject: basename(root),
+            businessQuote: args.restated_term.business_quote,
           })
         : null
       const memNote =
         mem?.ok === true
           ? `🧠 已记入 L1 术语记忆：${args.restated_term!.term} = ${args.restated_term!.definition}（下个需求出现该词将直接采信、不再问）`
-          : mem?.ok === false && mem.reason === "conflict"
-            ? `⚠ 术语「${args.restated_term!.term}」记忆里已有不同释义（${mem.existing}），未覆盖——请与业务确认该用哪个`
-            : ""
+          : mem?.ok === false && mem.reason === "missing_quote"
+            ? `⚠ 术语「${args.restated_term!.term}」**未入库**：L1 记忆必须有业务原话作凭据（business_quote），` +
+              `留空即拒写——记忆一入库就跨需求免问、业务不再被问，写错无法追查。` +
+              `若业务确实口头解释过，请照抄那句原话重试；只是点了「同意默认」则不要写记忆。`
+            : mem?.ok === false && mem.reason === "conflict"
+              ? `⚠ 术语「${args.restated_term!.term}」记忆里已有不同释义（${mem.existing}），未覆盖——请与业务确认该用哪个`
+              : ""
       const kb = readKb(saved)
       await writeKbFiles(root, kb)
       // 阶段 3：记忆接线——按**材料原文**匹配（同 ingest，方案 C）。

@@ -65,7 +65,7 @@ describe("3.6.1 ① · reqdoc_answer 复述术语即写 L1", () => {
           address: "4.2",
           content: "本行受理跨行转账",
           source: "问答",
-          restated_term: { term: "CIPS", definition: "中国现代化支付系统", kind: "行业通用" },
+          restated_term: { term: "CIPS", definition: "中国现代化支付系统", kind: "行业通用", business_quote: "业务说：CIPS 就是中国现代化支付系统" },
         } as never,
         ctx,
       ),
@@ -78,6 +78,54 @@ describe("3.6.1 ① · reqdoc_answer 复述术语即写 L1", () => {
     store.close()
   })
 
+  test("★ 缺业务原话 → 拒写且说清真因（凭据不可省）", async () => {
+    // L1 命中即免问、免问项由模型自己落定、业务不再被问 → 写错不可逆且无从追查。
+    // 与 force_reason / confirm_note 同一原则：凭据必须来自业务，故留空即拒写。
+    for (const quote of [undefined, "", "   "]) {
+      const store = reqdocStore()
+      const tools = createReqdocKbTools(store)
+      const out = String(
+        await tools.reqdoc_answer!.execute(
+          {
+            address: "4.2",
+            content: "本行受理跨行转账",
+            source: "问答",
+            restated_term: { term: "CIPS", definition: "中国现代化支付系统", kind: "行业通用", business_quote: quote },
+          } as never,
+          { sessionID: "r1", worktree: home } as never,
+        ),
+      )
+      expect(out).not.toContain("已记入 L1")
+      expect(out).toMatch(/未入库/)
+      expect(findMemory("l1-glossary", (e) => e.term === "CIPS")).toBeNull()
+      store.close()
+    }
+  })
+
+  test("★ 业务原话真落库（可追查谁说的）", async () => {
+    const store = reqdocStore()
+    const tools = createReqdocKbTools(store)
+    await tools.reqdoc_answer!.execute(
+      {
+        address: "4.2",
+        content: "本行受理跨行转账",
+        source: "问答",
+        restated_term: {
+          term: "CIPS",
+          definition: "中国现代化支付系统",
+          kind: "行业通用",
+          business_quote: "  业务说：CIPS 就是中国现代化支付系统  ",
+        },
+      } as never,
+      { sessionID: "r1", worktree: home } as never,
+    )
+    // 两端空白裁掉，凭据本身原样保留
+    expect(findMemory("l1-glossary", (e) => e.term === "CIPS")!.businessQuote).toBe(
+      "业务说：CIPS 就是中国现代化支付系统",
+    )
+    store.close()
+  })
+
   test("★ 同名不同义 → 不静默覆盖，提示与业务确认", async () => {
     const store = reqdocStore()
     const tools = createReqdocKbTools(store)
@@ -86,12 +134,12 @@ describe("3.6.1 ① · reqdoc_answer 复述术语即写 L1", () => {
       address: "4.2",
       content: "x",
       source: "问答",
-      restated_term: { term: "CRD", definition: "信贷审批部", kind: "内部简称" },
+      restated_term: { term: "CRD", definition: "信贷审批部", kind: "内部简称", business_quote: "业务说：CRD 是信贷审批部" },
     } as never
     expect(String(await tools.reqdoc_answer!.execute(args, ctx))).toContain("已记入 L1")
     const out2 = String(
       await tools.reqdoc_answer!.execute(
-        { ...(args as object), restated_term: { term: "CRD", definition: "容器运行时声明", kind: "行业通用" } } as never,
+        { ...(args as object), restated_term: { term: "CRD", definition: "容器运行时声明", kind: "行业通用", business_quote: "业务说：CRD 是容器运行时声明" } } as never,
         ctx,
       ),
     )

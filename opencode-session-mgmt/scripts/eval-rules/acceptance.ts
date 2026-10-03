@@ -126,6 +126,9 @@ async function main() {
     kind: "内部简称",
     scope: "org",
     origin: "restated",
+    // restated 必须带业务原话（对抗审查第九轮）：L1 命中即免问、业务不再被问，
+    // 凭据不可省。验收脚本模拟的业务复述一律附原话。
+    businessQuote: "业务口头复述：该缩写就是此释义",
     fromProject: "信贷系统改造",
   })
   record(
@@ -157,7 +160,7 @@ async function main() {
     `首轮开放项含 4.1.AML=${firstAddrs.includes("4.1.AML")}（材料提到了 AML，未复述过就该问）`,
   )
   // ② 记入 L1 且 kind=行业通用 → 消缺口（设计的 kind 分类规则）
-  writeL1Term("AML", "反洗钱", { kind: "行业通用", scope: "org", origin: "restated", fromProject: "p" })
+  writeL1Term("AML", "反洗钱", { kind: "行业通用", scope: "org", origin: "restated", businessQuote: "业务说：AML 就是反洗钱", fromProject: "p" })
   const withAml = deriveWithMemory(MATERIAL_1)
   const withAmlAddrs = withAml.all.map((q) => q.address)
   record(
@@ -171,6 +174,9 @@ async function main() {
     source: "问答",
     scope: "org",
     origin: "restated",
+    // restated 必须带业务原话（对抗审查第九轮）：L1 命中即免问、业务不再被问，
+    // 凭据不可省。验收脚本模拟的业务复述一律附原话。
+    businessQuote: "业务口头复述：该缩写就是此释义",
     fromProject: "信贷系统改造",
   })
   const withL2 = deriveWithMemory(`${MATERIAL_1}\n交易走 CIPS 通道，报文经 ESB 网关转发至核心系统。`)
