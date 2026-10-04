@@ -10,7 +10,7 @@ const FIXTURES: Record<string, string> = {
   reqdoc: "../fixtures/baseline/reqdoc-rules.txt",
 }
 
-export async function renderBaseline(workflow: WorkflowState): Promise<string> {
+export async function renderBaseline(workflow: WorkflowState, _lockedFiles: readonly string[] = []): Promise<string> {
   const def = getDefinition(workflow.type)
   const rules = await Bun.file(new URL(FIXTURES[workflow.type], import.meta.url).pathname).text()
 

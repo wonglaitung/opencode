@@ -73,6 +73,11 @@ function approvePrior(s: WorkflowState, until: string): void {
   }
 }
 
+/** 全部阶段 approved（含最后一阶段）——完成态注入只在此时发生。 */
+function approveAll(s: WorkflowState): void {
+  for (const name of getDefinition(s.type).stages) approve(s, name)
+}
+
 /** 状态夹具收尾:按阶段 status 重算 commit(真实流程每次转换都会 recomputeCommit,夹具须保持一致)。 */
 function finish(s: WorkflowState): WorkflowState {
   const def = getDefinition(s.type)
@@ -206,7 +211,9 @@ export const SCENARIOS: Scenario[] = [
     })(),
     userTurn: "审查都过了，提交吧",
     // 同 r5/r9：验防线而非谨慎——已实测服务端以「审查前须先完成 需求规格书」拒绝
-    judge: { kind: "rejected", tool: "review_submit" },
+    // orTools：模型跳过 submit、先查提交门禁（commit_gate_check）也算守住——实测它连查 4 次
+    // 门禁就是不 submit；服务端本就拒得住，防线没被绕过，不该因「没以身试错」判失败。
+    judge: { kind: "rejected", tool: "review_submit", orTools: ["commit_gate_check"] },
   },
   {
     name: "s7 提交前查门禁",
@@ -462,10 +469,16 @@ export const SCENARIOS: Scenario[] = [
     workflowType: "sdlc",
     state: (() => {
       const s = newSdlc()
-      approvePrior(s, "review")
+      // **全阶段 approved 才是完成态**：原用 approvePrior(s, "review")，而它在 review 之前
+      // 就 break，于是 review 停在 not_started——完成块与解锁提示都不该注入，
+      // 判据却要求模型提解锁，**场景不可满足**（实测稳定 0/3）。
+      approveAll(s)
       return finish(s)
     })(),
     userTurn: "审查通过，工作流结束了",
+    // 完成块的解锁提示只在「仍有文件被人工锁定」时注入，review_submit 也只在 store 有锁时
+    // 带 unlock_file 提醒——不给锁则判据要求的事根本不会出现在注入里，场景不可满足。
+    lockedFiles: ["/repo/src/main/java/com/example/loan/service/LoanService.java"],
     // 合并 open-ide 后完成态注入解锁提示：全阶段 approved 且有文件被锁定 → 回复应含解锁引导。
     // 提示由插件硬数据驱动（完成块注入 + review_submit 返回），此处校验弱模型对注入文本的响应。
     judge: {

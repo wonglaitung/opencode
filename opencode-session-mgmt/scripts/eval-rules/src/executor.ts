@@ -31,9 +31,30 @@ import { createReqdocImportTool } from "../../../packages/plugin/src/tools/reqdo
 import { createReqdocScanTool } from "../../../packages/plugin/src/tools/reqdoc-scan"
 import { createReqdocConventionReviewTool } from "../../../packages/plugin/src/tools/reqdoc-review-conventions"
 import { createWorkflowStartTools } from "../../../packages/plugin/src/tools/workflow-start"
-// 注：`open_ide` / `unlock_file` / `list_locked_files` 需要宿主 IDE 注册表，评测环境没有，
-// 故**故意不注册**——由 exec-selfcheck 的覆盖率检查把缺口显式报出来，而不是让模型
-// 调到一半拿到「未实现」。sdlc 的锁定类场景因此不适合在执行模式下跑。
+import { createOpenIdeTool } from "../../../packages/plugin/src/open-ide/open-ide-tool"
+import { createLockTools } from "../../../packages/plugin/src/open-ide/tools/lock-tools"
+import type { LockRegistry } from "../../../packages/plugin/src/open-ide/lock"
+
+/**
+ * 内存锁注册表：让 `open_ide` / `unlock_file` / `list_locked_files` 在评测环境**真实可执行**。
+ *
+ * 此前这三个工具**故意不注册**（`open_ide` 需要真实启动 IDE，评测里没有宿主），结果
+ * s22「完结后提示解锁」稳定 0/3——模型确实提示了解锁，但执行器拿不到实现，判据看到的是
+ * 一个假失败。锁逻辑本身不需要 IDE（只是 `Set<string>`），故用内存实现补上；
+ * 真正需要 IDE 的只有 `open_ide` 的「打开编辑器」动作，评测里退化为「仅记录锁定」。
+ */
+function memLocks(): LockRegistry {
+  const m = new Map<string, Set<string>>()
+  const key = (sid: string, f: string) => `${sid}\u0000${f}`
+  return {
+    lock: (sid, f) => void (m.get(sid)?.add(f) ?? m.set(sid, new Set([f])).get(sid)),
+    unlock: (sid, f) => void m.get(sid)?.delete(f),
+    isLocked: (sid, f) => m.get(sid)?.has(f) ?? false,
+    list: (sid) => [...(m.get(sid) ?? [])],
+    clear: (sid) => void m.delete(sid),
+    clearAll: () => m.clear(),
+  }
+}
 
 /** 工具结果回灌用的协议消息（assistant 工具调用 / tool 结果）。 */
 export interface PriorMessage {
@@ -85,6 +106,7 @@ type ToolLike = { execute: (args: unknown, ctx: unknown) => Promise<unknown> }
  * 故 `exec-selfcheck` 会在每次执行模式评测前核对覆盖率，缺一个就中止。
  */
 export function buildRegistry(store: Store): Record<string, ToolLike | undefined> {
+  const locks = memLocks()
   return {
     ...createReqdocKbTools(store),
     ...createReqdocFeatureTools(store),
@@ -96,6 +118,9 @@ export function buildRegistry(store: Store): Record<string, ToolLike | undefined
     ...createReqdocExportTool(),
     ...createReqdocScanTool(),
     ...createReqdocConventionReviewTool(),
+    // 与生产装配（index.ts）保持同构：open_ide 单个 + 锁工具组
+    open_ide: createOpenIdeTool([], locks) as unknown as ToolLike,
+    ...createLockTools(locks),
   } as Record<string, ToolLike | undefined>
 }
 
@@ -164,7 +189,7 @@ function readArtifact(root: string): string | undefined {
 export async function executeTurns(
   state: WorkflowState,
   model: (prior: PriorMessage[]) => Promise<ModelOutput>,
-  opts: { maxTurns?: number; sessionID?: string } = {},
+  opts: { maxTurns?: number; sessionID?: string; lockedFiles?: string[] } = {},
 ): Promise<ExecResult> {
   const sessionID = opts.sessionID ?? "eval"
   const maxTurns = opts.maxTurns ?? 4
@@ -174,6 +199,9 @@ export async function executeTurns(
   const store = Store.memory(() => state.type)
   try {
     seed(store, sessionID, state)
+    // 预置文件锁：解锁提示有两条注入路径（完成块 lockedFiles>0、review_submit 返回 store 有锁），
+    // 场景要测「有锁时会提示解锁」就必须真的有锁，否则判据不可满足（s22 曾稳定 0/3）。
+    for (const f of opts.lockedFiles ?? []) store.lockFile(sessionID, f)
     const ctx = { worktree: root, sessionID } as never
     const registry = buildRegistry(store)
     const prior: PriorMessage[] = []

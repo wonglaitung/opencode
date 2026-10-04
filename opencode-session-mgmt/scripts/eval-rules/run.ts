@@ -52,8 +52,8 @@ const EXECUTE = process.env.EVAL_EXECUTE === "1"
 const workflowRaw = argValue("--workflow")
 const workflow = workflowRaw === "sdlc" || workflowRaw === "reqdoc" ? workflowRaw : undefined
 
-async function renderSystem(state: Parameters<typeof renderNew>[0]): Promise<string> {
-  return variant === "baseline" ? renderBaseline(state) : renderNew(state)
+async function renderSystem(state: Parameters<typeof renderNew>[0], lockedFiles: readonly string[] = []): Promise<string> {
+  return variant === "baseline" ? renderBaseline(state, lockedFiles) : renderNew(state, lockedFiles)
 }
 
 console.log(`评测模型: ${modelId()} | variant: ${variant} | repeat: ${repeat}${dry ? " | dry(不调模型)" : ""}\n`)
@@ -96,7 +96,7 @@ const scenarios = (workflow ? SCENARIOS.filter((s) => s.workflowType === workflo
 )
 const results: ScenarioResult[] = []
 for (const sc of scenarios) {
-  const system = await renderSystem(sc.state)
+  const system = await renderSystem(sc.state, sc.lockedFiles)
 
   if (dry) {
     console.log(`===== ${sc.name} (${sc.workflowType}) =====`)
@@ -133,7 +133,13 @@ for (const sc of scenarios) {
           system,
           sc.userTurn,
           EVAL_TOOLS,
-        ).then((first) => executeTurns(sc.state, async (prior) => (prior.length === 0 ? first : chatComplete(system, sc.userTurn, EVAL_TOOLS, prior))))
+        ).then((first) =>
+          executeTurns(
+            sc.state,
+            async (prior) => (prior.length === 0 ? first : chatComplete(system, sc.userTurn, EVAL_TOOLS, prior)),
+            { lockedFiles: sc.lockedFiles },
+          ),
+        )
         // 判据看全部轮次（见 executor 的 allCalls 注释：只看最后一轮会把「已完成」判成未调用）
         out = {
           text: turn.allTexts.join("\n"),

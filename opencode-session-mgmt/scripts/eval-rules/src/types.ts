@@ -144,6 +144,12 @@ export interface Scenario {
   judge: Judge
   /** 判据意图一句话（不参与判定，仅留痕；配对场景靠它说明「正向/反向」） */
   note?: string
+  /**
+   * 预置的文件锁（仅执行模式有效）。sdlc 完成态的解锁提示有条件：`lockedFiles.length > 0`
+   * 才注入完成块、`review_submit` 也只在 store 真有锁时才带 unlock_file 提醒。
+   * 不给锁 = 判据要求的事根本不会出现在注入里，场景不可满足。
+   */
+  lockedFiles?: string[]
 }
 
 export interface ToolCall {

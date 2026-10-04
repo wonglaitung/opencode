@@ -10,6 +10,13 @@
 import { buildSystemFragment } from "../../../packages/plugin/src/prompt"
 import { type WorkflowState } from "sm-shared"
 
-export function renderNew(workflow: WorkflowState): string {
-  return buildSystemFragment(workflow, {}, [])
+/**
+ * 渲染当前注入文本。
+ *
+ * `lockedFiles` 必须能传进去：sdlc 完成块的解锁提示有条件（`lockedFiles.length > 0`
+ * 才注入），而场景的锁是**执行阶段**才灌进 store 的——注入若不带上锁，解锁提示就不会出现，
+ * 判据要求的事根本没进 system prompt（s22 曾因此稳定 0/3，场景不可满足）。
+ */
+export function renderNew(workflow: WorkflowState, lockedFiles: readonly string[] = []): string {
+  return buildSystemFragment(workflow, {}, [...lockedFiles])
 }
