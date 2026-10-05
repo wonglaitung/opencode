@@ -19,6 +19,7 @@
 import { existsSync } from "node:fs"
 import { EVAL_TOOLS } from "./src/tool-defs"
 import { judgeSelfCheck } from "./src/judge-selfcheck"
+import { formatOptionQuality, parseOptionSets } from "./src/option-quality"
 import { executeTurns } from "./src/executor"
 import { execSelfCheck } from "./src/exec-selfcheck"
 import { SCENARIOS } from "./src/scenarios"
@@ -95,6 +96,8 @@ const scenarios = (workflow ? SCENARIOS.filter((s) => s.workflowType === workflo
   nameFilter ? s.name.includes(nameFilter) : true,
 )
 const results: ScenarioResult[] = []
+// 每场景最后一次运行的正文，供报告末尾的选项质量聚合复查（optionQuality 里只有汇总行）
+const textsByScenario = new Map<string, string>()
 for (const sc of scenarios) {
   const system = await renderSystem(sc.state, sc.lockedFiles)
 
@@ -112,6 +115,7 @@ for (const sc of scenarios) {
 
   let pass = 0
   let lastDetail = ""
+  let lastText = ""
   // 动作预算超支取**最后一次**运行的结果（与 lastDetail 同口径）
   let lastChurn: { tool: string; calls: number }[] | undefined
   // 渲染/评分场景（质量飞轮 A4 归因）：留各次运行的模型输出原文——只看判定 detail 无法区分
@@ -158,6 +162,7 @@ for (const sc of scenarios) {
       continue
     }
     lastChurn = out.churn
+    if (out.text.trim() !== "") lastText = out.text
     if (captureOutput) outputs.push(out.artifact ?? out.text)
     const r = judgeScenario(sc.judge, out)
     if (r.pass) pass++
@@ -183,6 +188,10 @@ for (const sc of scenarios) {
     name: sc.name,
     workflowType: sc.workflowType,
     pass: allPass,
+    // 选项质量：**只观测**。不进通过率、不改判据——先拿基线数据，
+    // 再决定要不要改提示词或加约束（语义质量服务端判不了，贸然设门禁会重演
+    // 「判据与规则反向」那类问题，本次已栽过四次）。
+    ...(lastText.trim() !== "" ? { optionQuality: formatOptionQuality(parseOptionSets(lastText)) } : {}),
     passCount: pass,
     runCount: repeat,
     detail,
@@ -198,6 +207,7 @@ for (const sc of scenarios) {
     result.scores = scores
   }
   if (outputs.length > 0) result.outputs = outputs
+  textsByScenario.set(sc.name, lastText)
   results.push(result)
   console.log(`${allPass ? "✅" : "❌"} ${sc.name.padEnd(18)} ${sc.workflowType.padEnd(5)} ${pass}/${repeat}  ${detail}`)
 }
@@ -247,6 +257,27 @@ console.log(
     `reqdoc ${reqdoc.pass}/${reqdoc.total} (${reqdoc.rate}%)` +
     (score ? `\nPRD 评分 ${score.totalAvg}/100（平均，${score.scenarios.length} 个评分场景）` : ""),
 )
+
+// 选项质量聚合（阶段 1）：把散在 per-scenario 的观测汇总成一行，便于跨场景看基线。
+// 只统计「解析出问句」的场景——纯工具调用的场景没有选项可言，计入只会稀释分母。
+const oqTotals = { scenarios: 0, questions: 0, optionCountOk: 0, withFallback: 0, withDuplicate: 0 }
+for (const r of results) {
+  if (!r.optionQuality || r.optionQuality.includes("未解析出问句")) continue
+  oqTotals.scenarios++
+  const q = parseOptionSets(textsByScenario.get(r.name) ?? "")
+  oqTotals.questions += q.questions
+  oqTotals.optionCountOk += q.optionCountOk
+  oqTotals.withFallback += q.withFallback
+  oqTotals.withDuplicate += q.withDuplicate
+}
+if (oqTotals.scenarios > 0) {
+  const pct = (n: number): string => `${Math.round((n / Math.max(1, oqTotals.questions)) * 100)}%`
+  console.log(
+    `\n选项质量（观察项，不计通过率）：${oqTotals.scenarios} 个场景 / ${oqTotals.questions} 个问句｜` +
+      `选项数 3~4 ${pct(oqTotals.optionCountOk)}｜带兜底出口 ${pct(oqTotals.withFallback)}｜` +
+      `有机械重复 ${pct(oqTotals.withDuplicate)}`,
+  )
+}
 
 const report: EvalReport = {
   variant,

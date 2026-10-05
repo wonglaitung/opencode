@@ -185,6 +185,8 @@ export interface ScenarioResult {
   name: string
   workflowType: WorkflowType
   pass: boolean
+  /** 选项质量观测（阶段 1，纯观察、不计通过率；无提问场景则缺省） */
+  optionQuality?: string
   /** 该场景 N 次运行中通过次数（repeat>1 时聚合按运行次数统计，防单次抖动掩盖趋势） */
   passCount: number
   runCount: number
