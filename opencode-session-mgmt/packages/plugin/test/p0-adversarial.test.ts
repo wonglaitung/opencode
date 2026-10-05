@@ -1507,3 +1507,41 @@ describe("Step 6 · 分支二的说明书：AI 得知道按什么顺序调（否
     expect(kbSrc).toContain("const reqdoc_adopt_baseline = tool(")
   })
 })
+
+describe("★ sdlc-r37：模型侧自审落成规则（不滞留 conventions）", () => {
+  const wfSrc = () => read(join("..", "..", "shared", "src", "workflow.ts"))
+
+  test("★ 改完即审落在 implementation 阶段规则里，且 timing 是「改完即审、不攒到提交前」", () => {
+    // 这条时机定案原由 conventions/00-编码规约 第 10 节承载，但 conventions 按设计
+    // 「只注入、无门禁」（conventions.ts 头注：质量飞轮不参与），评测器看不见它。
+    // 已搬进 sdlc-r37——断言随之搬过来，并顺带钉住它**不在** conventions 里重复一遍
+    // （规约每轮注入，重复一遍就是白花 token）。
+    const { rulesForStage, SDLC } = require("../../shared/src/workflow") as {
+      rulesForStage: (d: unknown, s: string | null) => { id: string; text: string }[]
+      SDLC: unknown
+    }
+    const atImpl = rulesForStage(SDLC, "implementation")
+    const r37 = atImpl.find((r) => r.id === "sdlc-r37")
+    expect(r37).toBeDefined()
+    expect(r37!.text).toContain("立即自审一轮")
+    expect(r37!.text).toContain("不攒到提交前")
+    expect(r37!.text).toContain("跑出来而不是脑补")
+    // timing 必须与第 1 节验证同拍，且旧的「攒到提交前」不得复活
+    expect(r37!.text).not.toContain("交付前必做")
+    // 规约里不该再有第 10 节的全文
+    const conv = read(join("..", "conventions", "sdlc", "00-编码规约.md"))
+    expect(conv).not.toContain("对抗性审核")
+    expect(conv).not.toContain("交付前必做")
+  })
+
+  test("★ r37 第 ① 条是通用「波及面」而非文本受众特例", () => {
+    // 用户要求：原「受众核查」写成「写给机器的指令不要漏进给人看的输出」过于特定开发场景。
+    // 改为覆盖面（调用方/环境/既有数据/文本），文本只是其中一项。
+    const src = wfSrc()
+    const from = src.indexOf('id: "sdlc-r37"')
+    const rule = src.slice(from, src.indexOf('{ id: "sdlc-', from + 10))
+    expect(rule).toContain("波及面")
+    for (const facet of ["调用方", "环境", "既有数据", "文本"]) expect(rule).toContain(facet)
+    expect(rule).not.toContain("受众核查")
+  })
+})

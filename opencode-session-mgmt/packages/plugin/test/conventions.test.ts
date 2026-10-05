@@ -36,9 +36,6 @@ describe("loadWorkflowConventions（按工作流类型 + 阶段门控）", () =>
   test("sdlc implementation 阶段：注入 global(提交信息) + implementation(代码期)，不混入 design/reqdoc", () => {
     const text = loadWorkflowConventions("sdlc", "implementation", emptyRoot())
     expect(text).toContain("复杂度与代码异味") // implementation（安全-代码期）
-    expect(text).toContain("修改后对抗性审核") // implementation（00-编码规约 第 10 节）
-    expect(text).toContain("每次改完即做") // 时机定案：改完即审、与第 1 节验证同拍，不攒到提交前
-    expect(text).not.toContain("交付前必做") // 旧时机已废：提交前集中审多轮叠加的旧账最易走过场
     expect(text).toContain("AI 编写代码须带 [AI] 标记") // global
     expect(text).not.toContain("凭证与密钥") // design（安全-设计期）不泄漏
     expect(text).not.toContain("避免竞态") // design（并发）不泄漏
