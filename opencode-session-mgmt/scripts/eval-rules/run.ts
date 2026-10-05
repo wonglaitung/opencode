@@ -124,7 +124,10 @@ for (const sc of scenarios) {
 
   let pass = 0
   let lastDetail = ""
-  let lastText = ""
+  // 每场景**累计**各轮正文，不只留最后一次：观测要的是问句总体，而 `--repeat N` 下
+  // 只留最后一轮等于白丢 (N-1)/N 的样本（实测 r27 三次兜底 3/5/4，单看某一次会
+  // 把真实水平看成 1/5）。判据仍用最后一次（单次判更稳），观测用累计。
+  const textChunks: string[] = []
   // 动作预算超支取**最后一次**运行的结果（与 lastDetail 同口径）
   let lastChurn: { tool: string; calls: number }[] | undefined
   // 渲染/评分场景（质量飞轮 A4 归因）：留各次运行的模型输出原文——只看判定 detail 无法区分
@@ -158,6 +161,7 @@ for (const sc of scenarios) {
         // 判据看全部轮次（见 executor 的 allCalls 注释：只看最后一轮会把「已完成」判成未调用）
         out = {
           text: turn.allTexts.join("\n"),
+          lastTurnText: turn.allTexts.at(-1),
           toolCalls: turn.allCalls,
           artifact: turn.artifact,
           toolResults: turn.toolResults,
@@ -171,7 +175,8 @@ for (const sc of scenarios) {
       continue
     }
     lastChurn = out.churn
-    if (out.text.trim() !== "") lastText = out.text
+    if (out.text.trim() !== "") textChunks.push(out.text)
+    const lastText = textChunks.at(-1) ?? ""
     if (captureOutput) outputs.push(out.artifact ?? out.text)
     const r = judgeScenario(sc.judge, out)
     if (r.pass) pass++
@@ -200,15 +205,20 @@ for (const sc of scenarios) {
     // 选项质量：**只观测**。不进通过率、不改判据——先拿基线数据，
     // 再决定要不要改提示词或加约束（语义质量服务端判不了，贸然设门禁会重演
     // 「判据与规则反向」那类问题，本次已栽过四次）。
-    ...(lastText.trim() !== "" ? { optionQuality: formatOptionQuality(parseOptionSets(lastText)) } : {}),
+    ...(textChunks.length > 0
+      ? { optionQuality: formatOptionQuality(parseOptionSets(textChunks.join("\n"))) }
+      : {}),
     // 默认推荐限流（阶段 3）：只报「这一轮还带不带默认推荐」这一个机械事实。
     // 带 = r27 的转开放式没生效；不带 = 生效了。**不判对错**——「该不该转」有语义成分。
-    ...(lastText.trim() !== ""
-      ? {
-          defaultLoad: `默认推荐限流（观察项）：本轮${reportDefaultLoad(lastText).hasDefault ? "仍带" : "未带"}默认推荐${
-            reportDefaultLoad(lastText).markers.length ? `（命中 ${reportDefaultLoad(lastText).markers.join("、")}）` : ""
-          }`,
-        }
+    ...(textChunks.length > 0
+      ? (() => {
+          const dl = reportDefaultLoad(textChunks.join("\n"))
+          return {
+            defaultLoad: `默认推荐限流（观察项·仅最后一轮）：${dl.hasDefault ? "仍带" : "未带"}默认推荐${
+              dl.markers.length ? `（命中 ${dl.markers.join("、")}）` : ""
+            }`,
+          }
+        })()
       : {}),
     passCount: pass,
     runCount: repeat,
@@ -225,7 +235,7 @@ for (const sc of scenarios) {
     result.scores = scores
   }
   if (outputs.length > 0) result.outputs = outputs
-  textsByScenario.set(sc.name, lastText)
+  textsByScenario.set(sc.name, textChunks.join("\n"))
   results.push(result)
   console.log(`${allPass ? "✅" : "❌"} ${sc.name.padEnd(18)} ${sc.workflowType.padEnd(5)} ${pass}/${repeat}  ${detail}`)
 }

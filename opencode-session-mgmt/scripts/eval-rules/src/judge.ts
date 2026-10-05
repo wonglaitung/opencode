@@ -32,6 +32,11 @@ function argsMatch(expect: Record<string, unknown> | undefined, actual: Record<s
   return Object.entries(expect).every(([k, v]) => actual[k] === v)
 }
 
+/** 数「问句个数」：含问号的**行**算一问，行内可有多个问号；空行不计。 */
+function countQuestions(text: string): number {
+  return text.split(/\r?\n/).filter((line) => /[?？]/.test(line.trim())).length
+}
+
 export function judgeScenario(judge: Judge, out: ModelOutput): { pass: boolean; detail: string; score?: PrdScore } {
   switch (judge.kind) {
     case "rejected": {
@@ -160,7 +165,11 @@ export function judgeScenario(judge: Judge, out: ModelOutput): { pass: boolean; 
 
     case "text": {
       if (judge.type === "maxQuestions") {
-        const n = (out.text.match(/[?？]/g) ?? []).length
+        // 「单次提问最多 N 问」是**每轮**上限，故只看最后一轮；跨轮累计会误判
+        // （实测模型跨轮持续追问，3 轮累计 17 问，每轮都 ≤5）。
+        // 按**问句**计数而非问号个数：一句里出现两个问号（`"客户基本资料"具体指哪些？（可多选）`）
+        // 会被数成 2 问，实测把 r27 从 5 问误判成 6 问、0/3 全红。判据缺陷而非模型违规。
+        const n = countQuestions(out.lastTurnText ?? out.text)
         return n <= (judge.max ?? 0)
           ? { pass: true, detail: `✓ 问句 ${n} 个(≤${judge.max})` }
           : { pass: false, detail: `问句 ${n} 个,超过上限 ${judge.max}` }

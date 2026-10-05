@@ -160,7 +160,11 @@ export interface ToolCall {
 }
 
 export interface ModelOutput {
+  /** **全部轮次**拼接的正文——`text` 类判据按此判（reqdoc-r2 的「单次提问最多 5 个」是**每轮**上限，
+   *  跨轮累计会误判：实测模型跨轮持续追问，3 轮累计 17 问但每轮都 ≤5）。 */
   text: string
+  /** **最后一轮**的正文——需要「单轮视角」的观测用（如默认推荐限流：本轮是否还端默认）。 */
+  lastTurnText?: string
   toolCalls: ToolCall[]
   /**
    * 真实产物内容（仅 `EVAL_EXECUTE=1` 时有）：执行工具后从工作区读到的组装产物。
