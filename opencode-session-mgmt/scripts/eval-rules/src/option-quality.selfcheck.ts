@@ -30,7 +30,9 @@ const CASES: { desc: string; text: string; want: Record<string, unknown> }[] = [
   {
     desc: "真实格式：加粗问句、列表符选项、同行多选项都能解析",
     text: REAL,
-    want: { questions: 3, optionCountOk: 3, withFallback: 2, withDuplicate: 1 },
+    // 兜底只有 1 个：第 3 问的重复项「手工录入」不是兜底；
+    // 「以上都不是问题所在」按新口径也不计（接了内容就不是出口了）
+    want: { questions: 3, optionCountOk: 3, withFallback: 1, withDuplicate: 1 },
   },
   {
     desc: "问号不必在行尾（真实输出行尾是被加粗的 **）",
@@ -47,6 +49,28 @@ const CASES: { desc: string; text: string; want: Record<string, unknown> }[] = [
     text: "好的，我先初始化一下工作流。",
     want: { questions: 0 },
   },
+  // 兜底识别：单词表会把这 9 条全判成兜底（实测误判 6/7），令兜底率虚高。
+  // 故识别必须是**整项句式**，不是「含某个词」。这批用例就是防那个回退。
+  ...[
+    ["以上都不是", true],
+    ["其他", true],
+    ["其他（请补充）", true],
+    ["都不对", true],
+    ["以上都不是。", true],
+    ["都不是以上", true],
+    ["没有额外要求", false],
+    ["其他章节无需改动", false],
+    ["以上都没有提到", false],
+    ["无需额外审批", false],
+    ["没有特殊要求，按常规流程", false],
+    ["其他系统的问题", false],
+    ["以上都不是问题所在", false],
+    ["都不是我要的（请补充）", false],
+  ].map(([opt, want], i) => ({
+    desc: `兜底识别 ${i + 1}：「${opt}」→ ${want ? "应算兜底" : "不应算兜底"}`,
+    text: `问题？\n- A. 甲\n- B. ${opt}`,
+    want: { parsed0fallback: want },
+  })),
 ]
 
 /** 返回失灵项描述；空数组表示解析器行为符合预期。 */
@@ -55,7 +79,12 @@ export function optionQualitySelfCheck(): string[] {
   for (const c of CASES) {
     const r = parseOptionSets(c.text)
     for (const [k, want] of Object.entries(c.want)) {
-      const got = k === "parsed0options" ? (r.parsed[0]?.options.length ?? 0) : (r as unknown as Record<string, unknown>)[k]
+      const got =
+        k === "parsed0options"
+          ? (r.parsed[0]?.options.length ?? 0)
+          : k === "parsed0fallback"
+            ? (r.parsed[0]?.hasFallback ?? false)
+            : (r as unknown as Record<string, unknown>)[k]
       if (got !== want) fails.push(`${c.desc}：${k} 期望 ${String(want)}，实际 ${String(got)}`)
     }
   }
