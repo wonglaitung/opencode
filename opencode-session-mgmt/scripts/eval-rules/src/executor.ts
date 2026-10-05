@@ -83,6 +83,16 @@ export interface ExecResult {
   /** 逐次调用的执行结果，供「调用是否被服务端拒绝」类判定与诊断 */
   toolResults: { name: string; ok: boolean; result: string }[]
   /**
+   * **单轮动作预算超支**：同一工具被反复调用（参数各异，故上面的死循环检测抓不到）。
+   *
+   * 现象：弱模型在一个场景里连发 25 次 `reqdoc_answer`，每次都「成功」但没能走完
+   * ingest → 逐项确认 → assemble 的链路（6.4 第 5 条）。此前它表现为「该场景失败」，
+   * 但看不出是**流程本身要求多轮**、还是模型卡住了——两者在报告里长得一样。
+   * 有了这个计数就能分开：预算超支 = 该场景结论不可信，应先看是不是判据要求了单轮
+   * 做不到的事（就像曾经那四个渲染场景）。
+   */
+  churn?: { tool: string; calls: number }[]
+  /**
    * 模型是否陷入重复调用同一动作的死循环。
    *
    * 实测弱模型会连发同一个 `reqdoc_confirm_features`（qwen3 连发 4 次参数完全相同），
@@ -262,7 +272,16 @@ export async function executeTurns(
       }
       last = await model(prior)
     }
-    return { prior, last, allCalls, allTexts, artifact: readArtifact(root), toolResults, looped }
+    // 动作预算：按工具统计调用次数（跨全部轮次）。阈值 8 取自实测——正常场景里
+    // 单工具调用多在 1~3 次；25 次是量级差异而非波动。
+    const CHURN_THRESHOLD = 8
+    const count = new Map<string, number>()
+    for (const c of allCalls) count.set(c.name, (count.get(c.name) ?? 0) + 1)
+    const churn = [...count.entries()]
+      .filter(([, n]) => n >= CHURN_THRESHOLD)
+      .map(([tool, calls]) => ({ tool, calls }))
+      .sort((a, b) => b.calls - a.calls)
+    return { prior, last, allCalls, allTexts, artifact: readArtifact(root), toolResults, looped, churn }
   } finally {
     store.close()
     if (origMemoryHome === undefined) delete process.env.SM_MEMORY_HOME

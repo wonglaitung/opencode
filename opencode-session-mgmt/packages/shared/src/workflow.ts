@@ -437,7 +437,7 @@ export const SDLC: WorkflowDefinition = {
     { id: "sdlc-r7", stage: "review", text: "review 是唯一不可由 AI 自行推进的阶段（必须经 review_submit），目标是确保开发者真正理解代码。" },
     { id: "sdlc-r8", stage: "review", text: "进入审查后，将每个 AI 生成的代码变更拆分为可理解片段，comprehension_add 逐段登记并输出解释（做了什么、为什么这样写、被放弃的替代方案、潜在风险）。" },
     { id: "sdlc-r9", stage: "review", text: "开发者确认某片段时，立即调用 comprehension_confirm(codeSegmentId=该片段 id)；单次只接受一个 codeSegmentId，逐段确认、禁止一次确认多个。" },
-    { id: "sdlc-r10", stage: "review", text: "开发者追问时详细解释，comprehension_ask 将问答追加到该片段的 explanation。" },
+    { id: "sdlc-r10", stage: "review", text: "开发者追问时详细解释，comprehension_ask 将问答追加到该片段的 explanation。**追问必须登记成问答，不要用 read_file 自看代码代替**——不登记的问答不进理解证据链。" },
     { id: "sdlc-r11", stage: "review", text: "每个片段须达成终态（confirm 接受 / manual 开发者自处理），不允许 pending/rejected 悬空；拒绝的片段先 comprehension_rewrite 重写或 manual 定论，全部定论且前序阶段（requirements/design/implementation/testing）全部 approved 后才可 review_submit；清单四项须全为 true，否则回到编码/测试。返工多应结合拒绝意见 rewrite 改进，而非简单重试。" },
   ],
 }
@@ -531,7 +531,7 @@ export const REQDOC: WorkflowDefinition = {
 
     // ---- prd 需求规格书 ----
     { id: "reqdoc-r13", stage: "prd", text: "功能点拆解（核心）：综合前面 goal/rules/edge 收集的信息（材料提取 + 问答），把需求拆成功能点清单（编号/名称/优先级），先向业务展示清单确认；业务确认后调用 reqdoc_confirm_features(features=[{name,priority}]...) 记录，并为每个功能点在 06_功能点 下建子目录写入来源摘录（标注 [文档]/[问答] 来源）。业务说资料已放好则先调用 reqdoc_scan(directory=07_需求规格产出) 检查已有产出。" },
-    { id: "reqdoc-r14", stage: "prd", text: "PRD 产出（**由服务端从槽位投影生成，不要手写**）：流程只有两步——① reqdoc_ingest 批量提交内容槽位（地址取工具返回的清单）→ reqdoc_answer 逐项请业务确认落定；② reqdoc_assemble 由服务端按《业务需求说明书》模板投影出整篇 md，归档到 07_需求规格产出。**严禁用 write 手写或手工编辑 PRD 正文**（手写产物缺内嵌槽位摘要，定稿会被拦）。槽位变更后重跑 reqdoc_assemble。定稿后调用 reqdoc_export 生成 Word 交付件。" },
+    { id: "reqdoc-r14", stage: "prd", text: "PRD 产出（**由服务端从槽位投影生成，不要手写**）：流程只有两步——① reqdoc_ingest 批量提交内容槽位（地址取工具返回的清单）→ reqdoc_answer 逐项请业务确认落定；② reqdoc_assemble 由服务端按《业务需求说明书》模板投影出整篇 md，归档到 07_需求规格产出。**严禁用 write 手写或手工编辑 PRD 正文**（手写产物缺内嵌槽位摘要，定稿会被拦）。槽位变更后重跑 reqdoc_assemble。定稿后调用 reqdoc_export 生成 Word 交付件。**prd 阶段禁止用 comprehension_add**（review 阶段工具）堆理解条目——用它代替 reqdoc_ingest，内容既不进槽位也不进产物。" },
     // 槽位内容铁律：地址映射已由服务端派生（清单精确到每个小节），规则不再复述映射表、也不复述任何编号——
     // 模板结构已改为从 md 解析，编号会随机构模板变，写死在规则里必然过时。
     { id: "reqdoc-r20", stage: "prd", text: "槽位内容铁律：工具返回的「本轮该填」地址已精确到小节，**照地址填即可，不要自己判断该写进哪一节，也不要自造地址**（换机构模板后编号会变，清单永远是唯一依据）。内容要求：业务语言书面语，**禁止杜撰事实**——[问答] 来源的口语须提炼为规范书面语，不得原话照搬；[缺省] 必须附 reason，禁止裸 [缺省]。模板外成果（UAT 用例、低保真界面、数据字典与库表设计、RBAC 权限矩阵）不插入 PRD 正文，用 write 写入 07_需求规格产出 下子目录，并在对应功能点的「附件」小节列出清单与相对路径（该小节标题与地址以工具清单为准）。" },

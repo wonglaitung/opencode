@@ -173,6 +173,12 @@ export interface ModelOutput {
   artifact?: string
   /** 执行工具时每个调用的结果（工具名 → 回执或错误文案），供诊断与「调用是否被拒」类判定 */
   toolResults?: { name: string; ok: boolean; result: string }[]
+  /**
+   * 单轮动作预算超支（同工具被反复调用，参数各异 → 上面的 looped 抓不到）。
+   * **非空即表示该场景结论不可信**：先怀疑「判据要求了单轮做不到的事」或模型卡住，
+   * 而不是直接读成「规则没效果」。详见 executor 的 churn 注释。
+   */
+  churn?: { tool: string; calls: number }[]
 }
 
 export interface ScenarioResult {

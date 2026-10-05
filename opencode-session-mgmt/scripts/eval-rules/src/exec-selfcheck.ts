@@ -108,7 +108,18 @@ export async function execSelfCheck(): Promise<string[]> {
         `表现为「规则没效果」的假失败。补 packages/plugin/src 的对应 create* 工厂。`,
     )
 
-  // 4) 死循环检测
+  // 4) 单轮动作预算超支检测：同工具参数各异地反复调用（looped 抓不到这种）
+  const churned = await executeTurns(state, async (prior) => {
+    const n = prior.filter((m) => m.role === "assistant").length + 1
+    return n <= 10
+      ? { text: "", toolCalls: [{ id: `c${n}`, name: "reqdoc_answer", args: { address: `3.${n}`, content: `x${n}`, source: "问答" } }] }
+      : NOOP
+  }, { maxTurns: 12 })
+  if (churned.looped) fails.push("动作预算：参数各异的重复调用被误判成死循环（looped 与 churn 应各管一种）")
+  if (!churned.churn?.some((c) => c.tool === "reqdoc_answer" && c.calls >= 8))
+    fails.push("动作预算：同工具连发未触发 churn（该场景会被读成「模型不听话」而非「预算超支」）")
+
+  // 5) 死循环检测
   // 每一轮都发同一个调用（参数完全相同）——这才是弱模型的真实死循环形态（实测 qwen3 连发 4 次）
   const looped = await executeTurns(state, async () => ({
     text: "",

@@ -409,3 +409,42 @@ describe("hashApiKey（身份哈希，3.1 / 12 安全）", () => {
     expect(await hashApiKey("a")).not.toBe(await hashApiKey("b"))
   })
 })
+
+/**
+ * 面向弱模型的提示词要求·条 6「禁用要显式写」的护栏。
+ *
+ * 弱模型不会自己推断「不该用哪个工具」——**语义相邻的替代工具就是它的默认诱因**。
+ * 本仓已实测两起：`reqdoc_ingest` 该用时，模型连发 25 次 `comprehension_add`
+ * （把需求内容堆成理解条目，内容既不进槽位也不进产物）；`comprehension_ask` 该用时，
+ * 模型改用 `read_file` 自己看代码。
+ *
+ * 规则：凡 steer 某个工具的规则文本，若该工具存在下表列出的**替代路径**，规则必须
+ * **点名禁用**那条替代路径——否则等于没写。表是显式的、可审计的：每对都对应一次实测。
+ */
+describe("规则须显式禁用语义相邻的替代工具（条 6）", () => {
+  const TYPES = ["sdlc", "reqdoc"] as const
+  /** [正路工具, 替代路径] —— 每对都对应一次实测的绕道 */
+  const BYPASS_PAIRS: [string, string][] = [
+    ["reqdoc_ingest", "comprehension_add"],
+    ["comprehension_ask", "read_file"],
+  ]
+
+  for (const [correct, bypass] of BYPASS_PAIRS) {
+    test(`${correct} 必须被点名禁用 ${bypass}`, () => {
+      const steering = TYPES.flatMap((t) => getDefinition(t).rules).filter((r) => r.text.includes(correct))
+      expect(steering.length).toBeGreaterThan(0)
+      const naming = steering.filter((r) => r.text.includes(bypass))
+      expect(naming.map((r) => r.id)).not.toEqual([])
+    })
+  }
+
+  test("禁用措辞必须带阶段限定——comprehension_add 在 review 阶段是正当动作", () => {
+    const r14 = getDefinition("reqdoc").rules.find((r) => r.id === "reqdoc-r14")
+    expect(r14?.text).toContain("comprehension_add")
+    // 无条件禁用会把 review 阶段的正当用法也禁掉
+    expect(r14?.text).toMatch(/本阶段|阶段无关|除 review|review 阶段/)
+    // 且 review 阶段的正当规则仍在
+    expect(getDefinition("reqdoc").rules.some((r) => r.id === "reqdoc-r16" && r.text.includes("comprehension_add"))).toBe(true)
+    expect(getDefinition("sdlc").rules.some((r) => r.id === "sdlc-r8" && r.text.includes("comprehension_add"))).toBe(true)
+  })
+})

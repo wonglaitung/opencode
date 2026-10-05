@@ -112,6 +112,8 @@ for (const sc of scenarios) {
 
   let pass = 0
   let lastDetail = ""
+  // 动作预算超支取**最后一次**运行的结果（与 lastDetail 同口径）
+  let lastChurn: { tool: string; calls: number }[] | undefined
   // 渲染/评分场景（质量飞轮 A4 归因）：留各次运行的模型输出原文——只看判定 detail 无法区分
   // 「纯文本渲染」「错层级标题」「tool_call 占位」，须落原文才能归因（本机留痕，汇报不上行）
   const outputs: string[] = []
@@ -146,6 +148,7 @@ for (const sc of scenarios) {
           toolCalls: turn.allCalls,
           artifact: turn.artifact,
           toolResults: turn.toolResults,
+          churn: turn.churn,
         }
       }
     } catch (err) {
@@ -154,6 +157,7 @@ for (const sc of scenarios) {
       lastDetail = `请求失败:${err instanceof Error ? err.message.slice(0, 120) : String(err)}`
       continue
     }
+    lastChurn = out.churn
     if (captureOutput) outputs.push(out.artifact ?? out.text)
     const r = judgeScenario(sc.judge, out)
     if (r.pass) pass++
@@ -169,7 +173,12 @@ for (const sc of scenarios) {
     if (!r.pass) console.log(`   └ 第 ${i + 1} 次: ${r.detail}`)
   }
   const allPass = pass === repeat
-  const detail = allPass ? lastDetail : `通过 ${pass}/${repeat}${lastDetail ? `;末次:${lastDetail}` : ""}`
+  // 单轮动作预算超支要显式喊出来：否则「该场景失败」看不出是模型卡住还是判据要求了
+  // 单轮做不到的事——两者在报告里长得一样（6.4 第 5 条）。
+  const churnNote = lastChurn?.length
+    ? `；⚠动作预算超支 ${lastChurn.map((c) => `${c.tool}×${c.calls}`).join("、")}（该场景结论不可信，先查判据是否要求单轮做不到的事）`
+    : ""
+  const detail = (allPass ? lastDetail : `通过 ${pass}/${repeat}${lastDetail ? `;末次:${lastDetail}` : ""}`) + churnNote
   const result: ScenarioResult = {
     name: sc.name,
     workflowType: sc.workflowType,
