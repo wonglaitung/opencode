@@ -20,6 +20,7 @@ import { existsSync } from "node:fs"
 import { EVAL_TOOLS } from "./src/tool-defs"
 import { judgeSelfCheck } from "./src/judge-selfcheck"
 import { formatOptionQuality, parseOptionSets } from "./src/option-quality"
+import { optionQualitySelfCheck } from "./src/option-quality.selfcheck"
 import { executeTurns } from "./src/executor"
 import { execSelfCheck } from "./src/exec-selfcheck"
 import { SCENARIOS } from "./src/scenarios"
@@ -78,6 +79,14 @@ if (variant === "baseline" && !workflow && !dry && process.env.EVAL_ALLOW_BASELI
 const broken = judgeSelfCheck()
 if (broken.length > 0) {
   console.error(`❌ 判定器自检失败（${broken.length} 项）：\n${broken.map((b) => `  - ${b}`).join("\n")}`)
+  process.exit(1)
+}
+
+// 选项质量解析器自检：探针在合成样例上绿 ≠ 在真实输出上对（第一版就栽在这——
+// 要求问号在行尾，而真实输出行尾是被加粗的 **，真实场景里一个问句都解析不出）
+const oqBroken = optionQualitySelfCheck()
+if (oqBroken.length > 0) {
+  console.error(`❌ 选项质量解析器自检失败（${oqBroken.length} 项）：\n${oqBroken.map((b) => `  - ${b}`).join("\n")}`)
   process.exit(1)
 }
 

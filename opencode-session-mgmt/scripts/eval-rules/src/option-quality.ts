@@ -11,8 +11,11 @@
  * 四次）。故本模块**只产出观测数据**，先拿基线，再决定要不要改提示词或加约束。
  *
  * 解析口径（与既有 `optionsABC` 判据对齐，但逐问解析而非全文计数）：
- * - 一问 = 一个问句（以 `?` / `？` 结尾的行）；
- * - 该问之后的选项行 = 以 `A.` `A、` `A)` `A：` `**A**` 等开头的行，直到空行或下一个问句；
+ * - 一问 = 一个**含问号**的行（**不要求问号在行尾**——实测真实输出是
+ *   `**问题 1：您这边手头有没有现成的资料？**`，行尾是被加粗的 `**`；
+ *   早先按「行尾必须是问号」写，真实输出里一个都解析不出，观测直接失效）；
+ * - 选项行 = 以 `A.` `A、` `A)` `A：` 或 `- A.` / `* A.`（列表符）等开头的行，
+ *   直到空行或下一个问句行；
  * - 兜底项 = 选项文字含「以上都不是 / 其他 / 都不是 / 以上都不是以上 / 有其它」等；
  * - 重复 = 两个选项文字 trim 后完全相同（只查机械重复，不查语义近似）。
  */
@@ -53,9 +56,30 @@ const FALLBACK_PATTERNS = [
   "以上都不",
 ]
 
-/** 选项行：A. / A、/ A) / A：/ **A** / A) 等 */
-const OPTION_LINE = /^\s*(?:[-*]\s*)?(?:\*\*)?([A-H])(?:[.、)）:：]|\s\*\*)/
-const QUESTION_LINE = /[?？]\s*$/
+/** 选项行：A. / A、/ A) / A：/ **A** / - A. / * A) 等（可带列表符与加粗） */
+const OPTION_LINE = /^\s*(?:[-*]\s*)?(?:\*\*)?([A-H])(?:[.、)）:：]|\s*\*\*)/
+/** 问句行：含问号即可——不要求在行尾（加粗/列表符都可能跟在问号后面） */
+const QUESTION_LINE = /[?？]/
+/** 「问题 N：」这类显式问句标题（即使整行没有问号也算一问，如「问题 3：」后面另起一行才是问句） */
+const NUMBERED_QUESTION = /^\s*(?:[-*]\s*)?\**\s*(?:问题\s*\d+|\d+[.、)）])/
+
+/**
+ * 把一段文本里的**所有**选项标记剥出来，返回选项文字数组。
+ *
+ * 必须处理「一行多个选项」——实测真实输出既有 `- A. x B. y C. z`（列表符 + 同行多选项），
+ * 也有每项各占一行。早先只剥第一个标记，把 `B. y C. z` 整段当成 A 的文字，
+ * 于是「只有 1 个选项」——观测直接失真（再次印证：探针必须拿真实输出自证）。
+ */
+function splitInlineOptions(text: string): string[] {
+  const out: string[] = []
+  // 在任意大写字母标记前切。用 (?=[A-H][.、)）]) 而非 \b——标记前可能是中文
+  // （"只有柜员 B. 只有客户"），\b 在中文与字母之间不成立，会整段切不开。
+  for (const seg of text.split(/(?=[A-H][.、)）])/)) {
+    const m = OPTION_LINE.exec(seg.trim())
+    if (m) out.push(seg.trim().slice(m[0].length).trim())
+  }
+  return out
+}
 
 function isFallback(text: string): boolean {
   return FALLBACK_PATTERNS.some((p) => text.includes(p))
@@ -91,15 +115,19 @@ export function parseOptionSets(text: string): OptionQualityReport {
       flush() // 空行视为该问的选项块结束
       continue
     }
-    if (QUESTION_LINE.test(line.trim())) {
+    if (QUESTION_LINE.test(line) || NUMBERED_QUESTION.test(line)) {
       flush() // 遇到下一个问句，先收束上一问
-      cur = { question: line.trim(), options: [] }
+      // 选项可能与问句同行（实测出现过），先摘掉同行里问号之后的选项段
+      const inline = line.match(/([?？])([^?？]*)$/)
+      const head = inline ? line.slice(0, line.indexOf(inline[1]) + 1) : line
+      const tail = inline ? inline[2]!.trim() : ""
+      cur = { question: head.trim(), options: [] }
+      if (tail) cur.options.push(...splitInlineOptions(tail))
       continue
     }
-    const m = OPTION_LINE.exec(line)
-    if (cur && m) {
-      // 去掉标记本身，只留选项文字（兜底判断与重复检查都只看文字）
-      cur.options.push(line.slice(m[0].length).trim())
+    if (cur && OPTION_LINE.test(line)) {
+      // 一行可能含多个选项（`- A. x B. y`），逐个剥开
+      cur.options.push(...splitInlineOptions(line))
     }
   }
   flush()

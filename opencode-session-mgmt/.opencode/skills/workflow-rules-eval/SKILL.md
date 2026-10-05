@@ -43,7 +43,7 @@ description: Use when running or analyzing the rule-following evaluation baselin
 
 ## 文件布局
 
-- `src/scenarios.ts`：场景定义（48 个：sdlc s1-s22 + reqdoc r1-r26，每场景 = name + workflowType + 状态夹具 state + userTurn + judge）
+- `src/scenarios.ts`：场景定义（50 个：sdlc s1-s22 + reqdoc r1-r28，每场景 = name + workflowType + 状态夹具 state + userTurn + judge）
 - `src/render-baseline.ts` / `src/render-new.ts`：两种注入格式的渲染器
 - `src/judge.ts`：判定逻辑——行为类 `tool`/`no_tool`/`text`（两工作流共用），产出类 `score`/`render`（仅 reqdoc）
 - `src/score.ts`：reqdoc 五维确定性评分器 `scorePrd()`（镜像 `REQDOC_SCORE_DIMS` 扣分标准，非 LLM 判卷）
