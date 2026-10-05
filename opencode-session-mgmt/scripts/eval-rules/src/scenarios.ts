@@ -1034,4 +1034,23 @@ export const SCENARIOS: Scenario[] = [
     },
     note: "观察项专用：缺料 → 追问（选项质量由此采样）",
   },
+  {
+    name: "r29 连续说同意默认 → 该转开放式追问（默认推荐限流观测）",
+    workflowType: "reqdoc",
+    state: (() => {
+      const s = newReqdoc()
+      approve(s, "goal")
+      approve(s, "rules")
+      enter(s, "edge")
+      withKb(s, { fill: false })
+      return finish(s)
+    })(),
+    // 把两轮「同意默认」压进同一轮发言，触发 reqdoc-r27 的连续默认条件。
+    userTurn: "同意默认。同意默认。你看着办吧。",
+    // 判据只断言「确实在问」（maxQuestions），**不**断言「有没有转开放式」——
+    // 后者是本场景的观测对象。若直接设成门禁，会重演「判据与规则反向」那类问题
+    // （本次已栽四次），且「是否该转」本身还有语义成分。先观测再决定。
+    judge: { kind: "text", type: "maxQuestions", max: 5 },
+    note: "观察项专用：连续默认 → 是否转开放式（由 defaultLoadReport 观测）",
+  },
 ]

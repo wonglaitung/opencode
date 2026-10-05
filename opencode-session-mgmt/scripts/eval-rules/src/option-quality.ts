@@ -140,6 +140,30 @@ export function parseOptionSets(text: string): OptionQualityReport {
   }
 }
 
+/**
+ * 默认推荐限流观测（阶段 3，纯观察）。
+ *
+ * `reqdoc-r27` 规定「业务连续 2 轮选默认后必须改为开放式追问」，但**这条是否被执行
+ * 一直只有文字、没有观测**。本函数给出唯一能机械判的信号：**模型这一轮还带不带
+ * 【默认推荐】**。带了 = 没转开放式（限流未生效）；没带 = 转了。
+ *
+ * 只报事实、不判对错——「该不该转」含语义成分（也许该问的正好不是那三项），
+ * 且设成门禁会重演「判据与规则反向」。先拿数据。
+ */
+export interface DefaultLoadReport {
+  /** 本轮是否出现默认推荐字样 */
+  hasDefault: boolean
+  /** 命中文件里的判据词 */
+  markers: string[]
+}
+
+const DEFAULT_MARKERS = ["默认推荐", "默认项", "建议选", "我建议"]
+
+export function reportDefaultLoad(text: string): DefaultLoadReport {
+  const markers = DEFAULT_MARKERS.filter((m) => text.includes(m))
+  return { hasDefault: markers.length > 0, markers }
+}
+
 /** 汇总成一行可读观测，写进 per-scenario detail。 */
 export function formatOptionQuality(r: OptionQualityReport): string {
   if (r.questions === 0) return "选项质量：未解析出问句（该场景本就少提问，或模型只调工具不说话）"

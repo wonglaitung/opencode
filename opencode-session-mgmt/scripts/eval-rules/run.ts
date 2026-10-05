@@ -19,7 +19,7 @@
 import { existsSync } from "node:fs"
 import { EVAL_TOOLS } from "./src/tool-defs"
 import { judgeSelfCheck } from "./src/judge-selfcheck"
-import { formatOptionQuality, parseOptionSets } from "./src/option-quality"
+import { formatOptionQuality, parseOptionSets, reportDefaultLoad } from "./src/option-quality"
 import { optionQualitySelfCheck } from "./src/option-quality.selfcheck"
 import { executeTurns } from "./src/executor"
 import { execSelfCheck } from "./src/exec-selfcheck"
@@ -201,6 +201,15 @@ for (const sc of scenarios) {
     // 再决定要不要改提示词或加约束（语义质量服务端判不了，贸然设门禁会重演
     // 「判据与规则反向」那类问题，本次已栽过四次）。
     ...(lastText.trim() !== "" ? { optionQuality: formatOptionQuality(parseOptionSets(lastText)) } : {}),
+    // 默认推荐限流（阶段 3）：只报「这一轮还带不带默认推荐」这一个机械事实。
+    // 带 = r27 的转开放式没生效；不带 = 生效了。**不判对错**——「该不该转」有语义成分。
+    ...(lastText.trim() !== ""
+      ? {
+          defaultLoad: `默认推荐限流（观察项）：本轮${reportDefaultLoad(lastText).hasDefault ? "仍带" : "未带"}默认推荐${
+            reportDefaultLoad(lastText).markers.length ? `（命中 ${reportDefaultLoad(lastText).markers.join("、")}）` : ""
+          }`,
+        }
+      : {}),
     passCount: pass,
     runCount: repeat,
     detail,
