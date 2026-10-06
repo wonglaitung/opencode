@@ -1545,3 +1545,40 @@ describe("★ sdlc-r37：模型侧自审落成规则（不滞留 conventions）"
     expect(rule).not.toContain("受众核查")
   })
 })
+
+describe("★ 07 第 0 节：AI 是业务需求分析师（方法 vs 领域）", () => {
+  const conv = () => read(join("..", "conventions", "reqdoc", "07-业务口语.md"))
+
+  test("★ 角色句须同时说清「方法是他的价值」与「领域不是」", () => {
+    // 用户定案：AI = 受过训练的业务需求分析师，能力在帮业务厘清边界与需求，
+    // **不是** AI 比业务更懂。少一半就变成另一种角色——只说方法会退化成客服，
+    // 只说领域则鼓励模型替业务填领域知识（= 越权，且业务少想了那一步）。
+    const c = conv()
+    expect(c).toContain("你是受过训练的业务需求分析师")
+    expect(c).toContain("你的价值在**方法**")
+    expect(c).toContain("不在领域知识")
+  })
+
+  test("★ 边界落在「可确认性」上——可提默认，但须业务点头才成立", () => {
+    // 定案口径 C：`[缺省]` 合法（分析师本就该有行业直觉），边界不是「来源」而是
+    // 「可确认性」。所以护栏钉的是「须明确点头才成立」与「不得代填责任字段」，
+    // **不是**禁止提默认——那会把 [缺省] 机制这个地基一起推翻。
+    const c = conv()
+    expect(c).toContain("必须让业务明确点头")
+    expect(c).toContain("不要替业务拍板")
+    for (const f of ["force_reason", "confirm_note", "authorized_by", "business_quote"]) {
+      expect(c).toContain(f)
+    }
+    // 「AI 比业务更懂」是这个角色最危险的退化方向，显式禁掉
+    expect(c).toContain("别用推测填空隙")
+  })
+
+  test("★ 角色句留在规约里、不挪进 RuleItem（规则预算余量仅 3 字符）", () => {
+    // 若日后有人把角色句挪进 RuleItem，顶破 4000 字符基线（由 shared 包的
+    // reqdoc-context-budget 断言守住）。这里读**源码**而非 WORKFLOW_DEFINITIONS——
+    // 插件测试解析到的是已构建的 dist，改源码时它看不见（实测破坏测试因此假通过）。
+    const wf = read(join("..", "..", "shared", "src", "workflow.ts"))
+    expect(conv()).toContain("你是受过训练的业务需求分析师")
+    expect(wf).not.toContain("受过训练的业务需求分析师")
+  })
+})
