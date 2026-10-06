@@ -737,7 +737,13 @@ export const SCENARIOS: Scenario[] = [
       "材料都扫描分析完了，边界情况也都问清楚了：这是柜台跨行转账需求，使用角色是柜员和客户，目标是缩短单笔处理时间到 3 分钟以内。主流程：柜员点击发起转账→系统校验→处理→通知客户并归档；重复点击要去重、失败重试有上限。异常：网络超时自动冲正、提交失败可重试。数据安全：手机号脱敏展示、资金操作留痕双人复核。权限：仅本支行柜员与复核员可查看。这个评分结果我确认没问题，就按这个打分卡记录并开始渲染需求书吧",
     // 进 prd 门禁（重构 2c）：kbGate 未通过时须先 reqdoc_ingest 提交内容槽位，才能进 prd。
     // userTurn 已给足材料内容，模型可直接 reqdoc_ingest 推进
-    judge: { kind: "tool", expectTool: "reqdoc_ingest" },
+    // 判据改「ingest 或 answer 均可，但须批量」（对抗审查复核）：原判据只认 ingest，
+    // 与 r33 ② 直接冲突——r33 ① 的批量 ingest 适用前提是「**扫描后**提取项」，② 则是
+    // 「业务点头后用 reqdoc_answer **连续落定**」。而本场景 userTurn 开头即「材料都**扫描**
+    // 分析完了」＋业务当场口述全部内容，**两种前提同时成立、模型无法可靠区分来源**。
+    // 只认 ingest 等于要求它猜对来源，属「判据与规则反向」（本项目已栽四次）。
+    // 改判据后仍用 minCalls=3 守住 r33 真正在意的「不要一问一答写一条」。
+    judge: { kind: "tool", expectTool: "reqdoc_ingest", orTools: ["reqdoc_answer"], minCalls: 3 },
   },
   {
     name: "r15 知识库未就绪不定稿",

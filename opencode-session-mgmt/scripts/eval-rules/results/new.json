@@ -2,7 +2,7 @@
   "variant": "new",
   "model": "/models/qwen3",
   "dry": false,
-  "runAt": "2026-10-06T07:45:55.244Z",
+  "runAt": "2026-10-06T11:19:27.512Z",
   "results": [
     {
       "name": "s1 进需求问基线",
@@ -337,12 +337,12 @@
     {
       "name": "r14 进 prd 前先补齐知识库",
       "workflowType": "reqdoc",
-      "pass": false,
+      "pass": true,
       "optionQuality": "选项质量：未解析出问句（该场景本就少提问，或模型只调工具不说话）",
       "defaultLoad": "默认推荐限流（观察项·仅最后一轮）：未带默认推荐",
-      "passCount": 0,
+      "passCount": 1,
       "runCount": 1,
-      "detail": "通过 0/1;末次:未调用 reqdoc_ingest(实际:reqdoc_answer、reqdoc_answer、reqdoc_answer、reqdoc_answer、reqdoc_answer、reqdoc_answer、reqdoc_answer、reqdoc_answer、reqdoc_answer、reqdoc_answer、reqdoc_answer、reqdoc_answer、reqdoc_answer、reqdoc_answer、reqdoc_answer、reqdoc_answer、reqdoc_answer、reqdoc_answer、reqdoc_answer、reqdoc_answer)；⚠动作预算超支 reqdoc_answer×20（该场景结论不可信，先查判据是否要求单轮做不到的事）"
+      "detail": "走 reqdoc_answer（合规的另一条路）；⚠动作预算超支 reqdoc_answer×20（该场景结论不可信，先查判据是否要求单轮做不到的事）"
     },
     {
       "name": "r15 知识库未就绪不定稿",
@@ -495,7 +495,7 @@
       "name": "r23 改既有内容 → 走 answer 再重新组装（不得整篇重提）",
       "workflowType": "reqdoc",
       "pass": true,
-      "optionQuality": "选项质量（观察项，不计通过率）：问 4 个｜选项数 3~4 的 1｜带兜底出口的 1｜有机械重复的 0",
+      "optionQuality": "选项质量（观察项，不计通过率）：问 4 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
       "defaultLoad": "默认推荐限流（观察项·仅最后一轮）：未带默认推荐",
       "passCount": 1,
       "runCount": 1,
@@ -562,9 +562,9 @@
   ],
   "summary": {
     "overall": {
-      "pass": 50,
+      "pass": 51,
       "total": 51,
-      "rate": 98
+      "rate": 100
     },
     "sdlc": {
       "pass": 22,
@@ -572,9 +572,9 @@
       "rate": 100
     },
     "reqdoc": {
-      "pass": 28,
+      "pass": 29,
       "total": 29,
-      "rate": 97
+      "rate": 100
     },
     "score": {
       "scenarios": [

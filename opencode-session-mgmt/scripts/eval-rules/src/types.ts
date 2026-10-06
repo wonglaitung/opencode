@@ -46,6 +46,15 @@ export type Judge =
       argsContains?: Record<string, unknown[]>
       /** 若设置,调用次数须恰为该值(防批量/防漏) */
       exactCount?: number
+      /** 命中 `expectTool` **或**其中任一工具即通过——用于「两条路都合规」的场景。
+       *  r14 即此例：r33 ① 说扫描提取项走批量 `reqdoc_ingest`、② 说业务口头答复走
+       *  `reqdoc_answer` 连续落定，而 userTurn 里两者都像（"材料都扫描分析完了"＋
+       *  业务当场口述），**模型无法可靠区分来源**。原判据只认 ingest，等于要求它猜对
+       *  来源，属判据与规则反向（本项目已栽四次）。改用本字段后仍要靠 `minCalls`
+       *  守住 r33 真正在意的东西——**别一问一答**。 */
+      orTools?: string[]
+      /** 命中工具（含 `orTools`）的总调用次数下限——防退化成一条一问答 */
+      minCalls?: number
       /** 若设置,各次调用的该参数值必须互不相同(防重复确认同一 id) */
       distinctArg?: string
       /** 若设置,这些**点路径**字段必须在某次调用里是非空字符串(如

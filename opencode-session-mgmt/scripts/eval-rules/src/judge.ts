@@ -65,9 +65,26 @@ export function judgeScenario(judge: Judge, out: ModelOutput): { pass: boolean; 
     }
     case "tool": {
       const matched = out.toolCalls.filter((c) => c.name === judge.expectTool)
-      if (matched.length === 0) {
+      // orTools：两条路都合规时任一命中即过（见 types.ts 的 r14 说明）
+      const viaOr = (judge.orTools ?? []).filter((t) => out.toolCalls.some((c) => c.name === t))
+      if (matched.length === 0 && viaOr.length === 0) {
         const actual = out.toolCalls.map((c) => c.name).join("、") || "无工具调用"
         return { pass: false, detail: `未调用 ${judge.expectTool}(实际:${actual})` }
+      }
+      // minCalls 对「命中工具（含 orTools）」计数——防「对了工具但一条一答」
+      if (judge.minCalls !== undefined) {
+        const names = [judge.expectTool, ...(judge.orTools ?? [])]
+        const n = out.toolCalls.filter((c) => names.includes(c.name)).length
+        if (n < judge.minCalls) {
+          return {
+            pass: false,
+            detail: `${[judge.expectTool, ...viaOr].join("/")} 仅调用 ${n} 次，少于下限 ${judge.minCalls}（r33 要求批量，别一问一答）`,
+          }
+        }
+      }
+      if (matched.length === 0) {
+        // 只命中 orTools：跳过 args 等针对 expectTool 的断言（那些参数对另一条路无意义）
+        return { pass: true, detail: `走 ${viaOr[0]}（合规的另一条路）` }
       }
       if (!matched.some((c) => argsMatch(judge.args, c.args))) {
         return { pass: false, detail: `${judge.expectTool} 参数不匹配,期望 ${JSON.stringify(judge.args)}` }

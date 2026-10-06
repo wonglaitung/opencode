@@ -152,6 +152,45 @@ const CASES: { desc: string; judge: Parameters<typeof judgeScenario>[0]; out: Pa
     out: { text: "我认为需求已经很清楚了。", toolCalls: [] },
     want: false,
   },
+  // ---- orTools / minCalls（r14：两条路都合规，但要守住「别一问一答」）----
+  {
+    desc: "orTools：命中 orTools 里的另一工具即通过（r14 的 answer 路）",
+    judge: { kind: "tool", expectTool: "reqdoc_ingest", orTools: ["reqdoc_answer"], minCalls: 3 },
+    out: {
+      text: "",
+      toolCalls: [
+        { name: "reqdoc_answer", args: {} },
+        { name: "reqdoc_answer", args: {} },
+        { name: "reqdoc_answer", args: {} },
+      ],
+    },
+    want: true,
+  },
+  {
+    desc: "orTools + minCalls：只 answer 一次 → 不通过（防退化成一条一答）",
+    judge: { kind: "tool", expectTool: "reqdoc_ingest", orTools: ["reqdoc_answer"], minCalls: 3 },
+    out: { text: "", toolCalls: [{ name: "reqdoc_answer", args: {} }] },
+    want: false,
+  },
+  {
+    desc: "orTools：两个工具都没调 → 不通过（防恒通过）",
+    judge: { kind: "tool", expectTool: "reqdoc_ingest", orTools: ["reqdoc_answer"], minCalls: 3 },
+    out: { text: "", toolCalls: [{ name: "workflow_advance", args: {} }] },
+    want: false,
+  },
+  {
+    desc: "minCalls 按命中工具合计计（ingest+answer 混着也算批量）",
+    judge: { kind: "tool", expectTool: "reqdoc_ingest", orTools: ["reqdoc_answer"], minCalls: 3 },
+    out: {
+      text: "",
+      toolCalls: [
+        { name: "reqdoc_ingest", args: {} },
+        { name: "reqdoc_answer", args: {} },
+        { name: "reqdoc_answer", args: {} },
+      ],
+    },
+    want: true,
+  },
 ]
 
 /** 返回失灵项的描述；空数组表示全部判据行为符合预期。 */
