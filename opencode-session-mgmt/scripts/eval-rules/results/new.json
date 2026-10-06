@@ -2,7 +2,7 @@
   "variant": "new",
   "model": "/models/qwen3",
   "dry": false,
-  "runAt": "2026-10-05T17:53:13.671Z",
+  "runAt": "2026-10-06T07:45:55.244Z",
   "results": [
     {
       "name": "s1 进需求问基线",
@@ -228,8 +228,6 @@
       "name": "r2 业务确认单要点",
       "workflowType": "reqdoc",
       "pass": true,
-      "optionQuality": "选项质量：未解析出问句（该场景本就少提问，或模型只调工具不说话）",
-      "defaultLoad": "默认推荐限流（观察项·仅最后一轮）：未带默认推荐",
       "passCount": 1,
       "runCount": 1,
       "detail": "✓ comprehension_confirm {\"codeSegmentId\":\"业务目标\"}(恰好1次)"
@@ -238,7 +236,7 @@
       "name": "r3 进 goal 问基线",
       "workflowType": "reqdoc",
       "pass": true,
-      "optionQuality": "选项质量（观察项，不计通过率）：问 3 个｜选项数 3~4 的 3｜带兜底出口的 0｜有机械重复的 0",
+      "optionQuality": "选项质量（观察项，不计通过率）：问 3 个｜选项数 3~4 的 3｜带兜底出口的 3｜有机械重复的 0",
       "defaultLoad": "默认推荐限流（观察项·仅最后一轮）：未带默认推荐",
       "passCount": 1,
       "runCount": 1,
@@ -248,7 +246,7 @@
       "name": "r4 回到流程规则→revisit",
       "workflowType": "reqdoc",
       "pass": true,
-      "optionQuality": "选项质量（观察项，不计通过率）：问 3 个｜选项数 3~4 的 2｜带兜底出口的 0｜有机械重复的 0",
+      "optionQuality": "选项质量（观察项，不计通过率）：问 8 个｜选项数 3~4 的 5｜带兜底出口的 0｜有机械重复的 0",
       "defaultLoad": "默认推荐限流（观察项·仅最后一轮）：仍带默认推荐（命中 默认推荐）",
       "passCount": 1,
       "runCount": 1,
@@ -267,7 +265,7 @@
       "workflowType": "reqdoc",
       "pass": true,
       "optionQuality": "选项质量（观察项，不计通过率）：问 5 个｜选项数 3~4 的 5｜带兜底出口的 0｜有机械重复的 0",
-      "defaultLoad": "默认推荐限流（观察项·仅最后一轮）：仍带默认推荐（命中 默认推荐）",
+      "defaultLoad": "默认推荐限流（观察项·仅最后一轮）：仍带默认推荐（命中 默认推荐、默认项）",
       "passCount": 1,
       "runCount": 1,
       "detail": "✓ 命中 3/3 类探针"
@@ -302,7 +300,7 @@
       "name": "r10 要点拒绝后重写",
       "workflowType": "reqdoc",
       "pass": true,
-      "optionQuality": "选项质量（观察项，不计通过率）：问 19 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
+      "optionQuality": "选项质量（观察项，不计通过率）：问 3 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
       "defaultLoad": "默认推荐限流（观察项·仅最后一轮）：未带默认推荐",
       "passCount": 1,
       "runCount": 1,
@@ -312,6 +310,8 @@
       "name": "r11 资料已放好应扫描分析（双通道，不空问）",
       "workflowType": "reqdoc",
       "pass": true,
+      "optionQuality": "选项质量：未解析出问句（该场景本就少提问，或模型只调工具不说话）",
+      "defaultLoad": "默认推荐限流（观察项·仅最后一轮）：未带默认推荐",
       "passCount": 1,
       "runCount": 1,
       "detail": "✓ reqdoc_scan {\"directory\":\"01_背景与目标\"}"
@@ -321,7 +321,7 @@
       "workflowType": "reqdoc",
       "pass": true,
       "optionQuality": "选项质量（观察项，不计通过率）：问 2 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
-      "defaultLoad": "默认推荐限流（观察项·仅最后一轮）：未带默认推荐",
+      "defaultLoad": "默认推荐限流（观察项·仅最后一轮）：仍带默认推荐（命中 默认推荐）",
       "passCount": 1,
       "runCount": 1,
       "detail": "✓ reqdoc_confirm_features {}"
@@ -338,11 +338,11 @@
       "name": "r14 进 prd 前先补齐知识库",
       "workflowType": "reqdoc",
       "pass": false,
-      "optionQuality": "选项质量（观察项，不计通过率）：问 9 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
-      "defaultLoad": "默认推荐限流（观察项·仅最后一轮）：仍带默认推荐（命中 默认推荐）",
+      "optionQuality": "选项质量：未解析出问句（该场景本就少提问，或模型只调工具不说话）",
+      "defaultLoad": "默认推荐限流（观察项·仅最后一轮）：未带默认推荐",
       "passCount": 0,
       "runCount": 1,
-      "detail": "通过 0/1;末次:未调用 reqdoc_ingest(实际:无工具调用)"
+      "detail": "通过 0/1;末次:未调用 reqdoc_ingest(实际:reqdoc_answer、reqdoc_answer、reqdoc_answer、reqdoc_answer、reqdoc_answer、reqdoc_answer、reqdoc_answer、reqdoc_answer、reqdoc_answer、reqdoc_answer、reqdoc_answer、reqdoc_answer、reqdoc_answer、reqdoc_answer、reqdoc_answer、reqdoc_answer、reqdoc_answer、reqdoc_answer、reqdoc_answer、reqdoc_answer)；⚠动作预算超支 reqdoc_answer×20（该场景结论不可信，先查判据是否要求单轮做不到的事）"
     },
     {
       "name": "r15 知识库未就绪不定稿",
@@ -371,12 +371,86 @@
     {
       "name": "r18 材料齐全 → 组装成稿并评真实产物质量（高分）",
       "workflowType": "reqdoc",
-      "pass": false,
-      "passCount": 0,
+      "pass": true,
+      "passCount": 1,
       "runCount": 1,
-      "detail": "通过 0/1;末次:✗ 未产出组装件，无法评 PRD 质量",
+      "detail": "✓ 渲染命中 2 标记;总分 75(需≥60) [businessValue:12/12 flowClosure:5/20 edgeControl:22/22 compliance:6/16 authority:8/8 material:8/8 nfr:7/7 acceptability:7/7]",
+      "scoreAvg": {
+        "total": 75,
+        "dims": {
+          "businessValue": 12,
+          "flowClosure": 5,
+          "edgeControl": 22,
+          "compliance": 6,
+          "authority": 8,
+          "material": 8,
+          "nfr": 7,
+          "acceptability": 7
+        },
+        "maxDims": {
+          "businessValue": 12,
+          "flowClosure": 20,
+          "edgeControl": 22,
+          "compliance": 16,
+          "authority": 8,
+          "material": 8,
+          "nfr": 7,
+          "acceptability": 7
+        }
+      },
+      "scores": [
+        {
+          "dims": {
+            "businessValue": {
+              "score": 12,
+              "max": 12,
+              "deductions": []
+            },
+            "flowClosure": {
+              "score": 5,
+              "max": 20,
+              "deductions": [
+                "流程有头无尾"
+              ]
+            },
+            "edgeControl": {
+              "score": 22,
+              "max": 22,
+              "deductions": []
+            },
+            "compliance": {
+              "score": 6,
+              "max": 16,
+              "deductions": [
+                "未定义脱敏"
+              ]
+            },
+            "authority": {
+              "score": 8,
+              "max": 8,
+              "deductions": []
+            },
+            "material": {
+              "score": 8,
+              "max": 8,
+              "deductions": []
+            },
+            "nfr": {
+              "score": 7,
+              "max": 7,
+              "deductions": []
+            },
+            "acceptability": {
+              "score": 7,
+              "max": 7,
+              "deductions": []
+            }
+          },
+          "total": 75
+        }
+      ],
       "outputs": [
-        ""
+        "<!-- kb-digest: fc78c0919d65cf1a -->\n\nXXXXXXXXXXXX（项目全称）\n业务需求说明书\n\n日期：YYYY-MM\n\n## 第一章 项目信息\n\n| 项目信息 | 内容 |\n|------|------|\n| 标题 |  |\n| 项目编号 |  |\n| 项目名称 |  |\n| 项目性质 |  |\n| 用户部门 |  |\n| 配合部门 |  |\n| 项目经理 |  |\n| 技术经理 |  |\n| 业务人员 |  |\n| 开发人员 |  |\n\n## 第二章 文档变更过程\n\n| 版本号 | 修改内容 | 变更日期 | 修改者 | 备注 |\n|--------|---------|---------|--------|------|\n|  |  |  |  |  |\n\n## 第三章 需求概述\n\n### 3.1 需求类型\n\n本需求为信贷业务改造，解决柜面跨行转账与进度查询痛点。\n\n### 3.2 属于流程优化项目\n\n柜员发起转账后，客户经理可查询办理进度并收到通知。\n\n### 3.3 涉及跨部门项目\n\n转账按柜面提交顺序处理，高峰期排队不超过 5 分钟。\n\n### 3.4 涉及总行开发\n\n异常处理：① 交易超时——发起方在约定时限内未收到结果时，系统自动发起冲正并通知客户；② 柜员误操作——可在 30 分钟内申请撤销，需登记原因。\n\n### 3.5 希望完成时间\n\n权限：柜员可发起转账，客户经理只读查询，管理员可配置限额。\n\n### 3.6 需求提出原因及功能概述\n\n3.6 内容\n\n## 第四章 术语定义与业务规则\n\n### 4.2 业务规则\n\n4.2 内容\n\n## 第五章 需求功能详述\n\n> 编号规则：功能点 k（k 从 1 起）的标题为 `### 5.k 功能点名称`，与章节编号风格一致。功能点下子项编号为 `5.k.1 功能点输入要素`、`5.k.2 功能点处理要求`，子项小节为 `5.k.1.1`、`5.k.1.2` 等。下方按功能点 1、2、N 示例，实际按已确认功能点数复制。\n\n### 5.1 名单排查 [缺省：未确认]\n\n#### 5.1.1 功能点输入要素 [缺省：未确认]\n\n##### 5.1.1.1 简要概述\n\n5.1.1.1 内容\n\n##### 5.1.1.2 控制要求 [文档]\n\n5.1.1.2 内容\n\n#### 5.1.2 功能点处理要求 [缺省：未确认]\n\n##### 5.1.2.2 系统处理过程 [缺省：未确认]\n\n##### 5.1.2.3 异常处理要求 [文档]\n\n5.1.2.3 内容\n\n##### 5.1.2.4 提示信息 [缺省：未确认]\n\n##### 5.1.2.5 其他要求 [缺省：未确认]\n\n##### 5.1.2.6 清算处理 [文档]\n\n5.1.2.6 内容\n\n##### 5.1.2.7 差错处理 [文档]\n\n5.1.2.7 内容\n\n##### 5.1.2.8 交易安全性 [文档]\n\n5.1.2.8 内容\n\n##### 5.1.2.9 数据存贮和清理 [文档]\n\n5.1.2.9 内容\n\n##### 5.1.2.10 附件 [缺省：未确认]\n\n##### 5.1.2.11 接口与数据源 [文档]\n\n5.1.2.11 内容\n\n##### 5.1.2.12 权限与最小授权 [文档]\n\n5.1.2.12 内容\n\n##### 5.1.2.13 流程图 [文档]\n\n5.1.2.13 内容\n\n## 第六章 非功能需求\n\n### 6.1 性能与容量\n\n6.1 内容\n\n### 6.2 可用性与可靠性\n\n6.2 内容\n\n### 6.3 安全与信创\n\n6.3 内容\n\n### 6.4 数据主权与合规\n\n6.4 内容\n\n## 第七章 验收标准\n\n### 7.1 功能点验收指标\n\n7.1 内容\n\n### 7.2 量化验收口径\n\n7.2 内容\n"
       ]
     },
     {
@@ -411,8 +485,8 @@
       "name": "r22 覆盖率达标进 prd（正向）",
       "workflowType": "reqdoc",
       "pass": true,
-      "optionQuality": "选项质量（观察项，不计通过率）：问 1 个｜选项数 3~4 的 1｜带兜底出口的 1｜有机械重复的 0",
-      "defaultLoad": "默认推荐限流（观察项·仅最后一轮）：未带默认推荐",
+      "optionQuality": "选项质量（观察项，不计通过率）：问 2 个｜选项数 3~4 的 1｜带兜底出口的 0｜有机械重复的 0",
+      "defaultLoad": "默认推荐限流（观察项·仅最后一轮）：仍带默认推荐（命中 默认推荐）",
       "passCount": 1,
       "runCount": 1,
       "detail": "✓ workflow_advance {\"stage\":\"prd\",\"action\":\"enter\"}"
@@ -420,10 +494,12 @@
     {
       "name": "r23 改既有内容 → 走 answer 再重新组装（不得整篇重提）",
       "workflowType": "reqdoc",
-      "pass": false,
-      "passCount": 0,
+      "pass": true,
+      "optionQuality": "选项质量（观察项，不计通过率）：问 4 个｜选项数 3~4 的 1｜带兜底出口的 1｜有机械重复的 0",
+      "defaultLoad": "默认推荐限流（观察项·仅最后一轮）：未带默认推荐",
+      "passCount": 1,
       "runCount": 1,
-      "detail": "通过 0/1;末次:未调用 reqdoc_assemble(实际:workflow_advance、reqdoc_scan、reqdoc_init、reqdoc_scan)"
+      "detail": "✓ reqdoc_assemble {}"
     },
     {
       "name": "r24 缺料也不绕道：收进槽位，不得用理解条目代替",
@@ -437,8 +513,8 @@
       "name": "r25 业务口头复述缩写 → 写 L1 且必须带业务原话",
       "workflowType": "reqdoc",
       "pass": true,
-      "optionQuality": "选项质量（观察项，不计通过率）：问 16 个｜选项数 3~4 的 8｜带兜底出口的 8｜有机械重复的 0",
-      "defaultLoad": "默认推荐限流（观察项·仅最后一轮）：仍带默认推荐（命中 默认推荐）",
+      "optionQuality": "选项质量（观察项，不计通过率）：问 5 个｜选项数 3~4 的 5｜带兜底出口的 5｜有机械重复的 0",
+      "defaultLoad": "默认推荐限流（观察项·仅最后一轮）：仍带默认推荐（命中 默认推荐、默认项）",
       "passCount": 1,
       "runCount": 1,
       "detail": "✓ reqdoc_answer {}"
@@ -447,8 +523,8 @@
       "name": "r26 只是点了同意默认 → 不得写 L1（不凭空虚构复述）",
       "workflowType": "reqdoc",
       "pass": true,
-      "optionQuality": "选项质量（观察项，不计通过率）：问 2 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
-      "defaultLoad": "默认推荐限流（观察项·仅最后一轮）：仍带默认推荐（命中 默认推荐）",
+      "optionQuality": "选项质量（观察项，不计通过率）：问 1 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
+      "defaultLoad": "默认推荐限流（观察项·仅最后一轮）：仍带默认推荐（命中 默认推荐、默认项）",
       "passCount": 1,
       "runCount": 1,
       "detail": "✓ 任何调用都未带 restated_term"
@@ -457,18 +533,18 @@
       "name": "r27 需求只一句话 → 该用选项追问而非替业务补全",
       "workflowType": "reqdoc",
       "pass": true,
-      "optionQuality": "选项质量（观察项，不计通过率）：问 4 个｜选项数 3~4 的 4｜带兜底出口的 0｜有机械重复的 0",
+      "optionQuality": "选项质量（观察项，不计通过率）：问 10 个｜选项数 3~4 的 8｜带兜底出口的 6｜有机械重复的 0",
       "defaultLoad": "默认推荐限流（观察项·仅最后一轮）：仍带默认推荐（命中 默认推荐）",
       "passCount": 1,
       "runCount": 1,
-      "detail": "✓ 问句 4 个(≤5)"
+      "detail": "✓ 问句 5 个(≤5)"
     },
     {
       "name": "r28 几块还没想清 → 该追问而不是直接标缺省",
       "workflowType": "reqdoc",
       "pass": true,
-      "optionQuality": "选项质量（观察项，不计通过率）：问 8 个｜选项数 3~4 的 8｜带兜底出口的 8｜有机械重复的 0",
-      "defaultLoad": "默认推荐限流（观察项·仅最后一轮）：仍带默认推荐（命中 默认推荐）",
+      "optionQuality": "选项质量（观察项，不计通过率）：问 7 个｜选项数 3~4 的 7｜带兜底出口的 7｜有机械重复的 0",
+      "defaultLoad": "默认推荐限流（观察项·仅最后一轮）：未带默认推荐",
       "passCount": 1,
       "runCount": 1,
       "detail": "✓ 命中 4/4 类探针"
@@ -477,18 +553,18 @@
       "name": "r29 连续说同意默认 → 该转开放式追问（默认推荐限流观测）",
       "workflowType": "reqdoc",
       "pass": true,
-      "optionQuality": "选项质量（观察项，不计通过率）：问 3 个｜选项数 3~4 的 3｜带兜底出口的 0｜有机械重复的 0",
-      "defaultLoad": "默认推荐限流（观察项·仅最后一轮）：未带默认推荐",
+      "optionQuality": "选项质量（观察项，不计通过率）：问 6 个｜选项数 3~4 的 5｜带兜底出口的 5｜有机械重复的 0",
+      "defaultLoad": "默认推荐限流（观察项·仅最后一轮）：仍带默认推荐（命中 默认推荐、默认项）",
       "passCount": 1,
       "runCount": 1,
-      "detail": "✓ 问句 0 个(≤5)"
+      "detail": "✓ 问句 1 个(≤5)"
     }
   ],
   "summary": {
     "overall": {
-      "pass": 48,
+      "pass": 50,
       "total": 51,
-      "rate": 94
+      "rate": 98
     },
     "sdlc": {
       "pass": 22,
@@ -496,9 +572,73 @@
       "rate": 100
     },
     "reqdoc": {
-      "pass": 26,
+      "pass": 28,
       "total": 29,
-      "rate": 90
+      "rate": 97
+    },
+    "score": {
+      "scenarios": [
+        "r18 材料齐全 → 组装成稿并评真实产物质量（高分）"
+      ],
+      "totalAvg": 75,
+      "dims": [
+        {
+          "key": "businessValue",
+          "label": "业务目标与价值",
+          "max": 12,
+          "avg": 12,
+          "rate": 100
+        },
+        {
+          "key": "flowClosure",
+          "label": "主流程逻辑闭环",
+          "max": 20,
+          "avg": 5,
+          "rate": 25
+        },
+        {
+          "key": "edgeControl",
+          "label": "异常与边界控制",
+          "max": 22,
+          "avg": 22,
+          "rate": 100
+        },
+        {
+          "key": "compliance",
+          "label": "合规与数据安全",
+          "max": 16,
+          "avg": 6,
+          "rate": 38
+        },
+        {
+          "key": "authority",
+          "label": "权限与机构隔离",
+          "max": 8,
+          "avg": 8,
+          "rate": 100
+        },
+        {
+          "key": "material",
+          "label": "素材真实性",
+          "max": 8,
+          "avg": 8,
+          "rate": 100
+        },
+        {
+          "key": "nfr",
+          "label": "非功能覆盖",
+          "max": 7,
+          "avg": 7,
+          "rate": 100
+        },
+        {
+          "key": "acceptability",
+          "label": "可验收性",
+          "max": 7,
+          "avg": 7,
+          "rate": 100
+        }
+      ]
     }
   }
 }

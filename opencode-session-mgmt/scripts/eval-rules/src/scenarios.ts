@@ -96,6 +96,15 @@ const newReqdoc = () => createWorkflowState("reqdoc")
  * 替代旧的打分卡夹具 —— 门禁改读派生槽位后，score/probe/fieldDict 不再参与门禁。
  * fill=false 时只填前 3 个必填槽位，用于构造「kb 未就绪」的反例。
  */
+/** 预置的真实内容（非占位符）——只给 r23 的「改已有内容」用。 */
+const REAL_CONTENT: Record<string, string> = {
+  "3.1": "本需求为信贷业务改造，解决柜面跨行转账与进度查询痛点。",
+  "3.2": "柜员发起转账后，客户经理可查询办理进度并收到通知。",
+  "3.3": "转账按柜面提交顺序处理，高峰期排队不超过 5 分钟。",
+  "3.4": "异常处理：① 交易超时——发起方在约定时限内未收到结果时，系统自动发起冲正并通知客户；② 柜员误操作——可在 30 分钟内申请撤销，需登记原因。",
+  "3.5": "权限：柜员可发起转账，客户经理只读查询，管理员可配置限额。",
+}
+
 function withKb(
   s: WorkflowState,
   // 只允许系统真实存在的状态（reqdoc-slots.SlotStatus = draft|confirmed|conflict|retired）。
@@ -105,7 +114,14 @@ function withKb(
   // 占位文字并标 confirmed，而规则明令 ingest 不得把已确认槽位打回 draft，于是模型**无法**
   // 把 userTurn 里的真实内容写进去：产物里永远是占位符，评出来的质量分毫无意义
   // （r18 实测 flowClosure 0/20、edgeControl 0/22 就是这么来的）。夹具必须与规则自洽。
-  opts: { fill?: boolean; status?: "draft" | "confirmed"; empty?: boolean } = {},
+  // real：给「改已有内容」的场景用——预置**真实**（非占位符）且已确认的槽位，
+  // 让「修改已确认内容」这个动作在场景里真的可能发生。原先 r23 只有 empty 一档：
+  // 槽位全空，于是模型面对的处境是「prd 阶段但几乎没填」，它去 ingest 填内容才是
+  // 合乎处境的选择——判据要的「answer 改已有确认内容 → assemble」在这个场景里
+  // **没有对象可改**（实测 0/3，且正文里「组装」零出现）。空场景只能测「从零填」，
+  // 测不了「改已有」。这与 s22「不给锁则判据要求的事不会出现在注入里」同类：
+  // 判据要求的事，得在场景里真的可能发生。
+  opts: { fill?: boolean; status?: "draft" | "confirmed"; empty?: boolean; real?: string[] } = {},
 ): WorkflowState {
   if (s.type !== "reqdoc") return s
   const features = [{ no: 1, name: "名单排查", priority: "high" as const, confirmedAt: 1000 }]
@@ -115,7 +131,7 @@ function withKb(
     slots: filled.map((address) => ({
       kind: "prose" as const,
       address,
-      content: `${address} 内容`,
+      content: opts.real?.includes(address) ?? false ? REAL_CONTENT[address] ?? `${address} 已确认内容` : `${address} 内容`,
       source: "文档" as const,
       status: opts.status ?? ("confirmed" as const),
     })),
@@ -785,9 +801,12 @@ export const SCENARIOS: Scenario[] = [
       approve(s, "rules")
       approve(s, "edge")
       enter(s, "prd")
-      // 槽位留空：真实内容要由模型按 userTurn 提交进来（预填占位文字会与「ingest 不得
-      // 把已确认槽位打回 draft」冲突，导致产物里永远是占位符、质量分失真——见 withKb 注释）
-      withKb(s, { empty: true })
+      // **预置已确认槽位（真实内容）**——原先是 `empty: true`，那是错的：槽位全空时
+      // 模型面对的处境是「prd 阶段但几乎没填」，它去 ingest 填内容才是合乎处境的选择，
+      // 于是判据要的「answer 改已有确认内容 → assemble」没有对象可改。实测 0/3，
+      // 且三轮正文里「组装」零出现——不是提示不到位，是**这个场景根本没有该动作的处境**。
+      // 两次针对性提示（reqdoc_answer 回执、reqdoc_assemble 工具描述）均 0/3，据此排除提示强度。
+      withKb(s, { real: ["3.1", "3.2", "3.3", "3.4", "3.5"] })
       s.features = [
         { no: 1, name: "柜台跨行转账", priority: "high", confirmedAt: 1000 },
         { no: 2, name: "转账进度查询", priority: "medium", confirmedAt: 1000 },
@@ -895,9 +914,12 @@ export const SCENARIOS: Scenario[] = [
       approve(s, "rules")
       approve(s, "edge")
       enter(s, "prd")
-      // 槽位留空：真实内容要由模型按 userTurn 提交进来（预填占位文字会与「ingest 不得
-      // 把已确认槽位打回 draft」冲突，导致产物里永远是占位符、质量分失真——见 withKb 注释）
-      withKb(s, { empty: true })
+      // **预置已确认槽位（真实内容）**——原先是 `empty: true`，那是错的：槽位全空时
+      // 模型面对的处境是「prd 阶段但几乎没填」，它去 ingest 填内容才是合乎处境的选择，
+      // 于是判据要的「answer 改已有确认内容 → assemble」没有对象可改。实测 0/3，
+      // 且三轮正文里「组装」零出现——不是提示不到位，是**这个场景根本没有该动作的处境**。
+      // 两次针对性提示（reqdoc_answer 回执、reqdoc_assemble 工具描述）均 0/3，据此排除提示强度。
+      withKb(s, { real: ["3.1", "3.2", "3.3", "3.4", "3.5"] })
       s.features = [
         { no: 1, name: "柜台跨行转账", priority: "high", confirmedAt: 1000 },
         { no: 2, name: "转账进度查询", priority: "medium", confirmedAt: 1000 },
