@@ -411,6 +411,12 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
             reason: args.reason,
           }
         }
+        // 连续接受默认的轮数（reqdoc-r27 的触发条件）。此前这个数**只存在于对话里**：
+        // 服务端不存、状态条不显示，模型得自己跨轮数「同意默认」出现几次——弱模型
+        // 不可靠，实测 9/34 场景仍带默认推荐。与 r14 同病：规则要求模型判断一个
+        // 服务端未提供的信息。口径：收口为 [缺省] 即业务接受了这个默认 → +1；
+        // 任何其它调用（给了具体意见）归零，连续即中断。
+        kb.defaultAcceptStreak = args.source === "缺省" ? (kb.defaultAcceptStreak ?? 0) + 1 : 0
         kb.updatedAt = Date.now()
         workflow.kb = kb
       })

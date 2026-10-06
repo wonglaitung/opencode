@@ -248,6 +248,15 @@ export function buildStateBar(workflow: WorkflowState, stage: string | null): st
           `${open.l1Applied.length > 0 ? `；已采信历史记忆 ${open.l1Applied.length} 项待你落定（不必再问）：${open.l1Applied.join("、")}` : ""}`,
       )
     }
+    // 连续接受默认的轮数（reqdoc-r27）：**回执是一次性的**，跨轮/压缩上下文后模型无从
+    // 知道业务已经连着点了两次默认——这正是 9/34 场景仍带默认推荐的原因（r27 曾要求
+    // 模型自己在对话里数）。放状态条让它成为**看得见的事实**，措辞直接可转述。
+    if ((kb.defaultAcceptStreak ?? 0) > 0) {
+      lines.push(
+        `业务已连续 ${kb.defaultAcceptStreak} 轮接受默认推荐` +
+          (kb.defaultAcceptStreak! >= 2 ? "：**本轮不要再端带默认推荐的选项**，改为开放式追问，让业务对量化目标、功能范围、权限边界说具体意见" : ""),
+      )
+    }
     // 已承认基线（分支二）：回执是一次性的，而「这批内容业务已经授权过了」必须在状态条里一直在——
     // 否则压缩上下文后模型只剩「覆盖率很高」却不知道为什么满的，会把旧稿内容重新问一遍，
     // 恰好破坏「旧稿已有内容不必再说」这个承诺。措辞直接可转述（不点工具名）。

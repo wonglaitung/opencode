@@ -1582,3 +1582,45 @@ describe("★ 07 第 0 节：AI 是业务需求分析师（方法 vs 领域）",
     expect(wf).not.toContain("受过训练的业务需求分析师")
   })
 })
+
+describe("★ reqdoc-r27：连续默认改成服务端事实（模型不再自己数）", () => {
+  const src = () => read(join("..", "src", "tools", "reqdoc-kb-tools.ts"))
+
+  test("★ streak 口径：收口为 [缺省] +1，其它调用归零", () => {
+    // 连续即中断——业务一旦给了具体意见，之前连着点的默认就不再是「连续」。
+    const s = src()
+    expect(s).toContain('args.source === "缺省" ? (kb.defaultAcceptStreak ?? 0) + 1 : 0')
+  })
+
+  test("★ 状态条呈现 streak，且 ≥2 时带上「本轮不要端默认」", () => {
+    // 关键：r27 此前要模型自己在对话里数「同意默认」出现几次——回执一次性、历史会过期，
+    // 实测 9/34 场景仍带默认推荐。放状态条让它成为看得见的事实。
+    // 只查字符串存在是**假护栏**——整段 if 删掉后字符串仍在注释里，断言照样通过
+    // （实测破坏即假通过，已改为查结构）。故钉「门控 + 推送 + 文案」三者同时在场。
+    const p = read(join("..", "src", "prompt.ts"))
+    expect(p).toMatch(/if \(\(kb\.defaultAcceptStreak \?\? 0\) > 0\) \{\s*lines\.push\(/)
+    expect(p).toContain("业务已连续 ${kb.defaultAcceptStreak} 轮接受默认推荐")
+    // 状态条只报事实 + 给动作，判定依据是那个数字（措辞可直接转述，见 07-业务口语 第 3 节）
+    expect(p).toContain("本轮不要再端带默认推荐的选项")
+    // 措辞不得点工具名、不得带地址（要可直接转述给业务，见 07-业务口语 第 3 节）
+    expect(p).not.toContain("reqdoc_answer 本轮不要再端")
+  })
+
+  test("★ r27 措辞指向状态条、且不再让模型自己数", () => {
+    const wf = read(join("..", "..", "shared", "src", "workflow.ts"))
+    expect(wf).toContain("按状态条数字判，别自己在对话里数")
+    // 旧的「连续 2 轮」措辞（模型要自己数的东西）须已消失
+    // 边界按「下一条 reqdoc 规则」切（reqdoc-r37 是 sdlc 的，用它当终点会取到空串）
+    const from = wf.indexOf('id: "reqdoc-r27"')
+    const r27 = wf.slice(from, wf.indexOf('{ id: "reqdoc-', from + 10))
+    expect(r27).not.toContain("业务连续 2 轮选")
+    expect(r27).toContain("必须改为开放式追问")
+  })
+
+  test("★ r29 夹具预置 streak=2，不再靠「一轮里两次同意默认」", () => {
+    // 原夹具把两轮压进一轮，与 r27 的「轮」字面矛盾——模型推理合规却判失败。
+    const sc = read(join("..", "..", "..", "scripts", "eval-rules", "src", "scenarios.ts"))
+    expect(sc).toContain("defaultAcceptStreak = 2")
+    expect(sc).not.toContain("同意默认。同意默认。")
+  })
+})
