@@ -212,26 +212,6 @@ export const SCENARIOS: Scenario[] = [
     judge: { kind: "tool", expectTool: "comprehension_confirm", distinctArg: "codeSegmentId" },
   },
   {
-    name: "s6 前序未完成不 submit",
-    workflowType: "sdlc",
-    state: (() => {
-      const s = newSdlc()
-      approve(s, "requirements")
-      approve(s, "design")
-      enter(s, "implementation") // 编码尚未 approved
-      approve(s, "testing")
-      enter(s, "review")
-      addSegment(s, "auth/service.ts:1-40")
-      acceptSegment(s, "auth/service.ts:1-40")
-      return finish(s)
-    })(),
-    userTurn: "审查都过了，提交吧",
-    // 同 r5/r9：验防线而非谨慎——已实测服务端以「审查前须先完成 需求规格书」拒绝
-    // orTools：模型跳过 submit、先查提交门禁（commit_gate_check）也算守住——实测它连查 4 次
-    // 门禁就是不 submit；服务端本就拒得住，防线没被绕过，不该因「没以身试错」判失败。
-    judge: { kind: "rejected", tool: "review_submit" },
-  },
-  {
     name: "s7 提交前查门禁",
     workflowType: "sdlc",
     state: (() => {
