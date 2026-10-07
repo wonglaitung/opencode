@@ -111,4 +111,32 @@ describe("loadWorkflowConventions（按工作流类型 + 阶段门控）", () =>
       rmSync(root, { recursive: true, force: true })
     }
   })
+
+  test("★ 输出格式规约：两份都在 global 注入，且核心要求不漂移", () => {
+    // 两条要求（不用 mermaid、讲结构先给图）在 sdlc 与 reqdoc **各写一份**——loader 是
+    // `conventions/<type>/`，无跨类型共享层，重复不可避免。故用测试防漂移：任一份被删
+    // 或改软，这里立刻红。这是「一个概念一个名字」在元层面的对策。
+    const sdlc = loadWorkflowConventions("sdlc", "implementation", emptyRoot())!
+    const reqdoc = loadWorkflowConventions("reqdoc", "rules", emptyRoot())!
+    for (const [name, text] of [["sdlc", sdlc], ["reqdoc", reqdoc]] as const) {
+      expect(text, `${name} 缺「讲结构时先给图」`).toContain("讲结构时先给图")
+      expect(text, `${name} 缺 ASCII 图要求`).toContain("ASCII 文本图")
+      expect(text, `${name} 缺 mermaid 禁令`).toContain("mermaid")
+      expect(text, `${name} 缺「不用 mermaid」的明确表述`).toContain("不用")
+    }
+    // sdlc 侧：开发者不写项目文档，故**不得**出现「文档不受此限」那类例外
+    expect(sdlc).not.toContain("docs/*.md")
+    // reqdoc 侧：PRD 里的 mermaid 必须保留例外（与已定案 r34 不冲突）
+    expect(reqdoc).toContain("唯一例外")
+  })
+
+  test("★ 规约不得引用本项目内部文档（受众核查）", () => {
+    // 规约会注入到**客户**会话，客户没有 docs/session-management.md。曾把「观测口径与
+    // 实测数据见 session-management.md…」这类工程内部话写进 reqdoc 规约，属受众错位。
+    for (const type of ["sdlc", "reqdoc"] as const) {
+      const text = loadWorkflowConventions(type, null, emptyRoot()) ?? ""
+      expect(text, `${type} 规约泄漏内部文档引用`).not.toContain("session-management.md")
+      expect(text, `${type} 规约泄漏内部度量口径`).not.toContain("兜底出口率")
+    }
+  })
 })
