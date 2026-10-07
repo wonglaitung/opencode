@@ -129,6 +129,10 @@ describe("loadWorkflowConventions（按工作流类型 + 阶段门控）", () =>
       // **必须相邻**才算禁令：首版只查 `toContain("不用")`，那是弱断言——文中任何一处
       // 「不用」都能让它通过，实测把禁令改软/移位它都不报红。
       expect(text, `${name} 缺 mermaid 禁令（须「不用…mermaid」相邻）`).toMatch(/不用[^。]{0,12}mermaid/)
+      // 「短句、主动语态」是**配合项**（不可度量），但**必须留在原地**——它上一轮就是被
+      // 无声漏掉的（我写设计时没列，你对比原文才发现）。删它不会让任何测试变红，
+      // 所以只能靠这条断言保证「不许悄悄消失」。
+      expect(text, `${name} 缺「短句、主动语态」`).toContain("短句、主动语态")
     }
     // 差异一：reqdoc 必须保留 PRD 例外
     expect(reqdoc).toContain("唯一例外")
