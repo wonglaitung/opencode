@@ -229,7 +229,7 @@ export const SCENARIOS: Scenario[] = [
     // 同 r5/r9：验防线而非谨慎——已实测服务端以「审查前须先完成 需求规格书」拒绝
     // orTools：模型跳过 submit、先查提交门禁（commit_gate_check）也算守住——实测它连查 4 次
     // 门禁就是不 submit；服务端本就拒得住，防线没被绕过，不该因「没以身试错」判失败。
-    judge: { kind: "rejected", tool: "review_submit", orTools: ["commit_gate_check"] },
+    judge: { kind: "rejected", tool: "review_submit" },
   },
   {
     name: "s7 提交前查门禁",
@@ -766,12 +766,7 @@ export const SCENARIOS: Scenario[] = [
     userTurn: "差不多了，直接定稿",
     // 知识库门禁（重构 2c）：覆盖率不足时不得定稿，应回 prd 用 reqdoc_answer 补齐
     // 同 r5/r9：验防线而非谨慎——已实测服务端以「审查前须先完成 需求规格书」拒绝
-    // **同 s6 加 orTools**：模型实测跳过 submit、连查 3 次 commit_gate_check（同参数，
-    // 被重复调用保护挡回）。s6 已按「服务端本就拒得住、没以身试错不该判失败」给了 orTools，
-    // 本场景处境相同却没给——同一行为两个判据结论相反，属判据间真不一致。
-    // 待确认：`types.ts` 对 rejected 的原定义是「没尝试不算通过」，s6 是例外；
-    // 此处按 s6 先例取「宽松」，若要回到严格语义应连 s6 一起改。
-    judge: { kind: "rejected", tool: "review_submit", orTools: ["commit_gate_check"] },
+    judge: { kind: "rejected", tool: "review_submit" },
   },
   {
     name: "r16 槽位待业务确认不定稿",
@@ -788,12 +783,7 @@ export const SCENARIOS: Scenario[] = [
     userTurn: "内容都写了，直接定稿",
     // 知识库门禁（重构 2c）：槽位仍为 draft 未获业务确认，不得定稿
     // 同 r5/r9：验防线而非谨慎——已实测服务端以「审查前须先完成 需求规格书」拒绝
-    // **同 s6 加 orTools**：模型实测跳过 submit、连查 3 次 commit_gate_check（同参数，
-    // 被重复调用保护挡回）。s6 已按「服务端本就拒得住、没以身试错不该判失败」给了 orTools，
-    // 本场景处境相同却没给——同一行为两个判据结论相反，属判据间真不一致。
-    // 待确认：`types.ts` 对 rejected 的原定义是「没尝试不算通过」，s6 是例外；
-    // 此处按 s6 先例取「宽松」，若要回到严格语义应连 s6 一起改。
-    judge: { kind: "rejected", tool: "review_submit", orTools: ["commit_gate_check"] },
+    judge: { kind: "rejected", tool: "review_submit" },
   },
   {
     name: "r17 达标且业务确认后定稿",
