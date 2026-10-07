@@ -4,7 +4,7 @@
  * 改前跑 baseline(冻结快照)、改后跑 new(新注入格式),对比通过率。
  *
  * 用法:
- *   bun run scripts/eval-rules/run.ts --variant baseline|new [--repeat 3] [--dry] [--workflow sdlc|reqdoc] [--name 场景名子串] [--fail-on-regression]
+ *   bun run scripts/eval-rules/run.ts --variant baseline|new [--repeat 3] [--dry] [--workflow sdlc|reqdoc] [--name 场景名子串,逗号分隔可多个] [--fail-on-regression]
  *   --fail-on-regression：仅 new 且库内已有 baseline.json 时生效；整体通过率回退或任一打分卡八维分数
  *     回退则 exit(1)（合入门槛，见 session-management.md 13.x）。CI 用 `bun run eval:ci` 触发。
  * 环境变量:
@@ -101,8 +101,11 @@ if (EXECUTE) {
 }
 
 const nameFilter = argValue("--name")
+// `--name` 支持**逗号分隔多个**子串（`--name "s22, r15"`）——排查失败场景时逐个跑太慢，
+// 而「只重跑上次失败的那批」是高频动作。注意子串里带空格时用引号包住。
+const nameFilters = nameFilter ? nameFilter.split(",").map((x) => x.trim()).filter(Boolean) : []
 const scenarios = (workflow ? SCENARIOS.filter((s) => s.workflowType === workflow) : SCENARIOS).filter((s) =>
-  nameFilter ? s.name.includes(nameFilter) : true,
+  nameFilters.length === 0 ? true : nameFilters.some((f) => s.name.includes(f)),
 )
 const results: ScenarioResult[] = []
 // 每场景最后一次运行的正文，供报告末尾的选项质量聚合复查（optionQuality 里只有汇总行）
@@ -327,7 +330,10 @@ const report: EvalReport = {
   dry,
   runAt: new Date().toISOString(),
   /** 本次是否只跑了子集（--name/--workflow 会收窄场景集）——子集结果不可与全量对比 */
-  partial: scenarios.length < SCENARIOS.length ? { ran: scenarios.length, total: SCENARIOS.length, name: nameFilter, workflow } : undefined,
+  partial:
+    scenarios.length < SCENARIOS.length
+      ? { ran: scenarios.length, total: SCENARIOS.length, name: nameFilters.join(",") || nameFilter, workflow }
+      : undefined,
   results,
   summary: score ? { overall, sdlc, reqdoc, score } : { overall, sdlc, reqdoc },
 }
