@@ -6,6 +6,7 @@
  * 用 Bun 内建 fetch,零新增依赖——评测只判 tool_use,裸参数比高层 SDK 的断言 API 更可控。
  */
 import type { ModelOutput, ToolCall } from "./types"
+import { parseXmlToolCalls } from "./xml-toolcalls"
 
 const BASE = process.env.EVAL_BASE_URL ?? "http://localhost:8086/v1"
 const KEY = process.env.EVAL_API_KEY ?? ""
@@ -80,7 +81,7 @@ export async function chatComplete(
     }
     const data: any = await res.json()
     const msg = data?.choices?.[0]?.message
-    const toolCalls: ToolCall[] = (msg?.tool_calls ?? []).map((c: any) => {
+    let toolCalls: ToolCall[] = (msg?.tool_calls ?? []).map((c: any) => {
       let args: Record<string, unknown> = {}
       try {
         args = JSON.parse(c.function?.arguments ?? "{}")
@@ -89,6 +90,11 @@ export async function chatComplete(
       }
       return { name: c.function?.name ?? "", args, id: c.id }
     })
+    // 端点未启用 tool-calling 时，模型把调用写成 **XML 文本**塞进 content，此时
+    // tool_calls 为 null。实测踩过：容器重启后 chat template 走了非 tool-calling 路径，
+    // 全量 50 场景里 31 个假失败，症状是「模型调了工具却判成无工具调用」——
+    // 看起来像模型不听话，实际是评测器读不懂端点的输出形态。
+    if (toolCalls.length === 0) toolCalls = parseXmlToolCalls(msg?.content ?? "") as ToolCall[]
     // 推理模型(reasoning_content)可能把正文放 thinking 或 content 为空(reasoning 占满 max_tokens)。
     // text 类判定需兜底:content 为空时回退 reasoning_content。tool 类判定只看 tool_calls,不受影响。
     const content = msg?.content ?? ""

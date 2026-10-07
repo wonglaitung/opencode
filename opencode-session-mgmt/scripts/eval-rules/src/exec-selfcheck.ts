@@ -11,6 +11,8 @@
  * 2. `render` / `score` 判据真的读这份产物并给出分数（不是回落模型正文）；
  * 3. 重复调用能被识别为死循环并停止（否则评测会白烧轮数把「循环」误读成「不听话」）。
  */
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
 import { parseRenderStructure } from "sm-shared"
 import { requiredSlots } from "../../../packages/shared/src/reqdoc-slots.ts"
 import { judgeScenario } from "./judge.ts"
@@ -126,5 +128,40 @@ export async function execSelfCheck(): Promise<string[]> {
     toolCalls: [{ id: "l1", name: "reqdoc_confirm_features", args: { features } }],
   }))
   if (!looped.looped) fails.push("死循环检测：重复调用未被识别（评测会白烧轮数）")
+  // 作用域护栏：`out` 只在 retry 循环内可见，观测块在其作用域外。**tsc 抓不到**
+  // （`out` 声明在外层、类型上可访问），运行时才 ReferenceError——本轮实际踩过一次，
+  // 表现为评测跑到第一个场景就崩，且 `--dry` 完全测不出来（dry 不走执行路径）。
+  const runSrc = readFileSync(join(import.meta.dir, "..", "run.ts"), "utf8")
+  // 取整个结果组装块（从 textChunks.length 到 passCount）再查 `out.`——不能只查
+  // `defaultLoad:` 之后：观测块里的 `const streak = ...` 在它**之前**（首版正则就栽在这）。
+  const blockStart = runSrc.indexOf("textChunks.length > 0")
+  const blockEnd = runSrc.indexOf("passCount:", blockStart)
+  const obsBlock = blockStart >= 0 && blockEnd > blockStart ? runSrc.slice(blockStart, blockEnd) : ""
+  if (/\bout\./.test(obsBlock)) {
+    fails.push("run.ts：观测块里读了 out.* —— out 只在 retry 循环内可见，运行时才炸（tsc 抓不到）")
+  }
+  if (!/let lastStreak = 0/.test(runSrc)) {
+    fails.push("run.ts：缺 lastStreak 累积变量（限流观测须按触发条件加条件，否则读数指向不存在的问题）")
+  }
+  // XML 形态工具调用解析：端点未启用 tool-calling 时模型把调用写成 XML 塞进 content，
+  // 此时 tool_calls 为 null。实测踩过（容器重启后 chat template 走了非 tool-calling 路径），
+  // 症状是「模型明明调了工具却判成无工具调用」——50 场景里 31 个假失败，像模型不听话。
+  const { parseXmlToolCalls } = await import("./xml-toolcalls.ts")
+  const xmlCases: [string, string, Record<string, unknown>][] = [
+    ["单个调用", "<tool_call><function=workflow_baseline><parameter=estimated_hours>8</parameter></function></tool_call>", "workflow_baseline"],
+    ["并列多调用", "<tool_call><function=a><parameter=x>1</parameter></function><function=b></function></tool_call>", "b"],
+  ]
+  for (const [label, xml, wantName] of xmlCases) {
+    const got = parseXmlToolCalls(xml)
+    if (got.length === 0) fails.push(`XML 工具调用解析：${label} 解析不出调用`)
+    else if (!got.some((g: { name: string }) => g.name === wantName)) fails.push(`XML 工具调用解析：${label} 未取到 ${wantName}`)
+  }
+  // 类型必须还原：判据做引用相等，"8" 匹配不上 8
+  const typed = parseXmlToolCalls("<tool_call><function=t><parameter=a>8</parameter><parameter=b>true</parameter><parameter=c>hi</parameter></function></tool_call>")[0]
+  if (typed) {
+    if (typed.args.a !== 8) fails.push("XML 工具调用解析：数字未转成 number（判据引用相等会不匹配）")
+    if (typed.args.b !== true) fails.push("XML 工具调用解析：true 未转成 boolean")
+    if (typed.args.c !== "hi") fails.push("XML 工具调用解析：普通字符串被误转")
+  }
   return fails
 }

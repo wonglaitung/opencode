@@ -128,6 +128,10 @@ for (const sc of scenarios) {
   // 只留最后一轮等于白丢 (N-1)/N 的样本（实测 r27 三次兜底 3/5/4，单看某一次会
   // 把真实水平看成 1/5）。判据仍用最后一次（单次判更稳），观测用累计。
   const textChunks: string[] = []
+  // 限流观测要按触发条件加条件，故取**最后一次成功运行**收敛后的 streak。
+  // **不能读 out**：它只在 retry 循环内可见，观测块在其作用域外 → 运行时 ReferenceError。
+  // 而 tsc 抓不到（`out` 被声明在外层、类型上可访问），故下面紧跟一条作用域护栏。
+  let lastStreak = 0
   // 动作预算超支取**最后一次**运行的结果（与 lastDetail 同口径）
   let lastChurn: { tool: string; calls: number }[] | undefined
   // 渲染/评分场景（质量飞轮 A4 归因）：留各次运行的模型输出原文——只看判定 detail 无法区分
@@ -166,6 +170,7 @@ for (const sc of scenarios) {
           artifact: turn.artifact,
           toolResults: turn.toolResults,
           churn: turn.churn,
+          finalStreak: turn.finalStreak,
         }
       }
     } catch (err) {
@@ -175,6 +180,7 @@ for (const sc of scenarios) {
       continue
     }
     lastChurn = out.churn
+    lastStreak = out.finalStreak ?? 0
     if (out.text.trim() !== "") textChunks.push(out.text)
     const lastText = textChunks.at(-1) ?? ""
     if (captureOutput) outputs.push(out.artifact ?? out.text)
@@ -208,15 +214,23 @@ for (const sc of scenarios) {
     ...(textChunks.length > 0
       ? { optionQuality: formatOptionQuality(parseOptionSets(textChunks.join("\n"))) }
       : {}),
-    // 默认推荐限流（阶段 3）：只报「这一轮还带不带默认推荐」这一个机械事实。
-    // 带 = r27 的转开放式没生效；不带 = 生效了。**不判对错**——「该不该转」有语义成分。
+    // 默认推荐限流（阶段 3）：只报「这一轮还带不带默认推荐」这一个机械事实。**不判对错**
+    // ——「该不该转」有语义成分。两处必须对齐，缺一个读数就会指向不存在的问题：
+    // ① **只看最后一轮**（限流是「当轮」语义，跨轮累计会把上轮的默认项算进来——此处原写成
+    //    `textChunks.join`，与同文件上方注释自相矛盾）；② **按触发条件加条件**——streak < 2
+    //    时限流本轮就不该生效，带默认推荐是正常态。不加②时 33 个有文本场景里 8 个
+    //    「仍带」会被读成失败率，而那 8 个 streak 全是 0、一个都没触发过。
     ...(textChunks.length > 0
       ? (() => {
-          const dl = reportDefaultLoad(textChunks.join("\n"))
+          const dl = reportDefaultLoad(textChunks.at(-1) ?? "")
+          const streak = lastStreak
+          const armed = streak >= 2
           return {
-            defaultLoad: `默认推荐限流（观察项·仅最后一轮）：${dl.hasDefault ? "仍带" : "未带"}默认推荐${
-              dl.markers.length ? `（命中 ${dl.markers.join("、")}）` : ""
-            }`,
+            defaultLoad:
+              (armed
+                ? `限流已触发（连续默认 ${streak} 轮）：${dl.hasDefault ? "仍带" : "未带"}`
+                : `限流未触发（连续默认 ${streak} 轮，本轮不该生效）：${dl.hasDefault ? "仍带" : "未带"}`) +
+              `默认推荐${dl.markers.length ? `（命中 ${dl.markers.join("、")}）` : ""}`,
           }
         })()
       : {}),

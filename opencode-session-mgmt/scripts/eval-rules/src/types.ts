@@ -174,6 +174,14 @@ export interface ModelOutput {
   text: string
   /** **最后一轮**的正文——需要「单轮视角」的观测用（如默认推荐限流：本轮是否还端默认）。 */
   lastTurnText?: string
+  /**
+   * 收敛后的连续默认轮数（`kb.defaultAcceptStreak`）。
+   *
+   * 存在的理由是**给限流观测加条件**：streak < 2 时限流本轮就不该生效，端默认推荐是正常态。
+   * 不带这个数时「仍带默认推荐」会被读成失败率——实测 33 个有文本场景里 8 个「仍带」，
+   * 而那 8 个 streak 全是 0、一个都没触发过限流。
+   */
+  finalStreak?: number
   toolCalls: ToolCall[]
   /**
    * 真实产物内容（仅 `EVAL_EXECUTE=1` 时有）：执行工具后从工作区读到的组装产物。

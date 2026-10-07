@@ -281,7 +281,14 @@ export async function executeTurns(
       .filter(([, n]) => n >= CHURN_THRESHOLD)
       .map(([tool, calls]) => ({ tool, calls }))
       .sort((a, b) => b.calls - a.calls)
-    return { prior, last, allCalls, allTexts, artifact: readArtifact(root), toolResults, looped, churn }
+    // 收敛后的连续默认轮数（reqdoc-r27 限流的触发条件）。观测端要用它**给读数加条件**：
+    // streak=0 的场景带默认推荐是正常态，不该混进「限流没生效」的统计里——否则
+    // 33 个有文本场景里 8 个「仍带」会被读成失败率，实际那 8 个 streak 全是 0、
+    // 一个都没触发过限流。
+    const finalStreak = Number(
+      store.mutateWorkflow(sessionID, (w) => w.kb?.defaultAcceptStreak ?? 0) ?? 0,
+    )
+    return { prior, last, allCalls, allTexts, artifact: readArtifact(root), toolResults, looped, churn, finalStreak }
   } finally {
     store.close()
     if (origMemoryHome === undefined) delete process.env.SM_MEMORY_HOME
