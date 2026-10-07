@@ -112,22 +112,29 @@ describe("loadWorkflowConventions（按工作流类型 + 阶段门控）", () =>
     }
   })
 
-  test("★ 输出格式规约：两份都在 global 注入，且核心要求不漂移", () => {
-    // 两条要求（不用 mermaid、讲结构先给图）在 sdlc 与 reqdoc **各写一份**——loader 是
-    // `conventions/<type>/`，无跨类型共享层，重复不可避免。故用测试防漂移：任一份被删
-    // 或改软，这里立刻红。这是「一个概念一个名字」在元层面的对策。
+  test("★ 输出格式规约：两份都在 global 注入，共享核心不漂移、差异也是有意的", () => {
+    // 两条要求（讲结构先给图、不用 mermaid）在 sdlc 与 reqdoc **各写一份**——loader 是
+    // `conventions/<type>/`，无跨类型共享层，重复不可避免，故用测试防漂移。
+    //
+    // **注意：两份有意不同，不能要求逐字一致**（首版断言没意识到这点）：
+    // - reqdoc 有「唯一例外：PRD 交付件用 mermaid」（`reqdoc-r34` 要求流程图作为槽位内容
+    //   内嵌 mermaid，`reqdoc_export` 渲染成 PNG 进 Word——那是交付件不是对话输出）；
+    // - sdlc 无此例外（开发者走代码，不产出项目文档，故 mermaid 一律不用）。
+    // 护栏据此断言：**共享核心**两份都有，**差异**各自在位（reqdoc 必须有例外、sdlc 必须没有）。
     const sdlc = loadWorkflowConventions("sdlc", "implementation", emptyRoot())!
     const reqdoc = loadWorkflowConventions("reqdoc", "rules", emptyRoot())!
     for (const [name, text] of [["sdlc", sdlc], ["reqdoc", reqdoc]] as const) {
       expect(text, `${name} 缺「讲结构时先给图」`).toContain("讲结构时先给图")
       expect(text, `${name} 缺 ASCII 图要求`).toContain("ASCII 文本图")
-      expect(text, `${name} 缺 mermaid 禁令`).toContain("mermaid")
-      expect(text, `${name} 缺「不用 mermaid」的明确表述`).toContain("不用")
+      // **必须相邻**才算禁令：首版只查 `toContain("不用")`，那是弱断言——文中任何一处
+      // 「不用」都能让它通过，实测把禁令改软/移位它都不报红。
+      expect(text, `${name} 缺 mermaid 禁令（须「不用…mermaid」相邻）`).toMatch(/不用[^。]{0,12}mermaid/)
     }
-    // sdlc 侧：开发者不写项目文档，故**不得**出现「文档不受此限」那类例外
-    expect(sdlc).not.toContain("docs/*.md")
-    // reqdoc 侧：PRD 里的 mermaid 必须保留例外（与已定案 r34 不冲突）
+    // 差异一：reqdoc 必须保留 PRD 例外
     expect(reqdoc).toContain("唯一例外")
+    // 差异二：sdlc 必须没有例外——不得出现「文档不受此限」那类（开发者不写项目文档）
+    expect(sdlc).not.toContain("唯一例外")
+    expect(sdlc).not.toContain("docs/*.md")
   })
 
   test("★ 规约不得引用本项目内部文档（受众核查）", () => {
