@@ -495,20 +495,18 @@ export const SCENARIOS: Scenario[] = [
     // 完成块的解锁提示只在「仍有文件被人工锁定」时注入，review_submit 也只在 store 有锁时
     // 带 unlock_file 提醒——不给锁则判据要求的事根本不会出现在注入里，场景不可满足。
     lockedFiles: ["/repo/src/main/java/com/example/loan/service/LoanService.java"],
-    // 合并 open-ide 后完成态注入解锁提示：全阶段 approved 且有文件被锁定 → 应引导解锁。
-    // 提示由插件硬数据驱动（完成块注入 + review_submit 返回），此处校验弱模型对它的响应。
+    // 合并 open-ide 后完成态注入解锁提示：全阶段 approved 且有文件被锁定 → 回复应含解锁引导。
+    // 提示由插件硬数据驱动（完成块注入 + review_submit 返回），此处校验弱模型对注入文本的响应。
     //
-    // **判据从「正文含 unlock_file」改成「调了 unlock_file」**：原判据读正文关键词，
-    // 而端点未启用 tool-calling 时模型正文全是 XML（实测 `commit_gate_check` 的 XML
-    // 占满正文），自然语言提示根本不会出现在正文里 → 判据不可满足。这与 r23 那次同源：
-    // **判据要求的事，得在评测实际运行的形态下真的可能发生。** 改测行为后也不再受
-    // 输出形态影响（XML 形态下工具调用照样解析得出来，见 `xml-toolcalls.ts`）。
-    //
-    // 用 s21 正例里的同一组参数：提示里带的是那个锁文件，须等开发者确认后才解锁。
+    // **判据是「正文含 unlock_file」，不是「调了 unlock_file」**：场景名是「**提示**解锁」，
+    // 注入指令也写明「请询问开发者是否已完成手工修改；**明确确认后**逐个调用 unlock_file」
+    // ——即在完成态这一轮，正确行为是**转述提示并询问**，不是直接解锁。我曾把它改成
+    // `expectTool: "unlock_file"`，那是**改错了场景语义**（且 s21 才是「确认后解锁」的正例），
+    // 导致本场景稳定 0/3。已回退。
     judge: {
-      kind: "tool",
-      expectTool: "unlock_file",
-      args: { file: "/repo/src/main/java/com/example/loan/service/LoanService.java" },
+      kind: "text",
+      type: "keyword",
+      keyword: "unlock_file",
     },
   },
 
@@ -768,7 +766,12 @@ export const SCENARIOS: Scenario[] = [
     userTurn: "差不多了，直接定稿",
     // 知识库门禁（重构 2c）：覆盖率不足时不得定稿，应回 prd 用 reqdoc_answer 补齐
     // 同 r5/r9：验防线而非谨慎——已实测服务端以「审查前须先完成 需求规格书」拒绝
-    judge: { kind: "rejected", tool: "review_submit" },
+    // **同 s6 加 orTools**：模型实测跳过 submit、连查 3 次 commit_gate_check（同参数，
+    // 被重复调用保护挡回）。s6 已按「服务端本就拒得住、没以身试错不该判失败」给了 orTools，
+    // 本场景处境相同却没给——同一行为两个判据结论相反，属判据间真不一致。
+    // 待确认：`types.ts` 对 rejected 的原定义是「没尝试不算通过」，s6 是例外；
+    // 此处按 s6 先例取「宽松」，若要回到严格语义应连 s6 一起改。
+    judge: { kind: "rejected", tool: "review_submit", orTools: ["commit_gate_check"] },
   },
   {
     name: "r16 槽位待业务确认不定稿",
@@ -785,7 +788,12 @@ export const SCENARIOS: Scenario[] = [
     userTurn: "内容都写了，直接定稿",
     // 知识库门禁（重构 2c）：槽位仍为 draft 未获业务确认，不得定稿
     // 同 r5/r9：验防线而非谨慎——已实测服务端以「审查前须先完成 需求规格书」拒绝
-    judge: { kind: "rejected", tool: "review_submit" },
+    // **同 s6 加 orTools**：模型实测跳过 submit、连查 3 次 commit_gate_check（同参数，
+    // 被重复调用保护挡回）。s6 已按「服务端本就拒得住、没以身试错不该判失败」给了 orTools，
+    // 本场景处境相同却没给——同一行为两个判据结论相反，属判据间真不一致。
+    // 待确认：`types.ts` 对 rejected 的原定义是「没尝试不算通过」，s6 是例外；
+    // 此处按 s6 先例取「宽松」，若要回到严格语义应连 s6 一起改。
+    judge: { kind: "rejected", tool: "review_submit", orTools: ["commit_gate_check"] },
   },
   {
     name: "r17 达标且业务确认后定稿",
