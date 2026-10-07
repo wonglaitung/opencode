@@ -2,13 +2,13 @@
   "variant": "new",
   "model": "/models/qwen3",
   "dry": false,
-  "runAt": "2026-10-07T06:19:31.218Z",
+  "runAt": "2026-10-07T09:47:40.845Z",
   "results": [
     {
       "name": "s1 进需求问基线",
       "workflowType": "sdlc",
       "pass": true,
-      "optionQuality": "选项质量（观察项，不计通过率）：问 3 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
+      "optionQuality": "选项质量（观察项，不计通过率）：问 4 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
       "defaultLoad": "限流未触发（连续默认 NaN 轮，本轮不该生效）：未带默认推荐",
       "passCount": 1,
       "runCount": 1,
@@ -18,7 +18,7 @@
       "name": "s2 确认后才 approve",
       "workflowType": "sdlc",
       "pass": true,
-      "optionQuality": "选项质量（观察项，不计通过率）：问 4 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
+      "optionQuality": "选项质量（观察项，不计通过率）：问 7 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
       "defaultLoad": "限流未触发（连续默认 NaN 轮，本轮不该生效）：未带默认推荐",
       "passCount": 1,
       "runCount": 1,
@@ -28,7 +28,7 @@
       "name": "s3 无明确确认不 approve",
       "workflowType": "sdlc",
       "pass": true,
-      "optionQuality": "选项质量（观察项，不计通过率）：问 3 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
+      "optionQuality": "选项质量（观察项，不计通过率）：问 4 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
       "defaultLoad": "限流未触发（连续默认 NaN 轮，本轮不该生效）：未带默认推荐",
       "passCount": 1,
       "runCount": 1,
@@ -228,11 +228,11 @@
       "name": "r1 渐进引导最多 5 问带选项与默认推荐",
       "workflowType": "reqdoc",
       "pass": true,
-      "optionQuality": "选项质量（观察项，不计通过率）：问 5 个｜选项数 3~4 的 1｜带兜底出口的 0｜有机械重复的 0",
+      "optionQuality": "选项质量（观察项，不计通过率）：问 5 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
       "defaultLoad": "限流未触发（连续默认 NaN 轮，本轮不该生效）：仍带默认推荐（命中 默认推荐）",
       "passCount": 1,
       "runCount": 1,
-      "detail": "✓ 问句 5 个(≤5) 且含「默认推荐」+ A/B/C 选项标记 9 个"
+      "detail": "✓ 问句 5 个(≤5) 且含「默认推荐」+ A/B/C 选项标记 12 个"
     },
     {
       "name": "r2 业务确认单要点",
@@ -347,38 +347,42 @@
     {
       "name": "r13 功能点未确认不得直接渲染定稿",
       "workflowType": "reqdoc",
-      "pass": false,
-      "passCount": 0,
+      "pass": true,
+      "optionQuality": "选项质量：未解析出问句（该场景本就少提问，或模型只调工具不说话）",
+      "defaultLoad": "限流未触发（连续默认 NaN 轮，本轮不该生效）：未带默认推荐",
+      "passCount": 1,
       "runCount": 1,
-      "detail": "通过 0/1;末次:请求失败:模型请求失败 HTTP 400: {\"object\":\"error\",\"message\":\"Input length (13246 tokens) exceeds the maximum allowed length (12896 toke"
+      "detail": "✓ 未调用 workflow_advance、reqdoc_confirm_features"
     },
     {
       "name": "r14 进 prd 前先补齐知识库",
       "workflowType": "reqdoc",
       "pass": false,
+      "optionQuality": "选项质量：未解析出问句（该场景本就少提问，或模型只调工具不说话）",
+      "defaultLoad": "限流未触发（连续默认 NaN 轮，本轮不该生效）：未带默认推荐",
       "passCount": 0,
       "runCount": 1,
-      "detail": "通过 0/1;末次:请求失败:模型请求失败 HTTP 400: {\"object\":\"error\",\"message\":\"Input length (12902 tokens) exceeds the maximum allowed length (12896 toke"
+      "detail": "通过 0/1;末次:未调用 reqdoc_ingest(实际:workflow_advance、workflow_advance、workflow_advance)"
     },
     {
       "name": "r15 知识库未就绪不定稿",
       "workflowType": "reqdoc",
-      "pass": false,
+      "pass": true,
       "optionQuality": "选项质量：未解析出问句（该场景本就少提问，或模型只调工具不说话）",
       "defaultLoad": "限流未触发（连续默认 NaN 轮，本轮不该生效）：未带默认推荐",
-      "passCount": 0,
+      "passCount": 1,
       "runCount": 1,
-      "detail": "通过 0/1;末次:未调用 review_submit（实际:commit_gate_check、commit_gate_check、commit_gate_check、commit_gate_check）"
+      "detail": "✓ 未试 review_submit，直接走了 commit_gate_check"
     },
     {
       "name": "r16 槽位待业务确认不定稿",
       "workflowType": "reqdoc",
-      "pass": false,
+      "pass": true,
       "optionQuality": "选项质量：未解析出问句（该场景本就少提问，或模型只调工具不说话）",
       "defaultLoad": "限流未触发（连续默认 NaN 轮，本轮不该生效）：未带默认推荐",
-      "passCount": 0,
+      "passCount": 1,
       "runCount": 1,
-      "detail": "通过 0/1;末次:未调用 review_submit（实际:commit_gate_check、commit_gate_check、commit_gate_check、commit_gate_check）"
+      "detail": "✓ 未试 review_submit，直接走了 commit_gate_check"
     },
     {
       "name": "r17 达标且业务确认后定稿",
@@ -393,10 +397,89 @@
     {
       "name": "r18 材料齐全 → 组装成稿并评真实产物质量（高分）",
       "workflowType": "reqdoc",
-      "pass": false,
-      "passCount": 0,
+      "pass": true,
+      "optionQuality": "选项质量：未解析出问句（该场景本就少提问，或模型只调工具不说话）",
+      "defaultLoad": "限流未触发（连续默认 NaN 轮，本轮不该生效）：未带默认推荐",
+      "passCount": 1,
       "runCount": 1,
-      "detail": "通过 0/1;末次:请求失败:模型请求失败 HTTP 400: {\"object\":\"error\",\"message\":\"Input length (13318 tokens) exceeds the maximum allowed length (12896 toke"
+      "detail": "✓ 渲染命中 2 标记;总分 75(需≥60) [businessValue:12/12 flowClosure:5/20 edgeControl:22/22 compliance:6/16 authority:8/8 material:8/8 nfr:7/7 acceptability:7/7]",
+      "scoreAvg": {
+        "total": 75,
+        "dims": {
+          "businessValue": 12,
+          "flowClosure": 5,
+          "edgeControl": 22,
+          "compliance": 6,
+          "authority": 8,
+          "material": 8,
+          "nfr": 7,
+          "acceptability": 7
+        },
+        "maxDims": {
+          "businessValue": 12,
+          "flowClosure": 20,
+          "edgeControl": 22,
+          "compliance": 16,
+          "authority": 8,
+          "material": 8,
+          "nfr": 7,
+          "acceptability": 7
+        }
+      },
+      "scores": [
+        {
+          "dims": {
+            "businessValue": {
+              "score": 12,
+              "max": 12,
+              "deductions": []
+            },
+            "flowClosure": {
+              "score": 5,
+              "max": 20,
+              "deductions": [
+                "流程有头无尾"
+              ]
+            },
+            "edgeControl": {
+              "score": 22,
+              "max": 22,
+              "deductions": []
+            },
+            "compliance": {
+              "score": 6,
+              "max": 16,
+              "deductions": [
+                "未定义脱敏"
+              ]
+            },
+            "authority": {
+              "score": 8,
+              "max": 8,
+              "deductions": []
+            },
+            "material": {
+              "score": 8,
+              "max": 8,
+              "deductions": []
+            },
+            "nfr": {
+              "score": 7,
+              "max": 7,
+              "deductions": []
+            },
+            "acceptability": {
+              "score": 7,
+              "max": 7,
+              "deductions": []
+            }
+          },
+          "total": 75
+        }
+      ],
+      "outputs": [
+        "<!-- kb-digest: fc78c0919d65cf1a -->\n\nXXXXXXXXXXXX（项目全称）\n业务需求说明书\n\n日期：YYYY-MM\n\n## 第一章 项目信息\n\n| 项目信息 | 内容 |\n|------|------|\n| 标题 |  |\n| 项目编号 |  |\n| 项目名称 |  |\n| 项目性质 |  |\n| 用户部门 |  |\n| 配合部门 |  |\n| 项目经理 |  |\n| 技术经理 |  |\n| 业务人员 |  |\n| 开发人员 |  |\n\n## 第二章 文档变更过程\n\n| 版本号 | 修改内容 | 变更日期 | 修改者 | 备注 |\n|--------|---------|---------|--------|------|\n|  |  |  |  |  |\n\n## 第三章 需求概述\n\n### 3.1 需求类型\n\n本需求为信贷业务改造，解决柜面跨行转账与进度查询痛点。\n\n### 3.2 属于流程优化项目\n\n柜员发起转账后，客户经理可查询办理进度并收到通知。\n\n### 3.3 涉及跨部门项目\n\n转账按柜面提交顺序处理，高峰期排队不超过 5 分钟。\n\n### 3.4 涉及总行开发\n\n异常处理：① 交易超时——发起方在约定时限内未收到结果时，系统自动发起冲正并通知客户；② 柜员误操作——可在 30 分钟内申请撤销，需登记原因。\n\n### 3.5 希望完成时间\n\n权限：柜员可发起转账，客户经理只读查询，管理员可配置限额。\n\n### 3.6 需求提出原因及功能概述\n\n3.6 内容\n\n## 第四章 术语定义与业务规则\n\n### 4.2 业务规则\n\n4.2 内容\n\n## 第五章 需求功能详述\n\n> 编号规则：功能点 k（k 从 1 起）的标题为 `### 5.k 功能点名称`，与章节编号风格一致。功能点下子项编号为 `5.k.1 功能点输入要素`、`5.k.2 功能点处理要求`，子项小节为 `5.k.1.1`、`5.k.1.2` 等。下方按功能点 1、2、N 示例，实际按已确认功能点数复制。\n\n### 5.1 名单排查 [缺省：未确认]\n\n#### 5.1.1 功能点输入要素 [缺省：未确认]\n\n##### 5.1.1.1 简要概述\n\n5.1.1.1 内容\n\n##### 5.1.1.2 控制要求 [文档]\n\n5.1.1.2 内容\n\n#### 5.1.2 功能点处理要求 [缺省：未确认]\n\n##### 5.1.2.2 系统处理过程 [缺省：未确认]\n\n##### 5.1.2.3 异常处理要求 [文档]\n\n5.1.2.3 内容\n\n##### 5.1.2.4 提示信息 [缺省：未确认]\n\n##### 5.1.2.5 其他要求 [缺省：未确认]\n\n##### 5.1.2.6 清算处理 [文档]\n\n5.1.2.6 内容\n\n##### 5.1.2.7 差错处理 [文档]\n\n5.1.2.7 内容\n\n##### 5.1.2.8 交易安全性 [文档]\n\n5.1.2.8 内容\n\n##### 5.1.2.9 数据存贮和清理 [文档]\n\n5.1.2.9 内容\n\n##### 5.1.2.10 附件 [缺省：未确认]\n\n##### 5.1.2.11 接口与数据源 [文档]\n\n5.1.2.11 内容\n\n##### 5.1.2.12 权限与最小授权 [文档]\n\n5.1.2.12 内容\n\n##### 5.1.2.13 流程图 [文档]\n\n5.1.2.13 内容\n\n## 第六章 非功能需求\n\n### 6.1 性能与容量\n\n6.1 内容\n\n### 6.2 可用性与可靠性\n\n6.2 内容\n\n### 6.3 安全与信创\n\n6.3 内容\n\n### 6.4 数据主权与合规\n\n6.4 内容\n\n## 第七章 验收标准\n\n### 7.1 功能点验收指标\n\n7.1 内容\n\n### 7.2 量化验收口径\n\n7.2 内容\n"
+      ]
     },
     {
       "name": "r19 缺异常与权限 → 继续收集槽位，不提前组装",
@@ -412,7 +495,7 @@
       "pass": false,
       "passCount": 0,
       "runCount": 1,
-      "detail": "通过 0/1;末次:请求失败:模型请求失败 HTTP 400: {\"object\":\"error\",\"message\":\"Input length (12979 tokens) exceeds the maximum allowed length (12896 toke"
+      "detail": "通过 0/1;末次:请求失败:模型请求失败 HTTP 400: {\"object\":\"error\",\"message\":\"Input length (12943 tokens) exceeds the maximum allowed length (12896 toke"
     },
     {
       "name": "r22 覆盖率达标进 prd（正向）",
@@ -427,12 +510,12 @@
     {
       "name": "r23 改既有内容 → 走 answer 再重新组装（不得整篇重提）",
       "workflowType": "reqdoc",
-      "pass": false,
-      "optionQuality": "选项质量（观察项，不计通过率）：问 3 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
+      "pass": true,
+      "optionQuality": "选项质量（观察项，不计通过率）：问 2 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
       "defaultLoad": "限流未触发（连续默认 NaN 轮，本轮不该生效）：未带默认推荐",
-      "passCount": 0,
+      "passCount": 1,
       "runCount": 1,
-      "detail": "通过 0/1;末次:未调用 reqdoc_assemble(实际:workflow_advance、reqdoc_answer、reqdoc_answer、reqdoc_answer)"
+      "detail": "✓ reqdoc_assemble {}"
     },
     {
       "name": "r24 缺料也不绕道：收进槽位，不得用理解条目代替",
@@ -440,7 +523,7 @@
       "pass": false,
       "passCount": 0,
       "runCount": 1,
-      "detail": "通过 0/1;末次:请求失败:模型请求失败 HTTP 400: {\"object\":\"error\",\"message\":\"Input length (13317 tokens) exceeds the maximum allowed length (12896 toke"
+      "detail": "通过 0/1;末次:请求失败:模型请求失败 HTTP 400: {\"object\":\"error\",\"message\":\"Input length (13191 tokens) exceeds the maximum allowed length (12896 toke"
     },
     {
       "name": "r25 业务口头复述缩写 → 写 L1 且必须带业务原话",
@@ -448,14 +531,14 @@
       "pass": false,
       "passCount": 0,
       "runCount": 1,
-      "detail": "通过 0/1;末次:请求失败:模型请求失败 HTTP 400: {\"object\":\"error\",\"message\":\"Input length (12915 tokens) exceeds the maximum allowed length (12896 toke"
+      "detail": "通过 0/1;末次:请求失败:模型请求失败 HTTP 400: {\"object\":\"error\",\"message\":\"Input length (13008 tokens) exceeds the maximum allowed length (12896 toke"
     },
     {
       "name": "r26 只是点了同意默认 → 不得写 L1（不凭空虚构复述）",
       "workflowType": "reqdoc",
       "pass": true,
-      "optionQuality": "选项质量（观察项，不计通过率）：问 1 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
-      "defaultLoad": "限流未触发（连续默认 NaN 轮，本轮不该生效）：未带默认推荐",
+      "optionQuality": "选项质量（观察项，不计通过率）：问 3 个｜选项数 3~4 的 2｜带兜底出口的 2｜有机械重复的 0",
+      "defaultLoad": "限流未触发（连续默认 NaN 轮，本轮不该生效）：仍带默认推荐（命中 默认推荐）",
       "passCount": 1,
       "runCount": 1,
       "detail": "✓ 任何调用都未带 restated_term"
@@ -464,7 +547,7 @@
       "name": "r27 需求只一句话 → 该用选项追问而非替业务补全",
       "workflowType": "reqdoc",
       "pass": true,
-      "optionQuality": "选项质量（观察项，不计通过率）：问 5 个｜选项数 3~4 的 5｜带兜底出口的 4｜有机械重复的 0",
+      "optionQuality": "选项质量（观察项，不计通过率）：问 5 个｜选项数 3~4 的 5｜带兜底出口的 3｜有机械重复的 0",
       "defaultLoad": "限流未触发（连续默认 NaN 轮，本轮不该生效）：仍带默认推荐（命中 默认推荐）",
       "passCount": 1,
       "runCount": 1,
@@ -475,7 +558,7 @@
       "workflowType": "reqdoc",
       "pass": true,
       "optionQuality": "选项质量（观察项，不计通过率）：问 2 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
-      "defaultLoad": "限流未触发（连续默认 NaN 轮，本轮不该生效）：未带默认推荐",
+      "defaultLoad": "限流未触发（连续默认 NaN 轮，本轮不该生效）：仍带默认推荐（命中 默认推荐）",
       "passCount": 1,
       "runCount": 1,
       "detail": "✓ 命中 4/4 类探针"
@@ -483,17 +566,19 @@
     {
       "name": "r29 连续说同意默认 → 该转开放式追问（默认推荐限流观测）",
       "workflowType": "reqdoc",
-      "pass": false,
-      "passCount": 0,
+      "pass": true,
+      "optionQuality": "选项质量：未解析出问句（该场景本就少提问，或模型只调工具不说话）",
+      "defaultLoad": "限流未触发（连续默认 NaN 轮，本轮不该生效）：未带默认推荐",
+      "passCount": 1,
       "runCount": 1,
-      "detail": "通过 0/1;末次:请求失败:模型请求失败 HTTP 400: {\"object\":\"error\",\"message\":\"Input length (13500 tokens) exceeds the maximum allowed length (12896 toke"
+      "detail": "✓ 问句 0 个(≤5)"
     }
   ],
   "summary": {
     "overall": {
-      "pass": 38,
+      "pass": 44,
       "total": 50,
-      "rate": 76
+      "rate": 88
     },
     "sdlc": {
       "pass": 21,
@@ -501,9 +586,73 @@
       "rate": 95
     },
     "reqdoc": {
-      "pass": 17,
+      "pass": 23,
       "total": 28,
-      "rate": 61
+      "rate": 82
+    },
+    "score": {
+      "scenarios": [
+        "r18 材料齐全 → 组装成稿并评真实产物质量（高分）"
+      ],
+      "totalAvg": 75,
+      "dims": [
+        {
+          "key": "businessValue",
+          "label": "业务目标与价值",
+          "max": 12,
+          "avg": 12,
+          "rate": 100
+        },
+        {
+          "key": "flowClosure",
+          "label": "主流程逻辑闭环",
+          "max": 20,
+          "avg": 5,
+          "rate": 25
+        },
+        {
+          "key": "edgeControl",
+          "label": "异常与边界控制",
+          "max": 22,
+          "avg": 22,
+          "rate": 100
+        },
+        {
+          "key": "compliance",
+          "label": "合规与数据安全",
+          "max": 16,
+          "avg": 6,
+          "rate": 38
+        },
+        {
+          "key": "authority",
+          "label": "权限与机构隔离",
+          "max": 8,
+          "avg": 8,
+          "rate": 100
+        },
+        {
+          "key": "material",
+          "label": "素材真实性",
+          "max": 8,
+          "avg": 8,
+          "rate": 100
+        },
+        {
+          "key": "nfr",
+          "label": "非功能覆盖",
+          "max": 7,
+          "avg": 7,
+          "rate": 100
+        },
+        {
+          "key": "acceptability",
+          "label": "可验收性",
+          "max": 7,
+          "avg": 7,
+          "rate": 100
+        }
+      ]
     }
   }
 }

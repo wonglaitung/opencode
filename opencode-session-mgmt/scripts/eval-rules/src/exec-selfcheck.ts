@@ -143,6 +143,18 @@ export async function execSelfCheck(): Promise<string[]> {
   if (!/let lastStreak = 0/.test(runSrc)) {
     fails.push("run.ts：缺 lastStreak 累积变量（限流观测须按触发条件加条件，否则读数指向不存在的问题）")
   }
+  // **取值必须在 mutateWorkflow 回调内**——它返回 WorkflowState 对象而非回调返回值，
+  // 包一层 `Number(...)` 就成 NaN，限流读数显示「连续默认 NaN 轮」（实测踩过）。
+  const exSrc = readFileSync(join(import.meta.dir, "executor.ts"), "utf8")
+  // 逐行扫但跳过注释行——本文件注释里就写着那个反例写法（`我曾写 Number(store.mutateWorkflow(...))`），
+  // 不排除注释会让护栏永远红、而真正的问题被淹没。
+  const exCode = exSrc
+    .split("\n")
+    .filter((l) => !l.trim().startsWith("*") && !l.trim().startsWith("//") && !l.trim().startsWith("`"))
+    .join("\n")
+  if (/Number\(\s*store\.mutateWorkflow/.test(exCode)) {
+    fails.push("executor.ts：对 mutateWorkflow 的返回值套了 Number()——它返回对象不是回调值，会得 NaN")
+  }
   // XML 形态工具调用解析：端点未启用 tool-calling 时模型把调用写成 XML 塞进 content，
   // 此时 tool_calls 为 null。实测踩过（容器重启后 chat template 走了非 tool-calling 路径），
   // 症状是「模型明明调了工具却判成无工具调用」——50 场景里 31 个假失败，像模型不听话。

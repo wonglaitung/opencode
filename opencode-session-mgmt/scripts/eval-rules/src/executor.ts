@@ -285,9 +285,12 @@ export async function executeTurns(
     // streak=0 的场景带默认推荐是正常态，不该混进「限流没生效」的统计里——否则
     // 33 个有文本场景里 8 个「仍带」会被读成失败率，实际那 8 个 streak 全是 0、
     // 一个都没触发过限流。
-    const finalStreak = Number(
-      store.mutateWorkflow(sessionID, (w) => w.kb?.defaultAcceptStreak ?? 0) ?? 0,
-    )
+    // **在回调内取值**：mutateWorkflow 返回的是 WorkflowState 对象本身、不是回调返回值，
+    // 我曾写 `Number(store.mutateWorkflow(...))` → 得 NaN，限流读数因此显示「连续默认 NaN 轮」。
+    let finalStreak = 0
+    store.mutateWorkflow(sessionID, (w) => {
+      finalStreak = w.kb?.defaultAcceptStreak ?? 0
+    })
     return { prior, last, allCalls, allTexts, artifact: readArtifact(root), toolResults, looped, churn, finalStreak }
   } finally {
     store.close()
