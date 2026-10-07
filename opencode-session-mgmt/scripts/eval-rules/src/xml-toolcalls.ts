@@ -28,22 +28,33 @@ export interface XmlToolCall {
  * 故 `"8"` 匹配不上 `8`、`"true"` 匹配不上 `true`。按字面量形状转回原始类型，
  * 转不像就保持字符串（宁可显式不匹配，也不要瞎猜）。
  */
-export function coerceScalar(v: string): unknown {
-  if (v === "true") return true
-  if (v === "false") return false
-  if (v === "null") return null
-  if (/^-?\d+$/.test(v)) return Number(v)
-  if (/^-?\d*\.\d+$/.test(v)) return Number(v)
+export function coerceScalar(v: string, want: "string" | "number" | "boolean" = "string"): unknown {
+  // **按 schema 声明的类型转，不猜**。踩过的坑：一律把数字串转 number，结果把槽位地址
+  // `"3.1"` 转成了 `3.1`，而服务端 `reqdoc_answer` 的 address 是 `z.string()` →
+  // 参数校验失败、模型调不动。地址、文件名、枚举值都必须是字符串。
+  if (want === "boolean") return v === "true" ? true : v === "false" ? false : v
+  if (want === "number") {
+    const n = Number(v)
+    return Number.isFinite(n) && v.trim() !== "" ? n : v
+  }
   return v
 }
 
-export function parseXmlToolCalls(content: string): ToolCall[] {
+/**
+ * @param types 可选的「工具名 → 参数名 → 期望类型」表（来自 `EVAL_TOOLS` 的 schema）。
+ *   不给就**全部当字符串**——宁可类型不匹配显式失败，也不要瞎转。
+ */
+export function parseXmlToolCalls(
+  content: string,
+  types: Record<string, Record<string, "string" | "number" | "boolean">> = {},
+): ToolCall[] {
   const out: ToolCall[] = []
   for (const m of content.matchAll(/<function=([A-Za-z0-9_]+)>([\s\S]*?)<\/function>/g)) {
     const name = m[1]
     const args: Record<string, string> = {}
     for (const p of m[2].matchAll(/<parameter=([A-Za-z0-9_]+)>([\s\S]*?)<\/parameter>/g)) {
-      args[p[1]] = coerceScalar(p[2].trim())
+      const want = types[name]?.[p[1]] ?? "string"
+      args[p[1]] = coerceScalar(p[2].trim(), want)
     }
     out.push({ name, args, id: `xml-${out.length}` })
   }

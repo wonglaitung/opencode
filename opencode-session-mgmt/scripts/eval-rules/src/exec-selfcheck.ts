@@ -157,11 +157,27 @@ export async function execSelfCheck(): Promise<string[]> {
     else if (!got.some((g: { name: string }) => g.name === wantName)) fails.push(`XML 工具调用解析：${label} 未取到 ${wantName}`)
   }
   // 类型必须还原：判据做引用相等，"8" 匹配不上 8
-  const typed = parseXmlToolCalls("<tool_call><function=t><parameter=a>8</parameter><parameter=b>true</parameter><parameter=c>hi</parameter></function></tool_call>")[0]
+  const typed = parseXmlToolCalls(
+    "<tool_call><function=t><parameter=a>8</parameter><parameter=b>true</parameter><parameter=c>hi</parameter></function></tool_call>",
+    { t: { a: "number", b: "boolean" } },
+  )[0]
   if (typed) {
-    if (typed.args.a !== 8) fails.push("XML 工具调用解析：数字未转成 number（判据引用相等会不匹配）")
-    if (typed.args.b !== true) fails.push("XML 工具调用解析：true 未转成 boolean")
+    if (typed.args.a !== 8) fails.push("XML 工具调用解析：schema 声明 number 却没转（判据引用相等会不匹配）")
+    if (typed.args.b !== true) fails.push("XML 工具调用解析：schema 声明 boolean 却没转")
     if (typed.args.c !== "hi") fails.push("XML 工具调用解析：普通字符串被误转")
   }
+  // **未声明的参数一律当字符串**——踩过的坑：一律把数字串转 number，把槽位地址
+  // `"3.1"` 转成 `3.1`，而服务端 `reqdoc_answer.address` 是 `z.string()` → 模型调不动。
+  const addr = parseXmlToolCalls(
+    "<tool_call><function=reqdoc_answer><parameter=address>3.1</parameter></function></tool_call>",
+  )[0]
+  if (addr && addr.args.address !== "3.1") {
+    fails.push("XML 工具调用解析：未声明参数被误转（槽位地址必须是字符串，否则服务端校验失败）")
+  }
+  // 类型表须真从 EVAL_TOOLS 派生：address 是 string、estimated_hours 是 number
+  const { evalToolParamTypes } = await import("./tool-defs.ts")
+  const types = evalToolParamTypes()
+  if (types.reqdoc_answer?.address !== "string") fails.push("工具参数类型表：reqdoc_answer.address 应为 string")
+  if (types.workflow_baseline?.estimated_hours !== "number") fails.push("工具参数类型表：workflow_baseline.estimated_hours 应为 number")
   return fails
 }

@@ -495,12 +495,20 @@ export const SCENARIOS: Scenario[] = [
     // 完成块的解锁提示只在「仍有文件被人工锁定」时注入，review_submit 也只在 store 有锁时
     // 带 unlock_file 提醒——不给锁则判据要求的事根本不会出现在注入里，场景不可满足。
     lockedFiles: ["/repo/src/main/java/com/example/loan/service/LoanService.java"],
-    // 合并 open-ide 后完成态注入解锁提示：全阶段 approved 且有文件被锁定 → 回复应含解锁引导。
-    // 提示由插件硬数据驱动（完成块注入 + review_submit 返回），此处校验弱模型对注入文本的响应。
+    // 合并 open-ide 后完成态注入解锁提示：全阶段 approved 且有文件被锁定 → 应引导解锁。
+    // 提示由插件硬数据驱动（完成块注入 + review_submit 返回），此处校验弱模型对它的响应。
+    //
+    // **判据从「正文含 unlock_file」改成「调了 unlock_file」**：原判据读正文关键词，
+    // 而端点未启用 tool-calling 时模型正文全是 XML（实测 `commit_gate_check` 的 XML
+    // 占满正文），自然语言提示根本不会出现在正文里 → 判据不可满足。这与 r23 那次同源：
+    // **判据要求的事，得在评测实际运行的形态下真的可能发生。** 改测行为后也不再受
+    // 输出形态影响（XML 形态下工具调用照样解析得出来，见 `xml-toolcalls.ts`）。
+    //
+    // 用 s21 正例里的同一组参数：提示里带的是那个锁文件，须等开发者确认后才解锁。
     judge: {
-      kind: "text",
-      type: "keyword",
-      keyword: "unlock_file",
+      kind: "tool",
+      expectTool: "unlock_file",
+      args: { file: "/repo/src/main/java/com/example/loan/service/LoanService.java" },
     },
   },
 

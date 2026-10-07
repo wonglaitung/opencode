@@ -510,3 +510,25 @@ export const EVAL_TOOLS: OpenAITool[] = [
     },
   },
 ]
+
+/**
+ * 工具参数类型表（从 `EVAL_TOOLS` 的 JSON schema 派生），给 `parseXmlToolCalls` 用。
+ *
+ * 为什么需要：XML 形态里参数全是字符串，而服务端按 `z.string()` / `z.number()` 校验——
+ * 槽位地址 `"3.1"` 被转成 `3.1` 就会校验失败（实测踩过，模型调不动 `reqdoc_answer`）。
+ * **按 schema 转，不猜**：未声明的参数一律当字符串。
+ */
+export function evalToolParamTypes(): Record<string, Record<string, "string" | "number" | "boolean">> {
+  const out: Record<string, Record<string, "string" | "number" | "boolean">> = {}
+  for (const t of EVAL_TOOLS) {
+    const props = (t.function.parameters as { properties?: Record<string, { type?: string }> }).properties ?? {}
+    const params: Record<string, "string" | "number" | "boolean"> = {}
+    for (const [k, v] of Object.entries(props)) {
+      if (v.type === "number" || v.type === "integer") params[k] = "number"
+      else if (v.type === "boolean") params[k] = "boolean"
+      else params[k] = "string"
+    }
+    out[t.function.name] = params
+  }
+  return out
+}
