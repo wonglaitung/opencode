@@ -875,23 +875,6 @@ export const SCENARIOS: Scenario[] = [
     judge: { kind: "tool", expectTool: "reqdoc_ingest" },
   },
   {
-    name: "r21 知识库未收口不推进",
-    workflowType: "reqdoc",
-    state: (() => {
-      const s = newReqdoc()
-      approve(s, "goal")
-      approve(s, "rules")
-      enter(s, "edge")
-      // 槽位未填满（含 exception）→ kbGate 不通过
-      withKb(s, { fill: false })
-      return finish(s)
-    })(),
-    userTurn: "边界情况问完了，开始渲染吧",
-    // 知识库门禁（重构 2c）：kbGate 未通过时 workflow_advance(enter prd) 被拒绝
-    // 同 r5：已实测服务端以「必填叶子覆盖率 13% < 阈值 100%」拒绝 enter prd
-    judge: { kind: "rejected", tool: "workflow_advance" },
-  },
-  {
     name: "r22 覆盖率达标进 prd（正向）",
     workflowType: "reqdoc",
     state: (() => {
