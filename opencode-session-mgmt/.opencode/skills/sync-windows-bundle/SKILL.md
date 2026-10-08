@@ -1,27 +1,35 @@
 ---
 name: sync-windows-bundle
-description: Use when syncing local (WSL/Linux) source changes into the Windows-side opencode bundle so the Windows opencode (running on Node 22 at D:\Tools\node-v22.23.2-win-x64) picks up plugin/CLI/docs changes without manual copy. Triggers 同步 / sync / 同步到 Windows / D:\Tools / node-v22 / bundle / 重启守护进程.
+description: Use when syncing local (WSL/Linux) source changes into the Windows-side opencode bundles so the Windows opencode (running on Node 22 at D:\Tools\node-v22.23.2-win-x64) picks up plugin/CLI/docs changes without manual copy. Covers all three sibling projects — opencode-session-mgmt (opencode-sm-bundle-0.1.0), opencode-edge-debug (opencode-edge-debug-bundle-0.0.1), opencode-server-debug (opencode-server-debug-bundle-0.0.1). Triggers 同步 / sync / 同步到 Windows / D:\Tools / node-v22 / bundle / 重启守护进程 / edge-debug / server-debug.
 ---
 
 # 同步到 Windows bundle（sync-bundle）
 
 把本机（WSL/Linux）改动的**插件 / CLI / 文档**镜像进 Windows 上已解压的 bundle，免去手工 copy。本工程改动后、要在 Windows 侧 opencode 生效前必跑。
 
-## 单一事实源与默认目标
+## 三个工程 × 三个 bundle（同处 Windows 便携 runtime）
 
-- 脚本：`opencode-session-mgmt/scripts/sync-bundle.sh`（脚本自身会 `cd` 到仓库根，从哪运行都行）。
-- 默认 bundle（WSL 路径）：`/mnt/d/Tools/node-v22.23.2-win-x64/opencode-sm-bundle-0.1.0`
-  等价于 Windows 侧 `D:\Tools\node-v22.23.2-win-x64\opencode-sm-bundle-0.1.0`。
-- 换目标：`BUNDLE="/mnt/d/其它路径/opencode-sm-bundle-0.1.0" bash scripts/sync-bundle.sh`。
+根仓库 `/data/opencode` 下有三个独立工程，各带自己的 `scripts/sync-bundle.sh`，默认都指向 `D:\Tools\node-v22.23.2-win-x64` 下的同名 bundle：
 
-## 运行
+| 工程（仓库子目录） | 脚本 | 默认 bundle（WSL） | 默认 bundle（Windows） |
+|---|---|---|---|
+| opencode-session-mgmt | scripts/sync-bundle.sh | /mnt/d/Tools/node-v22.23.2-win-x64/opencode-sm-bundle-0.1.0 | D:\Tools\node-v22.23.2-win-x64\opencode-sm-bundle-0.1.0 |
+| opencode-edge-debug | scripts/sync-bundle.sh | /mnt/d/Tools/node-v22.23.2-win-x64/opencode-edge-debug-bundle-0.0.1 | D:\Tools\node-v22.23.2-win-x64\opencode-edge-debug-bundle-0.0.1 |
+| opencode-server-debug | scripts/sync-bundle.sh | /mnt/d/Tools/node-v22.23.2-win-x64/opencode-server-debug-bundle-0.0.1 | D:\Tools\node-v22.23.2-win-x64\opencode-server-debug-bundle-0.0.1 |
+
+换目标：`BUNDLE="/mnt/d/其它路径/xxx-bundle" bash scripts/sync-bundle.sh`。
+
+## 运行（三个都跑，漏一个那个插件就看不到改动）
+
+每个工程各自跑一次（脚本会 `cd` 到自身仓库根，从哪运行都行）：
 
 ```bash
-cd opencode-session-mgmt
-bash scripts/sync-bundle.sh
+bash /data/opencode/opencode-session-mgmt/scripts/sync-bundle.sh
+bash /data/opencode/opencode-edge-debug/scripts/sync-bundle.sh
+bash /data/opencode/opencode-server-debug/scripts/sync-bundle.sh
 ```
 
-`FORCE_VENDOR=1` 强制重装 `vendor/mermaid-cli`（离线 Mermaid 渲染依赖，平时幂等跳过）。
+`FORCE_VENDOR=1` 强制重装 `vendor/mermaid-cli`（仅 session-mgmt 用到，离线 Mermaid 渲染依赖，平时幂等跳过）。
 
 ## 它做了什么（关键点）
 
@@ -30,6 +38,8 @@ bundle 是 **hoisted 模式**打包：每个 workspace 包在 bundle 里存在**
 - `packages/<ws>` 与 `node_modules/<pkgname>`
 
 插件实际 `import` 的是 `node_modules/<pkgname>`，**所以改了包必须两处都更新，否则不生效**。脚本用 rsync（`-aL --delete --exclude node_modules`，优先）或回退 cp，把 `packages/{shared,plugin,cli}` 同步到这两处，再同步 `docs/`，最后幂等安装 vendor/mermaid-cli。结尾校验同步目录**无符号链接**（整包须为真实文件，否则 Windows 上软链易断链致插件加载失败）。
+
+edge-debug / server-debug 两个脚本只**镜像插件源码**（保留 `node_modules` 与 `setup.*` 不被覆盖或删除），机制比 session-mgmt 简单，但同样结尾校验无符号链接、同样要求同步后重启守护进程。
 
 ## 前置条件
 
