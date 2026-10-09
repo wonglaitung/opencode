@@ -6,6 +6,7 @@ import { describe, expect, test } from "bun:test"
 import { Store } from "../src/db"
 import { requiredSlots } from "sm-shared"
 import { createWorkflowTools } from "../src/tools/workflow"
+import { extractBaselineHours, applyBaselineProposal } from "../src/tools/baseline-proposal"
 import { createReviewTools } from "../src/tools/review"
 
 const ctx = { sessionID: "s1" } as never
@@ -67,6 +68,18 @@ describe("workflow_baseline（基线预估工时，6.3）", () => {
     store.close()
   })
 
+  test("开发者消息经 hook 解析后服务端放行（端到端，防解析回归）", async () => {
+    const { store, tools } = setup()
+    store.mutateWorkflow("s1", () => {}) // 确保 workflow 状态已建（生产由启动流程保证）
+    // 模拟 chat.message hook 捕获开发者原话
+    applyBaselineProposal(store, "s1", "预算是 8 小时，开始做吧", "m1")
+    expect(store.get("s1")!.workflow!.baselineProposedByDev?.hours).toBe(8)
+    // 模型据开发者原话录入 → 服务端放行
+    await tools.workflow_baseline!.execute({ estimated_hours: 8, developer_confirmed: true } as never, ctx)
+    expect(store.get("s1")!.workflow!.baseline?.estimatedHours).toBe(8)
+    store.close()
+  })
+
   test("需 developer_confirmed，防 AI 杜撰基线", async () => {
     const { store, tools } = setup()
     await expect(
@@ -80,7 +93,7 @@ describe("workflow_baseline（基线预估工时，6.3）", () => {
     const { store, tools } = setup()
     await expect(
       tools.workflow_baseline!.execute({ estimated_hours: 4, developer_confirmed: true } as never, ctx),
-    ).rejects.toThrow(/未检测到开发者|不得自行填入/)
+    ).rejects.toThrow(/未检测到开发者|不得自行填入|数字/)
     expect(store.get("s1")?.workflow?.baseline).toBeUndefined()
     store.close()
   })
@@ -90,7 +103,7 @@ describe("workflow_baseline（基线预估工时，6.3）", () => {
     propose(store, 8)
     await expect(
       tools.workflow_baseline!.execute({ estimated_hours: 4, developer_confirmed: true } as never, ctx),
-    ).rejects.toThrow(/一致|不符/)
+    ).rejects.toThrow(/一致|不符|数字/)
     store.close()
   })
 
@@ -189,6 +202,41 @@ describe("reqdoc 知识库门禁（进入 prd 阶段前，2c）", () => {
       ctx,
     )
     expect(store.get("s1")!.workflow!.stages.prd.status).toBe("in_progress")
+    store.close()
+  })
+})
+
+describe("baseline-proposal（6.3 防杜撰解析，对抗加固）", () => {
+  test("带估值意图的工时表述被解析", () => {
+    expect(extractBaselineHours("预算是 8 小时，开始做吧")).toBe(8)
+    expect(extractBaselineHours("手写约 24 小时")).toBe(24)
+    expect(extractBaselineHours("大概 2 人天")).toBe(16)
+  })
+
+  test("闲聊误捕获被拒绝（无估值意图）", () => {
+    expect(extractBaselineHours("昨天会议开了 2 小时")).toBeNull()
+    expect(extractBaselineHours("3 天试用期")).toBeNull()
+    expect(extractBaselineHours("发布后观察 7 天")).toBeNull()
+  })
+
+  test("最新用户消息无工时表述则清空旧证据", () => {
+    const store = Store.memory()
+    store.mutateWorkflow("s1", (w) => {
+      w.baselineProposedByDev = { hours: 8, messageID: "old", at: Date.now() }
+    })
+    applyBaselineProposal(store, "s1", "好的，继续吧", "m2")
+    expect(store.get("s1")?.workflow?.baselineProposedByDev).toBeUndefined()
+    store.close()
+  })
+
+  test("含工时但无意图的闲聊清空旧证据（不污染为错误值）", () => {
+    const store = Store.memory()
+    store.mutateWorkflow("s1", (w) => {
+      w.baselineProposedByDev = { hours: 8, messageID: "old", at: Date.now() }
+    })
+    applyBaselineProposal(store, "s1", "刚开了 2 小时会", "m2")
+    // 既不清成 2（闲聊数值），也不保留 8（陈旧复用），而是清空
+    expect(store.get("s1")?.workflow?.baselineProposedByDev).toBeUndefined()
     store.close()
   })
 })

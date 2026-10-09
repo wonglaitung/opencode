@@ -184,7 +184,8 @@ export function createWorkflowTools(store: Store): Record<string, ToolDefinition
   const workflow_baseline = tool({
     description:
       "录入本会话的基线预估人工工时（项目经理在需求创建时给出的预估，如 8 小时），" +
-      "用于会话结束后与实际周期对比、计算 AI 提效百分比（6.3）。可重复调用以重设（幂等覆盖，记最新值）。",
+      "用于会话结束后与实际周期对比、计算 AI 提效百分比（6.3）。可重复调用以重设（幂等覆盖，记最新值）。" +
+      "只接受数字表述（如「8 小时」「2 天」）；非数字表述（如「半天」「十天左右」）系统无法识别，请换算成数字后给出。",
     args: {
       estimated_hours: z.number().positive().describe("预估人工工时（小时，可小数），由项目经理给出，如 8"),
       developer_confirmed: z
@@ -201,13 +202,13 @@ export function createWorkflowTools(store: Store): Record<string, ToolDefinition
       // developer_confirmed 自证无效，须有开发者在对话中明确给出的工时证据。
       if (!proposed) {
         throw new WorkflowOpError(
-          "基线预估须由开发者在对话中明确给出（如「8 小时」）；未检测到开发者提供的预估工时，请勿自行填入数值（防止 AI 杜撰基线毒化 6.3 提效对比）。",
+          "基线预估须由开发者在对话中用数字明确给出（如「8 小时」「2 天」）；系统只接受数字形式的工时表述，未检测到数字预估工时，请勿自行填入数值（防止 AI 杜撰基线毒化 6.3 提效对比）。请直接报一个工时数字，例如「这个需求大概 8 小时」。",
         )
       }
       const tol = Math.max(0.5, proposed.hours * 0.1)
       if (Math.abs(proposed.hours - args.estimated_hours) > tol) {
         throw new WorkflowOpError(
-          `基线预估须与开发者在对话中给出的 ${proposed.hours} 小时一致；本次录入 ${args.estimated_hours} 小时不符，请按开发者实际表述录入（developer_confirmed 不得为 AI 自造数值）。`,
+          `基线预估须与开发者在对话中给出的数字一致：检测到 ${proposed.hours} 小时，本次录入 ${args.estimated_hours} 小时不符（系统只认数字表述，如「8 小时」）。请按开发者实际所报数字录入，developer_confirmed 不得为 AI 自造数值。`,
         )
       }
       const prev = wf?.baseline
