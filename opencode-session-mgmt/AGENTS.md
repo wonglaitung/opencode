@@ -63,7 +63,7 @@ docs/                # 设计文档族：session-management.md（通用机制/�
 
 7. **软约束不算不变量**：只靠 prompt 让模型「自觉不做 X」等于没约束——模型可随时走全量或越界写。任何「不该做 X」须有**服务端拒收**（如 `kb.editScope` 作用域锁 + 越界写入拒收），把不变量落到代码而非提示词。依据与踩坑史见 `docs/agents-notes.md`。
 
-交付验证口径：`bun run typecheck` + 三包分目录全量 `bun test`（勿在仓库根跑）+ `bun run acceptance:derive` + `bun run eval:dry`。模型驱动评测（判模型遵循度，如定点修订 r40）须 `EVAL_EXECUTE=1`；本地 qwen3 须再加 `EVAL_DISABLE_THINKING=1`——否则长 system prompt 下模型先「思考」耗尽 token、零工具调用直至超时，评测测不出规则遵循（实测 53s / 零调用 vs 关思考后秒级出工具调用）。
+交付验证口径：`bun run typecheck` + 三包分目录全量 `bun test`（勿在仓库根跑）+ `bun run acceptance:derive` + `bun run eval:dry`。模型驱动评测（判模型遵循度，如定点修订 r40）须 `EVAL_EXECUTE=1`；本地 qwen3 须再加 `EVAL_DISABLE_THINKING=1`——否则长 system prompt 下模型先「思考」耗尽 token、零工具调用直至超时，评测测不出规则遵循（实测 53s / 零调用 vs 关思考后秒级出工具调用）；**端点一律用 vLLM**——SGLang 同变体跨轮 ±20% 方差且上下文上限仅 21879（vLLM 为 102400），长场景在 SGLang 上必挂（r13 曾因此必红），SGLang 跑出的数字作废。
 
 ## 方案呈现：技术细节不能替代用户视角
 

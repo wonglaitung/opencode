@@ -821,17 +821,21 @@ export const SCENARIOS: Scenario[] = [
     })(),
     userTurn:
       "都齐了，组装吧。系统是柜台跨行转账：使用角色是柜员和客户，目标是缩短单笔处理时间到 3 分钟以内、降低柜面压力。主流程：柜员点击发起转账，系统校验后处理，成功后通知客户并归档。异常：网络超时自动冲正、同一笔交易被重复点击需去重、失败重试有上限。数据安全：手机号脱敏展示、关键操作留痕并复核。权限：仅本支行柜员与复核员可查看。",
-    // 口径演进（对抗审查第十、十一轮）：
+    // 口径演进（对抗审查第十、十一轮 + 本次）：
     // 第十轮发现原判据「模型正文里渲染出 PRD + 五维分」在奖励手写产物（规则明令不得手写、
     // 评测器又不执行工具），先降级为「期望 reqdoc_assemble」。
     // 第十一轮让评测器**执行真实工具**（EVAL_EXECUTE=1），产物真实落盘，故恢复质量判据：
     // 这次评的是 `reqdoc_assemble` 的**真实产物**（render/score 判据只认 artifact）。
-    // 阈值沿用原值（minTotal 60 / 三维下限），保证与第十轮之前的历史分数可比。
+    // 本次新增 flowClosure/compliance 下限：实测 qwen3 跳步组装（先 assemble 后 ingest、
+    // 自造地址 1.1~2.4 被服务端拒收×4），口述材料（脱敏/归档）从未进产物，却靠预置槽位
+    // 拿 75 分过 60 线——「做对≈100」与「跳步=75」不可分，判据对坏实现也绿（AGENTS.md 第 6 条）。
+    // 下限取坏/好两态中点之下：坏 run flowClosure 5、compliance 6 必红；材料落地后
+    // 「成功后/归档」「脱敏/留痕」关键词在场 → 20/16 必绿。历史分数与旧口径不可比（旧口径混有误放过的坏 run）。
     judge: {
       kind: "score",
       renderMarkers: ["业务需求说明书", "功能点"],
       minTotal: 60,
-      dimMin: { businessValue: 5, edgeControl: 15, authority: 5 },
+      dimMin: { businessValue: 5, edgeControl: 15, authority: 5, flowClosure: 10, compliance: 10 },
     },
   },
   {
