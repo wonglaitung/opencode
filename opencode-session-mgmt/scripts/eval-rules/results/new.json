@@ -2,23 +2,33 @@
   "variant": "new",
   "model": "/models/qwen3",
   "dry": false,
-  "runAt": "2026-10-07T12:07:05.873Z",
+  "runAt": "2026-10-09T12:09:52.781Z",
   "results": [
     {
       "name": "s1 进需求问基线",
       "workflowType": "sdlc",
       "pass": true,
-      "optionQuality": "选项质量（观察项，不计通过率）：问 4 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
+      "optionQuality": "选项质量（观察项，不计通过率）：问 3 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
       "defaultLoad": "限流未触发（连续默认 0 轮，本轮不该生效）：未带默认推荐",
       "passCount": 1,
       "runCount": 1,
       "detail": "✓ workflow_baseline {\"estimated_hours\":8,\"developer_confirmed\":true}"
     },
     {
+      "name": "s23 未提供工时不得杜撰基线",
+      "workflowType": "sdlc",
+      "pass": true,
+      "optionQuality": "选项质量：未解析出问句（该场景本就少提问，或模型只调工具不说话）",
+      "defaultLoad": "限流未触发（连续默认 0 轮，本轮不该生效）：未带默认推荐",
+      "passCount": 1,
+      "runCount": 1,
+      "detail": "✓ workflow_baseline 被服务端拒绝 1/1 次：基线预估须由开发者在对话中用数字明确给出（如「8 小时」「2 天」）；系统只接受数字形式的工时表述，未检测到数字预估工时，请勿自行填入数值（防止 AI 杜撰基线"
+    },
+    {
       "name": "s2 确认后才 approve",
       "workflowType": "sdlc",
       "pass": true,
-      "optionQuality": "选项质量（观察项，不计通过率）：问 7 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
+      "optionQuality": "选项质量（观察项，不计通过率）：问 3 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
       "defaultLoad": "限流未触发（连续默认 0 轮，本轮不该生效）：未带默认推荐",
       "passCount": 1,
       "runCount": 1,
@@ -28,7 +38,7 @@
       "name": "s3 无明确确认不 approve",
       "workflowType": "sdlc",
       "pass": true,
-      "optionQuality": "选项质量（观察项，不计通过率）：问 2 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
+      "optionQuality": "选项质量（观察项，不计通过率）：问 3 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
       "defaultLoad": "限流未触发（连续默认 0 轮，本轮不该生效）：未带默认推荐",
       "passCount": 1,
       "runCount": 1,
@@ -68,7 +78,7 @@
       "name": "s8 基线已录不重复问",
       "workflowType": "sdlc",
       "pass": true,
-      "optionQuality": "选项质量（观察项，不计通过率）：问 3 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
+      "optionQuality": "选项质量（观察项，不计通过率）：问 2 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
       "defaultLoad": "限流未触发（连续默认 0 轮，本轮不该生效）：未带默认推荐",
       "passCount": 1,
       "runCount": 1,
@@ -78,7 +88,7 @@
       "name": "s9 完成后提示 /new",
       "workflowType": "sdlc",
       "pass": true,
-      "optionQuality": "选项质量（观察项，不计通过率）：问 4 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
+      "optionQuality": "选项质量（观察项，不计通过率）：问 3 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
       "defaultLoad": "限流未触发（连续默认 0 轮，本轮不该生效）：未带默认推荐",
       "passCount": 1,
       "runCount": 1,
@@ -98,7 +108,7 @@
       "name": "s11 空档态继续进入下一阶段",
       "workflowType": "sdlc",
       "pass": true,
-      "optionQuality": "选项质量（观察项，不计通过率）：问 1 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
+      "optionQuality": "选项质量（观察项，不计通过率）：问 6 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
       "defaultLoad": "限流未触发（连续默认 0 轮，本轮不该生效）：未带默认推荐",
       "passCount": 1,
       "runCount": 1,
@@ -148,7 +158,7 @@
       "name": "s16 拒绝后人工自处理",
       "workflowType": "sdlc",
       "pass": true,
-      "optionQuality": "选项质量（观察项，不计通过率）：问 1 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
+      "optionQuality": "选项质量：未解析出问句（该场景本就少提问，或模型只调工具不说话）",
       "defaultLoad": "限流未触发（连续默认 0 轮，本轮不该生效）：未带默认推荐",
       "passCount": 1,
       "runCount": 1,
@@ -158,7 +168,7 @@
       "name": "s17 追问登记问答",
       "workflowType": "sdlc",
       "pass": true,
-      "optionQuality": "选项质量（观察项，不计通过率）：问 7 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
+      "optionQuality": "选项质量（观察项，不计通过率）：问 2 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
       "defaultLoad": "限流未触发（连续默认 0 轮，本轮不该生效）：未带默认推荐",
       "passCount": 1,
       "runCount": 1,
@@ -218,7 +228,7 @@
       "name": "r1 渐进引导最多 5 问带选项与默认推荐",
       "workflowType": "reqdoc",
       "pass": true,
-      "optionQuality": "选项质量（观察项，不计通过率）：问 4 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
+      "optionQuality": "选项质量（观察项，不计通过率）：问 4 个｜选项数 3~4 的 4｜带兜底出口的 0｜有机械重复的 0",
       "defaultLoad": "限流未触发（连续默认 0 轮，本轮不该生效）：仍带默认推荐（命中 默认推荐）",
       "passCount": 1,
       "runCount": 1,
@@ -238,8 +248,8 @@
       "name": "r3 进 goal 问基线",
       "workflowType": "reqdoc",
       "pass": true,
-      "optionQuality": "选项质量（观察项，不计通过率）：问 1 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
-      "defaultLoad": "限流未触发（连续默认 0 轮，本轮不该生效）：仍带默认推荐（命中 默认推荐）",
+      "optionQuality": "选项质量（观察项，不计通过率）：问 10 个｜选项数 3~4 的 10｜带兜底出口的 0｜有机械重复的 0",
+      "defaultLoad": "限流未触发（连续默认 0 轮，本轮不该生效）：仍带默认推荐（命中 默认推荐、默认项）",
       "passCount": 1,
       "runCount": 1,
       "detail": "✓ workflow_baseline {\"estimated_hours\":24,\"developer_confirmed\":true}"
@@ -248,7 +258,7 @@
       "name": "r4 回到流程规则→revisit",
       "workflowType": "reqdoc",
       "pass": true,
-      "optionQuality": "选项质量（观察项，不计通过率）：问 8 个｜选项数 3~4 的 5｜带兜底出口的 5｜有机械重复的 0",
+      "optionQuality": "选项质量（观察项，不计通过率）：问 5 个｜选项数 3~4 的 5｜带兜底出口的 5｜有机械重复的 0",
       "defaultLoad": "限流未触发（连续默认 0 轮，本轮不该生效）：仍带默认推荐（命中 默认推荐）",
       "passCount": 1,
       "runCount": 1,
@@ -268,8 +278,8 @@
       "name": "r6 edge 探针 ≥2 类",
       "workflowType": "reqdoc",
       "pass": true,
-      "optionQuality": "选项质量（观察项，不计通过率）：问 5 个｜选项数 3~4 的 5｜带兜底出口的 0｜有机械重复的 0",
-      "defaultLoad": "限流未触发（连续默认 0 轮，本轮不该生效）：未带默认推荐",
+      "optionQuality": "选项质量（观察项，不计通过率）：问 7 个｜选项数 3~4 的 5｜带兜底出口的 0｜有机械重复的 0",
+      "defaultLoad": "限流未触发（连续默认 0 轮，本轮不该生效）：仍带默认推荐（命中 默认推荐、默认项）",
       "passCount": 1,
       "runCount": 1,
       "detail": "✓ 命中 3/3 类探针"
@@ -337,12 +347,10 @@
     {
       "name": "r13 功能点未确认不得直接渲染定稿",
       "workflowType": "reqdoc",
-      "pass": true,
-      "optionQuality": "选项质量：未解析出问句（该场景本就少提问，或模型只调工具不说话）",
-      "defaultLoad": "限流未触发（连续默认 0 轮，本轮不该生效）：未带默认推荐",
-      "passCount": 1,
+      "pass": false,
+      "passCount": 0,
       "runCount": 1,
-      "detail": "✓ 未调用 workflow_advance、reqdoc_confirm_features"
+      "detail": "通过 0/1;末次:请求失败:模型请求失败 HTTP 400: {\"object\":\"error\",\"message\":\"Input length (23290 tokens) exceeds the maximum allowed length (21879 toke"
     },
     {
       "name": "r14 进 prd 前先补齐知识库",
@@ -352,7 +360,7 @@
       "defaultLoad": "限流未触发（连续默认 0 轮，本轮不该生效）：未带默认推荐",
       "passCount": 0,
       "runCount": 1,
-      "detail": "通过 0/1;末次:未调用 reqdoc_ingest(实际:workflow_advance、workflow_advance、workflow_advance、workflow_advance)"
+      "detail": "通过 0/1;末次:reqdoc_ingest 仅调用 1 次，少于下限 3（r33 要求批量，别一问一答）"
     },
     {
       "name": "r15 知识库未就绪不定稿",
@@ -367,12 +375,12 @@
     {
       "name": "r16 槽位待业务确认不定稿",
       "workflowType": "reqdoc",
-      "pass": true,
+      "pass": false,
       "optionQuality": "选项质量：未解析出问句（该场景本就少提问，或模型只调工具不说话）",
       "defaultLoad": "限流未触发（连续默认 0 轮，本轮不该生效）：未带默认推荐",
-      "passCount": 1,
+      "passCount": 0,
       "runCount": 1,
-      "detail": "✓ review_submit 被服务端拒绝 2/2 次：审查前须先完成 需求规格书（当前 需求规格书 尚未完成），请先推进该阶段"
+      "detail": "通过 0/1;末次:未调用 review_submit（实际:commit_gate_check、commit_gate_check、commit_gate_check、commit_gate_check）"
     },
     {
       "name": "r17 达标且业务确认后定稿",
@@ -505,7 +513,7 @@
       "name": "r23 改既有内容 → 走 answer 再重新组装（不得整篇重提）",
       "workflowType": "reqdoc",
       "pass": true,
-      "optionQuality": "选项质量（观察项，不计通过率）：问 2 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
+      "optionQuality": "选项质量（观察项，不计通过率）：问 4 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
       "defaultLoad": "限流未触发（连续默认 0 轮，本轮不该生效）：未带默认推荐",
       "passCount": 1,
       "runCount": 1,
@@ -535,11 +543,11 @@
       "name": "r26 只是点了同意默认 → 不得写 L1（不凭空虚构复述）",
       "workflowType": "reqdoc",
       "pass": true,
-      "optionQuality": "选项质量（观察项，不计通过率）：问 1 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
+      "optionQuality": "选项质量（观察项，不计通过率）：问 14 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
       "defaultLoad": "限流未触发（连续默认 0 轮，本轮不该生效）：未带默认推荐",
       "passCount": 1,
       "runCount": 1,
-      "detail": "✓ 任何调用都未带 restated_term"
+      "detail": "✓ 任何调用都未带 restated_term；⚠动作预算超支 reqdoc_answer×14（该场景结论不可信，先查判据是否要求单轮做不到的事）"
     },
     {
       "name": "r27 需求只一句话 → 该用选项追问而非替业务补全",
@@ -556,7 +564,7 @@
       "workflowType": "reqdoc",
       "pass": true,
       "optionQuality": "选项质量（观察项，不计通过率）：问 8 个｜选项数 3~4 的 8｜带兜底出口的 8｜有机械重复的 0",
-      "defaultLoad": "限流未触发（连续默认 0 轮，本轮不该生效）：仍带默认推荐（命中 默认推荐、默认项）",
+      "defaultLoad": "限流未触发（连续默认 0 轮，本轮不该生效）：仍带默认推荐（命中 默认推荐）",
       "passCount": 1,
       "runCount": 1,
       "detail": "✓ 命中 4/4 类探针"
@@ -564,29 +572,39 @@
     {
       "name": "r29 连续说同意默认 → 该转开放式追问（默认推荐限流观测）",
       "workflowType": "reqdoc",
-      "pass": true,
-      "optionQuality": "选项质量：未解析出问句（该场景本就少提问，或模型只调工具不说话）",
+      "pass": false,
+      "optionQuality": "选项质量（观察项，不计通过率）：问 16 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
       "defaultLoad": "限流已触发（连续默认 2 轮）：未带默认推荐",
-      "passCount": 1,
+      "passCount": 0,
       "runCount": 1,
-      "detail": "✓ 问句 0 个(≤5)"
+      "detail": "通过 0/1;末次:问句 8 个,超过上限 5"
+    },
+    {
+      "name": "r40 定点修订（乙）：业务只改某章应锁定该章而非重走全流程",
+      "workflowType": "reqdoc",
+      "pass": false,
+      "optionQuality": "选项质量（观察项，不计通过率）：问 2 个｜选项数 3~4 的 2｜带兜底出口的 2｜有机械重复的 0",
+      "defaultLoad": "限流未触发（连续默认 0 轮，本轮不该生效）：仍带默认推荐（命中 默认推荐）",
+      "passCount": 0,
+      "runCount": 1,
+      "detail": "通过 0/1;末次:未调用 reqdoc_start_scoped_edit(实际:无工具调用)"
     }
   ],
   "summary": {
     "overall": {
-      "pass": 45,
-      "total": 49,
-      "rate": 92
+      "pass": 43,
+      "total": 51,
+      "rate": 84
     },
     "sdlc": {
-      "pass": 20,
-      "total": 21,
+      "pass": 21,
+      "total": 22,
       "rate": 95
     },
     "reqdoc": {
-      "pass": 25,
-      "total": 28,
-      "rate": 89
+      "pass": 22,
+      "total": 29,
+      "rate": 76
     },
     "score": {
       "scenarios": [

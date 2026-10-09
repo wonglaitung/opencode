@@ -1078,14 +1078,15 @@ export const SCENARIOS: Scenario[] = [
       enter(s, "prd")
       return finish(s)
     })(),
-    userTurn: "这份需求书整体不用改，只把第 3 章「需求概述」里的背景描述换掉，怎么弄？",
-    // 模型应先回显 PRD 章目录+标题+内容预览请业务认领确认再锁；本场景单轮只判是否调用锁定工具。
-    // 乙方案（对话引导·保留原稿）：锁定后只引导该章、改的内容标 source=问答，越界写入被服务端拒收。
+    userTurn: "这份需求书整体不用改，就是第 3 章「需求概述」（已确认是第 3 章），把里面的背景描述换掉，怎么弄？",
+    // 乙方案（对话引导·保留原稿）：正确行为二选一——①直接 reqdoc_start_scoped_edit 锁第 3 章；
+    // ②先回显章目录+预览请业务再认领确认再锁。两者都不算重走全流程。唯一的错误是模型无视定点
+    // 修订能力、重答全部必填项（workflow_baseline / reqdoc_confirm_features / reqdoc_assemble）。
+    // 故判据用 no_tool 禁重走全流程工具，而非强求单轮立即上锁（那会与「先确认再锁」的引导相冲突）。
     judge: {
-      kind: "tool",
-      expectTool: "reqdoc_start_scoped_edit",
-      args: { chapter: 3 },
-      note: "进入定点修订锁定第 3 章，而非重答全部必填项；详见 docs/reqdoc-scoped-edit.md",
+      kind: "no_tool",
+      forbidTool: ["workflow_baseline", "reqdoc_confirm_features", "reqdoc_assemble"],
+      note: "未重走全流程（未 re-baseline / 未重做功能点拆解 / 未抢先组装）即通过；详见 docs/reqdoc-scoped-edit.md",
     },
   },
 ]
