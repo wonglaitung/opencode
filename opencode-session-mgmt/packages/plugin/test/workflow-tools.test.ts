@@ -49,8 +49,17 @@ describe("commit_force_unlock", () => {
 })
 
 describe("workflow_baseline（基线预估工时，6.3）", () => {
+  // 6.3 防杜撰：developer_confirmed=true 时必须存在开发者给出的工时证据
+  // （baselineProposedByDev），否则服务端拒收。测试里手动置证据模拟 hook 捕获。
+  function propose(store: Store, hours: number): void {
+    store.mutateWorkflow("s1", (w) => {
+      w.baselineProposedByDev = { hours, messageID: "t", at: Date.now() }
+    })
+  }
+
   test("录入预估工时并记录 setAt", async () => {
     const { store, tools } = setup()
+    propose(store, 8)
     await tools.workflow_baseline!.execute({ estimated_hours: 8, developer_confirmed: true } as never, ctx)
     const baseline = store.get("s1")!.workflow!.baseline
     expect(baseline?.estimatedHours).toBe(8)
@@ -67,9 +76,29 @@ describe("workflow_baseline（基线预估工时，6.3）", () => {
     store.close()
   })
 
+  test("未提供预估不得自行填入（服务端拒收，防数据毒化）", async () => {
+    const { store, tools } = setup()
+    await expect(
+      tools.workflow_baseline!.execute({ estimated_hours: 4, developer_confirmed: true } as never, ctx),
+    ).rejects.toThrow(/未检测到开发者|不得自行填入/)
+    expect(store.get("s1")?.workflow?.baseline).toBeUndefined()
+    store.close()
+  })
+
+  test("数值须与开发者给出一致", async () => {
+    const { store, tools } = setup()
+    propose(store, 8)
+    await expect(
+      tools.workflow_baseline!.execute({ estimated_hours: 4, developer_confirmed: true } as never, ctx),
+    ).rejects.toThrow(/一致|不符/)
+    store.close()
+  })
+
   test("重设为幂等覆盖（记最新值）", async () => {
     const { store, tools } = setup()
+    propose(store, 8)
     await tools.workflow_baseline!.execute({ estimated_hours: 8, developer_confirmed: true } as never, ctx)
+    propose(store, 12)
     await tools.workflow_baseline!.execute({ estimated_hours: 12, developer_confirmed: true } as never, ctx)
     expect(store.get("s1")!.workflow!.baseline?.estimatedHours).toBe(12)
     store.close()

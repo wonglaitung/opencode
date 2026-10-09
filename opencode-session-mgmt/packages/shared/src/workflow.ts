@@ -272,6 +272,13 @@ export interface WorkflowState {
    */
   baseline?: BaselineEstimate
   /**
+   * 基线预估由开发者在对话中明确给出的证据（6.3 防 AI 杜撰）：chat.message hook
+   * 捕获开发者消息里的工时表述后写入；`workflow_baseline` 在 `developer_confirmed=true`
+   * 时须与之匹配，否则拒收——防止模型自造基线毒化 6.3 AI 提效对比分母。
+   * 可选字段：hook 未捕获时缺省。
+   */
+  baselineProposedByDev?: { hours: number; messageID: string; at: number }
+  /**
    * reqdoc 功能点清单（重构核心：prd 前置功能点拆解，业务确认后写入）。
    * 可选字段：确认前缺省；sdlc 恒缺省。随汇报上行。
    */

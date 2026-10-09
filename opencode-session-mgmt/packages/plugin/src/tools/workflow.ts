@@ -195,7 +195,22 @@ export function createWorkflowTools(store: Store): Record<string, ToolDefinition
       if (args.developer_confirmed !== true) {
         throw new WorkflowOpError("基线预估须由开发者明确给出或确认：developer_confirmed 必须为 true")
       }
-      const prev = store.get(context.sessionID)?.workflow?.baseline
+      const wf = store.get(context.sessionID)?.workflow
+      const proposed = wf?.baselineProposedByDev
+      // 服务端防线（types.ts 既定：测「尝试了也不得成功」，不测模型谨慎）：
+      // developer_confirmed 自证无效，须有开发者在对话中明确给出的工时证据。
+      if (!proposed) {
+        throw new WorkflowOpError(
+          "基线预估须由开发者在对话中明确给出（如「8 小时」）；未检测到开发者提供的预估工时，请勿自行填入数值（防止 AI 杜撰基线毒化 6.3 提效对比）。",
+        )
+      }
+      const tol = Math.max(0.5, proposed.hours * 0.1)
+      if (Math.abs(proposed.hours - args.estimated_hours) > tol) {
+        throw new WorkflowOpError(
+          `基线预估须与开发者在对话中给出的 ${proposed.hours} 小时一致；本次录入 ${args.estimated_hours} 小时不符，请按开发者实际表述录入（developer_confirmed 不得为 AI 自造数值）。`,
+        )
+      }
+      const prev = wf?.baseline
       store.mutateWorkflow(context.sessionID, (workflow) => {
         workflow.baseline = { estimatedHours: args.estimated_hours, setAt: Date.now() }
       })

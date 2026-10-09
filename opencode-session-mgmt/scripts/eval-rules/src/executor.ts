@@ -33,6 +33,7 @@ import { createReqdocConventionReviewTool } from "../../../packages/plugin/src/t
 import { createWorkflowStartTools } from "../../../packages/plugin/src/tools/workflow-start"
 import { createOpenIdeTool } from "../../../packages/plugin/src/open-ide/open-ide-tool"
 import { createLockTools } from "../../../packages/plugin/src/open-ide/tools/lock-tools"
+import { extractBaselineHours } from "../../../packages/plugin/src/tools/baseline-proposal"
 import type { LockRegistry } from "../../../packages/plugin/src/open-ide/lock"
 
 /**
@@ -199,7 +200,7 @@ function readArtifact(root: string): string | undefined {
 export async function executeTurns(
   state: WorkflowState,
   model: (prior: PriorMessage[]) => Promise<ModelOutput>,
-  opts: { maxTurns?: number; sessionID?: string; lockedFiles?: string[] } = {},
+  opts: { maxTurns?: number; sessionID?: string; lockedFiles?: string[]; userTurn?: string } = {},
 ): Promise<ExecResult> {
   const sessionID = opts.sessionID ?? "eval"
   const maxTurns = opts.maxTurns ?? 4
@@ -209,6 +210,17 @@ export async function executeTurns(
   const store = Store.memory(() => state.type)
   try {
     seed(store, sessionID, state)
+    // 模拟 chat.message hook：开发者在 userTurn 里给出的工时，作为服务端校验证据
+    // 写入 baselineProposedByDev（与线上 hook 捕获等价），使 workflow_baseline 的
+    // 防线在评测里可复现——开发者真报数时放行，模型自造时被拒。
+    if (opts.userTurn) {
+      const hours = extractBaselineHours(opts.userTurn)
+      if (hours !== null) {
+        store.mutateWorkflow(sessionID, (w) => {
+          w.baselineProposedByDev = { hours, messageID: "userTurn", at: Date.now() }
+        })
+      }
+    }
     // 预置文件锁：解锁提示有两条注入路径（完成块 lockedFiles>0、review_submit 返回 store 有锁），
     // 场景要测「有锁时会提示解锁」就必须真的有锁，否则判据不可满足（s22 曾稳定 0/3）。
     for (const f of opts.lockedFiles ?? []) store.lockFile(sessionID, f)

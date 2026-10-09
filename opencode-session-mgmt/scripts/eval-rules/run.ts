@@ -162,7 +162,7 @@ for (const sc of scenarios) {
           executeTurns(
             sc.state,
             async (prior) => (prior.length === 0 ? first : chatComplete(system, sc.userTurn, EVAL_TOOLS, prior)),
-            { lockedFiles: sc.lockedFiles },
+            { lockedFiles: sc.lockedFiles, userTurn: sc.userTurn },
           ),
         )
         // 判据看全部轮次（见 executor 的 allCalls 注释：只看最后一轮会把「已完成」判成未调用）
