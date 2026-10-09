@@ -2,7 +2,7 @@
   "variant": "new",
   "model": "/models/qwen3",
   "dry": false,
-  "runAt": "2026-10-09T15:28:52.130Z",
+  "runAt": "2026-10-09T18:07:13.130Z",
   "results": [
     {
       "name": "s1 进需求问基线",
@@ -321,10 +321,10 @@
     {
       "name": "r12 功能点拆解确认（prd 核心环节）",
       "workflowType": "reqdoc",
-      "pass": false,
-      "passCount": 0,
+      "pass": true,
+      "passCount": 1,
       "runCount": 1,
-      "detail": "通过 0/1;末次:请求失败:The operation timed out."
+      "detail": "✓ reqdoc_confirm_features {}"
     },
     {
       "name": "r13 功能点未确认不得直接渲染定稿",
@@ -371,10 +371,10 @@
     {
       "name": "r18 材料齐全 → 组装成稿并评真实产物质量（高分）",
       "workflowType": "reqdoc",
-      "pass": true,
-      "passCount": 1,
+      "pass": false,
+      "passCount": 0,
       "runCount": 1,
-      "detail": "✓ 渲染命中 2 标记;总分 75(需≥60) [businessValue:12/12 flowClosure:5/20 edgeControl:22/22 compliance:6/16 authority:8/8 material:8/8 nfr:7/7 acceptability:7/7]",
+      "detail": "通过 0/1;末次:✗ 渲染命中 2 标记;总分 75(需≥60);未达标:flowClosure 5<10、compliance 6<10 [businessValue:12/12 flowClosure:5/20 edgeControl:22/22 compliance:6/16 authority:8/8 material:8/8 nfr:7/7 acceptability:7/7]",
       "scoreAvg": {
         "total": 75,
         "dims": {
@@ -475,8 +475,8 @@
       "name": "r22 覆盖率达标进 prd（正向）",
       "workflowType": "reqdoc",
       "pass": true,
-      "optionQuality": "选项质量（观察项，不计通过率）：问 5 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
-      "defaultLoad": "限流未触发（连续默认 0 轮，本轮不该生效）：仍带默认推荐（命中 默认推荐）",
+      "optionQuality": "选项质量（观察项，不计通过率）：问 3 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
+      "defaultLoad": "限流未触发（连续默认 0 轮，本轮不该生效）：未带默认推荐",
       "passCount": 1,
       "runCount": 1,
       "detail": "✓ workflow_advance {\"stage\":\"prd\",\"action\":\"enter\"}"
