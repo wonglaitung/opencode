@@ -361,6 +361,18 @@ export interface ReqdocKbState {
     features: ReqdocFeature[]
     at: number
   }
+  /**
+   * 定点修订（乙）作用域锁：进入后 ingest/answer 只接受该章地址，越界写入服务端拒收。
+   * 编辑前冻结 `snapshotBefore` 作差异基准；绑 `sessionId`/写入时刻，会话结束或新 baseline 强清，
+   * 杜绝跨会话残留误拒（对抗 B）。见 docs/reqdoc-scoped-edit.md。
+   */
+  editScope?: {
+    chapter: number
+    snapshotBefore: import("./reqdoc-slots").ReqdocSlot[]
+    active: boolean
+    sessionId?: string
+    at: number
+  }
   updatedAt: number
 }
 

@@ -155,7 +155,7 @@ const SessionMgmtPlugin: Plugin = async (input) => {
       ...createReqdocFeatureTools(store),
       // 阶段 2c：槽位工具组为唯一渲染路径，旧 reqdoc_score/probe/check/patch/field_dict 已移除
       ...createReqdocKbTools(store),
-       ...createReqdocExportTool(),
+       ...createReqdocExportTool(store),
        ...createReqdocImportTool(),
        ...createReqdocConventionReviewTool(),
        open_ide: createOpenIdeTool(entries, registry),

@@ -504,9 +504,36 @@ export const EVAL_TOOLS: OpenAITool[] = [
         type: "object",
         properties: {
           source: str("PRD Markdown 相对项目根路径（06_需求规格产出/N_名称/xxx.md）"),
+          mode: str("定点修订（乙）导出形态：chapter=锁定章整章；diff=相对编辑前快照的差异（默认）。不传则按 source 整篇导出"),
+          chapter: { type: "number", description: "定点导出目标章号；省略时取当前定点修订锁定章" },
         },
         required: ["source"],
       },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "reqdoc_start_scoped_edit",
+      description:
+        "定点修订（乙）入口：锁定某一章后只引导该章。业务说「改第 N 章」且已回显 PRD 章目录+标题+内容预览请其认领确认后，调此工具锁定。" +
+        "锁定后 ingest/answer 越界被服务端拒收（硬不变量）。仅 reqdoc 工作流有效。",
+      parameters: {
+        type: "object",
+        properties: {
+          chapter: { type: "number", description: "已与业务确认的要修改的 PRD 章号（如 2）；须先回显章目录请业务认领" },
+        },
+        required: ["chapter"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "reqdoc_end_scoped_edit",
+      description:
+        "定点修订（乙）结束：释放作用域锁。业务确认改完、导出差异后调用；锁释放后 ingest/answer 恢复全章可写。仅 reqdoc 工作流有效。",
+      parameters: { type: "object", properties: {} },
     },
   },
 ]

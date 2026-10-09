@@ -11,9 +11,17 @@
  */
 import { basename, dirname, extname, join } from "node:path"
 import { existsSync } from "node:fs"
-import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, writeFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { tool, type ToolDefinition } from "@opencode-ai/plugin"
+import {
+  chapterDiff,
+  chapterOf,
+  crossChapterImpact,
+  templateSchema,
+  type ReqdocKbState,
+} from "sm-shared"
+import type { Store } from "../db"
 import {
   Document,
   HeadingLevel,
@@ -277,20 +285,91 @@ export async function mdToDocx(md: string): Promise<Buffer> {
   return Buffer.from(await Packer.toBuffer(doc))
 }
 
-export function createReqdocExportTool(): Record<string, ToolDefinition> {
+export function createReqdocExportTool(store: Store): Record<string, ToolDefinition> {
   const reqdoc_export = tool({
     description:
       "reqdoc Word 导出：将已渲染的 PRD Markdown 导出为 Word（.docx）交付件，与源 md 同目录归档。" +
       "在 reqdoc_assemble 生成 PRD（写入 07_需求规格产出）并定稿后调用；" +
-      "source 填 PRD Markdown 相对项目根路径（如 07_需求规格产出/N_名称/xxx.md）。",
+      "source 填 PRD Markdown 相对项目根路径（如 07_需求规格产出/N_名称/xxx.md）。" +
+      "定点修订（乙）可选 mode：chapter=导出锁定章整章、diff=只导出相对编辑前快照的增/改/删（默认 diff）；" +
+      "此时无需 source，直接从知识库生成，并附单向提醒、原稿节映射提示与跨章影响。",
     args: {
-      source: z.string().describe("PRD Markdown 相对项目根路径（07_需求规格产出/N_名称/xxx.md）"),
+      source: z.string().describe("PRD Markdown 相对项目根路径（07_需求规格产出/N_名称/xxx.md）；定点修订导出时不需要"),
+      mode: z
+        .enum(["chapter", "diff"])
+        .optional()
+        .describe("定点修订（乙）导出形态：chapter=锁定章整章；diff=相对编辑前快照的差异（默认）。不传则按 source 整篇导出。"),
+      chapter: z.number().optional().describe("定点导出目标章号；省略时取当前定点修订锁定章（kb.editScope.chapter）"),
     },
     async execute(args, context) {
+      const root = projectRoot(context)
+      // 定点修订（乙）差异/整章导出：从知识库直接生成
+      if (args.mode) {
+        const kb = store.get(context.sessionID)?.workflow?.kb as ReqdocKbState | undefined
+        if (!kb) throw new Error("未找到需求知识库状态，无法定点导出。请先走 reqdoc 流程。")
+        const target = args.chapter ?? kb.editScope?.chapter
+        if (target === undefined) throw new Error("定点导出须指定 chapter（或先进入定点修订锁定章）。")
+        const schema = templateSchema()
+        const title = schema?.chapters.find((c) => c.number === target)?.title ?? `第${target}章`
+        const lines: string[] = []
+        if (args.mode === "diff") {
+          if (!kb.editScope?.active) {
+            throw new Error("差异导出须先进入定点修订（editScope 已激活并冻结编辑前快照）。整章导出可用 mode:chapter。")
+          }
+          const d = chapterDiff(kb.editScope.snapshotBefore, kb.slots, target)
+          lines.push(`# 定点修订 · 第${target}章《${title}》差异导出`, "")
+          lines.push(
+            "> ⚠ 单向提醒：本导出是「系统 → 你的原稿」的产物。你把内容贴回原稿后，系统不会回读你手改的原稿；" +
+              "后续若再以原稿发起修订，须重新上传并说明改动，否则系统只认这份 PRD 的状态。",
+          )
+          lines.push("", "## 改动内容（请把下列内容贴回你原稿对应节）")
+          for (const a of [...d.added, ...d.changed]) {
+            const s = kb.slots.find((x) => x.address === a)
+            if (!s) continue
+            lines.push(`### ${a}（${d.added.includes(a) ? "新增" : "改写"}）`, s.content, "")
+          }
+          if (d.removed.length) {
+            lines.push("## 已移除（retired / 消失）")
+            for (const a of d.removed) lines.push(`- ${a}`)
+            lines.push("")
+          }
+        } else {
+          const inCh = kb.slots.filter((s) => chapterOf(s.address) === target)
+          lines.push(`# 定点修订 · 第${target}章《${title}》整章导出`, "")
+          lines.push(
+            `> ⚠ 单向提醒：贴回原稿后系统不回读；原稿节映射：本导出对应 PRD 第${target}章《${title}》，` +
+              "若你原稿该部分标题不同请按内容自行对应到原稿相应节。",
+          )
+          lines.push("")
+          for (const s of inCh) {
+            lines.push(`### ${s.address}`, s.content, "")
+          }
+        }
+        const impact = crossChapterImpact(kb.slots, target)
+        if (impact.length) {
+          lines.push("## 跨章影响（仅供参考，不阻断）")
+          for (const x of impact) lines.push(`- ${x}`)
+          lines.push("")
+        }
+        const md = lines.join("\n")
+        const buf = await mdToDocx(md)
+        const outName = args.mode === "diff" ? `定点修订_第${target}章_差异` : `定点修订_第${target}章_整章`
+        const outDir = join(root, "07_需求规格产出")
+        await mkdir(outDir, { recursive: true })
+        const outMd = join(outDir, `${outName}.md`)
+        const outDocx = outMd.replace(/\.md$/, ".docx")
+        await Bun.write(outMd, md)
+        await Bun.write(outDocx, buf)
+        return (
+          `已导出定点修订（${args.mode === "diff" ? "差异" : "整章"}）第${target}章《${title}》：\n` +
+          `- ${outMd}\n- ${outDocx}\n` +
+          `⚠ 请务必转述给用户：① 贴回原稿后系统不回读（单向）；② 跨章影响见导出内「跨章影响」节；③ 原稿节映射提示见导出顶部。`
+        )
+      }
       if (extname(args.source).toLowerCase() !== ".md") {
         throw new Error("source 必须指向 .md 文件（reqdoc_export 只转换 Markdown 渲染的 PRD）")
       }
-      const mdPath = resolveWithinWorktree(projectRoot(context), args.source)
+      const mdPath = resolveWithinWorktree(root, args.source)
       let md: string
       try {
         md = await Bun.file(mdPath).text()

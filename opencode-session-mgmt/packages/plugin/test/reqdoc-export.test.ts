@@ -8,8 +8,10 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import JSZip from "jszip"
+import { Store } from "../src/db"
 import { createReqdocExportTool, mdToDocx } from "../src/tools/reqdoc-export"
 
+const store = Store.memory(() => "reqdoc" as const)
 const dirs: string[] = []
 
 function tempDir(): string {
@@ -87,7 +89,7 @@ describe("reqdoc_export", () => {
     const rel = "07_需求规格产出/1_名单排查/需求规格书.md"
     mkdirSync(dirname(join(worktree, rel)), { recursive: true })
     writeFileSync(join(worktree, rel), SAMPLE_MD, "utf8")
-    const tools = createReqdocExportTool()
+    const tools = createReqdocExportTool(store)
     const out = String(
       await tools.reqdoc_export!.execute({ source: rel } as never, { worktree } as never),
     )
@@ -99,7 +101,7 @@ describe("reqdoc_export", () => {
 
   test("非 .md 源被拒", async () => {
     const worktree = tempDir()
-    const tools = createReqdocExportTool()
+    const tools = createReqdocExportTool(store)
     await expect(
       tools.reqdoc_export!.execute({ source: "07_需求规格产出/需求规格书.docx" } as never, { worktree } as never),
     ).rejects.toThrow(/必须指向 .md/)
@@ -107,7 +109,7 @@ describe("reqdoc_export", () => {
 
   test("源文件不存在报错（提示先完成 PRD 渲染）", async () => {
     const worktree = tempDir()
-    const tools = createReqdocExportTool()
+    const tools = createReqdocExportTool(store)
     await expect(
       tools.reqdoc_export!.execute({ source: "07_需求规格产出/不存在/需求规格书.md" } as never, { worktree } as never),
     ).rejects.toThrow(/源文件不存在或不可读/)

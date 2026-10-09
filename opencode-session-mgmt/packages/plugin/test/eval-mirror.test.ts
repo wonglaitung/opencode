@@ -30,7 +30,7 @@ function runtimeToolNames(): Set<string> {
     createReqdocInitTool(),
     createReqdocFeatureTools(store),
     createReqdocKbTools(store),
-    createReqdocExportTool(),
+    createReqdocExportTool(store),
     createReqdocImportTool(),
     createReqdocConventionReviewTool(),
   ]

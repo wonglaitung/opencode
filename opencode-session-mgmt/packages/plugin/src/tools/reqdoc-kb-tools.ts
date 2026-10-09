@@ -19,6 +19,8 @@ import {
   assembleDoc,
   STOP_ASK_AFTER,
   advanceAskCounts,
+  chapterOf,
+  chapterRetireRatio,
   deriveQuestions,
   featuresAppendViolation,
   hasFeatureScopedSlots,
@@ -272,6 +274,18 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
               `请把这些地址从本批移除；确需修改已确认内容，改用 reqdoc_answer(address, content, source)（它保持已确认）。`,
           )
         }
+        // 定点修订（乙）作用域锁：进入 editScope 后只接受锁定章的地址，越界写入服务端拒收
+        // （硬不变量，呼应 AGENTS.md「软约束不算不变量」；防模型走全量或误写他章）。
+        if (kb.editScope?.active) {
+          const ch = kb.editScope.chapter
+          const out = args.slots.filter((s) => chapterOf(s.address) !== ch).map((s) => s.address)
+          if (out.length > 0) {
+            throw new WorkflowOpError(
+              `已进入定点修订，作用域锁定在第 ${ch} 章：本批含越界地址 ${out.join("、")}。\n` +
+                `请只提交第 ${ch} 章内的槽位；要改其它章请先结束本次定点修订（或另开会话）。`,
+            )
+          }
+        }
         // 槽位合并：同地址覆盖（status 由服务端强制 draft，模型不能自称已确认）
         const byAddr = new Map(kb.slots.map((s) => [s.address, s]))
         for (const s of args.slots) {
@@ -313,6 +327,7 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
         candidates: kb.candidates,
         l1: hits.l1,
         l2: hits.l2,
+        chapter: kb.editScope?.active ? kb.editScope.chapter : undefined,
       })
       // 推进轮次：把本轮展示的地址计数 +1（6.3 按轮次计）
       const counts = advanceAskCounts(kb.askCounts ?? {}, derived.batch.map((q) => q.address))
@@ -390,6 +405,13 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
               `② 容器叶子（<容器地址>.<术语名>、<容器地址>.<字段名>，如 ${addrHint().termLeaf}）。请先取本轮清单再回答。`,
           )
         }
+        // 定点修订（乙）作用域锁：越界地址服务端拒收（硬不变量）。
+        if (kb.editScope?.active && chapterOf(args.address) !== kb.editScope.chapter) {
+          throw new WorkflowOpError(
+            `已进入定点修订，作用域锁定在第 ${kb.editScope.chapter} 章：地址 ${args.address} 不在该章。` +
+              `请只改第 ${kb.editScope.chapter} 章；要改其它章请先结束本次定点修订。`,
+          )
+        }
         const idx = kb.slots.findIndex((s) => s.address === args.address)
         const prev = idx >= 0 ? kb.slots[idx]! : undefined
         if (!prev) {
@@ -459,6 +481,7 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
         candidates: kb.candidates,
         l1: hits.l1,
         l2: hits.l2,
+        chapter: kb.editScope?.active ? kb.editScope.chapter : undefined,
       })
       return [
         templateUnavailableNotice() ?? "",
@@ -473,6 +496,63 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
       ]
         .filter(Boolean)
         .join("\n")
+    },
+  })
+
+  const reqdoc_start_scoped_edit = tool({
+    description:
+      "定点修订（乙）入口：锁定某一章后只引导该章。业务说「改第 N 章」且你已回显 PRD 章目录 + 标题 + 内容预览请其认领确认后，调此工具锁定。" +
+      "锁定后 ingest/answer 越界被服务端拒收（硬不变量）；改完用 reqdoc_end_scoped_edit 释放，或用 reqdoc_export(mode, chapter) 导出差异。仅 reqdoc 工作流有效。",
+    args: {
+      chapter: z.number().describe("已与业务确认的要修改的 PRD 章号（如 2）；须先回显章目录请业务认领，不要凭空传。"),
+    },
+    async execute(args, context) {
+      const root = projectRoot(context)
+      const saved = store.mutateWorkflow(context.sessionID, (workflow) => {
+        requireReqdoc(workflow, "reqdoc_start_scoped_edit")
+        const kb = readKb(workflow)
+        const schema = templateSchema()
+        if (!schema?.chapters.some((c) => c.number === args.chapter)) {
+          throw new WorkflowOpError(
+            `章号 ${args.chapter} 不是合法 PRD 章号。合法章号见 PRD 模板（第一章到第七章）；请先回显章目录请业务确认后再锁定。`,
+          )
+        }
+        // 冻结编辑前快照作差异基准，并绑定会话（会话结束即失效，杜绝跨会话残留误拒——对抗 B）
+        kb.editScope = {
+          chapter: args.chapter,
+          snapshotBefore: kb.slots.map((s) => ({ ...s })),
+          active: true,
+          sessionId: context.sessionID,
+          at: Date.now(),
+        }
+        workflow.kb = kb
+      })
+      const kb = readKb(saved)
+      const schema = templateSchema()
+      const title = schema?.chapters.find((c) => c.number === args.chapter)?.title ?? ""
+      const derived = deriveQuestions(kb.features, { slots: kb.slots, chapter: args.chapter })
+      return [
+        `🔒 已进入定点修订，锁定第 ${args.chapter} 章《${title}》。编辑前快照已冻结（差异基准）。`,
+        `后续只引导该章；ingest/answer 越界会被服务端拒收。改完用 reqdoc_end_scoped_edit 释放锁，或用 reqdoc_export(mode:"diff"|"chapter", chapter:${args.chapter}) 导出差异。`,
+        `本轮该填（限第 ${args.chapter} 章）${derived.batch.length}/${derived.all.length} 项：`,
+        ...derived.batch.map((q) => `  - ${q.address}${q.guess ? `（默认：${q.guess}）` : ""}`),
+      ].join("\n")
+    },
+  })
+
+  const reqdoc_end_scoped_edit = tool({
+    description:
+      "定点修订（乙）结束：释放作用域锁。业务确认改完、导出差异后调用；锁释放后 ingest/answer 恢复全章可写。仅 reqdoc 工作流有效。",
+    args: {},
+    async execute(_args, context) {
+      store.mutateWorkflow(context.sessionID, (workflow) => {
+        requireReqdoc(workflow, "reqdoc_end_scoped_edit")
+        const kb = readKb(workflow)
+        if (!kb.editScope) return
+        kb.editScope = undefined
+        workflow.kb = kb
+      })
+      return "🔓 已释放定点修订作用域锁，恢复全章可写。"
     },
   })
 
@@ -562,6 +642,8 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
           }
         }
         kb.updatedAt = Date.now()
+        // 新基线强清定点修订锁：承认新基线后旧的 editScope 快照基准已失准，须重新进入（对抗 B）
+        kb.editScope = undefined
         workflow.kb = kb
         void alreadyConfirmed
       })
@@ -690,6 +772,13 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
           `可选：本次已写入记忆、后续不必再问的**槽位地址**（如 ${addrHint().feature ? `["${addrHint().feature}"]` : "[]"}，地址取工具清单）。` +
             "被退役的槽位不再进开放项、也不计入覆盖率——只填确实已进记忆的，填错会导致门禁永远不通过。",
         ),
+      confirmRetire: z
+        .boolean()
+        .optional()
+        .describe(
+          "定点修订中，当拟退役的槽位将使锁定章的 retired 占比超过 50% 时，必须显式传 true 确认" +
+            "（大范围删改须业务拍板，防模型用「替换成空 / 批量退役」悄悄清空一章）。",
+        ),
     },
     async execute(args, context) {
       const root = projectRoot(context)
@@ -715,6 +804,21 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
       // slot content 是 PRD 正文，**永不匹配**，是段空操作（P1-e）。改为按 slotAddress 显式指定。
       const retireAddrs = args.retire_slots ?? []
       if (retireAddrs.length > 0) {
+        // 定点修订（乙）retirement 守卫：锁定章内拟退役超 50% 须显式确认
+        // （防「替换成空 / 批量退役」悄悄清空一章；守卫查占比而非仅 retired 状态）。
+        if (workflow.kb?.editScope?.active) {
+          const ch = workflow.kb.editScope.chapter
+          const inScope = retireAddrs.filter((a) => chapterOf(a) === ch)
+          if (inScope.length > 0) {
+            const ratio = chapterRetireRatio(workflow.kb.slots, ch, inScope)
+            if (ratio > 0.5 && !args.confirmRetire) {
+              throw new WorkflowOpError(
+                `定点修订中拟退役第 ${ch} 章 ${inScope.length} 个槽位，将使该章 retired 占比达 ${Math.round(ratio * 100)}%（>50%）。` +
+                  `这是大范围删改，须显式确认：重调并传入 confirmRetire:true（表明业务确实要放弃该章过半内容）。`,
+              )
+            }
+          }
+        }
         store.mutateWorkflow(context.sessionID, (w) => {
           if (!w.kb) return
           w.kb.slots = w.kb.slots.map((sl) =>
@@ -733,7 +837,15 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
     },
   })
 
-  return { reqdoc_ingest, reqdoc_answer, reqdoc_adopt_baseline, reqdoc_assemble, reqdoc_memory_recall }
+  return {
+    reqdoc_ingest,
+    reqdoc_answer,
+    reqdoc_start_scoped_edit,
+    reqdoc_end_scoped_edit,
+    reqdoc_adopt_baseline,
+    reqdoc_assemble,
+    reqdoc_memory_recall,
+  }
 }
 
 /** 覆盖率文本（状态条与工具返回共用口径）。 */

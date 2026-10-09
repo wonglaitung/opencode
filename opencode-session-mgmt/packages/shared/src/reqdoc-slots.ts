@@ -198,6 +198,105 @@ export function requiredContainers(
 }
 
 // ---------------------------------------------------------------------------
+// 定点修订（乙）：章作用域辅助（纯函数，独立于存储）
+// ---------------------------------------------------------------------------
+
+/** 取槽位/地址所属章号：`4.1.CRD`/`5.1.2.1.客户号`/`3.1` → 首段数字。 */
+export function chapterOf(addr: string): number {
+  const n = Number(addr.split(".")[0])
+  return Number.isFinite(n) ? n : NaN
+}
+
+/** 章内全部槽位。 */
+export function slotsByChapter(slots: readonly ReqdocSlot[], ch: number): ReqdocSlot[] {
+  return slots.filter((s) => chapterOf(s.address) === ch)
+}
+
+/**
+ * 解析业务指的「第 N 章 / 章名 / 内容词」→ PRD 章号（数字），解析不到返回 null。
+ * 三输入：①「第 2 章」数字；②章标题或小节标题命中；③小节标题含该词 → 归属章。
+ * 解析不到上层须列候选让用户认领（防错章 rubber-stamp），不在此做兜底猜测。
+ */
+export function resolveChapterLabel(
+  label: string,
+  schema: TemplateSchema = templateSchemaOrEmpty(),
+): number | null {
+  const m = label.match(/第\s*(\d+)\s*章/)
+  if (m) {
+    const n = Number(m[1])
+    if (schema.chapters.some((c) => c.number === n)) return n
+  }
+  const norm = label.trim()
+  for (const c of schema.chapters) {
+    if (c.title.includes(norm) || norm.includes(c.title)) return c.number
+    for (const s of c.sections) {
+      if (s.title.includes(norm) || norm.includes(s.title)) return c.number
+    }
+  }
+  return null
+}
+
+/** 编辑某章时，该章内被其他章引用的术语/字段名（跨章影响提示，只列不阻断）。 */
+export function crossChapterImpact(
+  slots: readonly ReqdocSlot[],
+  ch: number,
+  schema: TemplateSchema = templateSchemaOrEmpty(),
+): string[] {
+  const inCh = slotsByChapter(slots, ch).filter((s) => s.kind !== "prose")
+  const names = inCh
+    .map((s) => slotSubKey(s.address, schema) ?? docAddrOf(s.address, schema))
+    .filter((x): x is string => x !== null && x.length > 0)
+  const out: string[] = []
+  for (const other of slots) {
+    if (chapterOf(other.address) === ch) continue
+    for (const n of names) {
+      if (other.content.includes(n)) out.push(`${n}（被 ${other.address} 引用）`)
+    }
+  }
+  return [...new Set(out)]
+}
+
+/** 某章 retired 占比（含本次拟 retire 的地址），>0.5 触发 confirmRetire 守卫。 */
+export function chapterRetireRatio(
+  slots: readonly ReqdocSlot[],
+  ch: number,
+  proposedRetires: readonly string[] = [],
+): number {
+  const inCh = slotsByChapter(slots, ch)
+  if (inCh.length === 0) return 0
+  const nowRetired = inCh.filter((s) => s.status === "retired").length
+  const proposed = proposedRetires.filter((a) => chapterOf(a) === ch).length
+  return (nowRetired + proposed) / inCh.length
+}
+
+/** 单章 diff（地址级增/改/删），导出定点差异用。 */
+export interface ChapterDiff {
+  added: string[]
+  changed: string[]
+  removed: string[]
+}
+
+export function chapterDiff(
+  before: readonly ReqdocSlot[],
+  after: readonly ReqdocSlot[],
+  ch: number,
+): ChapterDiff {
+  const bin = new Map(before.filter((s) => chapterOf(s.address) === ch).map((s) => [s.address, s]))
+  const ain = new Map(after.filter((s) => chapterOf(s.address) === ch).map((s) => [s.address, s]))
+  const out: ChapterDiff = { added: [], changed: [], removed: [] }
+  for (const [a, s] of ain) {
+    const b = bin.get(a)
+    if (!b) out.added.push(a)
+    else if (b.content !== s.content) out.changed.push(a)
+  }
+  for (const [a, b] of bin) {
+    const now = ain.get(a)
+    if (!now || now.status === "retired") out.removed.push(a)
+  }
+  return out
+}
+
+// ---------------------------------------------------------------------------
 // 6.2.1 覆盖判定：叶子 confirmed + 容器聚合
 // ---------------------------------------------------------------------------
 
@@ -444,6 +543,8 @@ export interface DeriveOptions {
   askCounts?: Readonly<Record<string, number>>
   /** 模板结构；缺省取已加载的模板。仅测试与「换模板」场景显式传入。 */
   schema?: TemplateSchema
+  /** 定点修订：仅派生该章的开放项（其余章不进 batch/stopped/all）。 */
+  chapter?: number
 }
 
 /**
@@ -528,6 +629,10 @@ function deriveAll(
         ...(guess ? { guess, from: l2.length && !term ? "memory-L2" : "memory-L1" } : {}),
       })
     }
+  }
+  // 定点修订：只保留目标章的开放项（其余章不进 batch/stopped/all）
+  if (opts.chapter !== undefined) {
+    return { questions: out.filter((q) => chapterOf(q.address) === opts.chapter), l1Applied }
   }
   return { questions: out, l1Applied }
 }
