@@ -1069,4 +1069,23 @@ export const SCENARIOS: Scenario[] = [
     judge: { kind: "text", type: "maxQuestions", max: 5 },
     note: "观察项专用：连续默认 → 是否转开放式（由 defaultLoadReport 观测）",
   },
+  {
+    name: "r40 定点修订（乙）：业务只改某章应锁定该章而非重走全流程",
+    workflowType: "reqdoc",
+    state: (() => {
+      const s = newReqdoc()
+      approvePrior(s, "prd")
+      enter(s, "prd")
+      return finish(s)
+    })(),
+    userTurn: "这份需求书整体不用改，只把第 3 章「需求概述」里的背景描述换掉，怎么弄？",
+    // 模型应先回显 PRD 章目录+标题+内容预览请业务认领确认再锁；本场景单轮只判是否调用锁定工具。
+    // 乙方案（对话引导·保留原稿）：锁定后只引导该章、改的内容标 source=问答，越界写入被服务端拒收。
+    judge: {
+      kind: "tool",
+      expectTool: "reqdoc_start_scoped_edit",
+      args: { chapter: 3 },
+      note: "进入定点修订锁定第 3 章，而非重答全部必填项；详见 docs/reqdoc-scoped-edit.md",
+    },
+  },
 ]
