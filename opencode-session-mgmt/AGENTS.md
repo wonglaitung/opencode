@@ -27,21 +27,18 @@ OpenCode 会话管理定制：标准化开发流程（五阶段门禁）、理�
 - **手工修改走 open_ide 锁定（sdlc-r12，软提示 + 硬拦截）**：开发者要手工改代码时 AI 先调 `open_ide`（**必须带 `file`**，防AI 覆盖）；锁定期间 AI 可继续其它任务但不得改被锁文件（`tool.execute.before` 服务端硬拦截）；须开发者明确确认后 `unlock_file`，并重新读取最新内容。**SDLC 完结时完成态注入解锁提示**（经 `hasCommitGate` 门控，reqdoc 不提示）。open-ide **物理合并**进本工程（`packages/plugin/src/open-ide/`，原 `opencode-open-ide` 已移除）：锁持久化进 SQLite `file_lock` 表（daemon 重启自动恢复）。
 - **规则阶段化注入**：`WorkflowDefinition.rules` 为 `RuleItem[]`（含 `stage`），每轮只注入 global + 当前阶段；状态以阶段状态块（`buildStateBar`）展示，替代冗长 JSON。无 in_progress 分三态，**完成态注入专用完成块**（不注入常规规则）。`applyTransition` 严格执行状态机：enter 已 approved 须走 revisit、enter 已 in_progress 幂等；**revisit 级联回退该阶段之后所有已 approved 的下游阶段**（下游结论建立在被回退阶段之上，须重走）。规则遵循度评测基线在 `scripts/eval-rules/`；**评测与质量飞轮实操手册见 `.opencode/skills/workflow-rules-eval/SKILL.md`**。
 
-### reqdoc 槽位知识库（详细机制见 workflow-reqdoc.md，定点修订审核见 reqdoc-scoped-edit.md）
+### reqdoc 槽位知识库（机制/调用序权威源：workflow-reqdoc.md；定点修订审核：reqdoc-scoped-edit.md）
 
-业务「口述 + 丢材料」，AI 代笔。
+业务「口述 + 丢材料」，AI 代笔。以下为勿重议红线，机制细节勿在此维护：
 
-- **槽位是唯一事实源**：服务端派生「该问什么 / 覆盖率 / 门禁 / PRD」；PRD 只是槽位的投影（`reqdoc_assemble`），**不得用 write 手写或手工编辑产物**。
-- **模板结构同样只有一份事实源**：`docs/reqdoc-prd-template.md`，由 `reqdoc-template-schema.ts` 解析；**换模板只改该 md，不改代码**；政策按**标题**声明（改标题会由 `unresolvedPolicy` 报出要求人工确认；按编号声明会随章节重排失效，故不采用）。**代码与规则文本里不得再出现模板地址字面量**，模型侧一切以「本轮该填」清单为准；护栏 `template-addr-hardcode.test.ts` 扫**全部插件源文件**（不是白名单），只放行占位形状与插值。
-- **换模板后旧会话显式重置**：`schemaAddressSpace` 记必填地址空间（**不含标题**），`templateDrift` 做**集合包含**判定（旧必填地址不在新模板里才算漂移）；漂移时状态条与回执报「建议开新会话重走」。**判据宁窄勿宽**（误报一次就是让业务白做一遍）；**只报不自动清**；**多模板并存：不做**（等第二个模板要同时在线时再单独设计）。
-- **模板不可读时分软硬两路**：提示类（状态条/回执/覆盖率/漂移检测）一律 `templateSchemaOrEmpty()` **绝不抛**，且必须带 `templateUnavailableNotice()`（真因 + 出路 + 承诺已填内容不丢——软降级后门禁默认文案会把人引向「用 ingest 补齐」的死路）；产物类（组装/渲染校验/骨架）一律 `requireTemplateSchema()` **必须抛**让用户报障——**「不崩」不等于「能用」**，宁可请求失败也不能产出结构不明的交付件。
-- **工具面**：`reqdoc_init` 建 00~07 目录契约（00_初稿需求书为导入入口，01~05 业务材料区，06/07 AI 工作区）；`reqdoc_scan(directory)` 单目录分步扫描（纯文本，图像显式降级）；三步工作流 `reqdoc_ingest`（地址必须来自清单，`candidates` 须填材料中真实出现的）→ `reqdoc_answer`（`source=缺省` 必附 reason）→ `reqdoc_assemble`；`reqdoc_confirm_features` 功能点拆解。动作指令载于 `reqdoc_ingest` 工具描述（model-only、每次请求都在）。
-- **唯一门禁是 `kbGate`**：必填叶子覆盖率 + 必填容器已覆盖或已声明可为空 + 无未收口项；确实无法补齐且业务坚持时 `force_kb=true` + **业务给的** `force_reason` 放行（理由模型不得代填）。
-- **记忆机制**（跨需求共享；**不影响门禁判定**，只影响问什么）：匹配证据是 **00~05 材料原文**（非模型转述的槽位正文；`06/07` 不作证据），故 `[问答]`/`[缺省]` 来源不参与匹配；L1 术语命中即**免问**，免问项仍是 draft，须模型随后 `reqdoc_answer` 落定且 source 一律标「问答」（不落定则容器覆盖不过）；L2 组织知识**不消缺口**，只作默认值仍问一次；**静默默认不入库**，同名不同义不静默覆盖。写入凭据：`restated_term` 必带 **`business_quote`（业务原话），留空拒写**；`reqdoc_memory_recall` 在定稿后由**业务勾选**才写 L2/L4。
-- **分支二（改已有需求）调用序**（按 `reqdoc-r8` 分支二序，不跳步；旧编号 `reqdoc-r36` 保留为文档锚点）：`import`（导入为 [文档]）→ `ingest`（**每项 ref 填稿路径**）→ `adopt_baseline` **先不带 confirm 预演** → 带 `confirm=true` + **`authorized_by`/`confirm_note`（须来自业务，模型不得代填）** + **`unmapped` 逐条申报处置**（不申报会静默消失）→ 沿用后**只问「旧稿未覆盖的必填项 + 新增功能点」**。只认 `source=文档` 且 `ref` 指向基线文件的槽位；**承认基线不豁免任何必填项**；确认时冻结 `kb.baselineSnapshot`。状态条的「必填容器未覆盖」是**聚合判定**——旧稿有对应内容就提交成容器叶子，确实没有才声明 `required:false` + reason，**不要把旧稿已写的术语与字段重问一遍**（对话义务，非服务端机制）。红线：**功能点只能追加末尾**；**ingest 不得把已确认槽位打回 draft**（整批拒绝并指路 `reqdoc_answer`）。已知限制：旧稿章节与模板的语义映射由 AI 完成、服务端无法校验；**`00_初稿需求书/` 里任何文件都会被当成分支二**。
-- **定稿三重校验**（`review_submit`）：① `kbGate`；② `kb-digest` 摘要一致（抓「槽位变了没重组装」）；③ **重组装 LCS 比对**（抓手改与行置换）；溯源章节独立校验（防伪造证据）。定稿回执输出本次变更清单（只认 `confirmed`，只在回执说、不改交付件格式）；之后经 `reqdoc_export` 导出 Word。
-- **定点修订（保留原稿改单章）**：`reqdoc_start_scoped_edit(chapter)` 锁章并冻结快照，`ingest`/`answer` 越界服务端拒收；改完先 `reqdoc_assemble` 重组装、**锁定期间** `reqdoc_export(mode="diff"|"chapter")` 导出差异、最后 `reqdoc_end_scoped_edit()` 释放锁（释放后 diff 导出报错）；锁绑会话 + 新 baseline 强清；大范围删改须业务拍板（退役 `confirmRetire`、空内容清空 `confirmClear`，两路同权）。
-- **给用户看的故障提示只能挂状态条**（工具回执默认不渲染，见「修改后必做：对抗性审查」第 1 条）。
+- **槽位与模板各只有一份事实源**：问什么/覆盖率/门禁/PRD 皆由槽位派生，PRD 是投影（**不得 write 手改产物**）；模板 = `docs/reqdoc-prd-template.md`（**换模板只改该 md**，政策按标题声明）；**代码与规则不得出现模板地址字面量**，模型以「本轮该填」清单为准。换模板后旧会话**显式重置**（集合包含判漂移，**宁窄勿宽、只报不自动清**）；**多模板并存：不做**。
+- **模板不可读分软硬两路**：提示类绝不抛（须带 `templateUnavailableNotice`），产物类必须抛——**「不崩」不等于「能用」**。
+- **工具面与门禁**：init（00~07 目录契约）/ scan / ingest（地址必须来自清单，`candidates` 须材料真实出现）/ answer（`source=缺省` 必附 reason）/ assemble / confirm_features；**唯一门禁 `kbGate`**，`force_kb` 须**业务给的** `force_reason`（模型不得代填）。
+- **记忆不影响门禁，只影响问什么**：证据仅 **00~05 材料原文**；L1 免问项仍是 draft，须模型 answer 落定且 source=问答；L2 只作默认值仍问一次、**不消缺口**；**静默默认不入库**。写入凭据：`restated_term` 必带 **`business_quote`（留空拒写）**；`reqdoc_memory_recall` 业务勾选才写。
+- **分支二（改已有需求）**：调用序按 **`reqdoc-r8` 分支二序不跳步**（预演 → 授权执行；`reqdoc-r36` 保留为文档锚点）；`authorized_by`/`confirm_note`/`unmapped` **须来自业务**；只认 `source=文档` 且 `ref` 指向基线文件；**不豁免必填**；冻结 `baselineSnapshot`；容器聚合判定——**勿把旧稿已写的术语与字段重问一遍**（对话义务非机制）。红线：**功能点只追加末尾**；**ingest 不得打回已确认槽位**（整批拒 + 指路 answer）；**`00_初稿需求书/` 任何文件都算分支二**。
+- **定稿**：三重校验（`kbGate` + `kb-digest` 一致 + 重组装 LCS，溯源独立校验）；变更清单只在回执说；之后 `reqdoc_export` 出 Word。
+- **定点修订**：`start_scoped_edit` 锁章冻结、越界拒收；**先 assemble → 锁定期 export → 最后 end**（释放后 diff 报错）；锁绑会话、新 baseline 强清；大范围删改须业务拍板（`confirmRetire`/`confirmClear` 同权）。
+- **给用户看的故障提示只能挂状态条**（见「修改后必做：对抗性审查」第 1 条）。
 - **sdlc 完全不动**（记忆不得影响 sdlc 门禁与理解确认）。
 
 ### 编写规约（按工作流类型 + 阶段门控 + 只注入）
