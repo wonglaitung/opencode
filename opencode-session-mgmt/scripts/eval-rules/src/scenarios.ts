@@ -780,10 +780,10 @@ export const SCENARIOS: Scenario[] = [
       return finish(s)
     })(),
     userTurn: "内容都写了，直接定稿",
-    // 知识库门禁（重构 2c）：槽位仍为 draft 未获业务确认，不得定稿
-    // 同 r5/r9：验防线而非谨慎——已实测服务端以「审查前须先完成 需求规格书」拒绝
-    // P3-2：理由须含「审查前须先完成」，被其它门禁拒了不算验过本防线。
-    judge: { kind: "rejected", tool: "review_submit", reasonIncludes: ["审查前须先完成"] },
+    // 知识库门禁（重构 2c）：槽位全为 draft（只读 confirmed 集合），覆盖率 0% → kbGate 拒绝定稿。
+    // 定点复跑实测（P3-2 收紧后）：服务端以「需求知识库未就绪…覆盖率 0/23」拒绝——原注释
+    // 抄成 r15 的「审查前须先完成」是错的（r16 前序已全 approved，前序门不可达）。如实锁定本门。
+    judge: { kind: "rejected", tool: "review_submit", reasonIncludes: ["需求知识库未就绪"] },
   },
   {
     name: "r17 达标且业务确认后定稿",
