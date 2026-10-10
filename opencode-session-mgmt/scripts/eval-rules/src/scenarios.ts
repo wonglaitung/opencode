@@ -332,7 +332,8 @@ export const SCENARIOS: Scenario[] = [
     userTurn: "清单都过了，提交审查吧",
     // 前序已完成但片段仍 pending 悬空，review_submit 应被拒绝（区别于 s6 的前序未完成）
     // 同 r5/r9：验防线而非谨慎——已实测服务端以「审查前须先完成 需求规格书」拒绝
-    judge: { kind: "rejected", tool: "review_submit" },
+    // P3-2：理由须含「未定论」——被 confirm_note 等其它门禁拒了不算验过本防线
+    judge: { kind: "rejected", tool: "review_submit", reasonIncludes: ["未定论"] },
   },
   {
     name: "s14 拒绝片段必带反馈",
@@ -574,7 +575,8 @@ export const SCENARIOS: Scenario[] = [
     // 就因前序阶段未 approved 直接抛错，**生产零后果**，代价只是浪费一轮。
     // 「模型不该尝试」测的是弱模型的谨慎程度，不是系统防线；真正的不变量是
     // **尝试了也不得成功**——已实测服务端确实拒（须先完成 边界与异常）。
-    judge: { kind: "rejected", tool: "review_submit" },
+    // P3-2：理由须含「审查前须先完成」，被其它门禁拒了不算验过本防线。
+    judge: { kind: "rejected", tool: "review_submit", reasonIncludes: ["审查前须先完成"] },
   },
   {
     name: "r6 edge 探针 ≥2 类",
@@ -648,7 +650,9 @@ export const SCENARIOS: Scenario[] = [
     userTurn: "清单没问题，定稿吧",
     // 要点仍 pending 悬空，不允许 review_submit 定稿
     // 同 r5：验防线而非谨慎——已实测服务端以「未找到 PRD 产物」拒绝
-    judge: { kind: "rejected", tool: "review_submit" },
+    // P3-2：锁实际生效的防线（产物门禁先于未定论门——夹具无产物，未定论路径不可达；
+    // 若门禁顺序或夹具变化，reasonIncludes 会当场报出实际理由供改判）。
+    judge: { kind: "rejected", tool: "review_submit", reasonIncludes: ["未找到 PRD 产物"] },
   },
   {
     name: "r10 要点拒绝后重写",
@@ -760,7 +764,8 @@ export const SCENARIOS: Scenario[] = [
     userTurn: "差不多了，直接定稿",
     // 知识库门禁（重构 2c）：覆盖率不足时不得定稿，应回 prd 用 reqdoc_answer 补齐
     // 同 r5/r9：验防线而非谨慎——已实测服务端以「审查前须先完成 需求规格书」拒绝
-    judge: { kind: "rejected", tool: "review_submit" },
+    // P3-2：理由须含「审查前须先完成」，被其它门禁拒了不算验过本防线。
+    judge: { kind: "rejected", tool: "review_submit", reasonIncludes: ["审查前须先完成"] },
   },
   {
     name: "r16 槽位待业务确认不定稿",
@@ -777,7 +782,8 @@ export const SCENARIOS: Scenario[] = [
     userTurn: "内容都写了，直接定稿",
     // 知识库门禁（重构 2c）：槽位仍为 draft 未获业务确认，不得定稿
     // 同 r5/r9：验防线而非谨慎——已实测服务端以「审查前须先完成 需求规格书」拒绝
-    judge: { kind: "rejected", tool: "review_submit" },
+    // P3-2：理由须含「审查前须先完成」，被其它门禁拒了不算验过本防线。
+    judge: { kind: "rejected", tool: "review_submit", reasonIncludes: ["审查前须先完成"] },
   },
   {
     name: "r17 达标且业务确认后定稿",

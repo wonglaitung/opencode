@@ -101,9 +101,12 @@ r23 本身在 vLLM 两变体皆红：模型习惯先 ingest 游走（baseline �
 宁可清空。
 
 **3（确认随事实失效）**：`workflow_revisit` 级联回退后，审查阶段的理解片段仍是 `accepted`——旧
-确认对应改动前的代码，模型可用 stale 确认定稿（S3）。同型：锁定期间静默重锁会重置差异基准
-（H3，现拒绝重锁）；`applyBaselineProposal` 曾复用陈旧 8h（现清空）。原则：失效要显式重置，
-不可靠「模型大概会重问」。
+确认对应改动前的代码，模型可用 stale 确认定稿（S3）。**前向同洞（对抗审核第二轮 P2）**：编辑
+无需 revisit 即可发生（implementation 已 approved 时直接改），旧 accepted 同样失真——已在
+`quality.lastEditAt`（AI 编辑观测点写入）+ `review_submit` 前向失效检查封住（仅 sdlc、仅审查
+未通过时；已 approved 的幂等重提不得被改写，否则留下「阶段 approved + 片段 pending」矛盾态）。
+同型：锁定期间静默重锁会重置差异基准（H3，现拒绝重锁）；`applyBaselineProposal` 曾复用陈旧
+8h（现清空）。原则：失效要显式重置，不可靠「模型大概会重问」。
 
 **4（宣称与门禁一致）**：workflow-sdlc.md §3 规则表停在 12 条、r1 指着已废弃的 `workflow_advance`
 初始化写法，模型会按不存在的机制行动（S8）；r37/r38 一段时间只在代码不在文档。预算棘轮

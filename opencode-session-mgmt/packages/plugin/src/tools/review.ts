@@ -300,10 +300,36 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
       // 对抗 S2-A：sdlc 审查清单曾是纯模型自证布尔，与 baseline（对话数字证据匹配）、
       // adopt_baseline（authorized_by+confirm_note）的证据纪律不一致——须附开发者确认原话。
       // reqdoc 不重复要求：其已接受要点有 P3.10 确认溯源硬门。
-      if (wf0?.type === "sdlc" && !(args.confirm_note as string | undefined)?.trim()) {
+      // 对抗审核 P3-1：已 approved 的重复 submit 走幂等短路，不受 confirm_note 门禁约束
+      // （门禁先于幂等会把「已通过后再点一次」打成报错，违背「已 approved 不再报错」契约）。
+      const alreadyApproved = wf0
+        ? wf0.stages[getDefinition(wf0.type).reviewStage!]?.status === "approved"
+        : false
+      if (wf0?.type === "sdlc" && !alreadyApproved && !(args.confirm_note as string | undefined)?.trim()) {
         throw new WorkflowOpError(
           "review_submit 须附 confirm_note：开发者确认审查清单的原话摘录（如「四项都没问题，通过」）。模型不得代拟。",
         )
+      }
+      // 对抗审核 P2（前向陈旧确认）：AI 在片段确认之后又编辑了代码（编辑无需 revisit，
+      // implementation 已 approved 时可直接改）——旧 accepted 对应的是编辑前的代码，
+      // 打回 pending 须重新确认（与 revisit 级联重置同纪律，宁可多问一遍）。
+      // 仅 sdlc：代码片段语义；reqdoc 要点是业务确认，不因文件编辑失效（有 P3.10 溯源兜底）。
+      // 仅审查未通过时生效：已 approved 的幂等重提不得被此改写（已通过后再改代码应走 revisit 重审）。
+      // 独立先行持久化——若并入下方主 mutate，悬挂检查抛错会回滚整个变更，
+      // 状态条会继续显示「已确认」的陈旧态（失效必须显式落库，不可靠回滚语义兜底）。
+      if (wf0?.type === "sdlc" && !alreadyApproved && (wf0.quality?.lastEditAt ?? 0) > 0) {
+        const lastEditAt = wf0.quality.lastEditAt!
+        store.mutateWorkflow(context.sessionID, (workflow) => {
+          const review = reviewRecord(workflow)
+          if (review.status === "approved") return
+          for (const c of review.comprehension) {
+            if (c.decision === "accepted" && c.confirmedAt !== null && c.confirmedAt < lastEditAt) {
+              c.decision = "pending"
+              c.developerConfirmed = false
+              c.confirmedAt = null
+            }
+          }
+        })
       }
       if (wf0?.kb) {
         try {

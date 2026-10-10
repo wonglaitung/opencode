@@ -237,6 +237,10 @@ export interface QualityMetrics {
   firstPassRate: number | null
   /** 「同一段代码/文件」的最大生成-修改循环次数（3.2），取 iterationByFile 各文件最大值 */
   iterationCount: number | null
+  /** 最近一次 AI 代码编辑时间戳（write/edit/apply_patch，与 iterationByFile 同观测点）。
+   *  sdlc 审查提交时用于前向失效：confirmedAt < lastEditAt 的已接受片段打回 pending
+   *  （对抗审核 P2——确认绑定当时的代码，编辑后旧确认不再成立；与 revisit 级联重置同纪律）。 */
+  lastEditAt?: number | null
   /** 合并后由 CI 按 sessionID 回写收集服务（设计文档 session-management.md 4.3） */
   reworkRate: number | null
   testCoverage: number | null

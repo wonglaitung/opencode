@@ -5,6 +5,7 @@
 import { describe, expect, test } from "bun:test"
 import { Store } from "../src/db"
 import { requiredSlots, reviewRecord } from "sm-shared"
+import { createIterationCounter } from "../src/tools/quality"
 import { createWorkflowTools } from "../src/tools/workflow"
 import { extractBaselineHours, applyBaselineProposal } from "../src/tools/baseline-proposal"
 import { createReviewTools } from "../src/tools/review"
@@ -326,6 +327,52 @@ describe("对抗 S2-A：sdlc review_submit 须附开发者确认原话", () => {
       ),
     )
     expect(out).toContain("审查阶段通过")
+    store.close()
+  })
+})
+
+describe("对抗审核 P2/P3-1：前向失效 + 幂等不受 confirm_note 门禁约束", () => {
+  test("确认后 AI 编辑 → review_submit 把 accepted 打回 pending 并拒绝", async () => {
+    const { store } = setup()
+    store.mutateWorkflow("s1", (w) => {
+      for (const n of ["requirements", "design", "implementation", "testing"]) w.stages[n].status = "approved"
+      reviewRecord(w).comprehension.push({
+        id: "a.ts:1-10",
+        explanation: "示例片段",
+        decision: "accepted",
+        developerConfirmed: true,
+        confirmedAt: 1000,
+        feedback: null,
+        rejectedAt: null,
+        rewrites: 0,
+        resolution: null,
+      })
+    })
+    // 经真实观测点写入 lastEditAt（工具执行后钩子），晚于确认时间戳 1000
+    const counter = createIterationCounter(store)
+    await counter({ tool: "edit", sessionID: "s1", args: { filePath: "a.ts", oldString: "x", newString: "y" } })
+    expect(store.get("s1")!.workflow!.quality.lastEditAt).toBeGreaterThan(1000)
+    const reviewTools = createReviewTools(store)
+    const checklist = { businessIntent: true, logicExplainable: true, behaviorVerifiable: true, confirm_note: "开发者：确认" }
+    await expect(reviewTools.review_submit!.execute(checklist as never, ctx)).rejects.toThrow(/未定论/)
+    const after = store.get("s1")!.workflow!
+    expect(reviewRecord(after).comprehension[0]!.decision).toBe("pending")
+    store.close()
+  })
+
+  test("已 approved 后无 confirm_note 重复 submit 仍幂等通过", async () => {
+    const { store } = setup()
+    store.mutateWorkflow("s1", (w) => {
+      for (const n of ["requirements", "design", "implementation", "testing"]) w.stages[n].status = "approved"
+    })
+    const reviewTools = createReviewTools(store)
+    const checklist = { businessIntent: true, logicExplainable: true, behaviorVerifiable: true, confirm_note: "开发者：确认" }
+    const first = String(await reviewTools.review_submit!.execute(checklist as never, ctx))
+    expect(first).toContain("审查阶段通过")
+    const { confirm_note: _drop, ...noNote } = checklist
+    // 幂等重提：不带 confirm_note 不得报错（P3-1）
+    const second = String(await reviewTools.review_submit!.execute(noNote as never, ctx))
+    expect(second).toContain("审查阶段通过")
     store.close()
   })
 })

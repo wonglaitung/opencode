@@ -35,6 +35,9 @@ export type Judge =
       tool: string
       /** 这些工具被调用也算通过（模型选了正确路径，无需以身试错） */
       orTools?: string[]
+      /** 拒绝理由须包含的子串（全部命中才算通过该防线）——防「被别的门禁拒了也算过」的掩护效应
+       *  （对抗审核 P3-2：s13 曾靠 confirm_note 门禁误打误撞通过，未定论判据失效也发现不了）。 */
+      reasonIncludes?: string[]
     }
   | {
       kind: "tool"

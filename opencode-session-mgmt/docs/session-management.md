@@ -533,7 +533,7 @@ export function resolveWorkflowType(v: unknown): WorkflowType   // 未知值回�
 
 **ReviewChecklist — 可接手标准检查项（sdlc 专属）**：审查清单由 `WorkflowDefinition.checklist` 定义，sdlc 注册四项（businessIntent/logicExplainable/behaviorVerifiable/designRationale），全部通过后审查阶段才可 approve。清单项要求与验证方式见 **workflow-sdlc.md 5 章**。
 
-`workflow.stages[review].checklist` 存储为 `Record<清单项 key, boolean>`。`review_submit` 从 `def.checklist` 生成具名输入参数（非 auto 项 → 布尔，auto 项由插件置真），未知键由 schema 层拒绝。sdlc 清单项见 **workflow-sdlc.md 5 章**；reqdoc 清单项另见 **workflow-reqdoc.md 2 章**（completeness/clarity/edgeCoverage/resolution）。
+`workflow.stages[review].checklist` 存储为 `Record<清单项 key, boolean>`。`review_submit` 从 `def.checklist` 生成具名输入参数（非 auto 项 → 布尔，auto 项由插件置真），未知键由 schema 层拒绝；sdlc 另有清单之外的必填参数 **`confirm_note`**（开发者确认原话摘录，见 8.3 工具表）。sdlc 清单项见 **workflow-sdlc.md 5 章**；reqdoc 清单项另见 **workflow-reqdoc.md 2 章**（completeness/clarity/edgeCoverage/resolution）。
 
 此外，审查阶段自动记录 **`firstPassRate`（AI 代码一次通过率）**：
 
@@ -1308,7 +1308,7 @@ sequenceDiagram
 | `comprehension_reject` | 拒绝单个片段/要点并附补充意见 | 必须存在；`feedback` 必填（意见将用于 AI 重写） |
 | `comprehension_rewrite` | AI 按意见重写后回到待审查 | 须处于 `rejected`；`rewrites++`，feedback 并入 explanation |
 | `comprehension_manual` | 开发者自己处理该片段/要点（自己写/删除） | 须处于 `rejected`；`resolution` 必填；进入终态 `manual` |
-| `review_submit` | 提交审查清单结果（从 `def.checklist` 生成具名参数） | 由 `def.checklist` 生成具名输入参数（非 auto 项布尔，auto 项插件置真）；**sdlc 须附 `confirm_note`（开发者确认审查清单的原话摘录，模型不得代拟；reqdoc 已有 P3.10 溯源硬门不重复要求）**；**前序阶段须全部 `approved`（审查是最后一关）**；有片段/要点时须已 `comprehension_add` 登记、且**全部处于终态 accepted/manual，不允许 pending/rejected 悬空**；通过时自动计算 `firstPassRate`（sdlc 与 reqdoc 均适用） |
+| `review_submit` | 提交审查清单结果（从 `def.checklist` 生成具名参数） | 由 `def.checklist` 生成具名输入参数（非 auto 项布尔，auto 项插件置真）；**sdlc 须附 `confirm_note`（开发者确认审查清单的原话摘录，模型不得代拟；reqdoc 已有 P3.10 溯源硬门不重复要求；已 approved 的幂等重提不受此限）**；**sdlc 前向失效**：AI 编辑晚于片段确认（`quality.lastEditAt` > `confirmedAt`）时，已接受片段在提交检查时打回 pending（仅审查未通过时生效）；**前序阶段须全部 `approved`（审查是最后一关）**；有片段/要点时须已 `comprehension_add` 登记、且**全部处于终态 accepted/manual，不允许 pending/rejected 悬空**；通过时自动计算 `firstPassRate`（sdlc 与 reqdoc 均适用） |
 | `commit_gate_check` | 提交前门禁检查（`def.hasCommitGate=true` 时启用） | 返回未完成阶段列表 + 缺失基线预估工时（仅 `hasCommitGate` 工作流且未录入 `workflow.baseline` 时出现）；未通过时 `tool.execute.before` 阻断 `git commit` |
 | `commit_force_unlock` | 强制提交授权（`def.hasCommitGate=true` 时，3.4 逃生口） | `developer_confirmed` 必须为 true、原因必填；写入一次性授权，门禁放行一次后置 `used` 留痕 |
 | `reqdoc_scan` / `reqdoc_confirm_features` / `reqdoc_score` / `reqdoc_check` / `reqdoc_export` | reqdoc 专属工具（需求资料扫描 / 功能点拆解确认 / 八维打分卡 / 渲染结构校验 / Word 导出），仅 `def.type === "reqdoc"` 时生效 | 各工具的用途与服务端校验见 **workflow-reqdoc.md 8 章** 完整表格 |

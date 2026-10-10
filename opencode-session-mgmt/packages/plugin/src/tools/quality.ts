@@ -93,6 +93,9 @@ export function createIterationCounter(store: Store, isSubagent: (sessionID: str
       byFile[key] = (byFile[key] ?? 0) + 1
       workflow.quality.iterationByFile = byFile
       workflow.quality.iterationCount = Math.max(...Object.values(byFile))
+      // 前向失效时间戳（对抗审核 P2）：任何 AI 代码编辑都刷新，供 review_submit 把
+      // 确认早于本次编辑的已接受片段打回 pending（sdlc，见 review.ts）。
+      workflow.quality.lastEditAt = Date.now()
       // AI 行数与迭代计数共用同一观测点（3.2）；无有效行数条目时保持 linesByFile 缺省，
       // 汇报投影据此上行 null（与 iterationCount 的 null 语义一致）
       const lines = workflow.quality.linesByFile ?? {}
