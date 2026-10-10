@@ -160,6 +160,46 @@ test("reqdoc 完成：提示 /new + revisit，无 git 门禁相关文案", () =>
       expect(text).not.toContain("reqdoc_patch")
     })
 
+    // r23 实测：业务说「改完记得重新组装」，旧引导只提 export（还把 end 写在 export 前），
+    // 与业务要求和锁语义双重冲突——差异导出必须在锁定期间（end 之后 export 会抛）。信号冲突须钉死。
+    test("★ 定点修订静态引导：先重组装、导出在释放锁之前", () => {
+      const s = reqdocAtPrd()
+      s.kb = {
+        slots: [],
+        features: [{ no: 1, name: "名单排查", priority: "high", confirmedAt: 1 }],
+        containers: {},
+        askCounts: {},
+        updatedAt: 1,
+      }
+      const text = buildSystemFragment(s, {}, [], NO_OVERLAY)
+      expect(text).toContain("改完先 reqdoc_assemble 重组装")
+      const exp = text.indexOf("reqdoc_export(mode, chapter) 导出")
+      const end = text.indexOf("reqdoc_end_scoped_edit 释放锁")
+      expect(exp).toBeGreaterThan(-1)
+      expect(end).toBeGreaterThan(exp)
+    })
+
+    test("★ active 定点修订块：含重组装，且导出在释放锁之前（差异导出要求锁在）", () => {
+      const s = reqdocAtPrd()
+      s.kb = {
+        slots: [],
+        features: [{ no: 1, name: "名单排查", priority: "high", confirmedAt: 1 }],
+        containers: {},
+        askCounts: {},
+        updatedAt: 1,
+        editScope: { chapter: 3, snapshotBefore: [], active: true, sessionId: "t", at: 1 },
+      }
+      const text = buildSystemFragment(s, {}, [], NO_OVERLAY)
+      expect(text).toContain("# 定点修订进行中")
+      expect(text).toContain("reqdoc_assemble 重组装")
+      // 顺序断言只看 active 块——静态引导里也含同名工具词，全文 indexOf 会先命中静态段
+      const active = text.slice(text.indexOf("# 定点修订进行中"))
+      const exp = active.indexOf('reqdoc_export(mode:"diff"|"chapter"')
+      const end = active.indexOf("reqdoc_end_scoped_edit 释放锁")
+      expect(exp).toBeGreaterThan(-1)
+      expect(end).toBeGreaterThan(exp)
+    })
+
     test("★ reqdoc prd 阶段 + kb 缺省（revisit 回退）：注入建库指引，不注入旧手写渲染指引", () => {
       const text = buildSystemFragment(reqdocAtPrd(), {}, [], NO_OVERLAY)
       expect(text).toContain("# 需求知识库未建")

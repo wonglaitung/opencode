@@ -150,7 +150,8 @@ export function buildSystemFragment(
         "→ 进入下一阶段与定稿的门禁读知识库派生门禁（kbGate）：必填槽位未 confirmed 或有未收口项即拦截。",
         "→ 若业务只想改已有需求书的某一章（而非整体重做）：先确认要改哪一章（用 PRD 章号或原稿节名；" +
           "章名不同须先回显 PRD 章目录+标题+内容预览请业务认领，确认才锁），再调用 reqdoc_start_scoped_edit(chapter) 锁定该章——" +
-          "不要逼业务重答全部必填项。改完用 reqdoc_export(mode, chapter) 拿差异贴回原稿。",
+          "不要逼业务重答全部必填项。改完先 reqdoc_assemble 重组装（槽位变了不重组装 → 摘要过期、定稿会被拒）；" +
+          "业务要把差异贴回自己的原稿时，在锁定期间用 reqdoc_export(mode, chapter) 导出（差异导出要求锁在），之后再 reqdoc_end_scoped_edit 释放锁。",
         "",
       )
       if (kb.editScope?.active) {
@@ -163,8 +164,9 @@ export function buildSystemFragment(
           `本次只改第 ${ch} 章：引导业务补全该章事实即可，不要去问/改其它章；ingest/answer 越界会被服务端拒收。`,
           `改的内容一律 source=问答；原文档已摄入、本次未动的槽位保持 source=文档，不要重标。`,
           ...(impact.length ? [`跨章影响（仅供参考、不阻断）：${impact.join("；")}`] : []),
-          `结束本次修订时：调用 reqdoc_end_scoped_edit 释放锁，并用 reqdoc_export(mode:"diff"|"chapter", chapter:${ch}) 导出差异，` +
-            `提示业务贴回他自己的原稿，并明确「贴回后系统不回读（单向）」。`,
+          `槽位有改动后先 reqdoc_assemble 重组装（否则 kb-digest 过期、定稿三重校验会拒）。`,
+          `业务要把差异贴回原稿时：在锁定期间 reqdoc_export(mode:"diff"|"chapter", chapter:${ch}) 导出（差异导出要求锁在），` +
+            `说明「贴回后系统不回读（单向）」，最后 reqdoc_end_scoped_edit 释放锁。`,
           "",
         )
       }
