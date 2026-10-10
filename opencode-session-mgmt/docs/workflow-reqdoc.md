@@ -320,7 +320,7 @@ flowchart TD
 
 ## 6. 开放项派生（少问的机制核心）
 
-**派生而非枚举**：`deriveQuestions(features, { slots, askCounts, decls, l1?, l2?, candidates? })`（`packages/shared/src/reqdoc-slots.ts`）从「必填叶子中未被 confirmed 占的」+「候选清单中未确认的容器子项」实时算出该问什么，返回四段：
+**派生而非枚举**：`deriveQuestions(features, { slots, askCounts, decls, l1?, l2?, candidates?, chapter? })`（`packages/shared/src/reqdoc-slots.ts`）从「必填叶子中未被 confirmed 占的」+「候选清单中未确认的容器子项」实时算出该问什么，返回四段：
 
 | 返回 | 含义 |
 |---|---|
@@ -340,6 +340,8 @@ flowchart TD
 
 **追问纪律不变**：`≤5 问/轮`、`A/B/C + 【默认推荐项】`、`≤3 轮`、业务语言（禁纯技术词汇）由 reqdoc-r2 约束；r27 进一步要求连续 2 轮走默认后改为开放式追问、强制给数字与真实举例。少问由**派生**保证（已确认的不再问），不由模型自觉保证。
 
+**章作用域（定点修订）**：传 `chapter` 时只出该章开放项（`reqdoc_start_scoped_edit` 锁定后，ingest/answer 的派生即以此收窄，见 7 章），不传保持全量。
+
 ## 7. 组装与幂等校验（PRD 是投影）
 
 **组装（`assembleDoc`，`packages/shared/src/reqdoc-assemble.ts`）**：纯函数入参 `(slots, features, templateText, { containers })`，模板逐字来自 `buildPrdSkeleton(templateText, features)`（部署包随带 `docs/reqdoc-prd-template.md`，客户端不依赖运行目录有模板文件）。逐节处理规则：
@@ -353,13 +355,15 @@ flowchart TD
 
 **Word 交付**：`reqdoc_export(source=PRD md 路径)` 把定稿 md 转 .docx，与源 md 同目录归档（实施方案「标准 PRD (Markdown/Word)」）。定稿后另有三项 best-effort 后处理：回填「第二章 文档变更过程」版本行（初始 1.0 / 重做 1.N）、复制 `PRD_V<N>.md` 到 `00_初稿需求书/` 供下轮迭代、把确认溯源追加到 PRD 末尾。
 
+**定点修订（保留原稿，只改单章）**：定稿后业务要改某章不必全量重走——`reqdoc_start_scoped_edit(chapter)` 冻结 `kb.editScope={chapter,snapshotBefore,active,sessionId}`，此后 `reqdoc_ingest`/`reqdoc_answer` 只接受锁定章地址（越界服务端拒收），派生也只出该章开放项。改完先 `reqdoc_assemble` 重组装，再在**锁定期间** `reqdoc_export(mode="diff"|"chapter", chapter)` 导出 `定点修订_第N章_差异.md`（差异 + 单向提醒 + 跨章影响随产物走；**释放锁后 diff 导出会抛错**），最后 `reqdoc_end_scoped_edit()` 释放锁。锁绑会话、会话结束或新 baseline 强清（防残留误拒他章）。大范围删改须业务拍板：退役占比 >50% 走 `retire_slots`+`confirmRetire`，空内容清空占比 >50% 须 `reqdoc_answer(confirmClear=true)`——两路同权，防用空内容绕过退役守卫清空一章。设计与对抗审核记录见 [`docs/reqdoc-scoped-edit.md`](reqdoc-scoped-edit.md)。
+
 **装配路径与文件名**：`assembleDir` 决定落盘目录（单功能点 → `07_需求规格产出/N_名称/`；多功能点 → `07_需求规格产出/`），定稿校验的预期路径由 `prdRelPath` 从 `kb.features` 推导并**固定拼接 `PRD.md`**。因此 `reqdoc_assemble` 的 `source` 参数只应留空或传 `PRD.md`——传其它文件名会让定稿校验判为「未找到 PRD 产物」。
 
 **docx 与 md 的维护约定**：`docs/模版.docx` 为权威源，`docs/reqdoc-prd-template.md` 为运行时载体（插件读的是 md；r14/r20 规则文本不引用 docx，避免双权威歧义）。**改 docx 必须同步重渲染 md**，否则「严格逐字遵循」名不副实。
 
 ## 8. 专属工具
 
-reqdoc 无 git 提交门禁（`hasCommitGate=false`），`commit_gate_*` 工具不启用。reqdoc 专属工具共 11 个（通用工具 workflow_advance/revisit/baseline/comprehension_*/review_submit 见 session-management.md 4.1）：
+reqdoc 无 git 提交门禁（`hasCommitGate=false`），`commit_gate_*` 工具不启用。reqdoc 专属工具共 13 个（通用工具 workflow_advance/revisit/baseline/comprehension_*/review_submit 见 session-management.md 4.1）：
 
 | 工具 | 用途 | 服务端校验 |
 |------|------|-----------|
@@ -371,7 +375,9 @@ reqdoc 无 git 提交门禁（`hasCommitGate=false`），`commit_gate_*` 工具�
 | `reqdoc_adopt_baseline` | reqdoc 承认基线：把一份已有需求书（自己的初稿 / 本流程上一版 PRD）派生的槽位一次性确认，业务不必把稿里已有的内容再说一遍；确认时冻结 `kb.baselineSnapshot` 作为变更清单基准 | 仅 reqdoc；**不带 `confirm` 先预演**（按章分组返回清单 + 覆盖率变化）；执行必须给 `authorized_by` + `confirm_note`，**模型不得代填**（照 `force_kb`/`force_reason` 先例）；**只认 `source=文档` 且 `ref` 指向该基线文件的槽位**（`[问答]` 的冒充基线 = 不实溯源）；**`unmapped` 必填**（可为空数组）：稿里有、模板装不下的内容逐条申报处置——不申报这类内容会静默消失；**承认基线不豁免任何必填项** |
 | `reqdoc_assemble` | reqdoc PRD 组装：把槽位投影成整篇 PRD（md）并归档 `07_需求规格产出/`（单功能点进 `N_名称/` 子目录，多功能点落根）。返回结构指纹 + 省略的空容器节 + 槽位摘要 | 仅 reqdoc；模板不可用或功能点为空报错（提示先 `reqdoc_ingest` 提交功能点）；结构与来源标签服务端保证，产物不得手工编辑 |
 | `reqdoc_memory_recall` | reqdoc 定稿记忆回顾（阶段 3 新增）：把本次收集到的组织知识候选（系统名/接口/产品线等）逐条列给业务**勾选**，勾选的写入 L2 组织记忆供后续需求复用为默认值；可选 `prefs` 写 L4 表达偏好（只影响措辞与详略）。定稿通过后调用一次即可 | 仅 reqdoc；**业务未勾选的绝不写入**——刻意做成独立工具而非定稿自动写（自动写等于 AI 决定什么值得记住，而记忆跨需求传播）；静默默认来源（`accepted_default`/`inferred`）不入库并在返回中列出；写入后把对应 `[问答]` 槽位置 `retired`（已进记忆不必重复追问，状态随工作流状态落库、知识库文件在下一次 `reqdoc_ingest`/`reqdoc_answer` 回写时同步）；不影响任何门禁与判定；可见性与遗忘走 `opencode-sm memory list` / `forget` |
-| `reqdoc_export` | reqdoc PRD 导出：定稿 PRD 从 md 转 Word（.docx）交付件，与源 md 同目录归档 | 仅 reqdoc；`source` 为 md 相对项目根路径；仅转换 .md（源不可读报错提示先组装） |
+| `reqdoc_export` | reqdoc PRD 导出：定稿 PRD 从 md 转 Word（.docx）交付件，与源 md 同目录归档；定点修订期间可 `mode="diff"`（地址级差异+单向提醒+跨章影响）或 `mode="chapter"`（整章内容）导出单章交付物（见 7 章） | 仅 reqdoc；`source` 为 md 相对项目根路径；仅转换 .md（源不可读报错提示先组装）；diff 模式要求 editScope 锁在（未进定点修订报错，释放后导出同样报错），chapter 模式只需合法章号 |
+| `reqdoc_start_scoped_edit` | reqdoc 定点修订入口：锁定单章、冻结修订前快照（差异基准），后续引导与派生都收窄到该章 | 仅 reqdoc；章号须为 PRD 模板合法章号；重复锁定会覆盖快照（改锁另一章前先 end）；返回锁定章标题 + 该章「本轮该填」 |
+| `reqdoc_end_scoped_edit` | reqdoc 定点修订出口：释放作用域锁，恢复全章可写 | 仅 reqdoc；无锁时空转（幂等）；锁另由会话结束 / 新 baseline 强清兜底 |
 | `reqdoc_import` | reqdoc 基于初稿完善入口：把业务已有初稿（docx/pdf/txt 等）落盘 `00_初稿需求书/`、解析为 `[文档]` 来源，并产出「规约初评」（按 7 份机构规约逐条点评 + 三类补全路径） | 仅 reqdoc；不自动 approve 任何阶段、不自动快进；规约初评只诊断不改写初稿 |
 | `reqdoc_review_conventions` | reqdoc 规约初评：读取 `00_初稿需求书/` 下的初稿，按 7 份机构规约输出「满足/缺失/矛盾 + 引用段落 + 补全路径」结构化初评 | 仅 reqdoc；无初稿时提示先 reqdoc_import；初评是诊断，不改写初稿 |
 
