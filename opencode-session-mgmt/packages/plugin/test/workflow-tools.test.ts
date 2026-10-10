@@ -4,7 +4,7 @@
  */
 import { describe, expect, test } from "bun:test"
 import { Store } from "../src/db"
-import { requiredSlots } from "sm-shared"
+import { requiredSlots, reviewRecord } from "sm-shared"
 import { createWorkflowTools } from "../src/tools/workflow"
 import { extractBaselineHours, applyBaselineProposal } from "../src/tools/baseline-proposal"
 import { createReviewTools } from "../src/tools/review"
@@ -237,6 +237,95 @@ describe("baseline-proposal（6.3 防杜撰解析，对抗加固）", () => {
     applyBaselineProposal(store, "s1", "刚开了 2 小时会", "m2")
     // 既不清成 2（闲聊数值），也不保留 8（陈旧复用），而是清空
     expect(store.get("s1")?.workflow?.baselineProposedByDev).toBeUndefined()
+    store.close()
+  })
+})
+
+describe("对抗 S1：enter 自动确认须 developer_confirmed，回执披露名单", () => {
+  test("无确认 enter 将自动确认前序被拒；带确认放行且回执列出", async () => {
+    const { store, tools } = setup()
+    store.mutateWorkflow("s1", (w) => {
+      w.stages.requirements.status = "in_progress"
+    })
+    await expect(
+      tools.workflow_advance!.execute({ stage: "design", action: "enter", developer_confirmed: false } as never, ctx),
+    ).rejects.toThrow(/自动确认/)
+    expect(store.get("s1")!.workflow!.stages.requirements.status).toBe("in_progress")
+    const out = String(
+      await tools.workflow_advance!.execute({ stage: "design", action: "enter", developer_confirmed: true } as never, ctx),
+    )
+    expect(out).toContain("自动确认：需求分析")
+    expect(store.get("s1")!.workflow!.stages.requirements.status).toBe("approved")
+    store.close()
+  })
+
+  test("无进行中前序的 enter 不要求确认（首阶段）", async () => {
+    const { store, tools } = setup()
+    const out = String(
+      await tools.workflow_advance!.execute({ stage: "requirements", action: "enter", developer_confirmed: false } as never, ctx),
+    )
+    expect(out).not.toContain("自动确认")
+    expect(store.get("s1")!.workflow!.stages.requirements.status).toBe("in_progress")
+    store.close()
+  })
+})
+
+describe("对抗 S3-A：级联触及审查时重置已确认理解片段", () => {
+  test("revisit implementation → review 回退且 accepted→pending；revisit review 自身不重置", async () => {
+    const { store, tools } = setup()
+    store.mutateWorkflow("s1", (w) => {
+      for (const n of ["requirements", "design", "implementation", "testing", "review"]) {
+        w.stages[n].status = "approved"
+      }
+      reviewRecord(w).comprehension.push({
+        id: "a.ts:1-10",
+        explanation: "示例片段",
+        decision: "accepted",
+        developerConfirmed: true,
+        confirmedAt: 1,
+        feedback: null,
+        rejectedAt: null,
+        rewrites: 0,
+        resolution: null,
+      })
+    })
+    await tools.workflow_revisit!.execute({ stage: "implementation" } as never, ctx)
+    const after = store.get("s1")!.workflow!
+    expect(after.stages.review.status).toBe("in_progress")
+    expect(reviewRecord(after).comprehension[0]!.decision).toBe("pending")
+    expect(reviewRecord(after).comprehension[0]!.developerConfirmed).toBe(false)
+    // 重新确认后，revisit 审查自身（代码未变）不重置
+    store.mutateWorkflow("s1", (wf) => {
+      const c = reviewRecord(wf).comprehension[0]!
+      c.decision = "accepted"
+      c.developerConfirmed = true
+      c.confirmedAt = 2
+      wf.stages.review.status = "approved"
+    })
+    await tools.workflow_revisit!.execute({ stage: "review" } as never, ctx)
+    expect(reviewRecord(store.get("s1")!.workflow!).comprehension[0]!.decision).toBe("accepted")
+    store.close()
+  })
+})
+
+describe("对抗 S2-A：sdlc review_submit 须附开发者确认原话", () => {
+  test("缺 confirm_note 被拒；附上放行", async () => {
+    const { store } = setup()
+    store.mutateWorkflow("s1", (w) => {
+      for (const n of ["requirements", "design", "implementation", "testing"]) {
+        w.stages[n].status = "approved"
+      }
+    })
+    const reviewTools = createReviewTools(store)
+    const checklist = { businessIntent: true, logicExplainable: true, behaviorVerifiable: true }
+    await expect(reviewTools.review_submit!.execute(checklist as never, ctx)).rejects.toThrow(/confirm_note/)
+    const out = String(
+      await reviewTools.review_submit!.execute(
+        { ...checklist, confirm_note: "四项都没问题，通过" } as never,
+        ctx,
+      ),
+    )
+    expect(out).toContain("审查阶段通过")
     store.close()
   })
 })

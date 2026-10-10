@@ -222,7 +222,7 @@ describe("review_submit 门禁", () => {
   test("纯讨论会话（无代码编辑）无片段也可通过", async () => {
     const { store, tools } = setup()
     await tools.review_submit!.execute(
-      { businessIntent: true, logicExplainable: true, behaviorVerifiable: true } as never,
+      { businessIntent: true, logicExplainable: true, behaviorVerifiable: true, confirm_note: "开发者：确认" } as never,
       ctx,
     )
     expect(reviewOf(store).status).toBe("approved")
@@ -236,7 +236,7 @@ describe("review_submit 门禁", () => {
     })
     await expect(
       tools.review_submit!.execute(
-        { businessIntent: true, logicExplainable: true, behaviorVerifiable: true } as never,
+        { businessIntent: true, logicExplainable: true, behaviorVerifiable: true, confirm_note: "开发者：确认" } as never,
         ctx,
       ),
     ).rejects.toThrow(/片段/)
@@ -245,7 +245,7 @@ describe("review_submit 门禁", () => {
 
   test("重复 review_submit 幂等（已 approved 不再报错）", async () => {
     const { store, tools } = setup()
-    const args = { businessIntent: true, logicExplainable: true, behaviorVerifiable: true } as never
+    const args = { businessIntent: true, logicExplainable: true, behaviorVerifiable: true, confirm_note: "开发者：确认" } as never
     await tools.review_submit!.execute(args, ctx)
     await expect(tools.review_submit!.execute(args, ctx)).resolves.toBeDefined()
     expect(reviewOf(store).status).toBe("approved")
@@ -260,7 +260,7 @@ describe("review_submit 门禁", () => {
     )
     await expect(
       tools.review_submit!.execute(
-        { businessIntent: true, logicExplainable: true, behaviorVerifiable: true } as never,
+        { businessIntent: true, logicExplainable: true, behaviorVerifiable: true, confirm_note: "开发者：确认" } as never,
         ctx,
       ),
     ).rejects.toThrow(/未定论/)
@@ -276,7 +276,7 @@ describe("review_submit 门禁", () => {
     await tools.comprehension_reject!.execute({ codeSegmentId: "a", feedback: "f" } as never, ctx)
     await expect(
       tools.review_submit!.execute(
-        { businessIntent: true, logicExplainable: true, behaviorVerifiable: true } as never,
+        { businessIntent: true, logicExplainable: true, behaviorVerifiable: true, confirm_note: "开发者：确认" } as never,
         ctx,
       ),
     ).rejects.toThrow(/未定论/)
@@ -292,7 +292,7 @@ describe("review_submit 门禁", () => {
     await tools.comprehension_confirm!.execute({ codeSegmentId: "a" } as never, ctx)
     await expect(
       tools.review_submit!.execute(
-        { businessIntent: false, logicExplainable: true, behaviorVerifiable: true } as never,
+        { businessIntent: false, logicExplainable: true, behaviorVerifiable: true, confirm_note: "开发者：确认" } as never,
         ctx,
       ),
     ).rejects.toThrow(/清单/)
@@ -307,7 +307,7 @@ describe("review_submit 门禁", () => {
     )
     await tools.comprehension_confirm!.execute({ codeSegmentId: "a" } as never, ctx)
     await tools.review_submit!.execute(
-      { businessIntent: true, logicExplainable: true, behaviorVerifiable: true } as never,
+      { businessIntent: true, logicExplainable: true, behaviorVerifiable: true, confirm_note: "开发者：确认" } as never,
       ctx,
     )
     const wf = store.get("s1")!.workflow!
@@ -323,7 +323,7 @@ describe("review_submit 门禁", () => {
     // 全新工作流：全 not_started → 直接拒绝
     await expect(
       tools.review_submit!.execute(
-        { businessIntent: true, logicExplainable: true, behaviorVerifiable: true } as never,
+        { businessIntent: true, logicExplainable: true, behaviorVerifiable: true, confirm_note: "开发者：确认" } as never,
         ctx,
       ),
     ).rejects.toThrow(/审查前须先完成/)
@@ -333,7 +333,7 @@ describe("review_submit 门禁", () => {
     })
     await expect(
       tools.review_submit!.execute(
-        { businessIntent: true, logicExplainable: true, behaviorVerifiable: true } as never,
+        { businessIntent: true, logicExplainable: true, behaviorVerifiable: true, confirm_note: "开发者：确认" } as never,
         ctx,
       ),
     ).rejects.toThrow(/审查前须先完成/)
@@ -359,7 +359,7 @@ describe("review_submit 门禁", () => {
     })
     store.lockFile("s1", "/home/dev/project/src/A.java")
     const out = await tools.review_submit!.execute(
-      { businessIntent: true, logicExplainable: true, behaviorVerifiable: true } as never,
+      { businessIntent: true, logicExplainable: true, behaviorVerifiable: true, confirm_note: "开发者：确认" } as never,
       ctx,
     )
     expect(String(out)).toContain("人工锁定")
@@ -474,7 +474,7 @@ describe("review_submit 门禁", () => {
     const { store, tools } = setup()
     // sdlc 无 score 也照常通过（门禁分支按 def.type === "reqdoc" 隔离）
     const out = await tools.review_submit!.execute(
-      { businessIntent: true, logicExplainable: true, behaviorVerifiable: true } as never,
+      { businessIntent: true, logicExplainable: true, behaviorVerifiable: true, confirm_note: "开发者：确认" } as never,
       ctx,
     )
     expect(String(out)).toContain("审查阶段通过")
@@ -583,7 +583,7 @@ describe("firstPassRate 自动计算", () => {
     await tools.comprehension_rewrite!.execute({ codeSegmentId: "b" } as never, ctx)
     await tools.comprehension_confirm!.execute({ codeSegmentId: "b" } as never, ctx)
     await tools.review_submit!.execute(
-      { businessIntent: true, logicExplainable: true, behaviorVerifiable: true } as never,
+      { businessIntent: true, logicExplainable: true, behaviorVerifiable: true, confirm_note: "开发者：确认" } as never,
       ctx,
     )
     // 2 段定论，仅 a 一次通过 → 50%
@@ -605,7 +605,7 @@ describe("firstPassRate 自动计算", () => {
     await tools.comprehension_reject!.execute({ codeSegmentId: "b", feedback: "f" } as never, ctx)
     await tools.comprehension_manual!.execute({ codeSegmentId: "b", resolution: "已废弃" } as never, ctx)
     await tools.review_submit!.execute(
-      { businessIntent: true, logicExplainable: true, behaviorVerifiable: true } as never,
+      { businessIntent: true, logicExplainable: true, behaviorVerifiable: true, confirm_note: "开发者：确认" } as never,
       ctx,
     )
     // a accepted(rewrites=0) + b manual → 1/2 = 50%
@@ -616,7 +616,7 @@ describe("firstPassRate 自动计算", () => {
   test("纯讨论会话无片段时 firstPassRate 保持 null", async () => {
     const { store, tools } = setup()
     await tools.review_submit!.execute(
-      { businessIntent: true, logicExplainable: true, behaviorVerifiable: true } as never,
+      { businessIntent: true, logicExplainable: true, behaviorVerifiable: true, confirm_note: "开发者：确认" } as never,
       ctx,
     )
     expect(store.get("s1")!.workflow!.quality.firstPassRate).toBeNull()
@@ -631,7 +631,7 @@ describe("firstPassRate 自动计算", () => {
     )
     await tools.comprehension_confirm!.execute({ codeSegmentId: "a" } as never, ctx)
     await tools.review_submit!.execute(
-      { businessIntent: true, logicExplainable: true, behaviorVerifiable: true } as never,
+      { businessIntent: true, logicExplainable: true, behaviorVerifiable: true, confirm_note: "开发者：确认" } as never,
       ctx,
     )
     expect(store.get("s1")!.workflow!.quality.firstPassRate).toBe(100)

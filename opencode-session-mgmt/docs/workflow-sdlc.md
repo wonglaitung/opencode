@@ -12,29 +12,31 @@ sdlc 是**开发者**的默认工作流，覆盖一次软件开发会话的完�
 
 **sdlc 定义**：五阶段 `["requirements","design","implementation","testing","review"]`，审查阶段为 `review`，四清单项（businessIntent/logicExplainable/behaviorVerifiable/designRationale），`hasCommitGate=true`，结构化规则见 3 章。
 
-## 3. 规则全文（sdlc-r1~r12）
+## 3. 规则全文（sdlc 全 15 条：r1~r13 + r37 + r38）
 
 规则以 `WorkflowDefinition.rules: RuleItem[]` 存储（见 session-management.md 3.2 注册表）。插件每轮经 `rulesForStage` **只注入 global + 当前 in_progress 阶段的规则**；无进行中阶段时只给 global + 起步提示（完成态走专用完成块，见 session-management.md 7.1）。规则文本只承载**模型可行动作**（调用哪个工具、何时、确认语义）；插件内部机制（行数统计、stuck 检测、一次通过率计算）由代码强制，不进注入文本。
 
-以下是 **sdlc** 的 12 条规则（6 global + 1 requirements + 5 review）：
+以下是 **sdlc** 的 15 条规则（7 global + 1 requirements + 1 implementation + 1 testing + 5 review）：
 
 | id | stage | 注入文本 |
 |----|-------|----------|
-| sdlc-r1 | global | 会话开始时，调用 workflow_advance(stage=requirements, action=enter) 初始化工作流。 |
-| sdlc-r2 | global | 阶段可能完成时，先输出摘要并询问确认；仅开发者明确表示「确认/通过/可以」才算确认——「你看着办」「差不多」等模糊表态不算，不得自行 approve。确认后调用 workflow_advance(action=approve, developer_confirmed=true)。 |
+| sdlc-r1 | global | 会话开始时，调用 workflow_start 初始化工作流（开发者说「启动/开始 SDLC 工作流」时也调用它，不要仅用文字回复）。 |
+| sdlc-r2 | global | 阶段可能完成时，先输出摘要并询问确认；仅开发者明确表示「确认/通过/可以」才算确认——「你看着办」「差不多」等模糊表态不算，不得自行 approve。确认后调用 workflow_advance(action=approve, developer_confirmed=true)。询问确认时须显式点明所确认的阶段名（如「【编码 阶段】以上编码是否确认？」），不得用笼统的「以上流程与规则是否确认」。注意：enter 进入下一阶段会自动确认仍处于进行中的前序阶段（工具强制）——同样必须在开发者明确确认之后才可调用（developer_confirmed=true），回执会列出被自动确认的阶段；不要用连环 enter 绕过逐阶段确认。 |
 | sdlc-r3 | global | 开发者说「回到XX」时，立即调用 workflow_revisit(stage=XX)。绝不自行判断阶段已完成。 |
 | sdlc-r4 | global | 要求提交时，先调用 commit_gate_check；全部五阶段（含审查）approved 后才可 git commit。 |
 | sdlc-r5 | global | 提交门禁放行且 git commit 成功后，提醒开发者执行 /new 开始下一个需求，保持统计隔离。 |
 | sdlc-r12 | global | 开发者表示要手工修改某段/某文件代码时，先调用 open_ide 并**必须携带 file 参数指明该文件**（不指定 file 不会锁定），以锁定该文件防 AI 覆盖。若开发者未明确文件，先询问要改哪个文件。锁定期间可继续其它任务（改其它文件/答疑），但不得修改被锁定的文件（write/edit/apply_patch 会被服务端拒绝）。开发者确认改完后，须经其明确确认（如说「改完了/可以继续」）再调用 unlock_file 解锁该文件，并重新读取最新文件内容后继续；多个锁定文件须逐个确认解锁。 |
 | sdlc-r13 | global | 阶段可见性（通用）：你每条回复的开头，必须用一行向开发者展示当前所处阶段与全部阶段进展，格式——📍 阶段：<当前阶段中文名>（第 N/Y 步）｜ 目的：<本阶段一句话目的> ｜ 已完成：<已 approved 阶段名>✓ ｜ 下一步：<下一阶段名>。处于「未开始/空档」态时，说明「尚未开始，请从<首阶段>开始」或「空档，下一步：<阶段名>」。向开发者询问确认/approve 时，必须显式点明所确认的**阶段名**（如「【编码 阶段】以上编码是否确认？」），不得用笼统的「以上流程与规则是否确认」之类不点名阶段的问法。 |
 | sdlc-r6 | requirements | 进入需求阶段时，主动询问预估人工工时（小时）；开发者明确给出后调用 workflow_baseline(developer_confirmed=true)。未提供不阻塞；已录入后不必重复询问。 |
+| sdlc-r37 | implementation | 每次改完代码立即自审一轮，不攒到提交前：① **波及面**——这次改动会波及哪些地方，一处不漏地列出来再动手：调用方（签名/返回值/导出改了吗）、运行与分发环境（宿主提供什么、依赖在别处会不会丢）、既有数据与产物（旧文件/已生成代码/已发出去的东西还在吗）、以及会被读到的文本（给机器的指令别混进给人看的输出，可见性去实际渲染路径核实而非凭感觉断言）。② **反例与方向**——给自己的修复构造一个能推翻它的场景（空值、并发、重复调用、顺序颠倒、上一步遗留状态），**跑出来而不是脑补**；并确认修法对齐了被比较双方的口径与方向，不只字面对上。③ **同类残留**——同类问题在别处多半也存在，grep 同模式一并处理，只修被点名的那一处等于修一半。④ **规约互查**——不与本目录其它规约（安全、日志、并发幂等）冲突。⑤ **护栏随修**——每条被证实的缺陷补一条能失败的测试钉住，与修复同一批提交；拿不准的取舍先回报再改，不静默绕过。 |
+| sdlc-r38 | testing | 进入测试阶段后先跑全量测试（项目既有测试套件），把结果摘要（通过/失败数、失败项）贴给开发者看；有失败未修复时不得请求确认通过。项目无测试套件时如实说明，并与开发者约定替代验证方式（如手工验收步骤）后再请求确认。 |
 | sdlc-r7 | review | review 是唯一不可由 AI 自行推进的阶段（必须经 review_submit），目标是确保开发者真正理解代码。 |
 | sdlc-r8 | review | 进入审查后，将每个 AI 生成的代码变更拆分为可理解片段，comprehension_add 逐段登记并输出解释（做了什么、为什么这样写、被放弃的替代方案、潜在风险）。 |
 | sdlc-r9 | review | 开发者确认某片段时，立即调用 comprehension_confirm(codeSegmentId=该片段 id)；单次只接受一个 codeSegmentId，逐段确认、禁止一次确认多个。 |
-| sdlc-r10 | review | 开发者追问时详细解释，comprehension_ask 将问答追加到该片段的 explanation。 |
+| sdlc-r10 | review | 开发者追问时详细解释，comprehension_ask 将问答追加到该片段的 explanation。**追问必须登记成问答，不要用 read_file 自看代码代替**——不登记的问答不进理解证据链。 |
 | sdlc-r11 | review | 每个片段须达成终态（confirm 接受 / manual 开发者自处理），不允许 pending/rejected 悬空；拒绝的片段先 comprehension_rewrite 重写或 manual 定论，全部定论且前序阶段（requirements/design/implementation/testing）全部 approved 后才可 review_submit；清单四项须全为 true，否则回到编码/测试。返工多应结合拒绝意见 rewrite 改进，而非简单重试。 |
 
-> 注入时机：进行中阶段为 requirements 时注入 7 条（r1-r6 + r12）；design/implementation/testing 时注入 6 条（r1-r5 + r12）；review 时注入 11 条（r1-r5 + r7-r12）。
+> 注入时机：global 恒为 7 条（r1-r5 + r12 + r13）。requirements 注入 8 条（+r6）；design 注入 7 条；implementation 注入 8 条（+r37）；testing 注入 8 条（+r38）；review 注入 12 条（+r7-r11）。
 
 ## 4. 实际效果：开发者看到什么（场景一~四）
 
@@ -153,6 +155,8 @@ sdlc 的审查清单（`ReviewChecklist`）由 `WorkflowDefinition.checklist` �
 | `logicExplainable` | 圈复杂度 > 10 的方法必须有行内注释 | 静态分析 + 审查 |
 | `behaviorVerifiable` | 每个 Service 方法至少有一个集成测试，测试即使用文档 | 审查清单 + 门禁 |
 | **`designRationale`** | **AI 必须为每个代码变更输出设计推导：为什么这样写、有哪些替代方案被放弃、潜在风险是什么** | **开发者逐段定夺（accepted / manual）** |
+
+清单布尔之外，sdlc 的 `review_submit` 还须附 **`confirm_note`**（开发者确认审查清单的原话摘录，如「四项都没问题，通过」）——与 `adopt_baseline` 的 `authorized_by`/`confirm_note` 同纪律，模型不得代拟；reqdoc 不重复要求（其已接受要点有 P3.10 确认溯源硬门）。
 
 **一次通过率**（`firstPassRate`）由 `review_submit` 审查通过时自动计算，公式与口径见 session-management.md 3.2——sdlc 分母为「代码片段」、reqdoc 分母为「PRD 要点」。
 

@@ -267,6 +267,13 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
       "通过时自动计算一次通过率 firstPassRate 写入质量指标。具名参数由当前工作流类型的审查清单生成。",
     args: {
       ...reviewChecklistArgs,
+      confirm_note: z
+        .string()
+        .optional()
+        .describe(
+          "sdlc 必填：开发者确认审查清单的原话摘录（如「四项都没问题，通过」）——模型不得代拟，" +
+            "与 adopt_baseline 的 authorized_by/confirm_note 同纪律。reqdoc 不需要（已有确认溯源硬门）。",
+        ),
       force_kb: z
         .boolean()
         .optional()
@@ -290,6 +297,14 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
       let liveMd: string | undefined
       let prdMissing = false
       const wf0 = store.ensure(context.sessionID).workflow
+      // 对抗 S2-A：sdlc 审查清单曾是纯模型自证布尔，与 baseline（对话数字证据匹配）、
+      // adopt_baseline（authorized_by+confirm_note）的证据纪律不一致——须附开发者确认原话。
+      // reqdoc 不重复要求：其已接受要点有 P3.10 确认溯源硬门。
+      if (wf0?.type === "sdlc" && !(args.confirm_note as string | undefined)?.trim()) {
+        throw new WorkflowOpError(
+          "review_submit 须附 confirm_note：开发者确认审查清单的原话摘录（如「四项都没问题，通过」）。模型不得代拟。",
+        )
+      }
       if (wf0?.kb) {
         try {
           const root = projectRoot(context)

@@ -58,7 +58,7 @@ export function createWorkflowTools(store: Store): Record<string, ToolDefinition
       action: z.enum(["enter", "approve"]).describe("enter=开始该阶段；approve=确认完成"),
       developer_confirmed: z
         .boolean()
-        .describe("approve 时必须为 true，表示开发者已在对话中明确确认；否则调用将被拒绝"),
+        .describe("approve 或「enter 将自动确认前序阶段」时必须为 true，表示开发者已在对话中明确确认；否则调用将被拒绝"),
       note: z.string().optional().describe("本次转换的备注"),
       force_kb: z
         .boolean()
@@ -75,6 +75,8 @@ export function createWorkflowTools(store: Store): Record<string, ToolDefinition
       if (args.force_kb && !args.force_reason) {
         throw new WorkflowOpError("force_kb=true 必须同时给 force_reason（理由须由业务给出，模型不得代填）")
       }
+      // 对抗 S1：enter 自动确认前序阶段的名单，供回执披露（同 workflow_revisit 级联披露的先例）。
+      let autoApprovedLabels: string[] = []
       const saved = store.mutateWorkflow(context.sessionID, (workflow) => {
         assertStage(workflow, args.stage)
         const def = getDefinition(workflow.type)
@@ -122,14 +124,26 @@ export function createWorkflowTools(store: Store): Record<string, ToolDefinition
         }
         // 进入下一阶段即自动确认（approve）上一阶段（工具强制，防"进入即进行中、确认未落库"缝隙，
         // 见报告#7）：仅把处于 in_progress 的前序阶段补 approve，已 approved 跳过、not_started 不动。
+        // 对抗 S1：自动路径绕过 approve 的 developer_confirmed 检查——凡会触发自动确认的 enter
+        // 一律要求同款确认自证，否则连环 enter 等于零确认走完全部非审查门禁。
         if (args.action === "enter") {
           const idx = def.stages.indexOf(args.stage)
+          const autoApprove: string[] = []
           for (let i = idx - 1; i >= 0; i--) {
             const pred = def.stages[i]!
-            if (workflow.stages[pred].status === "in_progress") {
-              applyTransition(workflow, pred, "approve", Date.now(), "进入下一阶段自动确认上一阶段")
-            }
+            if (workflow.stages[pred].status === "in_progress") autoApprove.push(pred)
           }
+          if (autoApprove.length > 0 && args.developer_confirmed !== true) {
+            throw new WorkflowOpError(
+              `进入「${def.labels[args.stage] ?? args.stage}」将自动确认已完成的前序阶段：${autoApprove
+                .map((n) => def.labels[n] ?? n)
+                .join("、")}。须开发者明确确认后才可推进（developer_confirmed=true）；未经确认请勿 enter。`,
+            )
+          }
+          for (const pred of autoApprove) {
+            applyTransition(workflow, pred, "approve", Date.now(), "进入下一阶段自动确认上一阶段")
+          }
+          autoApprovedLabels = autoApprove.map((n) => def.labels[n] ?? n)
         }
         applyTransition(workflow, args.stage, args.action, Date.now(), args.note)
       })
@@ -144,8 +158,9 @@ export function createWorkflowTools(store: Store): Record<string, ToolDefinition
           ? `\n🚧 下一阶段「${def.labels[nextKey] ?? nextKey}」前置条件（须满足后再推进）：\n  - ${REQDOC_STAGE_PREREQS[nextKey]!.join("\n  - ")}`
           : ""
       return (
-        `✅ ${def.labels[args.stage] ?? args.stage} → ${stage.status}\n` +
-        `提交状态：${saved.commit.status}` +
+        `✅ ${def.labels[args.stage] ?? args.stage} → ${stage.status}` +
+        (autoApprovedLabels.length ? `（自动确认：${autoApprovedLabels.join("、")}）` : "") +
+        `\n提交状态：${saved.commit.status}` +
         (saved.commit.blocked_by.length ? `（未完成：${saved.commit.blocked_by.join("、")}）` : "") +
         prereqLines
       )

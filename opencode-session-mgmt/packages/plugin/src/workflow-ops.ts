@@ -3,7 +3,7 @@
  * 阶段转换（enter/approve/revisit）、审查回退与提交门禁重算——
  * 集中于此供插件工具复用与单元测试，不触碰数据库。
  */
-import { getDefinition, type TransitionAction, type WorkflowState } from "sm-shared"
+import { getDefinition, reviewRecord, type TransitionAction, type WorkflowState } from "sm-shared"
 
 export class WorkflowOpError extends Error {}
 
@@ -75,6 +75,18 @@ export function applyTransition(
           downstream.status = "in_progress"
           downstream.revision += 1
           downstream.transitions.push({ action: "revisit", at, note })
+        }
+      }
+      // 对抗 S3-A：级联回退触及审查时，已确认的理解片段失效重置——旧确认对应的是改动前的
+      // 代码/要点，返工后不得以 stale 确认通过 review_submit（review 自身返工不算，代码未变）。
+      const reviewIdx = def.reviewStage ? def.stages.indexOf(def.reviewStage) : -1
+      if (reviewIdx > idx) {
+        for (const c of reviewRecord(workflow).comprehension) {
+          if (c.decision === "accepted") {
+            c.decision = "pending"
+            c.developerConfirmed = false
+            c.confirmedAt = null
+          }
         }
       }
       break
