@@ -531,6 +531,13 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
       const saved = store.mutateWorkflow(context.sessionID, (workflow) => {
         requireReqdoc(workflow, "reqdoc_start_scoped_edit")
         const kb = readKb(workflow)
+        // 对抗 H3：重复锁定会静默重置快照基准、差异丢失先前改动——active 期间一律拒绝。
+        if (kb.editScope?.active) {
+          throw new WorkflowOpError(
+            `已处于定点修订（锁定第 ${kb.editScope.chapter} 章）：重复锁定会重置差异基准、丢失已做改动。` +
+              `继续编辑本章无需再锁；要改其它章请先 reqdoc_end_scoped_edit 结束本次修订。`,
+          )
+        }
         const schema = templateSchema()
         if (!schema?.chapters.some((c) => c.number === args.chapter)) {
           throw new WorkflowOpError(

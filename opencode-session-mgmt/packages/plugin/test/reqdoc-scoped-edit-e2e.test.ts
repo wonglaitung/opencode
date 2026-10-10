@@ -33,6 +33,8 @@ const startEdit = (tools: ReturnType<typeof createReqdocKbTools>, chapter: numbe
   tools.reqdoc_start_scoped_edit!.execute({ chapter } as never, ctx)
 const endEdit = (tools: ReturnType<typeof createReqdocKbTools>, ctx: never) =>
   tools.reqdoc_end_scoped_edit!.execute({} as never, ctx)
+const memoryRecall = (tools: ReturnType<typeof createReqdocKbTools>, args: unknown, ctx: never) =>
+  tools.reqdoc_memory_recall!.execute(args as never, ctx)
 
 describe("定点修订 · 端到端链路（乙）", () => {
   test("start_scoped_edit 冻结编辑前快照，并限定派生只出该章", async () => {
@@ -130,6 +132,58 @@ describe("定点修订 · 端到端链路（乙）", () => {
     // 带业务确认放行
     const out = String(await answer(tools, { address: "3.2", content: "", source: "问答", confirmClear: true }, ctx))
     expect(out).toContain("已确认")
+    store.close()
+  })
+
+  test("H3：重复锁定拒绝（防差异基准静默重置），end 后可重入", async () => {
+    const { store, tools, ctx } = setup()
+    await ingest(tools, { features: [{ name: "名单排查", priority: "high" }], slots: [
+      { address: "3.1", kind: "prose", content: "原稿", source: "文档" },
+    ] }, ctx)
+    await startEdit(tools, 3, ctx)
+    await expect(startEdit(tools, 3, ctx)).rejects.toThrow(/差异基准/)
+    await endEdit(tools, ctx)
+    await startEdit(tools, 3, ctx)
+    store.close()
+  })
+
+  test("H2：差异导出逐项标注未确认内容（draft 不得与 confirmed 混列）", async () => {
+    const { store, tools, exTools, ctx, worktree } = setup()
+    await ingest(tools, { features: [{ name: "名单排查", priority: "high" }], slots: [
+      { address: "3.1", kind: "prose", content: "甲", source: "文档" },
+    ] }, ctx)
+    await startEdit(tools, 3, ctx)
+    await answer(tools, { address: "3.1", content: "修订甲", source: "问答" }, ctx)
+    await ingest(tools, { slots: [
+      { address: "3.2", kind: "prose", content: "未确认新内容", source: "文档" },
+    ] }, ctx)
+    await exTools.reqdoc_export!.execute({ mode: "diff", chapter: 3 } as never, ctx)
+    const md = readFileSync(pjoin(worktree, "07_需求规格产出", "定点修订_第3章_差异.md"), "utf8")
+    expect(md).toContain("3.1（改写）")
+    expect(md).not.toContain("3.1（改写）（待业务确认）")
+    expect(md).toContain("3.2（新增）（待业务确认）")
+    store.close()
+  })
+
+  test("H1：整章导出剔除 retired 正文、单列已移除", async () => {
+    const { store, tools, exTools, ctx, worktree } = setup()
+    await ingest(tools, { features: [{ name: "名单排查", priority: "high" }], slots: [
+      { address: "3.1", kind: "prose", content: "存活内容", source: "文档" },
+      { address: "3.2", kind: "prose", content: "将退役内容", source: "文档" },
+    ] }, ctx)
+    await answer(tools, { address: "3.1", content: "存活", source: "问答" }, ctx)
+    await answer(tools, { address: "3.2", content: "退役正文", source: "问答" }, ctx)
+    await startEdit(tools, 3, ctx)
+    // 锁定章内退役 1/2 = 50%，未超阈值无需 confirmRetire
+    await memoryRecall(tools, { facts: [], retire_slots: ["3.2"] }, ctx)
+    await exTools.reqdoc_export!.execute({ mode: "chapter", chapter: 3 } as never, ctx)
+    const md = readFileSync(pjoin(worktree, "07_需求规格产出", "定点修订_第3章_整章.md"), "utf8")
+    expect(md).toContain("### 3.1")
+    expect(md).toContain("存活")
+    expect(md).not.toContain("### 3.2")
+    expect(md).not.toContain("退役正文")
+    expect(md).toContain("已移除（retired，不贴回）")
+    expect(md).toContain("- 3.2")
     store.close()
   })
 })

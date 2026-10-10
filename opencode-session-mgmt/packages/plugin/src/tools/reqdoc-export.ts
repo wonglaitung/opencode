@@ -326,7 +326,9 @@ export function createReqdocExportTool(store: Store): Record<string, ToolDefinit
           for (const a of [...d.added, ...d.changed]) {
             const s = kb.slots.find((x) => x.address === a)
             if (!s) continue
-            lines.push(`### ${a}（${d.added.includes(a) ? "新增" : "改写"}）`, s.content, "")
+            // 对抗 H2：draft（未经业务确认）与 confirmed 同列会让人误贴——逐项标注。
+            const pending = s.status === "confirmed" ? "" : "（待业务确认）"
+            lines.push(`### ${a}（${d.added.includes(a) ? "新增" : "改写"}）${pending}`, s.content, "")
           }
           if (d.removed.length) {
             lines.push("## 已移除（retired / 消失）")
@@ -334,7 +336,9 @@ export function createReqdocExportTool(store: Store): Record<string, ToolDefinit
             lines.push("")
           }
         } else {
-          const inCh = kb.slots.filter((s) => chapterOf(s.address) === target)
+          // 对抗 H1：整章导出曾原样打印 retired 内容——用户会把已删内容贴回原稿。
+          const inCh = kb.slots.filter((s) => chapterOf(s.address) === target && s.status !== "retired")
+          const removedInCh = kb.slots.filter((s) => chapterOf(s.address) === target && s.status === "retired")
           lines.push(`# 定点修订 · 第${target}章《${title}》整章导出`, "")
           lines.push(
             `> ⚠ 单向提醒：贴回原稿后系统不回读；原稿节映射：本导出对应 PRD 第${target}章《${title}》，` +
@@ -342,7 +346,13 @@ export function createReqdocExportTool(store: Store): Record<string, ToolDefinit
           )
           lines.push("")
           for (const s of inCh) {
-            lines.push(`### ${s.address}`, s.content, "")
+            const pending = s.status === "confirmed" ? "" : "（待业务确认）"
+            lines.push(`### ${s.address}${pending}`, s.content, "")
+          }
+          if (removedInCh.length) {
+            lines.push("## 已移除（retired，不贴回）")
+            for (const s of removedInCh) lines.push(`- ${s.address}`)
+            lines.push("")
           }
         }
         const impact = crossChapterImpact(kb.slots, target)
