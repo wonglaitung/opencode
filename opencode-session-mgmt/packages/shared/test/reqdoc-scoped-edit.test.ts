@@ -5,6 +5,7 @@
  */
 import { describe, expect, test } from "bun:test"
 import {
+  chapterClearRatio,
   chapterDiff,
   chapterOf,
   chapterRetireRatio,
@@ -62,6 +63,17 @@ describe("定点修订 · 章作用域纯函数", () => {
     const slots = [slot("3.1"), slot("3.2"), slot("3.3", { status: "retired" })]
     expect(chapterRetireRatio(slots, 3)).toBeCloseTo(1 / 3)
     expect(chapterRetireRatio(slots, 3, ["3.2"])).toBeCloseTo(2 / 3)
+  })
+
+  test("chapterClearRatio 含拟写空（对抗 F：空内容与退役同权）", () => {
+    const slots = [slot("3.1"), slot("3.2"), slot("3.3", { content: "  " })]
+    expect(chapterClearRatio(slots, 3)).toBeCloseTo(1 / 3)
+    expect(chapterClearRatio(slots, 3, ["3.2"])).toBeCloseTo(2 / 3)
+    // 已空的地址重复提议不双计；他章地址不计入
+    expect(chapterClearRatio(slots, 3, ["3.3", "4.1"])).toBeCloseTo(1 / 3)
+    // 已退役槽位不进分母（退役占比归 confirmRetire 管，不重复计）
+    const withRetired = [...slots, slot("3.4", { status: "retired", content: "" })]
+    expect(chapterClearRatio(withRetired, 3)).toBeCloseTo(1 / 3)
   })
 
   test("chapterDiff 地址级增改删", () => {

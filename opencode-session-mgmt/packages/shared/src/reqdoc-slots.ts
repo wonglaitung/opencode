@@ -269,6 +269,24 @@ export function chapterRetireRatio(
   return (nowRetired + proposed) / inCh.length
 }
 
+/**
+ * 某章「内容为空」槽位占比（含本次拟写空的地址），>0.5 触发 confirmClear 守卫。
+ * 对抗 F：confirmRetire 只看退役，空内容 answer 可绕过它悄悄清空一章——两路占比同权。
+ */
+export function chapterClearRatio(
+  slots: readonly ReqdocSlot[],
+  ch: number,
+  proposedClears: readonly string[] = [],
+): number {
+  const inCh = slotsByChapter(slots, ch).filter((s) => s.status !== "retired")
+  if (inCh.length === 0) return 0
+  const nowEmpty = inCh.filter((s) => s.content.trim() === "").length
+  const proposed = proposedClears.filter(
+    (a) => chapterOf(a) === ch && inCh.some((s) => s.address === a && s.content.trim() !== ""),
+  ).length
+  return (nowEmpty + proposed) / inCh.length
+}
+
 /** 单章 diff（地址级增/改/删），导出定点差异用。 */
 export interface ChapterDiff {
   added: string[]

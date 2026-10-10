@@ -20,6 +20,7 @@ import {
   STOP_ASK_AFTER,
   advanceAskCounts,
   chapterOf,
+  chapterClearRatio,
   chapterRetireRatio,
   deriveQuestions,
   featuresAppendViolation,
@@ -390,6 +391,13 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
             "下一个需求材料出现该词将直接采信、不再追问。**业务只是点了「同意默认」时绝对不要填**——" +
             "静默接受不入库，否则错误定义会跨需求传播。",
         ),
+      confirmClear: z
+        .boolean()
+        .optional()
+        .describe(
+          "定点修订中，当空内容 answer 使锁定章的清空占比超过 50% 时，必须显式传 true 确认" +
+            "（大范围删改须业务拍板；防用空内容绕过退役守卫悄悄清空一章）。",
+        ),
     },
     async execute(args, context) {
       const root = projectRoot(context)
@@ -411,6 +419,18 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
             `已进入定点修订，作用域锁定在第 ${kb.editScope.chapter} 章：地址 ${args.address} 不在该章。` +
               `请只改第 ${kb.editScope.chapter} 章；要改其它章请先结束本次定点修订。`,
           )
+        }
+        // 对抗 F：confirmRetire 只看退役，空内容 answer 可绕过它清空整章——清空占比 >50% 同权须确认。
+        if (kb.editScope?.active && args.content.trim() === "") {
+          const ch = kb.editScope.chapter
+          const ratio = chapterClearRatio(kb.slots, ch, [args.address])
+          if (ratio > 0.5 && !args.confirmClear) {
+            throw new WorkflowOpError(
+              `定点修订中空内容将清空第 ${ch} 章的 ${Math.round(ratio * 100)}% 槽位（>50%）。` +
+                `大范围删改须业务拍板：确属业务要求，传 confirmClear=true 重试；` +
+                `若本意是退役槽位，用 reqdoc_memory_recall 的 retire_slots（大范围退役同样要 confirmRetire）——不要用空内容代替退役。`,
+            )
+          }
         }
         const idx = kb.slots.findIndex((s) => s.address === args.address)
         const prev = idx >= 0 ? kb.slots[idx]! : undefined

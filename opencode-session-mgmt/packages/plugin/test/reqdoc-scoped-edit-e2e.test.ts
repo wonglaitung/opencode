@@ -109,4 +109,27 @@ describe("定点修订 · 端到端链路（乙）", () => {
     expect(diffMd).not.toContain("信贷审批部") // 越界 ch4 被拒，未进差异
     store.close()
   })
+
+  test("对抗 F：空内容清空 >50% 须 confirmClear，非修订态不受限", async () => {
+    const { store, tools, ctx } = setup()
+    await ingest(tools, { features: [{ name: "名单排查", priority: "high" }], slots: [
+      { address: "3.1", kind: "prose", content: "甲", source: "文档" },
+      { address: "3.2", kind: "prose", content: "乙", source: "文档" },
+      { address: "3.3", kind: "prose", content: "丙", source: "文档" },
+    ] }, ctx)
+    for (const a of ["3.1", "3.2", "3.3"]) {
+      await answer(tools, { address: a, content: `内容${a}`, source: "问答" }, ctx)
+    }
+    // 非修订态：空内容允许（守卫只管定点修订）
+    await answer(tools, { address: "3.3", content: "", source: "问答" }, ctx)
+    // 进入修订锁 ch3：3.3 已空=1/3；写空 3.2 → 2/3 >50% 被拒
+    await startEdit(tools, 3, ctx)
+    await expect(
+      answer(tools, { address: "3.2", content: "", source: "问答" }, ctx),
+    ).rejects.toThrow(/清空/)
+    // 带业务确认放行
+    const out = String(await answer(tools, { address: "3.2", content: "", source: "问答", confirmClear: true }, ctx))
+    expect(out).toContain("已确认")
+    store.close()
+  })
 })
