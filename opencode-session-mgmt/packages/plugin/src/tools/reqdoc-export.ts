@@ -373,7 +373,8 @@ export function createReqdocExportTool(store: Store): Record<string, ToolDefinit
         return (
           `已导出定点修订（${args.mode === "diff" ? "差异" : "整章"}）第${target}章《${title}》：\n` +
           `- ${outMd}\n- ${outDocx}\n` +
-          `⚠ 请务必转述给用户：① 贴回原稿后系统不回读（单向）；② 跨章影响见导出内「跨章影响」节；③ 原稿节映射提示见导出顶部。`
+          `⚠ 请按业务场景转述：有外部原稿、需把内容贴回的——① 贴回后系统不回读（单向）② 跨章影响见导出内「跨章影响」节 ` +
+          `③ 原稿节映射见导出顶部；无外部原稿（纯对话产出）的——不必贴回，直接用重组装后的 07 产物/Word 交付，本文件仅作改动清单。`
         )
       }
       if (extname(args.source).toLowerCase() !== ".md") {

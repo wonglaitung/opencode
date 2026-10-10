@@ -200,6 +200,85 @@ test("reqdoc 完成：提示 /new + revisit，无 git 门禁相关文案", () =>
       expect(end).toBeGreaterThan(exp)
     })
 
+    // 对抗 M1：整块引导曾只在 prd 注入——review / 定稿后「只改一章」时引导与 active 纪律
+    // 全部丢失，锁定与收尾靠模型临时发挥。
+    function reqdocAtReview(): WorkflowState {
+      const s = createWorkflowState("reqdoc")
+      for (const name of ["goal", "rules", "edge", "prd"]) {
+        applyTransition(s, name, "enter", 1)
+        applyTransition(s, name, "approve", 2)
+      }
+      applyTransition(s, "review", "enter", 3)
+      s.kb = {
+        slots: [],
+        features: [{ no: 1, name: "名单排查", priority: "high", confirmedAt: 1 }],
+        containers: {},
+        askCounts: {},
+        updatedAt: 1,
+      }
+      return s
+    }
+
+    test("★ M1：review 阶段注入一句修订引导（非 prd 不再裸奔）", () => {
+      const text = buildSystemFragment(reqdocAtReview(), {}, [], NO_OVERLAY)
+      expect(text).toContain("reqdoc_start_scoped_edit(chapter) 锁定该章")
+      // 未锁定时不出现 active 块
+      expect(text).not.toContain("# 定点修订进行中")
+    })
+
+    test("★ M1：review 阶段 active 块注入（组装/导出/释放纪律不因阶段丢失）", () => {
+      const s = reqdocAtReview()
+      s.kb!.editScope = { chapter: 3, snapshotBefore: [], active: true, sessionId: "t", at: 1 }
+      const text = buildSystemFragment(s, {}, [], NO_OVERLAY)
+      expect(text).toContain("# 定点修订进行中")
+      const active = text.slice(text.indexOf("# 定点修订进行中"))
+      const exp = active.indexOf('reqdoc_export(mode:"diff"|"chapter"')
+      const end = active.indexOf("reqdoc_end_scoped_edit 释放锁")
+      expect(exp).toBeGreaterThan(-1)
+      expect(end).toBeGreaterThan(exp)
+    })
+
+    test("★ M1：完成态 active 块仍注入（定稿后锁定修订不裸奔）", () => {
+      const s = completeReqdoc()
+      s.kb = {
+        slots: [],
+        features: [{ no: 1, name: "名单排查", priority: "high", confirmedAt: 1 }],
+        containers: {},
+        askCounts: {},
+        updatedAt: 1,
+        editScope: { chapter: 3, snapshotBefore: [], active: true, sessionId: "t", at: 1 },
+      }
+      const text = buildSystemFragment(s, {}, [], NO_OVERLAY)
+      expect(text).toContain("Workflow 已完成")
+      expect(text).toContain("# 定点修订进行中")
+    })
+
+    test("★ L1：贴回话术区分有/无外部原稿（prd 静态引导）", () => {
+      const s = reqdocAtPrd()
+      s.kb = {
+        slots: [],
+        features: [{ no: 1, name: "名单排查", priority: "high", confirmedAt: 1 }],
+        containers: {},
+        askCounts: {},
+        updatedAt: 1,
+      }
+      const text = buildSystemFragment(s, {}, [], NO_OVERLAY)
+      expect(text).toContain("无外部原稿（纯对话产出）时不必导差异")
+    })
+
+    test("★ L1：完成态引导同样区分有/无外部原稿", () => {
+      const s = completeReqdoc()
+      s.kb = {
+        slots: [],
+        features: [{ no: 1, name: "名单排查", priority: "high", confirmedAt: 1 }],
+        containers: {},
+        askCounts: {},
+        updatedAt: 1,
+      }
+      const text = buildSystemFragment(s, {}, [], NO_OVERLAY)
+      expect(text).toContain("无外部原稿时直接 reqdoc_export 导更新版 Word 交付")
+    })
+
     test("★ reqdoc prd 阶段 + kb 缺省（revisit 回退）：注入建库指引，不注入旧手写渲染指引", () => {
       const text = buildSystemFragment(reqdocAtPrd(), {}, [], NO_OVERLAY)
       expect(text).toContain("# 需求知识库未建")

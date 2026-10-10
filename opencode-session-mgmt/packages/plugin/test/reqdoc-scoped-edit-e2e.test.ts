@@ -186,4 +186,20 @@ describe("定点修订 · 端到端链路（乙）", () => {
     expect(md).toContain("- 3.2")
     store.close()
   })
+
+  test("M2：锁定期间 retire_slots 跨章退役被拒（scope 锁覆盖退役旁路）", async () => {
+    const { store, tools, ctx } = setup()
+    await ingest(tools, { features: [{ name: "名单排查", priority: "high" }], slots: [
+      { address: "3.1", kind: "prose", content: "三章", source: "文档" },
+      { address: "3.2", kind: "prose", content: "三章二", source: "文档" },
+      { address: "4.1.CRD", kind: "term", content: "信贷审批部", source: "文档" },
+    ] }, ctx)
+    await startEdit(tools, 3, ctx)
+    await expect(
+      memoryRecall(tools, { facts: [], retire_slots: ["4.1.CRD"] }, ctx),
+    ).rejects.toThrow(/章外地址/)
+    // 章内退役不受影响（1/2 = 50%，未超阈值，无需 confirmRetire）
+    await memoryRecall(tools, { facts: [], retire_slots: ["3.1"] }, ctx)
+    store.close()
+  })
 })

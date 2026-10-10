@@ -36,6 +36,39 @@ export function buildSystemFragment(
   // 绑定规约送达（阶段化：global 常驻 + 当前阶段专属，见 conventions.ts）。stage===null 时只有 global。
   const conventions = loadWorkflowConventions(def.type, stage, projectRoot)
 
+  // 定点修订（阶段无关，对抗 M1）：此前整块挂在 stage==="prd" 门控内——review 阶段与定稿后
+  // 「只改一章」时引导与 active 纪律（先重组装 / 导出在锁定期间 / 不重标 source）全部丢失，
+  // 锁定与收尾全靠模型临时发挥，正是「已改好」空头宣称的温床。放在 isComplete 早退之前，
+  // 保证定稿完成态也能收到。
+  if (def.type === "reqdoc") {
+    const scope = workflow.kb?.editScope
+    if (scope?.active) {
+      const ch = scope.chapter
+      const impact = crossChapterImpact(workflow.kb!.slots, ch)
+      parts.push(
+        "",
+        `# 定点修订进行中（锁定第 ${ch} 章）`,
+        "",
+        `本次只改第 ${ch} 章：引导业务补全该章事实即可，不要去问/改其它章；ingest/answer 越界会被服务端拒收。`,
+        `改的内容一律 source=问答；原文档已摄入、本次未动的槽位保持 source=文档，不要重标。`,
+        ...(impact.length ? [`跨章影响（仅供参考、不阻断）：${impact.join("；")}`] : []),
+        `槽位有改动后先 reqdoc_assemble 重组装（否则 kb-digest 过期、定稿三重校验会拒）。`,
+        `业务要把差异贴回原稿时：在锁定期间 reqdoc_export(mode:"diff"|"chapter", chapter:${ch}) 导出（差异导出要求锁在），` +
+          `说明「贴回后系统不回读（单向）」，最后 reqdoc_end_scoped_edit 释放锁。`,
+        `无外部原稿（纯对话产出）时不必导差异：重组装后直接 reqdoc_export 导出更新版 Word 交付即可。`,
+        "",
+      )
+    } else if (stage !== "prd" && !isComplete(workflow)) {
+      parts.push(
+        "",
+        "若业务只想改已有需求书的某一章（而非整体重做）：先回显 PRD 章目录+标题+内容预览请业务认领，确认后 " +
+          "reqdoc_start_scoped_edit(chapter) 锁定该章，不要逼业务重答全部必填项；改完先 reqdoc_assemble 重组装，" +
+          "锁定期间 reqdoc_export(mode, chapter) 导差异（有外部原稿需贴回时），最后 reqdoc_end_scoped_edit 释放锁；" +
+          "无外部原稿时重组装后直接 reqdoc_export 导更新版 Word 交付。",
+      )
+    }
+  }
+
   // 完成态（全部阶段 approved，stage===null）：不注入常规规则——全局规则里的 r1「初始化工作流」
   // 等在完成态会与「已全部完成」自相矛盾，误导弱模型重启流程；改为给全完成态的三条可行动作：
   // 提交（如尚未）→ /new 开新需求 → revisit 改本需求。
@@ -61,6 +94,12 @@ export function buildSystemFragment(
         "在这份需求上新增功能：调用 workflow_revisit(stage=prd) 回到需求规格书阶段，" +
           "功能点只能在原清单末尾追加（见 r35 ①），已确认槽位保持不变，" +
           "只就新增部分向业务提问；**不要用 /new 重开**（会丢掉全部已确认槽位）。",
+      )
+      parts.push(
+        "只改某一章而非整体重做：用定点修订——回显 PRD 章目录+标题+内容预览请业务认领后 " +
+          "reqdoc_start_scoped_edit(chapter) 锁定该章（服务端拒收越界写入），改完先 reqdoc_assemble 重组装；" +
+          "有外部原稿需贴回时在锁定期间 reqdoc_export(mode, chapter) 导差异，最后 reqdoc_end_scoped_edit 释放锁；" +
+          "无外部原稿时直接 reqdoc_export 导更新版 Word 交付。不要让业务重答全部必填项。",
       )
     }
     if (conventions) {
@@ -151,25 +190,10 @@ export function buildSystemFragment(
         "→ 若业务只想改已有需求书的某一章（而非整体重做）：先确认要改哪一章（用 PRD 章号或原稿节名；" +
           "章名不同须先回显 PRD 章目录+标题+内容预览请业务认领，确认才锁），再调用 reqdoc_start_scoped_edit(chapter) 锁定该章——" +
           "不要逼业务重答全部必填项。改完先 reqdoc_assemble 重组装（槽位变了不重组装 → 摘要过期、定稿会被拒）；" +
-          "业务要把差异贴回自己的原稿时，在锁定期间用 reqdoc_export(mode, chapter) 导出（差异导出要求锁在），之后再 reqdoc_end_scoped_edit 释放锁。",
+          "业务要把差异贴回自己的原稿时，在锁定期间用 reqdoc_export(mode, chapter) 导出（差异导出要求锁在），之后再 reqdoc_end_scoped_edit 释放锁。" +
+          "无外部原稿（纯对话产出）时不必导差异：重组装后直接 reqdoc_export 导出更新版 Word 交付即可。",
         "",
       )
-      if (kb.editScope?.active) {
-        const ch = kb.editScope.chapter
-        const impact = crossChapterImpact(kb.slots, ch)
-        parts.push(
-          "",
-          `# 定点修订进行中（锁定第 ${ch} 章）`,
-          "",
-          `本次只改第 ${ch} 章：引导业务补全该章事实即可，不要去问/改其它章；ingest/answer 越界会被服务端拒收。`,
-          `改的内容一律 source=问答；原文档已摄入、本次未动的槽位保持 source=文档，不要重标。`,
-          ...(impact.length ? [`跨章影响（仅供参考、不阻断）：${impact.join("；")}`] : []),
-          `槽位有改动后先 reqdoc_assemble 重组装（否则 kb-digest 过期、定稿三重校验会拒）。`,
-          `业务要把差异贴回原稿时：在锁定期间 reqdoc_export(mode:"diff"|"chapter", chapter:${ch}) 导出（差异导出要求锁在），` +
-            `说明「贴回后系统不回读（单向）」，最后 reqdoc_end_scoped_edit 释放锁。`,
-          "",
-        )
-      }
     }
   }
 

@@ -66,6 +66,15 @@
 
 **结论**：硬不变量扎实；乙 引入的 6 处须落地修订（B/I/G/C/D/F）已全部落地 + 3 处局限声明（A/E/H）；架构影响不大（无新来源/工具，净改动限于 editScope 锁+导出选项+引导意图）。
 
+**第二轮对抗审核（用户体检 / 不误导，已全部落地）**
+- **H1 整章导出含 retired 正文**：`mode=chapter` 曾原样打印已退役内容——用户会把已删内容贴回原稿。改：过滤 retired 并单列「已移除（不贴回）」，与 diff 模式对齐。
+- **H2 差异不分确认状态**：draft（未确认）与 confirmed 混列在「请贴回」交付物里无标记。改：逐项标注（待业务确认）。
+- **H3 重复锁定重置基准**：`start_scoped_edit` 无条件覆盖 `snapshotBefore`——差异静默丢失先前改动。改：active 期间拒绝重锁，指路先 end。
+- **M1 引导只在 prd 注入**：review/定稿后「只改一章」零引导，active 纪律（重组装/导出顺序/不重标 source）一并丢失。改：active 块阶段无关（含完成态早退之前），非 prd 补一句引导，完成态补定向一句。
+- **M2 退役旁路**：scope 锁曾只覆盖 ingest/answer，锁定期间 `retire_slots` 可退役他章。改：越界退役服务端拒收。
+- **L1 「贴回」话术不分用户**：无外部原稿（纯对话产出）的用户被引导走差异贴回叙事。改：引导与导出回执都区分「有原稿→贴回（单向）」/「无原稿→重组装后直接导 Word」。
+- **L2 章号认领软约束（待决策，未落地）**：`start_scoped_edit` 不要求业务确认凭据，与 `adopt_baseline` 的 `authorized_by` 先例不一致。锁可逆、内容仍经 answer 确认，残余风险为「错章确认」；是否加 `confirmed_quote` 必填待拍板。
+
 ## 5. 验收口径
 
 `bun run typecheck` + 三包分目录全量 `bun test` + `bun run eval:dry` 新场景"对话引导只改一章（乙：定点导出）"。单元测试：`resolveChapterLabel`/`slotsByChapter`/`crossChapterImpact`/`chapterRetireRatio`/`chapterDiff`/`deriveQuestions({chapter})`。集成：摄入→采纳基线→"改第2章"→引导→断言仅第2章变且标`问答`、他章`文档`完好、`editScope` 拒收越界（回归）、>50% retired 触发确认、找不到=补进、导出 chapter/diff 含映射+提醒+影响、跨章影响列、全门禁未触发。

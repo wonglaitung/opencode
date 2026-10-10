@@ -831,6 +831,18 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
       // slot content 是 PRD 正文，**永不匹配**，是段空操作（P1-e）。改为按 slotAddress 显式指定。
       const retireAddrs = args.retire_slots ?? []
       if (retireAddrs.length > 0) {
+        // 对抗 M2：scope 锁曾只覆盖 ingest/answer——锁定期间用 retire_slots 退役他章槽位
+        // 是「本次只改第 N 章」不变量的跨章写入旁路，一并拒收。
+        if (workflow.kb?.editScope?.active) {
+          const ch = workflow.kb.editScope.chapter
+          const outOfScope = retireAddrs.filter((a) => chapterOf(a) !== ch)
+          if (outOfScope.length > 0) {
+            throw new WorkflowOpError(
+              `已进入定点修订，作用域锁定在第 ${ch} 章：retire_slots 含章外地址 ${outOfScope.join("、")}。` +
+                `本次只改第 ${ch} 章；他章退役请先 reqdoc_end_scoped_edit 结束本次修订再操作。`,
+            )
+          }
+        }
         // 定点修订（乙）retirement 守卫：锁定章内拟退役超 50% 须显式确认
         // （防「替换成空 / 批量退役」悄悄清空一章；守卫查占比而非仅 retired 状态）。
         if (workflow.kb?.editScope?.active) {
