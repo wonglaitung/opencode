@@ -293,6 +293,14 @@ export function buildStateBar(workflow: WorkflowState, stage: string | null): st
           `${open.l1Applied.length > 0 ? `；已采信历史记忆 ${open.l1Applied.length} 项待你落定（不必再问）：${open.l1Applied.join("、")}` : ""}`,
       )
     }
+    // 功能点优先级（业务确认时给的）：让模型每轮看到提问顺序依据，措辞可直接转述（07-业务口语 第 3 节）。
+    // 只在有功能点时显示——goal/rules 阶段功能点未确认，显示空名单只会让模型困惑。
+    if (kb.features.length > 0) {
+      const list = kb.features
+        .map((f) => `${f.no}. ${f.name}（${f.priority === "high" ? "高" : f.priority === "medium" ? "中" : "低"}）`)
+        .join("、")
+      lines.push(`功能点优先级（业务已确认，提问按此顺序）：${list}`)
+    }
     // 先出初稿提示（业务反馈：未达准入标准时也希望有初稿供线下讨论）：
     // 门禁未通过或有停问项时挂这一行，措辞可直接转述（阶段行见 reqdoc-r25 的转述要求）。
     if (!gate.pass || open.stopped.length > 0) {

@@ -264,6 +264,8 @@ describe("WorkflowDefinition 注册表（3.2）", () => {
     // （加词 = 改代码 + 文档镜像 + 测试三处，且与规约对照表两处迟早漂移；词表钉在 conventions.test）
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r2" && r.text.includes("允许填哪几种值") && r.text.includes("《业务口语规约》"))).toBe(true)
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r6" && r.text.includes("默认推荐"))).toBe(true)
+    // r13 优先级问句（业务反馈：AI 不知优先级，须业务告知）——必须问「哪几个必须先做好」
+    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r13" && r.text.includes("必须先做好") && r.text.includes("priority 全 medium"))).toBe(true)
     // 阶段可见性（质量飞轮）：reqdoc-r25 通用规则，驱动模型每轮开头展示阶段 + 点名确认
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r25" && r.text.includes("第 N/Y 步") && r.text.includes("点名阶段"))).toBe(true)
     // 先出初稿转述：状态条行 → 阶段行（业务可见）——r25 必须包含转述要求

@@ -179,6 +179,83 @@ describe("槽位内核 · 开放项派生（6.2.3）", () => {
     expect(addrs).not.toContain("3.1")
     expect(addrs).toContain("3.2")
   })
+
+  describe("功能点优先级排序（业务反馈：提问序列未按优先级）", () => {
+    const threeFeatures: ReqdocFeature[] = [
+      { no: 1, name: "低优先", priority: "low", confirmedAt: 1000 },
+      { no: 2, name: "高优先", priority: "high", confirmedAt: 1000 },
+      { no: 3, name: "中优先", priority: "medium", confirmedAt: 1000 },
+    ]
+    // 先确认全部章节级槽位（3.x/4.2/6.x/7.x），只留功能点开放项——否则章节级占满 8 项 batch
+    const chapterConfirmed = requiredSlots(threeFeatures)
+      .filter((a) => !a.startsWith("5."))
+      .map(confirmed)
+
+    test("batch 前 N 项全属 high 功能点（低优先不占前排名额）", () => {
+      const r = deriveQuestions(threeFeatures, { slots: chapterConfirmed })
+      expect(r.batch.length).toBeGreaterThan(0)
+      // batch 全是功能点地址（章节级已 confirmed）
+      expect(r.batch.every((q) => q.address.startsWith("5."))).toBe(true)
+      // high 功能点（no=2）必须排在最前
+      const highIdx = r.batch.findIndex((q) => q.address.startsWith("5.2."))
+      expect(highIdx).toBe(0)
+      // low/medium 要么排在 high 之后，要么根本没进 batch（high 占满 8 项）
+      const lowIdx = r.batch.findIndex((q) => q.address.startsWith("5.1."))
+      const medIdx = r.batch.findIndex((q) => q.address.startsWith("5.3."))
+      if (lowIdx >= 0) expect(highIdx).toBeLessThan(lowIdx)
+      if (medIdx >= 0) expect(highIdx).toBeLessThan(medIdx)
+    })
+
+    test("同优先级按功能点清单序号（no 小的先）", () => {
+      const same: ReqdocFeature[] = [
+        { no: 1, name: "A", priority: "medium", confirmedAt: 1000 },
+        { no: 2, name: "B", priority: "medium", confirmedAt: 1000 },
+        { no: 3, name: "C", priority: "medium", confirmedAt: 1000 },
+      ]
+      const chaps = requiredSlots(same).filter((a) => !a.startsWith("5.")).map(confirmed)
+      const r = deriveQuestions(same, { slots: chaps })
+      expect(r.batch.every((q) => q.address.startsWith("5."))).toBe(true)
+      // no=1 必须排最前；no=2/3 要么排后面要么没进 batch
+      const first1 = r.batch.findIndex((q) => q.address.startsWith("5.1."))
+      expect(first1).toBe(0)
+      const first2 = r.batch.findIndex((q) => q.address.startsWith("5.2."))
+      const first3 = r.batch.findIndex((q) => q.address.startsWith("5.3."))
+      if (first2 >= 0) expect(first1).toBeLessThan(first2)
+      if (first3 >= 0) expect(first1).toBeLessThan(first3)
+    })
+
+    test("章节级地址保持原序排最前（文档骨架先立）", () => {
+      // 不确认任何槽位：章节级在前、功能点在后
+      const r = deriveQuestions(threeFeatures)
+      expect(r.batch[0]?.address).toBe("3.1")
+      expect(r.batch[1]?.address).toBe("3.2")
+    })
+
+    test("同功能点内部保持模板顺序", () => {
+      const r = deriveQuestions(threeFeatures, { slots: chapterConfirmed })
+      const feat2 = r.batch.filter((q) => q.address.startsWith("5.2."))
+      // 5.2.* 内部按模板序（逐段数值比较，字符串比较会把 "11" 排在 "9" 前）
+      const segs = (a: string) => a.split(".").map(Number)
+      for (let i = 1; i < feat2.length; i++) {
+        const prev = segs(feat2[i - 1]!.address)
+        const curr = segs(feat2[i]!.address)
+        // curr 应 > prev：找到第一个不同段，curr 该段更大
+        let ordered = false
+        for (let j = 0; j < Math.max(prev.length, curr.length); j++) {
+          if (curr[j] === prev[j]) continue
+          ordered = (curr[j] ?? 0) > (prev[j] ?? 0)
+          break
+        }
+        expect(ordered).toBe(true)
+      }
+    })
+
+    test("停问剔除与 8 项封顶不受排序影响", () => {
+      const r = deriveQuestions(threeFeatures)
+      expect(r.batch.length).toBeLessThanOrEqual(QUESTIONS_PER_TURN)
+      expect(r.batch.every((q) => q.askCount < STOP_ASK_AFTER)).toBe(true)
+    })
+  })
 })
 
 describe("槽位内核 · 覆盖与门禁（6.2.1/6.2.2）", () => {
@@ -307,8 +384,9 @@ describe("槽位内核 · 停问与分封顶（6.3 / 7.4，审查 A1/A2/A3）", 
     const r = deriveQuestions(two)
     expect(r.all.length).toBeGreaterThan(QUESTIONS_PER_TURN)
     expect(r.batch.length).toBe(QUESTIONS_PER_TURN)
-    // batch 是 all 的前缀（按文档顺序填，不随机）
-    expect(r.batch.map((q) => q.address)).toEqual(r.all.slice(0, QUESTIONS_PER_TURN).map((q) => q.address))
+    // batch 是 all 的子集（排序后截断，不再保证是前缀——功能点优先级会改变顺序）
+    const allAddrs = new Set(r.all.map((q) => q.address))
+    expect(r.batch.every((q) => allAddrs.has(q.address))).toBe(true)
   })
 
   test("同一轮重复调用不累加 askCount（6.3 按轮次计，审查 A1）", () => {

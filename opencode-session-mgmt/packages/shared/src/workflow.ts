@@ -573,7 +573,7 @@ export const REQDOC: WorkflowDefinition = {
     { id: "reqdoc-r22", stage: "edge", text: "覆盖度门禁（进 prd 硬前置）：服务端按 kbGate 校验必填槽位覆盖率与未收口项——**必填槽位未 confirmed、或有停问/conflict 项未收口，workflow_advance(stage=prd, action=enter) 会被拒绝**。工具返回的覆盖率与剩余项实时反映状态，别凭记忆判断。业务明确「本期确实不涉及」的项用 reqdoc_answer(source=缺省, reason=...) 显式收口即计入覆盖。确实无法补齐且业务坚持不做，可 force_kb=true + 业务给的 force_reason 放行（理由模型不得代填）。" },
 
     // ---- prd 需求规格书 ----
-    { id: "reqdoc-r13", stage: "prd", text: "功能点拆解（核心）：综合前面 goal/rules/edge 收集的信息（材料提取 + 问答），把需求拆成功能点清单（编号/名称/优先级），先向业务展示清单确认；业务确认后调用 reqdoc_confirm_features(features=[{name,priority}]...) 记录，并为每个功能点在 06_功能点 下建子目录写入来源摘录（标注 [文档]/[问答] 来源）。业务说资料已放好则先调用 reqdoc_scan(directory=07_需求规格产出) 检查已有产出。" },
+    { id: "reqdoc-r13", stage: "prd", text: "功能点拆解（核心）：综合前面 goal/rules/edge 收集的信息（材料提取 + 问答），把需求拆成功能点清单（编号/名称/优先级）。展示清单时**必须额外问一句**「哪几个是这个需求必须先做好？」（A/B/C + 默认推荐，≤5 问的一部分）——按业务回答定 high，其余 medium；不问就调 confirm_features = priority 全 medium（AI 不得替业务定 high）。业务确认后调用 reqdoc_confirm_features(features=[{name,priority}]...) 记录，并为每个功能点在 06_功能点 下建子目录写入来源摘录（标注 [文档]/[问答] 来源）。业务说资料已放好则先调用 reqdoc_scan(directory=07_需求规格产出) 检查已有产出。" },
     { id: "reqdoc-r14", stage: "prd", text: "PRD 产出（**由服务端从槽位投影生成，不要手写**）：流程只有两步——① reqdoc_ingest 批量提交内容槽位（地址取工具返回的清单）→ reqdoc_answer 逐项请业务确认落定；② reqdoc_assemble 由服务端按《业务需求说明书》模板投影出整篇 md，归档到 07_需求规格产出。**严禁用 write 手写或手工编辑 PRD 正文**（手写产物缺内嵌槽位摘要，定稿会被拦）。槽位变更后重跑 reqdoc_assemble。定稿后调用 reqdoc_export 生成 Word 交付件。**prd 阶段禁止用 comprehension_add**（review 阶段工具）堆理解条目——用它代替 reqdoc_ingest，内容既不进槽位也不进产物。" },
     // 槽位内容铁律：地址映射已由服务端派生（清单精确到每个小节），规则不再复述映射表、也不复述任何编号——
     // 模板结构已改为从 md 解析，编号会随机构模板变，写死在规则里必然过时。

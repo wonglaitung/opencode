@@ -500,6 +500,29 @@ describe("buildStateBar · 知识库覆盖（2c）", () => {
       expect(bar).not.toContain("信息没齐也能先出初稿")
     })
   })
+
+  describe("功能点优先级行（业务反馈：AI 不知优先级）", () => {
+    test("有功能点 → 状态条显示优先级名单", () => {
+      const s = createWorkflowState("reqdoc")
+      s.kb = kbOf(2)
+      const bar = buildStateBar(s, "prd")
+      expect(bar).toContain("功能点优先级（业务已确认，提问按此顺序）")
+      expect(bar).toContain("名单排查（高）")
+    })
+
+    test("无功能点（kb 空 features）→ 不显示", () => {
+      const s = createWorkflowState("reqdoc")
+      s.kb = { ...kbOf(0), features: [] }
+      const bar = buildStateBar(s, "prd")
+      expect(bar).not.toContain("功能点优先级")
+    })
+
+    test("sdlc 工作流 → 恒不含（隔离断言）", () => {
+      const s = createWorkflowState("sdlc")
+      const bar = buildStateBar(s, "implementation")
+      expect(bar).not.toContain("功能点优先级")
+    })
+  })
 })
 
 describe("★ 对抗审查修复：基线提示必须是跨轮持久提示（P2-1）", () => {

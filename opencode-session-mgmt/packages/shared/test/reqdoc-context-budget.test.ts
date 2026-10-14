@@ -30,9 +30,10 @@ describe("reqdoc 上下文预算基线", () => {
     // 历史轨迹：6517（打分卡管线）→ 2c 4369 → 阶段 3 1476（本级）+ 1906（global）≈3998。
     // S1 对抗审核（enter 自动确认须 developer_confirmed）给 reqdoc-r3 增约 43 字的机制说明，
     // 棘轮余量耗尽 → 上限带注释调至 4200；无说明的继续增长仍会被拦。
+    // 优先级排序（r13 加问句「哪几个必须先做好」）再增约 73 字 → 4273，上限调至 4350。
     expect(globalChars).toBeGreaterThan(0)
     expect(prdChars).toBeGreaterThan(0)
-    expect(prdInjection).toBeLessThan(4200)
+    expect(prdInjection).toBeLessThan(4350)
     expect(prdInjection).toBeLessThan(8000)
   })
 

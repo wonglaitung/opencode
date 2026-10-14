@@ -225,7 +225,7 @@ flowchart TD
 | reqdoc-r12 | edge | 按已投放材料反问缺口（如已有制度但缺权限，追问「不同岗位的权限如何隔离」）；业务说资料已放好则调用 reqdoc_scan(directory=03_制度与合规) 与 reqdoc_scan(directory=04_角色与权限) 扫描提取作输入；综合岗位角色矩阵、机构隔离、审批授权与双人复核材料生成 RBAC 权限控制矩阵与审批流控制逻辑，向业务展示确认。\n主流程须先用**可读的纯文本步骤**（编号列表 ①→②→③ 或箭头串）向业务展示确认——对话内不得只给 Mermaid 图。综合扫描材料与问答产出**数据字典与库表设计**（数据实体/字段/主外键/校验规则）并请业务确认，落盘 07_需求规格产出/数据字典与库表设计/。 |
 | reqdoc-r33 | edge | 填槽纪律：① 扫描后**批量起草**——一次 reqdoc_ingest 提交本轮全部提取项（工具封顶 8 项/次），不要一问一答写一条；② **一次性确认**——把本轮清单合成一条消息请业务逐项过目，业务点头后用 reqdoc_answer 连续落定，不要每项单独问一轮；③ 术语分三类，别混：**(a) 回执「已采信历史记忆」列出的项**——它们**不在本轮清单里**（服务端已剔除），**绝不要再问业务**，但**须由你直接 reqdoc_answer 落定，source 一律标「问答」**（定义出自业务过往口述，材料只出现该词、并未给出定义；标「文档」等于在交付件上做不实溯源）；不落定则术语容器覆盖不过、进 prd 被拦；**(b) 清单里带「默认：…」标记的**——共享知识命中（即 L2 组织知识），转述成确认式提问请业务点头（仍要问，只是带默认值）；**(c) 两者都没有的缩写**——正常问，取不到定义时可给猜测但必须带默认值请业务点头。 |
 | reqdoc-r22 | edge | 覆盖度门禁（进 prd 硬前置）：服务端按 kbGate 校验必填槽位覆盖率与未收口项——**必填槽位未 confirmed、或有停问/conflict 项未收口，workflow_advance(stage=prd, action=enter) 会被拒绝**。工具返回的覆盖率与剩余项实时反映状态，别凭记忆判断。业务明确「本期确实不涉及」的项用 reqdoc_answer(source=缺省, reason=...) 显式收口即计入覆盖。确实无法补齐且业务坚持不做，可 force_kb=true + 业务给的 force_reason 放行（理由模型不得代填）。 |
-| reqdoc-r13 | prd | 功能点拆解（核心）：综合前面 goal/rules/edge 收集的信息（材料提取 + 问答），把需求拆成功能点清单（编号/名称/优先级），先向业务展示清单确认；业务确认后调用 reqdoc_confirm_features(features=[{name,priority}]...) 记录，并为每个功能点在 06_功能点 下建子目录写入来源摘录（标注 [文档]/[问答] 来源）。业务说资料已放好则先调用 reqdoc_scan(directory=07_需求规格产出) 检查已有产出。 |
+| reqdoc-r13 | prd | 功能点拆解（核心）：综合前面 goal/rules/edge 收集的信息（材料提取 + 问答），把需求拆成功能点清单（编号/名称/优先级）。展示清单时**必须额外问一句**「哪几个是这个需求必须先做好？」（A/B/C + 默认推荐，≤5 问的一部分）——按业务回答定 high，其余 medium；不问就调 confirm_features = priority 全 medium（AI 不得替业务定 high）。业务确认后调用 reqdoc_confirm_features(features=[{name,priority}]...) 记录，并为每个功能点在 06_功能点 下建子目录写入来源摘录（标注 [文档]/[问答] 来源）。业务说资料已放好则先调用 reqdoc_scan(directory=07_需求规格产出) 检查已有产出。 |
 | reqdoc-r14 | prd | PRD 产出（**由服务端从槽位投影生成，不要手写**）：流程只有两步——① reqdoc_ingest 批量提交内容槽位（地址取工具返回的清单）→ reqdoc_answer 逐项请业务确认落定；② reqdoc_assemble 由服务端按《业务需求说明书》模板投影出整篇 md，归档到 07_需求规格产出。**严禁用 write 手写或手工编辑 PRD 正文**（手写产物缺内嵌槽位摘要，定稿会被拦）。槽位变更后重跑 reqdoc_assemble。assemble 生成 PRD 后即可调用 reqdoc_export 导出 Word 交付件（未定稿也能导出，产物里没定的内容标「暂未获得」）。 |
 | reqdoc-r20 | prd | 槽位内容铁律：工具返回的「本轮该填」地址已精确到小节，**照地址填即可，不要自己判断该写进哪一节，也不要自造地址**（换机构模板后编号会变，清单永远是唯一依据）。内容要求：业务语言书面语，**禁止杜撰事实**——[问答] 来源的口语须提炼为规范书面语，不得原话照搬；[缺省] 必须附 reason，禁止裸 [缺省]。模板外成果（UAT 用例、低保真界面、数据字典与库表设计、RBAC 权限矩阵）不插入 PRD 正文，用 write 写入 07_需求规格产出 下子目录，并在对应功能点的「附件」小节列出清单与相对路径（该小节标题与地址以工具清单为准）。 |
 | reqdoc-r24 | prd | 组装幂等门禁：reqdoc_assemble 会把槽位摘要内嵌进产物，review_submit 定稿时重读比对——**不一致即拒绝**（槽位变更须重新组装；产物被手改须还原）。手写或编辑过的 PRD（无内嵌摘要）同样被拦。缺料字段如实标 [缺省] 并附 reason，不要为凑覆盖率编造内容。 |
@@ -314,7 +314,7 @@ flowchart TD
 
 两处共用 `force_kb` + `force_reason` 放行语义（`force_kb=true` 而未给 `force_reason` 直接报错：**理由必须业务给，模型不得代填**）。`workflow_advance` 另有前置条件清单 `REQDOC_STAGE_PREREQS` 在进入/完成阶段后显式列出，让业务提前看到「进下一阶段前必须满足什么」。
 
-**状态条与汇报投影**：状态条（`buildStateBar`）在有 `kb` 时输出「知识库：必填槽位 X/Y（Z%）；门禁可通过 ✓ / 未就绪：<原因>」与「待确认槽位 N 项（本轮问 M）；已停问 K 项」，门禁未通过或有停问项时追加「信息没齐也能先出初稿：说『先出个初稿』即可」（业务可直接转述，阶段行经 reqdoc-r25 带出）；未建库时输出「知识库：未建（请先 reqdoc_ingest 提交需求内容槽位）」；prd 阶段系统提示另注入「需求知识库流程」三步指引（kb 缺省时注入「知识库未建」三步）。汇报侧 `stats.ts` 的 `SessionStats.kb = { filled, total, pct }` 取代原 `score` 字段（`score` 保留为 deprecated 且恒为 `null`，仅历史 JSON 兼容）。
+**状态条与汇报投影**：状态条（`buildStateBar`）在有 `kb` 时输出「知识库：必填槽位 X/Y（Z%）；门禁可通过 ✓ / 未就绪：<原因>」与「待确认槽位 N 项（本轮问 M）；已停问 K 项」，有功能点时追加「功能点优先级（业务已确认，提问按此顺序）：① …」（`deriveQuestions` 按此排序），门禁未通过或有停问项时追加「信息没齐也能先出初稿：说『先出个初稿』即可」（业务可直接转述，阶段行经 reqdoc-r25 带出）；未建库时输出「知识库：未建（请先 reqdoc_ingest 提交需求内容槽位）」；prd 阶段系统提示另注入「需求知识库流程」三步指引（kb 缺省时注入「知识库未建」三步）。汇报侧 `stats.ts` 的 `SessionStats.kb = { filled, total, pct }` 取代原 `score` 字段（`score` 保留为 deprecated 且恒为 `null`，仅历史 JSON 兼容）。
 
 **打分卡已退役（但共享导出保留）**：`REQDOC_SCORE_DIMS` / `ReqdocScoreDimKey` / `reqdocScoreRubric()` / `REQDOC_SCORE_PASS` **仍存在**，但**不再是 reqdoc 门禁、不再注入任何 reqdoc 规则文本**（r21 已删），唯一消费者是 `scripts/eval-rules/` 的独立评分通道（`score.ts` 镜像八维扣分标准、`judge.ts` 聚合）——设计文档 4.4 第 3 层明确保留该通道。同理，`renderTargetDigest()`、`buildPrdSkeleton()`、`MAPPED_FIELD_KEYS`、`renderCheckRubric()` 是**组装/模板内部工具，不是门禁**（`buildPrdSkeleton` 被 `assembleDoc` 内部调用；`MAPPED_FIELD_KEYS` 用于必填集与「必标来源」判定；`renderTargetDigest`/`renderCheckRubric` 现已无调用点，保留仅为结构描述复用）。
 
@@ -325,7 +325,7 @@ flowchart TD
 | 返回 | 含义 |
 |---|---|
 | `all` | 本轮该问的全量（未分批、未剔除停问项）——状态条/调试用，不直接进模型 |
-| `batch` | 本轮返回给模型的批次（已剔除停问项，按 `QUESTIONS_PER_TURN` 封顶） |
+| `batch` | 本轮返回给模型的批次（已剔除停问项，按功能点优先级排序后按 `QUESTIONS_PER_TURN` 封顶——high→medium→low，同级按清单序号，章节级排最前） |
 | `stopped` | 因连续 `STOP_ASK_AFTER` 轮未确认被移出清单的项（**未收口**，门禁会拦） |
 | `unclosed` | 未收口项 = 停问项 + `conflict` 项（门禁唯一读入项） |
 

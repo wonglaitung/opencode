@@ -709,6 +709,8 @@ export function deriveOpenQuestions(
  * - **停问**：连续 `STOP_ASK_AFTER` 轮未确认的项移出 `batch`（仍在 `stopped` 里可查）
  * - **未收口**：停问项 + `conflict` 项，供 `kbGate` 拦门禁
  * - **封顶**：`batch` 按 `QUESTIONS_PER_TURN` 截断（7.5 要求封顶在服务端强制）
+ * - **排序**：功能点地址按业务确认的优先级排（high→medium→low，同级按清单序号）；
+ *   章节级地址（文档骨架）保持原序排最前。排完序再截断——低优先级不占前排名额。
  */
 export function deriveQuestions(features: readonly ReqdocFeature[], opts: DeriveOptions = {}): DerivedQuestions {
   const slots = opts.slots ?? []
@@ -718,13 +720,46 @@ export function deriveQuestions(features: readonly ReqdocFeature[], opts: Derive
   // conflict 项：未收口，但不由 deriveAll 产出（它们是已存在的槽位，非开放项）
   const conflicts = slots.filter((s) => s.status === "conflict").map((s) => s.address)
   const unclosed = [...new Set([...stopped.map((q) => q.address), ...conflicts])]
+  const schema = opts.schema ?? templateSchemaOrEmpty()
+  const sorted = sortByFeaturePriority(active, features, schema)
   return {
     all: questions,
     stopped,
-    batch: active.slice(0, QUESTIONS_PER_TURN),
+    batch: sorted.slice(0, QUESTIONS_PER_TURN),
     unclosed,
     l1Applied,
   }
+}
+
+/** 优先级排序权重：high 先问。 */
+const PRIORITY_ORDER: Record<ReqdocFeature["priority"], number> = { high: 0, medium: 1, low: 2 }
+
+/**
+ * 按功能点优先级排开放项：章节级地址（文档骨架）保持原序排最前；
+ * 功能点地址按 priority→功能点序号→模板原序排序。
+ * 不改地址、不改必填集——只改「本轮问哪 N 个」的顺序。
+ */
+function sortByFeaturePriority(
+  items: readonly OpenQuestion[],
+  features: readonly ReqdocFeature[],
+  schema: TemplateSchema,
+): OpenQuestion[] {
+  const prio = (addr: string): number => {
+    if (!isFeatureAddr(schema, addr)) return -1 // 章节级排最前
+    const no = Number(addr.split(".")[1])
+    return PRIORITY_ORDER[features[no - 1]?.priority ?? "medium"]
+  }
+  return [...items].sort((a, b) => {
+    const pa = prio(a.address)
+    const pb = prio(b.address)
+    if (pa !== pb) return pa - pb
+    // 章节级（pa === pb === -1）：稳定排序天然保持原序，不比序号
+    if (pa === -1) return 0
+    // 同优先级功能点：序号小的先（no = 地址第二段）
+    const na = Number(a.address.split(".")[1])
+    const nb = Number(b.address.split(".")[1])
+    return na - nb
+  })
 }
 
 /** 推进一轮：把本轮展示过的地址的 askCount +1（**按轮次计不按调用计**——由调用方每轮调一次，6.3）。 */
