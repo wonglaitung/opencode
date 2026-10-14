@@ -31,6 +31,9 @@ describe("loadWorkflowConventions（按工作流类型 + 阶段门控）", () =>
     const text = loadWorkflowConventions("reqdoc", null, emptyRoot())
     expect(text).not.toBeNull()
     expect(text).toContain("业务口语规约")
+    // 术语词表的唯一载体在这里（r2 规则文本只留行为 + 指针，词表不进代码——漏词只补这张表）
+    expect(text).toContain("枚举值")
+    expect(text).toContain("允许填哪几种值")
   })
 
   test("sdlc implementation 阶段：注入 global(提交信息) + implementation(代码期)，不混入 design/reqdoc", () => {

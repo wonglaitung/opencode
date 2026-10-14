@@ -260,8 +260,9 @@ describe("WorkflowDefinition 注册表（3.2）", () => {
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r2" && r.text.includes("最多 5 个问题") && r.text.includes("默认推荐"))).toBe(true)
     // 追问原则：严禁纯技术词汇（业务语言转述，实施方案「追问原则」）
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r2" && r.text.includes("严禁") && r.text.includes("纯技术词汇") && r.text.includes("幂等"))).toBe(true)
-    // 业务反馈「枚举值听不懂」：r2 须点名数据字典类技术词并给白话问法（术语友好性）
-    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r2" && r.text.includes("枚举值") && r.text.includes("允许填哪几种值"))).toBe(true)
+    // 业务反馈「枚举值听不懂」：r2 钉行为（白话问法）+ 词表指针——**词表本身不进规则文本**
+    // （加词 = 改代码 + 文档镜像 + 测试三处，且与规约对照表两处迟早漂移；词表钉在 conventions.test）
+    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r2" && r.text.includes("允许填哪几种值") && r.text.includes("《业务口语规约》"))).toBe(true)
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r6" && r.text.includes("默认推荐"))).toBe(true)
     // 阶段可见性（质量飞轮）：reqdoc-r25 通用规则，驱动模型每轮开头展示阶段 + 点名确认
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r25" && r.text.includes("第 N/Y 步") && r.text.includes("点名阶段"))).toBe(true)
