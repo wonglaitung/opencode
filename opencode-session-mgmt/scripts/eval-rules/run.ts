@@ -21,6 +21,8 @@ import { EVAL_TOOLS } from "./src/tool-defs"
 import { judgeSelfCheck } from "./src/judge-selfcheck"
 import { formatOptionQuality, parseOptionSets, reportDefaultLoad } from "./src/option-quality"
 import { optionQualitySelfCheck } from "./src/option-quality.selfcheck"
+import { formatTermHygiene, parseTermHits } from "./src/term-hygiene"
+import { termHygieneSelfCheck } from "./src/term-hygiene.selfcheck"
 import { executeTurns } from "./src/executor"
 import { execSelfCheck } from "./src/exec-selfcheck"
 import { SCENARIOS } from "./src/scenarios"
@@ -87,6 +89,13 @@ if (broken.length > 0) {
 const oqBroken = optionQualitySelfCheck()
 if (oqBroken.length > 0) {
   console.error(`❌ 选项质量解析器自检失败（${oqBroken.length} 项）：\n${oqBroken.map((b) => `  - ${b}`).join("\n")}`)
+  process.exit(1)
+}
+
+// 术语白话解析器自检（阶段 1 观察项）：同选项质量——解析器先自证能红，读数才有意义
+const thBroken = termHygieneSelfCheck()
+if (thBroken.length > 0) {
+  console.error(`❌ 术语白话解析器自检失败（${thBroken.length} 项）：\n${thBroken.map((b) => `  - ${b}`).join("\n")}`)
   process.exit(1)
 }
 
@@ -237,6 +246,9 @@ for (const sc of scenarios) {
           }
         })()
       : {}),
+    // 术语白话（阶段 1）：只观测业务可见正文的技术词命中，不进通过率——业务反馈
+    // 「枚举值听不懂」，软约束（r2 + 07 对照表）拦不拦得住先拿基线再议。
+    ...(textChunks.length > 0 ? { termHygiene: formatTermHygiene(textChunks.join("\n")) } : {}),
     passCount: pass,
     runCount: repeat,
     detail,
@@ -321,6 +333,29 @@ if (oqTotals.scenarios > 0) {
     `\n选项质量（观察项，不计通过率）：${oqTotals.scenarios} 个场景 / ${oqTotals.questions} 个问句｜` +
       `选项数 3~4 ${pct(oqTotals.optionCountOk)}｜带兜底出口 ${pct(oqTotals.withFallback)}｜` +
       `有机械重复 ${pct(oqTotals.withDuplicate)}`,
+  )
+}
+
+// 术语白话聚合（阶段 1）：与选项质量同法——散在 per-scenario 的读数汇总成一行。
+// 有业务可见正文的场景才入分母（纯工具调用场景没有面向业务的话可言）。
+const thTotals = { scenarios: 0, hits: 0 }
+const thByTerm: Record<string, number> = {}
+for (const r of results) {
+  if (!r.termHygiene) continue
+  thTotals.scenarios++
+  const parsed = parseTermHits(textsByScenario.get(r.name) ?? "")
+  thTotals.hits += parsed.hits
+  for (const [t, n] of Object.entries(parsed.byTerm)) thByTerm[t] = (thByTerm[t] ?? 0) + n
+}
+if (thTotals.scenarios > 0) {
+  const top = Object.entries(thByTerm)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([t, n]) => `${t}×${n}`)
+    .join("、")
+  console.log(
+    `术语白话（观察项，不计通过率）：${thTotals.scenarios} 个场景命中 ${thTotals.hits} 处` +
+      `${top ? `｜命中最多：${top}` : ""}`,
   )
 }
 

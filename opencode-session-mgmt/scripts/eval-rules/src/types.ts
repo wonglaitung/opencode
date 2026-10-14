@@ -213,6 +213,8 @@ export interface ScenarioResult {
   optionQuality?: string
   /** 默认推荐限流观测（阶段 3，纯观察、不计通过率） */
   defaultLoad?: string
+  /** 术语白话观测（阶段 1，纯观察、不计通过率；扫业务可见正文的技术词命中） */
+  termHygiene?: string
   /** 该场景 N 次运行中通过次数（repeat>1 时聚合按运行次数统计，防单次抖动掩盖趋势） */
   passCount: number
   runCount: number
