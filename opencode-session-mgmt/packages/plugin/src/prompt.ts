@@ -293,6 +293,11 @@ export function buildStateBar(workflow: WorkflowState, stage: string | null): st
           `${open.l1Applied.length > 0 ? `；已采信历史记忆 ${open.l1Applied.length} 项待你落定（不必再问）：${open.l1Applied.join("、")}` : ""}`,
       )
     }
+    // 先出初稿提示（业务反馈：未达准入标准时也希望有初稿供线下讨论）：
+    // 门禁未通过或有停问项时挂这一行，措辞可直接转述（阶段行见 reqdoc-r25 的转述要求）。
+    if (!gate.pass || open.stopped.length > 0) {
+      lines.push(`信息没齐也能先出初稿：说「先出个初稿」即可`)
+    }
     // 连续接受默认的轮数（reqdoc-r27）：**回执是一次性的**，跨轮/压缩上下文后模型无从
     // 知道业务已经连着点了两次默认——这正是 9/34 场景仍带默认推荐的原因（r27 曾要求
     // 模型自己在对话里数）。放状态条让它成为**看得见的事实**，措辞直接可转述。

@@ -499,7 +499,7 @@ export const EVAL_TOOLS: OpenAITool[] = [
       name: "reqdoc_export",
       description:
         "reqdoc prd 阶段：将已渲染的 PRD Markdown 导出为 Word（.docx）交付件，与源 md 同目录归档。" +
-        "在 PRD 渲染（write 到 06_需求规格产出）定稿后调用。",
+        "在 reqdoc_assemble 生成 PRD 后即可调用，未定稿也能导出——产物里没定的内容会标着「暂未获得」。",
       parameters: {
         type: "object",
         properties: {

@@ -1311,7 +1311,7 @@ sequenceDiagram
 | `review_submit` | 提交审查清单结果（从 `def.checklist` 生成具名参数） | 由 `def.checklist` 生成具名输入参数（非 auto 项布尔，auto 项插件置真）；**sdlc 须附 `confirm_note`（开发者确认审查清单的原话摘录，模型不得代拟；reqdoc 已有 P3.10 溯源硬门不重复要求；已 approved 的幂等重提不受此限）**；**sdlc 前向失效**：AI 编辑晚于片段确认（`quality.lastEditAt` > `confirmedAt`）时，已接受片段在提交检查时打回 pending（仅审查未通过时生效）；**前序阶段须全部 `approved`（审查是最后一关）**；有片段/要点时须已 `comprehension_add` 登记、且**全部处于终态 accepted/manual，不允许 pending/rejected 悬空**；通过时自动计算 `firstPassRate`（sdlc 与 reqdoc 均适用） |
 | `commit_gate_check` | 提交前门禁检查（`def.hasCommitGate=true` 时启用） | 返回未完成阶段列表 + 缺失基线预估工时（仅 `hasCommitGate` 工作流且未录入 `workflow.baseline` 时出现）；未通过时 `tool.execute.before` 阻断 `git commit` |
 | `commit_force_unlock` | 强制提交授权（`def.hasCommitGate=true` 时，3.4 逃生口） | `developer_confirmed` 必须为 true、原因必填；写入一次性授权，门禁放行一次后置 `used` 留痕 |
-| `reqdoc_scan` / `reqdoc_confirm_features` / `reqdoc_score` / `reqdoc_check` / `reqdoc_export` | reqdoc 专属工具（需求资料扫描 / 功能点拆解确认 / 八维打分卡 / 渲染结构校验 / Word 导出），仅 `def.type === "reqdoc"` 时生效 | 各工具的用途与服务端校验见 **workflow-reqdoc.md 8 章** 完整表格 |
+| `reqdoc_scan` / `reqdoc_confirm_features` / `reqdoc_export` / 其余 reqdoc 工具 | reqdoc 专属工具（需求资料扫描 / 功能点拆解确认 / Word 导出等），仅 `def.type === "reqdoc"` 时生效 | 各工具的用途与服务端校验见 **workflow-reqdoc.md 8 章** 完整表格 |
 
 工具定义遵循上游插件 `ToolDefinition` 接口（`packages/plugin/src/tool.ts`），由 `tool` hook 注册后自动进入 LLM 可用工具集（上游 `tool/registry.ts` 已接线）。
 

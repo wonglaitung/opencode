@@ -266,6 +266,10 @@ describe("WorkflowDefinition 注册表（3.2）", () => {
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r6" && r.text.includes("默认推荐"))).toBe(true)
     // 阶段可见性（质量飞轮）：reqdoc-r25 通用规则，驱动模型每轮开头展示阶段 + 点名确认
     expect(REQDOC.rules.some((r) => r.id === "reqdoc-r25" && r.text.includes("第 N/Y 步") && r.text.includes("点名阶段"))).toBe(true)
+    // 先出初稿转述：状态条行 → 阶段行（业务可见）——r25 必须包含转述要求
+    expect(REQDOC.rules.some((r) => r.id === "reqdoc-r25" && r.text.includes("信息没齐也能先出初稿") && r.text.includes("不得扩写"))).toBe(true)
+    // sdlc-r13 不含该转述句（隔离断言：sdlc 零改动）
+    expect(SDLC.rules.some((r) => r.id === "sdlc-r13" && r.text.includes("信息没齐也能先出初稿"))).toBe(false)
     // 投放/口述 决定阶段无关（质量飞轮）：reqdoc-r26 通用规则，目标阶段被跳过时仍须每轮提出二选一。
     // 措辞要点（对抗审查第十二轮）：二选一必须收敛成「本轮最多 5 问里的第一问」，**不得**写成
     // 「不得先抛其它问题」——那与 reqdoc-r2「单次提问最多 5 个、每个必须附 A/B/C + 默认推荐」

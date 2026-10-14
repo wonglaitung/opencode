@@ -73,6 +73,19 @@ describe("评测契约镜像 · 与运行时对齐（P2）", () => {
     expect(assemble.function.description).toMatch(/不应手工编辑|不要手写|不要手工编辑/)
   })
 
+  test("export 描述：未定稿也能导出（业务反馈：先出初稿供线下讨论）", () => {
+    // 评测镜像
+    const mirrorExport = EVAL_TOOLS.find((t) => t.function.name === "reqdoc_export")!
+    expect(mirrorExport.function.description).toContain("未定稿也能导出")
+    expect(mirrorExport.function.description).not.toContain("定稿后调用")
+    // 运行时
+    const store2 = Store.memory()
+    const runtimeExport = createReqdocExportTool(store2).reqdoc_export
+    expect(runtimeExport.description).toContain("未定稿也能导出")
+    expect(runtimeExport.description).not.toContain("定稿后调用")
+    store2.close()
+  })
+
   test("force_kb / force_reason 在 workflow_advance 与 review_submit 契约中", () => {
     for (const n of ["workflow_advance", "review_submit"]) {
       const props = Object.keys(

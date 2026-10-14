@@ -460,6 +460,46 @@ describe("buildStateBar · 知识库覆盖（2c）", () => {
     const bar = buildStateBar(s, "prd")
     expect(bar).toContain("知识库：未建")
   })
+
+  describe("先出初稿提示（业务反馈：未就绪时先出初稿）", () => {
+    const full = () => {
+      const s = createWorkflowState("reqdoc")
+      s.kb = kbOf(requiredSlots(kbOf(0).features).length)
+      return s
+    }
+
+    test("未就绪（未填满）→ 显示「先出初稿」", () => {
+      const s = createWorkflowState("reqdoc")
+      s.kb = kbOf(2)
+      const bar = buildStateBar(s, "prd")
+      expect(bar).toContain("信息没齐也能先出初稿：说「先出个初稿」即可")
+    })
+
+    test("已就绪（全填满）→ 不显示", () => {
+      const bar = buildStateBar(full(), "prd")
+      expect(bar).not.toContain("信息没齐也能先出初稿")
+    })
+
+    test("有停问项 → 显示（stopped 路径）", () => {
+      // 停问只存在于未 confirmed 的槽位（deriveAll 只为未覆盖项生成开放项），
+      // 故场景必然是覆盖率未满 → gate 不通过 → 提示自然显示；
+      // 这里显式设 askCount=2 验证 stopped 路径也触发条件。
+      const s = createWorkflowState("reqdoc")
+      s.kb = kbOf(10)
+      const addr = requiredSlots(s.kb!.features)[10]!
+      s.kb!.askCounts = { [addr]: 2 }
+      const bar = buildStateBar(s, "prd")
+      expect(bar).toContain("信息没齐也能先出初稿")
+      expect(bar).toContain("已停问")
+    })
+
+    test("sdlc 工作流 → 恒不含（隔离断言）", () => {
+      const s = createWorkflowState("sdlc")
+      // sdlc 无 kb，但显式建一个不就绪的 kb 也不该触发（buildStateBar 按 def.type 分支）
+      const bar = buildStateBar(s, "implementation")
+      expect(bar).not.toContain("信息没齐也能先出初稿")
+    })
+  })
 })
 
 describe("★ 对抗审查修复：基线提示必须是跨轮持久提示（P2-1）", () => {

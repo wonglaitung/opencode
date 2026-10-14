@@ -1,8 +1,8 @@
 /**
  * reqdoc Word 导出工具（设计文档 workflow-reqdoc.md 8 章，实施方案「标准 PRD (Markdown/Word)」）。
  * reqdoc_export —— 将已渲染的 PRD Markdown（07_需求规格产出 下）转换为 Word（.docx）
- * 交付件，与源 md 同目录归档，供行方交付。仅 reqdoc 工作流使用（规则 reqdoc-r14 在
- * PRD 定稿后调用）。
+ * 交付件，与源 md 同目录归档，供行方交付。仅 reqdoc 工作流使用（规则 reqdoc-r14；
+ * 未定稿也能导出，产物里没定的内容标「暂未获得」，供线下讨论）。
  *
  * 转换覆盖模板渲染实际用到的标记：标题（#~#####）、表格（|…|）、无序列表（-）、
  * 引用（>）、代码块（```）与行内加粗（**…**）/反引号（`…`）。Mermaid 流程图
@@ -289,7 +289,7 @@ export function createReqdocExportTool(store: Store): Record<string, ToolDefinit
   const reqdoc_export = tool({
     description:
       "reqdoc Word 导出：将已渲染的 PRD Markdown 导出为 Word（.docx）交付件，与源 md 同目录归档。" +
-      "在 reqdoc_assemble 生成 PRD（写入 07_需求规格产出）并定稿后调用；" +
+      "在 reqdoc_assemble 生成 PRD（写入 07_需求规格产出）后即可调用，**未定稿也能导出**——产物里没定的内容会标着「暂未获得」，可直接拿去线下讨论。" +
       "source 填 PRD Markdown 相对项目根路径（如 07_需求规格产出/N_名称/xxx.md）。" +
       "定点修订（乙）可选 mode：chapter=导出锁定章整章、diff=只导出相对编辑前快照的增/改/删（默认 diff）；" +
       "此时无需 source，直接从知识库生成，并附单向提醒、原稿节映射提示与跨章影响。",
