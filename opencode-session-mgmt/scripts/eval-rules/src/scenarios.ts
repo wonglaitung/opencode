@@ -1099,4 +1099,108 @@ export const SCENARIOS: Scenario[] = [
       note: "未重走全流程（未 re-baseline / 未重做功能点拆解 / 未抢先组装）即通过；详见 docs/reqdoc-scoped-edit.md",
     },
   },
+  // ---- 银行场景（r50-r52）：验证模型在银行业务语境下的合规判断与边界控制 ----
+  {
+    name: "r50 贷款审批 → 合规要点与数据安全（银行专项）",
+    workflowType: "reqdoc",
+    state: (() => {
+      const s = newReqdoc()
+      approve(s, "goal")
+      approve(s, "rules")
+      approve(s, "edge")
+      enter(s, "prd")
+      // 预置贷款审批相关槽位（真实银行内容）
+      s.kb = {
+        slots: [
+          { kind: "prose", address: "3.1", content: "个人消费贷款在线审批，解决柜面排队与人工审核慢的痛点。", source: "文档", status: "confirmed" },
+          { kind: "prose", address: "3.2", content: "客户提交申请后系统自动审批，超过 5 万转人工复核。", source: "文档", status: "confirmed" },
+          { kind: "prose", address: "3.3", content: "审批流：系统初审 → 人工复核（>5万）→ 合同签署 → 放款。", source: "文档", status: "confirmed" },
+          { kind: "prose", address: "3.4", content: "异常：征信查询超时重试 2 次后转人工；同一客户 30 分钟内重复提交去重；审批拒绝后 24 小时冷却期。", source: "文档", status: "confirmed" },
+          { kind: "prose", address: "3.5", content: "权限：客户经理发起，审批岗复核，放款岗执行；征信数据仅审批岗可见。", source: "文档", status: "confirmed" },
+        ],
+        features: [{ no: 1, name: "消费贷款审批", priority: "high", confirmedAt: 1000 }],
+        containers: { "4.1": { required: false, reason: "无特殊术语" }, "5.1.2.1": { required: false, reason: "无结构化字段" } },
+        askCounts: {},
+        updatedAt: 1000,
+      }
+      return finish(s)
+    })(),
+    userTurn:
+      "材料都齐了，组装吧。这是个人消费贷款审批：客户在线提交申请，系统自动初审，超过 5 万转人工复核。征信数据要脱敏，操作留痕。审批拒绝后有 24 小时冷却期。",
+    // 银行合规重点：征信数据保护、操作留痕、审批权限隔离——compliance 维应拿到高分
+    judge: {
+      kind: "score",
+      renderMarkers: ["业务需求说明书", "功能点"],
+      minTotal: 60,
+      dimMin: { businessValue: 5, edgeControl: 15, authority: 5, flowClosure: 10, compliance: 10 },
+    },
+  },
+  {
+    name: "r51 跨境汇款 → 异常处理与对账（银行专项）",
+    workflowType: "reqdoc",
+    state: (() => {
+      const s = newReqdoc()
+      approve(s, "goal")
+      approve(s, "rules")
+      approve(s, "edge")
+      enter(s, "prd")
+      s.kb = {
+        slots: [
+          { kind: "prose", address: "3.1", content: "个人跨境汇款（SWIFT/CIPS），解决到账慢与状态不透明问题。", source: "文档", status: "confirmed" },
+          { kind: "prose", address: "3.2", content: "客户提交汇款指令，系统校验合规后经 SWIFT/CIPS 发出，到账后通知客户。", source: "文档", status: "confirmed" },
+          { kind: "prose", address: "3.3", content: "主流程：汇款录入 → 合规审查（反洗钱/制裁名单）→ 报文发送 → 路由回执 → 到账确认。", source: "文档", status: "confirmed" },
+          { kind: "prose", address: "3.4", content: "异常：SWIFT 超时自动重发 1 次后转人工；CIPS 节假日顺延；汇率波动超 2% 暂停并通知客户确认；路由退汇报文自动入待处理队列。", source: "文档", status: "confirmed" },
+          { kind: "prose", address: "3.5", content: "权限：柜员录入，合规岗审查，主管大额授权（>100 万美元）。", source: "文档", status: "confirmed" },
+        ],
+        features: [{ no: 1, name: "跨境汇款", priority: "high", confirmedAt: 1000 }],
+        containers: { "4.1": { required: false, reason: "无特殊术语" }, "5.1.2.1": { required: false, reason: "无结构化字段" } },
+        askCounts: {},
+        updatedAt: 1000,
+      }
+      return finish(s)
+    })(),
+    userTurn:
+      "材料齐了，组装。跨境汇款：客户提交后系统做反洗钱和制裁名单筛查，然后走 SWIFT 或 CIPS。异常要处理超时重发、节假日顺延、汇率波动超 2% 暂停确认。",
+    // 银行边界控制重点：SWIFT/CIPS 超时、汇率波动、路由退回——edgeControl 维应拿到高分
+    judge: {
+      kind: "score",
+      renderMarkers: ["业务需求说明书", "功能点"],
+      minTotal: 60,
+      dimMin: { businessValue: 5, edgeControl: 15, authority: 5, flowClosure: 10, compliance: 10 },
+    },
+  },
+  {
+    name: "r52 反洗钱可疑交易报送 → 合规闭环（银行专项）",
+    workflowType: "reqdoc",
+    state: (() => {
+      const s = newReqdoc()
+      approve(s, "goal")
+      approve(s, "rules")
+      approve(s, "edge")
+      enter(s, "prd")
+      s.kb = {
+        slots: [
+          { kind: "prose", address: "3.1", content: "可疑交易自动监测与报送，满足反洗钱监管要求。", source: "文档", status: "confirmed" },
+          { kind: "prose", address: "3.2", content: "系统按规则模型扫描交易，命中预警后人工甄别，确认可疑后报送央行。", source: "文档", status: "confirmed" },
+          { kind: "prose", address: "3.3", content: "流程：交易采集 → 规则扫描 → 预警生成 → 人工甄别 → 可疑确认 → 报文生成 → 央行报送 → 回执归档。", source: "文档", status: "confirmed" },
+          { kind: "prose", address: "3.4", content: "异常：报送超时自动重试 3 次后转人工；回执失败进入补报队列；规则误报率超阈值触发模型调优。", source: "文档", status: "confirmed" },
+          { kind: "prose", address: "3.5", content: "权限：甄别岗初筛，复核岗确认，报送岗执行；全链路留痕不可篡改。", source: "文档", status: "confirmed" },
+        ],
+        features: [{ no: 1, name: "反洗钱可疑交易报送", priority: "high", confirmedAt: 1000 }],
+        containers: { "4.1": { required: false, reason: "无特殊术语" }, "5.1.2.1": { required: false, reason: "无结构化字段" } },
+        askCounts: {},
+        updatedAt: 1000,
+      }
+      return finish(s)
+    })(),
+    userTurn:
+      "材料齐了，组装。反洗钱报送：系统扫描交易生成预警，人工甄别确认可疑后报送央行。报送超时要重试，失败进补报队列，全链路留痕。",
+    // 银行合规闭环重点：报送时效、回执处理、留痕不可篡改——compliance + edgeControl 应双高
+    judge: {
+      kind: "score",
+      renderMarkers: ["业务需求说明书", "功能点"],
+      minTotal: 60,
+      dimMin: { businessValue: 5, edgeControl: 15, authority: 5, flowClosure: 10, compliance: 10 },
+    },
+  },
 ]
