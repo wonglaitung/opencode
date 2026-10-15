@@ -6,7 +6,7 @@
  *   - tool                                工作流工具集（4.1）+ open_ide 打开/人工文件锁（open-ide 4、5）
  *   - tool.execute.before                 提交门禁硬拦截（7.3）‖ 人工文件锁拦截（open-ide 5.2，先行）
  *   - tool.execute.after                  迭代计数
- *   - chat.message                        会话首次活动汇报触发
+ *   - chat.message                        会话首次活动汇报触发 ‖ 工时证据捕获（取本次消息文本）
  * 启动后台任务（孤儿清理/标题回填/补推汇报）延后触发，见 startup.ts。
  * 合并后 open-ide 源码在 src/open-ide/；锁持久化进 Store（file_lock 表，重启自动恢复）。
  */
@@ -77,29 +77,6 @@ function createUsageProvider(client: PluginInput["client"]) {
  * 「所有函数导出」都当作插件工厂，以 (input, options) 逐一调用，曾致插件加载失败
  * （见 CLAUDE.md 铁律）。
  */
-// 6.3 防 AI 杜撰基线：读会话最新一条开发者消息，提取工时表述写入 workflow 状态，
-// 供 workflow_baseline 在 developer_confirmed=true 时校验。失败静默（同 syncSessionTitle）。
-async function captureBaselineFromMessages(
-  store: Store,
-  client: PluginInput["client"],
-  sessionID: string,
-): Promise<void> {
-  try {
-    const res = await client.session.messages({ path: { id: sessionID } })
-    const messages = res.data
-    if (!messages) return
-    const lastUser = [...messages].reverse().find((m) => m.info.role === "user")
-    if (!lastUser) return
-    const text = lastUser.parts
-      .filter((p) => p.type === "text")
-      .map((p) => p.text)
-      .join("\n")
-    applyBaselineProposal(store, sessionID, text, lastUser.info.id)
-  } catch {
-    // 上游瞬时不可达：跳过，下次 chat.message 再补
-  }
-}
-
 async function syncSessionTitle(store: Store, client: PluginInput["client"], sessionID: string): Promise<void> {
   const cur = store.get(sessionID)?.title
   if (cur && !isPlaceholderTitle(cur)) return
@@ -170,13 +147,21 @@ const SessionMgmtPlugin: Plugin = async (input) => {
 
     "tool.execute.after": createIterationCounter(store, isSubagent),
 
-    "chat.message": async (hookInput) => {
+    "chat.message": async (hookInput, output) => {
       // 子代理会话不追踪：不建记录、不汇报（2.4 统计纯净度）
       if (await isSubagent(hookInput.sessionID)) return
       await syncSessionTitle(store, input.client, hookInput.sessionID)
       await reporter.enqueueReport(hookInput.sessionID)
-      // 6.3 防 AI 杜撰基线：捕获开发者消息里的工时表述，作服务端校验证据
-      await captureBaselineFromMessages(store, input.client, hookInput.sessionID)
+      // 6.3 防 AI 杜撰基线：工时证据取**本次** hook 消息的文本。不得回读历史消息
+      // ——上游 chat.message 在消息落库前触发（prompt.ts 先 trigger 后 updateMessage），
+      // 回读恒少当前这条：证据滞后一条，且会被上一条无工时消息清空，workflow_baseline
+      // 就会连续拒收开发者已报出的数字（线上 P1，护栏见 test/baseline-hook.test.ts）。
+      applyBaselineProposal(
+        store,
+        hookInput.sessionID,
+        output.parts.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n"),
+        output.message.id,
+      )
     },
 
     dispose: async () => {

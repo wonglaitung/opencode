@@ -23,10 +23,11 @@ export function extractBaselineHours(text: string): number | null {
   return n
 }
 
-// 由 chat.message hook 调用：开发者消息含（带意图的）工时表述时写入证据，供
-// workflow_baseline 在 developer_confirmed=true 时校验（服务端防线，防模型自造基线
-// 毒化 6.3 AI 提效对比分母）。最新一条开发者消息若不含此类表述，则清空旧证据——
-// 确保基线须由「最近一次」开发者表述给出，杜绝陈旧数字被复用。
+// 由 chat.message hook 调用（文本取自 hook 传入的**当前**消息，不回读库——上游先触发后落库）：
+// 开发者消息含（带意图的）工时表述时写入证据，供 workflow_baseline 在
+// developer_confirmed=true 时校验（服务端防线，防模型自造基线毒化 6.3 AI 提效对比分母）。
+// 最新一条开发者消息若不含此类表述，则清空旧证据——确保基线须由「最近一次」开发者
+// 表述给出，杜绝陈旧数字被复用。
 export function applyBaselineProposal(
   store: Store,
   sessionID: string,

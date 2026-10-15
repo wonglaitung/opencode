@@ -1937,7 +1937,7 @@ flowchart LR
 
 | 文件 | 用途 |
 |------|------|
-| `src/index.ts` | 插件入口：注册 hooks（`experimental.chat.system.transform`、`tool`、`tool.execute.before/after`、`chat.message`），启动后台任务延后触发 |
+| `src/index.ts` | 插件入口：注册 hooks（`experimental.chat.system.transform`、`tool`、`tool.execute.before/after`、`chat.message`），启动后台任务延后触发；`chat.message` 另捕获基线工时证据——取**本次** hook 消息文本（`output.parts` 拼接 + `output.message.id`），**不回读消息接口**（上游先触发后落库，回读恒滞后一条，坑史见 agents-notes 对抗性审查） |
 | `src/startup.ts` | 启动后台任务：共用一次 `session.list` 完成 孤儿清理 + 标题回填（延后 2 秒，减少启动耗时） |
 | `src/db/schema.ts` | 插件库表定义（仅 `workflow_session` 一张表） |
 | `src/db/index.ts` | 插件 SQLite 初始化与迁移（bun:sqlite，WAL 模式） |
