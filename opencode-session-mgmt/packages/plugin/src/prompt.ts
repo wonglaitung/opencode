@@ -303,7 +303,9 @@ export function buildStateBar(workflow: WorkflowState, stage: string | null): st
     }
     // 先出初稿提示（业务反馈：未达准入标准时也希望有初稿供线下讨论）：
     // 门禁未通过或有停问项时挂这一行，措辞可直接转述（阶段行见 reqdoc-r25 的转述要求）。
-    if (!gate.pass || open.stopped.length > 0) {
+    // 须功能点清单已确认才挂：assemble 的硬前提是 features 非空（否则服务端报「功能点为空」），
+    // 清单没确认时挂这行是空承诺——提示必须与能力同刻出现（P2 方案 A）。
+    if (kb.features.length > 0 && (!gate.pass || open.stopped.length > 0)) {
       lines.push(`信息没齐也能先出初稿：说「先出个初稿」即可`)
     }
     // 连续接受默认的轮数（reqdoc-r27）：**回执是一次性的**，跨轮/压缩上下文后模型无从

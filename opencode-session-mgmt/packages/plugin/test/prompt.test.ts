@@ -493,6 +493,16 @@ describe("buildStateBar · 知识库覆盖（2c）", () => {
       expect(bar).toContain("已停问")
     })
 
+    test("功能点清单未确认 → 不显示（提示不得先于组装能力出现）", () => {
+      // P2 方案 A：assemble 硬前提 features 非空——清单没确认时说了也组装不了
+      // （服务端报「功能点为空」），提示行必须与能力同刻出现，前半程不得空承诺。
+      const s = createWorkflowState("reqdoc")
+      s.kb = { ...kbOf(2), features: [] }
+      const bar = buildStateBar(s, "prd")
+      expect(bar).toContain("未就绪")
+      expect(bar).not.toContain("信息没齐也能先出初稿")
+    })
+
     test("sdlc 工作流 → 恒不含（隔离断言）", () => {
       const s = createWorkflowState("sdlc")
       // sdlc 无 kb，但显式建一个不就绪的 kb 也不该触发（buildStateBar 按 def.type 分支）

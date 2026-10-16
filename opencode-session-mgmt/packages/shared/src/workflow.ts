@@ -574,7 +574,7 @@ export const REQDOC: WorkflowDefinition = {
 
     // ---- prd 需求规格书 ----
     { id: "reqdoc-r13", stage: "prd", text: "功能点拆解（核心）：综合前面 goal/rules/edge 收集的信息（材料提取 + 问答），把需求拆成功能点清单（编号/名称/优先级）。展示清单时**必须额外问一句**「哪几个是这个需求必须先做好？」（A/B/C + 默认推荐，≤5 问的一部分）——按业务回答定 high，其余 medium；不问就调 confirm_features = priority 全 medium（AI 不得替业务定 high）。业务确认后调用 reqdoc_confirm_features(features=[{name,priority}]...) 记录，并为每个功能点在 06_功能点 下建子目录写入来源摘录（标注 [文档]/[问答] 来源）。业务说资料已放好则先调用 reqdoc_scan(directory=07_需求规格产出) 检查已有产出。" },
-    { id: "reqdoc-r14", stage: "prd", text: "PRD 产出（**由服务端从槽位投影生成，不要手写**）：流程只有两步——① reqdoc_ingest 批量提交内容槽位（地址取工具返回的清单）→ reqdoc_answer 逐项请业务确认落定；② reqdoc_assemble 由服务端按《业务需求说明书》模板投影出整篇 md，归档到 07_需求规格产出。**严禁用 write 手写或手工编辑 PRD 正文**（手写产物缺内嵌槽位摘要，定稿会被拦）。槽位变更后重跑 reqdoc_assemble。定稿后调用 reqdoc_export 生成 Word 交付件。**prd 阶段禁止用 comprehension_add**（review 阶段工具）堆理解条目——用它代替 reqdoc_ingest，内容既不进槽位也不进产物。" },
+    { id: "reqdoc-r14", stage: "prd", text: "PRD 产出（**由服务端从槽位投影生成，不要手写**）：流程只有两步——① reqdoc_ingest 批量提交内容槽位（地址取工具返回的清单）→ reqdoc_answer 逐项请业务确认落定；② reqdoc_assemble 由服务端按《业务需求说明书》模板投影出整篇 md，归档到 07_需求规格产出。**严禁用 write 手写或手工编辑 PRD 正文**（手写产物缺内嵌槽位摘要，定稿会被拦）。槽位变更后重跑 reqdoc_assemble。assemble 生成 PRD 后即可调用 reqdoc_export 导出 Word 交付件（未定稿也能导出，产物里没定的内容标 [缺省：…]）。**prd 阶段禁止用 comprehension_add**（review 阶段工具）堆理解条目——用它代替 reqdoc_ingest，内容既不进槽位也不进产物。" },
     // 槽位内容铁律：地址映射已由服务端派生（清单精确到每个小节），规则不再复述映射表、也不复述任何编号——
     // 模板结构已改为从 md 解析，编号会随机构模板变，写死在规则里必然过时。
     { id: "reqdoc-r20", stage: "prd", text: "槽位内容铁律：工具返回的「本轮该填」地址已精确到小节，**照地址填即可，不要自己判断该写进哪一节，也不要自造地址**（换机构模板后编号会变，清单永远是唯一依据）。内容要求：业务语言书面语，**禁止杜撰事实**——[问答] 来源的口语须提炼为规范书面语，不得原话照搬；[缺省] 必须附 reason，禁止裸 [缺省]。模板外成果（UAT 用例、低保真界面、数据字典与库表设计、RBAC 权限矩阵）不插入 PRD 正文，用 write 写入 07_需求规格产出 下子目录，并在对应功能点的「附件」小节列出清单与相对路径（该小节标题与地址以工具清单为准）。" },
