@@ -581,7 +581,7 @@ export const REQDOC: WorkflowDefinition = {
 
     { id: "reqdoc-r24", stage: "prd", text: "组装幂等门禁：reqdoc_assemble 会把槽位摘要内嵌进产物，review_submit 定稿时重读比对——**不一致即拒绝**（槽位变更须重新组装；产物被手改须还原）。手写或编辑过的 PRD（无内嵌摘要）同样被拦。缺料字段如实标 [缺省] 并附 reason，不要为凑覆盖率编造内容。" },
     { id: "reqdoc-r31", stage: "prd", text: "字段定义（进入本轮清单里 kind=field 的容器下的槽位，逐字段与业务确认）：每个功能点的输入字段逐一定义——字段名、类型、长度/精度、是否必填、取值域/约束、来源系统/接口——用 reqdoc_ingest(kind=\"field\") 提交、reqdoc_answer 落定。**确无结构化输入字段的，用 containers 把该容器声明为 {required: false, reason: <理由>}**（容器地址取工具返回的清单；术语容器同理，即 kind=term 的那个），否则 kbGate 会因必填容器未覆盖而拦截。" },
-    { id: "reqdoc-r34", stage: "prd", text: "流程图生成（prd 阶段）：渲染每个功能点时，若满足以下任一条件，须在模板的「流程图」小节内嵌 Mermaid 流程图（flowchart TD 或 sequence diagram）：(1) 功能点涉及 3 步以上的主流程（含分支/循环）；(2) 功能点涉及多角色交互（如客户→系统→审批人）；(3) 业务在 rules/edge 阶段已提供或确认过流程图（02_流程与数据 扫描提取）。不满足时任选「● 不涉及」。该小节的地址取本轮清单，勿自造。流程图以 Mermaid 语法内嵌 PRD 正文该小节（用 ```mermaid 围栏包裹），不单独落盘附_流程图/（除非流程图超长超一屏才拆分独立文件，并在同一小节引用路径）。" },
+    { id: "reqdoc-r34", stage: "prd", text: "流程图生成（prd 阶段）：渲染每个功能点时，若满足以下任一条件，须在模板的「流程图」小节内嵌 Mermaid 流程图（flowchart TD 或 sequence diagram）：(1) 功能点涉及 3 步以上的主流程（含分支/循环）；(2) 功能点涉及多角色交互（如客户→系统→审批人）；(3) 业务在 rules/edge 阶段已提供或确认过流程图（02_流程与数据 扫描提取）。不满足时任选「● 不涉及」。该小节的地址取本轮清单，勿自造。流程图以 Mermaid 语法内嵌 PRD 正文该小节（用 ```mermaid 围栏包裹），不单独落盘附_流程图/（除非流程图超长超一屏才拆分独立文件，并在同一小节引用路径）。节点 ID 用 ASCII（A、step1 等），中文写进节点标签（A[开始]）——裸中文 ID 与「-- 是 -->」嵌入文本箭头写法不被 Word 导出渲染器识别，会降级为源码文本。" },
     // ---- review 业务确认（核心）----
     { id: "reqdoc-r15", stage: "review", text: "review 是唯一不可由 AI 自行推进的阶段（必须经 review_submit），确保业务真正理解并确认 PRD 要点。" },
     { id: "reqdoc-r16", stage: "review", text: "要点拆解与确认：把 PRD 拆为可确认要点（业务目标/核心字段/异常规则/合规要求），comprehension_add 逐段复述输出。业务确认某要点立即 comprehension_confirm(codeSegmentId=该要点 id)——**单次只接受一个要点，禁止一次确认多个**。业务追问时用 comprehension_ask 把问答追加到该要点。" },

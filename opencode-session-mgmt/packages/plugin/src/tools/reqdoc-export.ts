@@ -6,13 +6,12 @@
  *
  * 转换覆盖模板渲染实际用到的标记：标题（#~#####）、表格（|…|）、无序列表（-）、
  * 引用（>）、代码块（```）与行内加粗（**…**）/反引号（`…`）。Mermaid 流程图
- * （```mermaid）渲染为 PNG 嵌入 Word（优先 bundle 预装 vendor 的 mermaid-cli + 系统
- * Edge/Chrome，回退 npx；均不可用时降级输出源码+提示）。
+ * （```mermaid）渲染为 PNG 嵌入 Word（beautiful-mermaid 纯 JS 出 SVG + resvg 光栅化，
+ * 无浏览器、无联网、无 puppeteer；认不出的图型降级输出源码+提示）。
  */
+import { createHash } from "node:crypto"
 import { basename, dirname, extname, join } from "node:path"
-import { existsSync } from "node:fs"
-import { mkdir, mkdtemp, readFile, writeFile, rm } from "node:fs/promises"
-import { tmpdir } from "node:os"
+import { mkdir } from "node:fs/promises"
 import { tool, type ToolDefinition } from "@opencode-ai/plugin"
 import {
   chapterDiff,
@@ -82,75 +81,321 @@ function isSeparatorRow(row: string): boolean {
   )
 }
 
-/** vendor 内 mermaid-cli 入口（bin: mmdc → src/cli.js；index.js 是纯库入口，直接跑静默退出）相对 bundle 根的路径（离线预装，见 sync-bundle.sh / pack-bundle.sh）。 */
-const VENDOR_MMDC_ENTRY = join("vendor", "mermaid-cli", "node_modules", "@mermaid-js", "mermaid-cli", "src", "cli.js")
+/** Mermaid 渲染缓存：同一段源码跨图/跨导出只渲染一次（键为源码 sha256；PRD 图数量个位数，无界可接受）。 */
+const mermaidPngCache = new Map<string, Buffer>()
 
-/** 从 start 向上查找已预装 mermaid-cli 的 bundle 根（插件可能从 packages/ 或 node_modules/ 加载，上溯容错）。 */
-function findVendorBundleRoot(start: string): string | null {
-  let dir = start
-  for (let i = 0; i < 6; i++) {
-    if (existsSync(join(dir, VENDOR_MMDC_ENTRY))) return dir
-    const parent = dirname(dir)
-    if (parent === dir) break
-    dir = parent
+/** 渲染缩放倍数（与旧 mermaid-cli -s 2 同口径，Word 里 500px 宽下更清晰）。 */
+const MERMAID_PNG_SCALE = 2
+
+/**
+ * 尝试把 Mermaid 源码渲染为 PNG：beautiful-mermaid（纯 JS 解析 + ELK 布局，无 DOM/浏览器）
+ * 出 SVG，resvg 光栅化出 PNG；失败返回 null，由调用方降级输出源码。
+ * 2026-10 方案：不走 mermaid-cli/puppeteer/系统浏览器（spike 3/3：中文 flowchart、
+ * sequence alt、sequence loop+note）。
+ *
+ * 其手写解析器用 ^([\w-]+)（仅 ASCII）识别裸节点 ID——裸中文 ID（开始 --> 结束）的行会被
+ * 静默丢弃，混合图（A[开始] --> 结束）会渲染成缺边错图（P2 实证）。故 flowchart 先经
+ * normalizeFlowchart：把节点位裸 Unicode ID 改写为 ASCII ID+中文标签，并做箭头差分校验与
+ * 残留 Unicode 扫描；过不了就返回 null 降级——宁给源码文本，不给错图。
+ */
+async function renderMermaidToPng(mermaidSrc: string): Promise<Buffer | null> {
+  const key = createHash("sha256").update(mermaidSrc).digest("hex")
+  const hit = mermaidPngCache.get(key)
+  if (hit) return hit
+  try {
+    const { parseMermaid, renderMermaidSVG } = await import("beautiful-mermaid")
+    const { Resvg } = await import("@resvg/resvg-js")
+    const normalized = normalizeMermaidSource(mermaidSrc)
+    if (!normalized) return null
+    let source = normalized.src
+    if (normalized.kind === "flow") {
+      // 差分校验：扫描器计数的箭头必须都被解析器落成边；改写出的节点 ID 必须都在图里
+      let graph
+      try {
+        graph = parseMermaid(source)
+      } catch {
+        return null
+      }
+      if (graph.edges.length < normalized.arrows) return null
+      for (const id of normalized.nodeIds) {
+        if (!graph.nodes.has(id)) return null
+      }
+      source = normalized.src
+    }
+    // beautiful-mermaid 会在 SVG 头部内嵌 Google Fonts @import——剥掉，产物不外联
+    const svg = renderMermaidSVG(source).replace(/@import[^;]*;/g, "")
+    const png = new Resvg(svg, {
+      fitTo: { mode: "zoom", value: MERMAID_PNG_SCALE },
+      // loadSystemFonts 覆盖 win/mac 系统字体（中文标签依赖）；linux 需显式字体目录
+      font: { fontDirs: ["/usr/share/fonts", "/usr/local/share/fonts"], loadSystemFonts: true },
+    })
+      .render()
+      .asPng()
+    mermaidPngCache.set(key, png)
+    return png
+  } catch {
+    return null
+  }
+}
+
+/** 归一化结果：flow 带差分校验数据；seq 直通（sequence 解析器用 \S 匹配 actor，Unicode 安全，有 e2e 钉住）。 */
+type NormalizedMermaid = { kind: "flow"; src: string; arrows: number; nodeIds: string[] } | { kind: "seq"; src: string }
+
+/** 按首行图型分派：仅放行 r34 允许的 flowchart/graph 与 sequenceDiagram，其余（gantt 等）降级。 */
+function normalizeMermaidSource(src: string): NormalizedMermaid | null {
+  const header = src.split(/\r?\n/).find((l) => l.trim() !== "")
+  if (!header) return null
+  if (/^\s*sequenceDiagram\b/.test(header)) return { kind: "seq", src }
+  if (/^\s*(?:flowchart|graph)\b/.test(header)) {
+    const normalized = normalizeFlowchart(src)
+    return normalized && { kind: "flow", ...normalized }
   }
   return null
 }
 
-/** Windows 系统浏览器（Edge 必带，Chrome 次选）；非 win32 返回 null，走 puppeteer 自带缓存。 */
-function systemBrowser(): string | null {
-  if (process.platform !== "win32") return null
-  const pf = process.env["ProgramFiles"] ?? "C:\\Program Files"
-  const pf86 = process.env["ProgramFiles(x86)"] ?? "C:\\Program Files (x86)"
-  const candidates = [
-    join(pf86, "Microsoft", "Edge", "Application", "msedge.exe"),
-    join(pf, "Microsoft", "Edge", "Application", "msedge.exe"),
-    join(pf, "Google", "Chrome", "Application", "chrome.exe"),
-    join(pf86, "Google", "Chrome", "Application", "chrome.exe"),
-  ]
-  return candidates.find((p) => existsSync(p)) ?? null
-}
+/** 单行词法片段；node/cls 为待改写的裸 Unicode 标识，raw/arrow 原样回贴。 */
+type FlowPiece = { k: "raw" | "arrow" | "node" | "cls"; v: string }
+type FlowLine = { pieces: FlowPiece[]; arrows: number }
 
-/** vendor 调用用的 node：优先 bundle 同级的便携 node.exe，其次 PATH 上的 node。 */
-function vendorNode(bundleRoot: string): string {
-  if (process.platform === "win32") {
-    const sibling = join(bundleRoot, "..", "node.exe")
-    if (existsSync(sibling)) return sibling
+/** 安全箭头 op 表——与 beautiful-mermaid 的 ARROW_REGEX 同口径（对齐比较双方，防宽表漏检）。 */
+const SAFE_FLOW_ARROW_OPS = ["-.->", "-.-", "-->", "==>", "===", "---"]
+
+/** 从位置 i 匹配安全箭头（含可选 < 反向前缀）；|边标签| 由调用方紧随消费。 */
+function matchSafeFlowArrow(line: string, i: number): string | null {
+  let j = i
+  if (line[j] === "<") j++
+  for (const op of SAFE_FLOW_ARROW_OPS) {
+    if (line.startsWith(op, j)) return line.slice(i, j + op.length)
   }
-  return "node"
+  return null
 }
 
-/** 尝试用 mermaid-cli (mmdc) 把 Mermaid 源码渲染为 PNG；失败返回 null。 */
-async function renderMermaidToPng(mermaidSrc: string): Promise<Buffer | null> {
-  try {
-    const dir = await mkdtemp(join(tmpdir(), "mermaid-"))
-    const inPath = join(dir, "input.mmd")
-    const outPath = join(dir, "output.png")
-    // mermaid-cli v12 的 -p 接受 JSON 配置文件路径（非内联 JSON），写入临时文件
-    const cfgPath = join(dir, "puppeteer.json")
-    await writeFile(inPath, mermaidSrc, "utf8")
-    const cfg: Record<string, unknown> = { args: ["--no-sandbox", "--disable-setuid-sandbox"] }
-    const browser = systemBrowser()
-    if (browser) {
-      // 离线机不预装 chrome-headless-shell：指向系统浏览器，并覆盖 mermaid-cli 默认
-      // headless:"shell"（shell 模式只认 headless-shell 二进制），改用完整浏览器新无头模式
-      cfg.executablePath = browser
-      cfg.headless = true
+/**
+ * flowchart 单行扫描：状态机「节点位 ⇄ 箭头位」。节点位接受 ASCII ID 或裸 Unicode 标识
+ * （node 片段，待改写为 mN[原文]）；箭头位只接受安全箭头（+紧随 |标签|）。任何未知字符、
+ * 嵌入文本箭头（-- 是 -->）、节点位外的 Unicode 等一律返回 null（整图降级，绝不静默丢行）。
+ */
+function scanFlowLine(line: string): FlowLine | null {
+  const pieces: FlowPiece[] = []
+  let arrows = 0
+  let expectNode = true
+  let i = 0
+  const n = line.length
+  const readBracket = (start: number): number => {
+    const open = line[start]!
+    const close = open === "[" ? "]" : open === "(" ? ")" : "}"
+    let depth = 0
+    for (let j = start; j < n; j++) {
+      if (line[j] === open) depth++
+      else if (line[j] === close && --depth === 0) return j + 1
     }
-    await writeFile(cfgPath, JSON.stringify(cfg), "utf8")
-    const bundleRoot = findVendorBundleRoot(import.meta.dir)
-    const args = `-i "${inPath}" -o "${outPath}" -b transparent -s 2 -p "${cfgPath}"`
-    const command = bundleRoot
-      ? `"${vendorNode(bundleRoot)}" "${join(bundleRoot, VENDOR_MMDC_ENTRY)}" ${args}`
-      : `npx --yes @mermaid-js/mermaid-cli ${args}`
-    const { execSync } = await import("node:child_process")
-    execSync(command, { timeout: 60_000, stdio: "pipe" })
-    const buf = await readFile(outPath)
-    await rm(dir, { recursive: true, force: true })
-    return buf
-  } catch {
+    return -1
+  }
+  while (i < n) {
+    const c = line[i]!
+    if (c === " " || c === "\t") {
+      pieces.push({ k: "raw", v: c })
+      i++
+      continue
+    }
+    const arrow = matchSafeFlowArrow(line, i)
+    if (arrow) {
+      // 箭头只在接受态（前置节点已出现）合法；节点位直接来箭头（--> B）视为怪写法
+      if (expectNode) return null
+      pieces.push({ k: "arrow", v: arrow })
+      i += arrow.length
+      arrows++
+      expectNode = true
+      // |边标签| 紧随箭头（与 ARROW_REGEX 的 (?:\|([^|]*)\|)? 同口径）
+      if (line[i] === "|") {
+        const end = line.indexOf("|", i + 1)
+        if (end < 0) return null
+        pieces.push({ k: "raw", v: line.slice(i, end + 1) })
+        i = end + 1
+      }
+      continue
+    }
+    if (c === "&" && !expectNode) {
+      pieces.push({ k: "raw", v: "&" })
+      i++
+      expectNode = true
+      continue
+    }
+    if (line.startsWith(":::", i) && !expectNode) {
+      const cls = /^:::[\w\p{L}-]+/u.exec(line.slice(i))
+      if (!cls) return null
+      pieces.push({ k: "cls", v: cls[0].slice(3) })
+      i += cls[0].length
+      continue
+    }
+    if ((c === "[" || c === "(" || c === "{") && !expectNode) {
+      const end = readBracket(i)
+      if (end < 0) return null
+      pieces.push({ k: "raw", v: line.slice(i, end) })
+      i = end
+      continue
+    }
+    if (expectNode) {
+      const ascii = /^[A-Za-z_][\w-]*/.exec(line.slice(i))
+      if (ascii) {
+        pieces.push({ k: "raw", v: ascii[0] })
+        i += ascii[0].length
+        expectNode = false
+        continue
+      }
+      const uni = /^[^\s&|<>=()[\]{}"'`~.,-]+/u.exec(line.slice(i))
+      if (uni && /[^\x00-\x7F]/.test(uni[0])) {
+        pieces.push({ k: "node", v: uni[0] })
+        i += uni[0].length
+        expectNode = false
+        continue
+      }
+    }
     return null
   }
+  return { pieces, arrows }
+}
+
+/**
+ * flowchart 归一化：两遍扫描——收集节点/子图/样式类名的 Unicode 标识映射，再改写发射；
+ * 随后做「标签区外不得残留 Unicode」保守扫描（classDef 中文类名等改写不了的场景走降级）。
+ * 返回 null = 含怪写法或无法安全改写，整图降级。
+ */
+function normalizeFlowchart(src: string): { src: string; arrows: number; nodeIds: string[] } | null {
+  const lines = src.split(/\r?\n/)
+  const idMap = new Map<string, string>()
+  const nodeIds: string[] = []
+  let nextId = 0
+  const mapped = (token: string): string => {
+    let id = idMap.get(token)
+    if (!id) {
+      id = `m${nextId++}`
+      idMap.set(token, id)
+    }
+    return id
+  }
+  const isStructural = (line: string): boolean =>
+    /^\s*(%%|flowchart\b|graph\b|direction\b|end\b|classDef\b|class\b|style\b|linkStyle\b|click\b|accTitle\b|accDescr\b)/.test(
+      line,
+    )
+
+  // 第一遍：节点/子图行建映射；结构行仅登记 class/classDef 行的样式类名（含 :::中文 简写共用一张表）
+  const scans: (FlowLine | null)[] = []
+  for (const line of lines) {
+    if (isStructural(line)) {
+      scans.push(null)
+      const cm = /^\s*class\s+(.+?)\s+(\S+)\s*$/.exec(line)
+      if (cm && /[^\x00-\x7F]/.test(cm[2]!)) mapped(cm[2]!)
+      const cd = /^\s*classDef\s+(\S+)/.exec(line)
+      if (cd && /[^\x00-\x7F]/.test(cd[1]!)) mapped(cd[1]!)
+      continue
+    }
+    const sg = /^\s*subgraph\s+(.+)$/.exec(line)
+    if (sg) {
+      const rest = sg[1]!.trim()
+      if (!/^[\w-]+(\s*\[.*\])?$/.test(rest)) {
+        if (/[[\](){}]/.test(rest)) return null
+        mapped(rest)
+      }
+      scans.push(null)
+      continue
+    }
+    const flow = scanFlowLine(line)
+    if (!flow) return null
+    scans.push(flow)
+    for (const p of flow.pieces) {
+      if (p.k === "node") {
+        mapped(p.v)
+        if (!nodeIds.includes(idMap.get(p.v)!)) nodeIds.push(idMap.get(p.v)!)
+      }
+      if (p.k === "cls" && /[^\x00-\x7F]/.test(p.v)) mapped(p.v)
+    }
+  }
+
+  // 第二遍：发射。节点位裸 Unicode 标识 → mN[原文]（紧随方括号组时只换 ID）；class/style 行查表改写。
+  const out: string[] = []
+  for (let li = 0; li < lines.length; li++) {
+    const line = lines[li]!
+    const flow = scans[li]
+    if (flow) {
+      let text = ""
+      for (let pi = 0; pi < flow.pieces.length; pi++) {
+        const p = flow.pieces[pi]!
+        if (p.k === "node") {
+          const id = mapped(p.v)
+          let next = flow.pieces[pi + 1]
+          let ni = pi + 1
+          while (next && next.k === "raw" && next.v.trim() === "") {
+            ni++
+            next = flow.pieces[ni]
+          }
+          text += next && next.k === "raw" && /^[[({]/.test(next.v.trimStart()) ? id : `${id}[${p.v}]`
+          continue
+        }
+        if (p.k === "cls") {
+          text += `:::${/[^\x00-\x7F]/.test(p.v) ? mapped(p.v) : p.v}`
+          continue
+        }
+        text += p.v
+      }
+      out.push(text)
+      continue
+    }
+    if (!isStructural(line)) {
+      const sg = /^\s*subgraph\s+(.+)$/.exec(line)
+      if (sg) {
+        const rest = sg[1]!.trim()
+        out.push(/^[\w-]+(\s*\[.*\])?$/.test(rest) ? line : `subgraph ${mapped(rest)}[${rest}]`)
+        continue
+      }
+      out.push(line)
+      continue
+    }
+    // accTitle/accDescr 不进 PNG，直接丢弃（其文本常为中文，保留会误触发残留扫描）
+    if (/^\s*acc(Title|Descr)\b/i.test(line)) continue
+    const clsLine = /^\s*class\s+(.+?)\s+(\S+)\s*$/.exec(line)
+    if (clsLine) {
+      out.push(
+        `${line.slice(0, line.length - clsLine[0].trimStart().length)}${clsLine[1]!
+          .split(",")
+          .map((t) => {
+            const tok = t.trim()
+            return idMap.get(tok) ? t.replace(tok, idMap.get(tok)!) : t
+          })
+          .join(",")} ${/[^\x00-\x7F]/.test(clsLine[2]!) ? mapped(clsLine[2]!) : clsLine[2]!}`,
+      )
+      continue
+    }
+    const cdLine = /^\s*classDef\s+(\S+)(\s+.*)?$/.exec(line)
+    if (cdLine) {
+      const name = /[^\x00-\x7F]/.test(cdLine[1]!) ? mapped(cdLine[1]!) : cdLine[1]!
+      out.push(`classDef ${name}${cdLine[2] ?? ""}`)
+      continue
+    }
+    const styleLine = /^\s*style\s+(\S+)(\s+.*)$/.exec(line)
+    if (styleLine) {
+      out.push(`style ${idMap.get(styleLine[1]!) ?? styleLine[1]!}${styleLine[2]}`)
+      continue
+    }
+    out.push(line)
+  }
+  const rewritten = out.join("\n")
+  // 保守扫描：剥去注释行、引号串、方括号/圆括号/花括号组与 |标签| 后不得残留 Unicode
+  const stripped = rewritten
+    .split(/\r?\n/)
+    .filter((l) => !/^\s*%%/.test(l))
+    .map((l) =>
+      l
+        .replace(/"[^"]*"/g, "")
+        .replace(/'[^']*'/g, "")
+        .replace(/\[[^\]]*\]/g, "")
+        .replace(/\([^)]*\)/g, "")
+        .replace(/\{[^}]*\}/g, "")
+        .replace(/\|[^|]*\|/g, ""),
+    )
+    .join("\n")
+  if (/[^\x00-\x7F]/.test(stripped)) return null
+  return { src: rewritten, arrows: scans.reduce((a, f) => a + (f?.arrows ?? 0), 0), nodeIds }
 }
 
 /** 解析 Markdown 表格（首行表头 + 分隔行 + 数据行）为 docx 表格。 */
@@ -196,19 +441,22 @@ export async function mdToDocx(md: string): Promise<Buffer> {
       if (lang === "mermaid") {
         const png = await renderMermaidToPng(code.join("\n"))
         if (png) {
+          // PNG IHDR 宽高在 offset 16/20：固定宽 500、高按实际比例（替换旧写死 500×300）
+          const width = 500
+          const height = Math.max(1, Math.round((width * png.readUInt32BE(20)) / png.readUInt32BE(16)))
           children.push(
             new Paragraph({
-              children: [new ImageRun({ data: png, transformation: { width: 500, height: 300 }, type: "png" })],
+              children: [new ImageRun({ data: png, transformation: { width, height }, type: "png" })],
               spacing: { before: 120, after: 120 },
             }),
           )
           continue
         }
-        // 降级：mmdc 不可用，输出源码 + 提示
+        // 降级：未知图型/渲染失败，输出源码 + 提示
         children.push(
           new Paragraph({
             children: [
-              new TextRun({ text: "[流程图源码（需安装 @mermaid-js/mermaid-cli 渲染）]", italics: true, color: "999999" }),
+              new TextRun({ text: "[流程图暂不支持渲染，以下为源码]", italics: true, color: "999999" }),
             ],
             spacing: { before: 60, after: 60 },
           }),

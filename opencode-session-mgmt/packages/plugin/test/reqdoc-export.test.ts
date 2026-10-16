@@ -115,3 +115,130 @@ describe("reqdoc_export", () => {
     ).rejects.toThrow(/源文件不存在或不可读/)
   })
 })
+
+describe("reqdoc_export · Mermaid 渲染（无浏览器链路 + 裸中文 ID 静默丢弃防线，2026-10 方案回归）", () => {
+  /** 从 docx zip 里取 word/media/ 下的图片部件（排除目录项）。 */
+  async function mediaParts(buf: Buffer): Promise<{ name: string; data: Buffer }[]> {
+    const zip = await JSZip.loadAsync(buf)
+    return Promise.all(
+      Object.keys(zip.files)
+        .filter((f) => f.startsWith("word/media/") && !f.endsWith("/"))
+        .map(async (name) => ({ name, data: await zip.file(name)!.async("nodebuffer") })),
+    )
+  }
+
+  /** 渲染 md → docx，返回「是否出图 + 是否带降级提示」。 */
+  async function renderBlock(block: string): Promise<{ pngCount: number; degrade: boolean }> {
+    const buf = await mdToDocx(`# 图\n\n\`\`\`mermaid\n${block}\n\`\`\``)
+    const zip = await JSZip.loadAsync(buf)
+    const xml = await zip.file("word/document.xml")!.async("text")
+    return { pngCount: (await mediaParts(buf)).length, degrade: xml.includes("流程图暂不支持渲染") }
+  }
+
+  test("中文 flowchart 渲染为 PNG 嵌入（media 里有真实 PNG，比例自适应）", async () => {
+    const md = [
+      "# 图",
+      "",
+      "```mermaid",
+      "flowchart TD",
+      "    A[用户提交申请] --> B{金额是否超限}",
+      "    B -->|是| C[转人工审批]",
+      "    B -->|否| D[系统自动审批]",
+      "```",
+    ].join("\n")
+    const buf = await mdToDocx(md)
+    const media = await mediaParts(buf)
+    expect(media.length).toBe(1)
+    expect(media[0]!.data.subarray(1, 4).toString()).toBe("PNG")
+    // IHDR 宽高：宽高比不为写死的 500:300（回归旧 500×300 拉伸）
+    const w = media[0]!.data.readUInt32BE(16)
+    const h = media[0]!.data.readUInt32BE(20)
+    expect(Math.abs(w / h - 500 / 300)).toBeGreaterThan(0.1)
+  })
+
+  test("裸中文节点 ID 渲染为 PNG（A′ 改写：曾被解析器静默丢弃→空图降级）", async () => {
+    const r = await renderBlock("flowchart TD\n    客户 --> 系统\n    系统 --> 数据库")
+    expect(r.pngCount).toBe(1)
+    expect(r.degrade).toBe(false)
+  })
+
+  test("混合图（ASCII+裸中文 ID）渲染出完整图（曾静默丢边成错图，P2 回归）", async () => {
+    const r = await renderBlock("flowchart TD\n    A[开始] --> 结束\n    结束 --> C[完成]")
+    expect(r.pngCount).toBe(1)
+    expect(r.degrade).toBe(false)
+  })
+
+  test("中文子图与 & 并联渲染为 PNG", async () => {
+    const sg = await renderBlock("flowchart TD\n    subgraph 审批组\n        A --> B\n    end\n    B --> C")
+    expect(sg.pngCount).toBe(1)
+    const amp = await renderBlock("flowchart TD\n    开始 & 结束 --> 归档")
+    expect(amp.pngCount).toBe(1)
+  })
+
+  test("中文 classDef/class/style/::: 简写渲染为 PNG（样式类名一并改写）", async () => {
+    const r = await renderBlock(
+      "flowchart TD\n    开始[提交]:::高风险 --> 结束\nclassDef 高风险 fill:#f00,stroke:#333\nstyle 结束 fill:#eee",
+    )
+    expect(r.pngCount).toBe(1)
+    expect(r.degrade).toBe(false)
+  })
+
+  test("sequenceDiagram（裸中文 actor / alt）渲染为 PNG（解析器 \S 匹配，Unicode 安全）", async () => {
+    const bare = await renderBlock("sequenceDiagram\n    甲->>乙: 提交申请\n    乙-->>甲: 返回结果")
+    expect(bare.pngCount).toBe(1)
+    const alt = await renderBlock(
+      [
+        "sequenceDiagram",
+        "    participant 客户",
+        "    participant 系统",
+        "    客户->>系统: 提交贷款申请",
+        "    alt 金额大于50万",
+        "        系统-->>客户: 转人工审批",
+        "    else 金额不大于50万",
+        "        系统-->>客户: 自动审批通过",
+        "    end",
+      ].join("\n"),
+    )
+    expect(alt.pngCount).toBe(1)
+  })
+
+  test("嵌入文本箭头（-- 是 -->）降级为源码提示（不静默、不崩）", async () => {
+    const r = await renderBlock("flowchart TD\n    A -- 是 --> B")
+    expect(r.pngCount).toBe(0)
+    expect(r.degrade).toBe(true)
+  })
+
+  test("解析器不支持的箭头（--x / ~~~）降级（扫描器与解析器箭头表对齐 + 差分校验兜底）", async () => {
+    const x = await renderBlock("flowchart TD\n    A --x B")
+    expect(x.pngCount).toBe(0)
+    expect(x.degrade).toBe(true)
+    // ~~~ 是差分校验的专属防线：扫描器放行时（SAFE 表误含）解析器仍会丢边，靠箭头差分拦下
+    const t = await renderBlock("flowchart TD\n    A ~~~ B")
+    expect(t.pngCount).toBe(0)
+    expect(t.degrade).toBe(true)
+  })
+
+  test("classDef 样式值里无法改写的中文（未加引号 font-family）降级", async () => {
+    const r = await renderBlock("flowchart TD\n    A --> B\nclassDef hot font-family:微软雅黑")
+    expect(r.pngCount).toBe(0)
+    expect(r.degrade).toBe(true)
+  })
+
+  test("认不出的图型（gantt）降级为源码提示（不崩、不出图）", async () => {
+    const md = ["# 图", "", "```mermaid", "gantt", "    title x", "    section s", "    t1:2024-01-01, 1d", "```"].join(
+      "\n",
+    )
+    const buf = await mdToDocx(md)
+    await assertDocx(buf, ["流程图暂不支持渲染，以下为源码", "gantt"])
+    expect((await mediaParts(buf)).length).toBe(0)
+  })
+
+  test("同一图源二次导出命中缓存，产物仍为 PNG", async () => {
+    const src = "```mermaid\nflowchart LR\n    开始 --> 结束\n```"
+    const first = await mediaParts(await mdToDocx(`# 缓存\n\n${src}`))
+    const second = await mediaParts(await mdToDocx(`# 缓存2\n\n${src}`))
+    expect(first.length).toBe(1)
+    expect(second.length).toBe(1)
+    expect(second[0]!.data.equals(first[0]!.data)).toBe(true)
+  })
+})

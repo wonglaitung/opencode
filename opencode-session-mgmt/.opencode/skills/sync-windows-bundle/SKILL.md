@@ -29,8 +29,6 @@ bash /data/opencode/opencode-edge-debug/scripts/sync-bundle.sh
 bash /data/opencode/opencode-server-debug/scripts/sync-bundle.sh
 ```
 
-`FORCE_VENDOR=1` 强制重装 `vendor/mermaid-cli`（仅 session-mgmt 用到，离线 Mermaid 渲染依赖，平时幂等跳过）。
-
 ## 它做了什么（关键点）
 
 bundle 是 **hoisted 模式**打包：每个 workspace 包在 bundle 里存在**两份**——

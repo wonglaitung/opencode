@@ -12,8 +12,6 @@
 # 用法：
 #   bash scripts/sync-bundle.sh
 #   BUNDLE="/mnt/d/其它路径/opencode-sm-bundle-0.1.0" bash scripts/sync-bundle.sh
-# 环境变量：
-#   FORCE_VENDOR=1   强制重装 vendor/mermaid-cli（离线 Mermaid 渲染依赖）
 #
 # 改完请重启 opencode 守护进程（关闭再开）让插件重新加载。
 #
@@ -88,8 +86,15 @@ fi
 check_dirs+=("$BUNDLE/docs")
 echo "  ✓ docs/"
 
-echo "==> vendor/mermaid-cli（离线 Mermaid 渲染，幂等安装）"
-bash "$REPO/scripts/install-vendor-mermaid.sh" "$BUNDLE"
+# 根 bun.lock/package.json 是 bundle 内 bun install 的解析基准；
+# 插件新增第三方依赖（如 beautiful-mermaid、@resvg/resvg-js）必须同步 lock 后
+# 在 **Windows 侧** 跑 bun install——resvg 为平台二进制，WSL/Linux 下会装成 linux 版，
+# Windows 运行时加载 .node 失败。
+echo "==> 同步根 bun.lock / package.json（依赖解析基准）"
+cp -f "$REPO/bun.lock" "$BUNDLE/bun.lock"
+cp -f "$REPO/package.json" "$BUNDLE/package.json"
+echo "  ✓ bun.lock + package.json"
+echo "  ⚠ 若新增了第三方依赖，须在 Windows 侧（cmd）执行：cd /d <bundle目录> && bun install"
 
 echo "==> 校验：同步目录不应含符号链接（技术规范要求整包为真实文件）"
 syms=$(find "${check_dirs[@]}" -type l 2>/dev/null || true)
