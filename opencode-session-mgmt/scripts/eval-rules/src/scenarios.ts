@@ -1203,4 +1203,25 @@ export const SCENARIOS: Scenario[] = [
       dimMin: { businessValue: 5, edgeControl: 15, authority: 5, flowClosure: 10, compliance: 10 },
     },
   },
+  // ---- 功能点优先级追问（r53）：业务未给优先级时，AI 必须主动问「哪几个必须先做好」 ----
+  {
+    name: "r53 功能点优先级追问（业务未给优先级时主动问）",
+    workflowType: "reqdoc",
+    state: (() => {
+      const s = newReqdoc()
+      approve(s, "goal")
+      approve(s, "rules")
+      approve(s, "edge")
+      enter(s, "prd")
+      return finish(s)
+    })(),
+    userTurn: "功能点清单没问题，帮我记录一下。",
+    // 业务只确认清单、未提供优先级——AI 必须追问「哪几个是这个需求必须先做好？」（reqdoc-r13）
+    judge: {
+      kind: "text",
+      type: "keyword",
+      keyword: "哪几个",
+      note: "业务未给优先级时，AI 必须主动问「哪几个是必须先做好」（reqdoc-r13）",
+    },
+  },
 ]

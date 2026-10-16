@@ -1,6 +1,6 @@
 /**
  * 打 OpenAI 兼容 /chat/completions(非流式、temperature 0)。
- * 环境变量: EVAL_BASE_URL(默认 http://localhost:8086/v1) / EVAL_API_KEY / EVAL_MODEL(默认 /models/qwen3)
+ * 环境变量: EVAL_BASE_URL(默认 http://localhost:8086/v1) / EVAL_API_KEY / EVAL_MODEL(默认 qwen3)
  *          / EVAL_MAX_TOKENS(默认 2048,推理模型显式 4096) / EVAL_TIMEOUT_MS(默认 180000)
  *          / EVAL_DISABLE_THINKING(设 1 时带 chat_template_kwargs:{enable_thinking:false})。
  * 用 Bun 内建 fetch,零新增依赖——评测只判 tool_use,裸参数比高层 SDK 的断言 API 更可控。
@@ -11,7 +11,7 @@ import { evalToolParamTypes } from "./tool-defs"
 
 const BASE = process.env.EVAL_BASE_URL ?? "http://localhost:8086/v1"
 const KEY = process.env.EVAL_API_KEY ?? ""
-const MODEL = process.env.EVAL_MODEL ?? "/models/qwen3"
+const MODEL = process.env.EVAL_MODEL ?? "qwen3"
 // 推理模型（deepseek-*-flash 等）需预留 thinking 空间,4096 防截断吞工具调用;
 // 慢速弱模型（本地 qwen3.6 ~16 tok/s）默认 2048,过长输出会拖到超时。
 const MAX_TOKENS = Number(process.env.EVAL_MAX_TOKENS ?? "2048")
