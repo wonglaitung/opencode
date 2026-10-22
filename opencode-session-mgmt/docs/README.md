@@ -14,6 +14,7 @@
 | [workflow-sdlc.md](workflow-sdlc.md) | 设计文档 | 工作流一：sdlc 软件开发定义（阶段 / 四清单 / hasCommitGate）、12 条规则全文、场景一~四、审查清单、统计口径、评测场景 | [session-management.md](session-management.md)（3.2/6.1/8.3/8.5/9 指针指向其章）、[deployment.md](deployment.md)（6.1 对话示例） | 可（同步引用方）；**新增文档进 docs/ 先登记本表** |
 | [workflow-reqdoc.md](workflow-reqdoc.md) | 设计文档 | 工作流二：reqdoc 需求书定义、需求资料目录契约、25 条规则全文、**知识库门禁（kbGate 唯一门禁）**、开放项派生、组装与幂等、专属工具、评测 | [session-management.md](session-management.md)（3.2/6.1/6.2/8.3/8.5/9 指针指向其章）、[reqdoc-prd-template.md](reqdoc-prd-template.md) | 可（同步引用方）；**新增文档进 docs/ 先登记本表** |
 | [collector-spec.md](collector-spec.md) | 设计文档 | 收集服务（collector）规范：三端点、聚合、容错 | 无入站引用（独立规范） | 可，但内容被作为部署/开发依据 |
+| [collector-metrics.md](collector-metrics.md) | 设计文档 | **上报指标判读口径**：当前阶段 / 阶段耗时 / 返工的派生算法与边界（输入为 collector-spec.md 5.1 的 SessionReport） | 无入站引用（看板/收集服务实现依据） | 可 |
 | [deployment.md](deployment.md) | 设计文档 | **部署与使用手册**（新人先看）：装 OpenCode、启用插件、CLI、收集服务、内网隔离、FAQ | [README.md](../README.md) 链接；自身引用 [qwen3.6-27b.chat-template.jinja](qwen3.6-27b.chat-template.jinja) | 改名需同步 README.md |
 | [upstream-sync.md](upstream-sync.md) | 设计文档 | 上游同步方案：remote 布局、同步命令、冲突预案、同步记录 | [README.md](../README.md)、[CLAUDE.md](../CLAUDE.md)、[.opencode/command/sync-upstream.md](../.opencode/command/sync-upstream.md)、[deployment.md](deployment.md) | 改名需同步 4 处引用 |
 | [leadership-brief-reqdoc.md](leadership-brief-reqdoc.md) | 设计文档 | **reqdoc 汇报材料**（给管理层）：需求书工作流价值、退出风险/ROI 回应、质量飞轮三支柱、兼容现状、决策请求（技术细节见 workflow-reqdoc.md）；与 leadership-brief.md 并列、同一七节骨架 | 无入站引用 | 可 |
