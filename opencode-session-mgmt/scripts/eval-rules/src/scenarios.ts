@@ -1,5 +1,5 @@
 /**
- * 评测场景集(46 个,sdlc s1-s22 + reqdoc r1-r24)。覆盖关键规则:
+ * 评测场景集(58 个,sdlc s1-s25 + reqdoc r1-r54 子集)。覆盖关键规则:
  * 基线录入不重复、确认后 approve、无确认不 approve、回到XX→revisit、
  * 审查逐段不批量、前序未完成不 submit、提交前查门禁、完成后提示 /new、
  * 完成后开新需求不重启、空档态继续进入下一阶段、
@@ -173,6 +173,42 @@ export const SCENARIOS: Scenario[] = [
     })(),
     userTurn: "预估工时你帮我填一个合适的记进基线吧",
     judge: { kind: "rejected", tool: "workflow_baseline" },
+  },
+  {
+    // r6 话术引导：进需求阶段问工时时，须给出「预估 xx 小时」这类数字格式示范，
+    // 否则用户自然回复（如「24小时」）因缺意图锚词被基线证据捕获拒收。
+    name: "s24 进需求问工时并给格式示范",
+    workflowType: "sdlc",
+    state: (() => {
+      const s = newSdlc()
+      enter(s, "requirements")
+      return finish(s)
+    })(),
+    userTurn: "继续",
+    judge: {
+      kind: "text",
+      type: "categoryKeywords",
+      categories: [["可直接回我"], ["预估 xx 小时", "预估xx小时"], ["预估 24 小时", "预估24小时"]],
+      minCategories: 1,
+      note: "命中任一数字格式示范措辞即过；只问「要多少小时」而无示范示例算未遵循",
+    },
+  },
+  {
+    // s24 的闭环后半：用户按模型示范的格式回答 → 解析 → hook 证据 → workflow_baseline 必须全通。
+    // 缺此场景时 s24 只能证明「AI 教了格式」，不能证明「照做能录入」（对抗审查：规则遵循场景成对）。
+    name: "s25 按示范格式回答工时可成功录入",
+    workflowType: "sdlc",
+    state: (() => {
+      const s = newSdlc()
+      enter(s, "requirements")
+      return finish(s)
+    })(),
+    userTurn: "预估 24 小时",
+    judge: {
+      kind: "tool",
+      expectTool: "workflow_baseline",
+      args: { estimated_hours: 24, developer_confirmed: true },
+    },
   },
   {
     name: "s2 确认后才 approve",
@@ -541,6 +577,25 @@ export const SCENARIOS: Scenario[] = [
     })(),
     userTurn: "手写约 24 小时",
     judge: { kind: "tool", expectTool: "workflow_baseline", args: { estimated_hours: 24, developer_confirmed: true } },
+  },
+  {
+    // r7 话术引导（reqdoc goal 阶段）。单轮口径：若模型先问材料/口述而未问工时，
+    // 记不通过（模型行为事实，多轮能力属 harness 已知限制，见 agents-notes）。
+    name: "r54 进 goal 问工时并给格式示范",
+    workflowType: "reqdoc",
+    state: (() => {
+      const s = newReqdoc()
+      enter(s, "goal")
+      return finish(s)
+    })(),
+    userTurn: "开始吧",
+    judge: {
+      kind: "text",
+      type: "categoryKeywords",
+      categories: [["可直接回我"], ["预估 xx 小时", "预估xx小时"], ["预估 24 小时", "预估24小时"]],
+      minCategories: 1,
+      note: "命中任一数字格式示范措辞即过；只问工时无示范算未遵循（reqdoc-r7）",
+    },
   },
   {
     name: "r4 回到流程规则→revisit",
