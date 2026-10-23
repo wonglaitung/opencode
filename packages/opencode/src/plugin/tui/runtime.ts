@@ -12,6 +12,7 @@ import {
   type TuiTheme,
 } from "@opencode-ai/plugin/tui"
 import path from "path"
+import fs from "fs"
 import { fileURLToPath } from "url"
 import { TuiConfig } from "@/config/tui"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -121,23 +122,58 @@ type RuntimeState = {
 
 const DISPOSE_TIMEOUT_MS = 5000
 const KV_KEY = "plugin_enabled"
+const PLUGIN_LOG_FILE = path.join(Global.Path.log, "tui-plugin.log")
+const LOG_LEVELS = { DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3 } as const
+type PluginLogLevel = keyof typeof LOG_LEVELS
+
 const EMPTY_TUI: TuiPluginModule = {
   tui: async () => {},
 }
 
+function configuredLogLevel(): PluginLogLevel {
+  const value = process.env.OPENCODE_LOG_LEVEL?.toUpperCase()
+  if (value && value in LOG_LEVELS) return value as PluginLogLevel
+  return "INFO"
+}
+
+function serializeLogData(data: Record<string, unknown>) {
+  return Object.fromEntries(
+    Object.entries(data).map(([key, value]) => [key, value instanceof Error ? errorData(value) : value]),
+  )
+}
+
+// TUI plugins run inside the alternate screen, where stderr is effectively invisible.
+// Persist structured lines so failures remain inspectable after the fact.
+function writePluginLog(level: PluginLogLevel, message: string, data: Record<string, unknown> = {}) {
+  if (LOG_LEVELS[level] < LOG_LEVELS[configuredLogLevel()]) return
+  const line = JSON.stringify({
+    timestamp: new Date().toISOString(),
+    level,
+    message,
+    ...serializeLogData(data),
+  })
+  try {
+    fs.mkdirSync(Global.Path.log, { recursive: true })
+    fs.appendFileSync(PLUGIN_LOG_FILE, line + "\n")
+  } catch {}
+
+  if (level === "ERROR") console.error(`[tui.plugin] ${message}`, data)
+  else if (level === "WARN") console.warn(`[tui.plugin] ${message}`, data)
+  else console.debug(`[tui.plugin] ${message}`, data)
+}
+
 function fail(message: string, data: Record<string, unknown>) {
   if (!("error" in data)) {
-    console.error(`[tui.plugin] ${message}`, data)
+    writePluginLog("ERROR", message, data)
     return
   }
 
   const text = `${message}: ${errorMessage(data.error)}`
-  const next = { ...data, error: errorData(data.error) }
-  console.error(`[tui.plugin] ${text}`, next)
+  writePluginLog("ERROR", text, { ...data, error: errorData(data.error) })
 }
 
 function warn(message: string, data: Record<string, unknown>) {
-  console.warn(`[tui.plugin] ${message}`, data)
+  writePluginLog("WARN", message, data)
 }
 
 function createScopedKeymap(keymap: TuiPluginApi["keymap"], scope: PluginScope): TuiPluginApi["keymap"] {
@@ -678,7 +714,9 @@ async function resolveExternalPlugins(list: ConfigPlugin.Origin[], wait: () => P
     items: list,
     kind: "tui",
     wait: async () => {
-      await wait().catch(() => {})
+      await wait().catch((error) => {
+        warn("tui plugin dependency wait failed", { error })
+      })
     },
     finish: async (loaded, origin, retry) => {
       const mod = await Promise.resolve()
@@ -708,6 +746,18 @@ async function resolveExternalPlugins(list: ConfigPlugin.Origin[], wait: () => P
 
       const theme_files = await readThemeFiles(loaded.spec, loaded.pkg)
 
+      writePluginLog("DEBUG", "tui plugin ready", {
+        spec: loaded.spec,
+        id,
+        source: loaded.source,
+        target: loaded.target,
+        entry: loaded.entry,
+        package: loaded.pkg?.json.name,
+        version: loaded.pkg?.json.version,
+        retry,
+        themes: theme_files.length,
+      })
+
       return {
         options: loaded.options,
         spec: loaded.spec,
@@ -735,6 +785,14 @@ async function resolveExternalPlugins(list: ConfigPlugin.Origin[], wait: () => P
       })
       if (!id) return
 
+      writePluginLog("DEBUG", "tui plugin theme-only package", {
+        spec: loaded.spec,
+        id,
+        target: loaded.target,
+        themes: theme_files.length,
+        retry,
+      })
+
       return {
         options: loaded.options,
         spec: loaded.spec,
@@ -749,25 +807,73 @@ async function resolveExternalPlugins(list: ConfigPlugin.Origin[], wait: () => P
       }
     },
     report: {
-      start() {},
-      missing(candidate, retry, message) {
-        warn("tui plugin has no entrypoint", { path: candidate.plan.spec, retry, message })
+      start(candidate, retry) {
+        writePluginLog("DEBUG", "tui plugin load start", {
+          spec: candidate.plan.spec,
+          scope: candidate.origin.scope,
+          config: candidate.origin.source,
+          retry,
+        })
       },
-      error(candidate, retry, stage, error, resolved) {
+      skip(candidate, reason) {
+        writePluginLog("DEBUG", "tui plugin skipped", {
+          spec: candidate.plan.spec,
+          reason,
+        })
+      },
+      loaded(candidate, retry, value, elapsedMs) {
+        writePluginLog("DEBUG", "tui plugin resolved", {
+          spec: value.spec,
+          source: value.source,
+          target: value.target,
+          entry: value.entry,
+          package: value.pkg?.json.name,
+          version: value.pkg?.json.version,
+          retry,
+          elapsedMs,
+        })
+      },
+      missing(candidate, retry, message, value, elapsedMs) {
+        warn("tui plugin has no entrypoint", {
+          spec: candidate.plan.spec,
+          target: value.target,
+          message,
+          retry,
+          elapsedMs,
+        })
+      },
+      error(candidate, retry, stage, error, resolved, elapsedMs) {
         const spec = candidate.plan.spec
         if (stage === "install") {
-          fail("failed to resolve tui plugin", { path: spec, retry, error })
+          fail("failed to resolve tui plugin", {
+            spec,
+            retry,
+            elapsedMs,
+            error,
+          })
           return
         }
         if (stage === "compatibility") {
-          fail("tui plugin incompatible", { path: spec, retry, error })
+          fail("tui plugin incompatible", { spec, retry, elapsedMs, error })
           return
         }
         if (stage === "entry") {
-          fail("failed to resolve tui plugin entry", { path: spec, retry, error })
+          fail("failed to resolve tui plugin entry", {
+            spec,
+            target: resolved?.target,
+            retry,
+            elapsedMs,
+            error,
+          })
           return
         }
-        fail("failed to load tui plugin", { path: spec, target: resolved?.entry, retry, error })
+        fail("failed to load tui plugin", {
+          spec,
+          target: resolved?.entry,
+          retry,
+          elapsedMs,
+          error,
+        })
       },
     },
   })
@@ -1087,7 +1193,11 @@ async function load(input: {
     )
     const pluginOrigins = config.plugin_origins ?? (await TuiConfig.pluginOrigins())
     const records = Flag.OPENCODE_PURE ? [] : pluginOrigins
-    if (Flag.OPENCODE_PURE && pluginOrigins.length) {
+    if (Flag.OPENCODE_PURE) {
+      writePluginLog("DEBUG", "tui plugin load disabled", {
+        reason: "pure",
+        configured: pluginOrigins.length,
+      })
     }
 
     for (const item of internalTuiPlugins(flags)) {
@@ -1105,6 +1215,14 @@ async function load(input: {
 
     const ready = await resolveExternalPlugins(records, () => TuiConfig.waitForDependencies())
     await addExternalPluginEntries(next, ready)
+
+    writePluginLog("DEBUG", "tui plugin load summary", {
+      directory: cwd,
+      configured: pluginOrigins.length,
+      external: ready.length,
+      total: next.plugins.length,
+      active: next.plugins.filter((plugin) => plugin.enabled).length,
+    })
 
     applyInitialPluginEnabledState(next, config)
     for (const plugin of next.plugins) {

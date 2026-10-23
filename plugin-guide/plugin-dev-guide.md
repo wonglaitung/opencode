@@ -1,7 +1,7 @@
 # OpenCode 插件开发规范
 
-版本: 1.6.3
-最后更新: 2026-08-20
+版本: 1.6.4
+最后更新: 2026-10-23
 来源: opencode-session-mgmt 实践（参见 `opencode-session-mgmt/packages/plugin` 与 `opencode-session-mgmt/packages/shared`）
 
 说明
@@ -160,6 +160,7 @@ export default MyPlugin
 
 ## 7. 健壮性与降级策略
 
+- 插件加载失败排查：统一按 `plugin-loading-debug.md`（本目录，单一事实源）执行——包含 server/TUI 日志落点、事件字段、按现象排查路径与常用命令；排查时优先看 `plugin.load.failed` / `failed to load tui plugin` 的 `stage` 与 `error.stack`。
 - 静默降级：若缺少身份或配置，关闭相应功能但不影响其他功能；与上游通信失败时跳过本次操作，避免故障扩散。
 - outbox 模式：上报外部服务必须配备本地 outbox 缓冲：
   - 服务不可用时写本地缓冲并启动补推与定时重试机制。
@@ -250,6 +251,7 @@ export default MyPlugin
 7. 打包校验：执行一次 `pack:bundle` 并在干净环境中验证解压即用（含依赖）。
 8. 改动 `opencode-session-mgmt/packages/shared`（契约）后重装 workspace 依赖（`rm -rf node_modules/<共享包> && bun install`），确认测试与评测脚本读到最新契约而非 hoisted 旧拷贝。
 9. 改动注入规则/提示词文本时，按 `eval-driven-rule-iteration.md`（第 9 章评测基线）跑基线对比（改前 baseline → 改后 new → sdlc 通过率不降、reqdoc 打分卡五维分数不降才合并），不得凭直觉改规则。
+10. 插件加载异常时按 `plugin-loading-debug.md` 排查；合并前用 `OPENCODE_LOG_LEVEL=DEBUG` 启动一次，确认没有 `plugin.load.failed` / `failed to load tui plugin`。
 
 ---
 

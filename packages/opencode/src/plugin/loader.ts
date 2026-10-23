@@ -45,16 +45,27 @@ export namespace PluginLoader {
   type Report = {
     // Called before each attempt so callers can log initial load attempts and retries uniformly.
     start?: (candidate: Candidate, retry: boolean) => void
+    // Called when a plugin is intentionally skipped before any filesystem or npm work happens.
+    skip?: (candidate: Candidate, reason: "deprecated") => void
     // Called when the package exists but does not provide the requested entrypoint.
-    missing?: (candidate: Candidate, retry: boolean, message: string, resolved: Missing) => void
+    missing?: (
+      candidate: Candidate,
+      retry: boolean,
+      message: string,
+      resolved: Missing,
+      elapsedMs: number,
+    ) => void
     // Called for operational failures such as install, compatibility, or dynamic import errors.
     error?: (
       candidate: Candidate,
       retry: boolean,
       stage: "install" | "entry" | "compatibility" | "load",
       error: unknown,
-      resolved?: Resolved,
+      resolved: Resolved | undefined,
+      elapsedMs: number,
     ) => void
+    // Called after a plugin module imports successfully, before the caller-specific finisher runs.
+    loaded?: (candidate: Candidate, retry: boolean, loaded: Loaded, elapsedMs: number) => void
   }
 
   type AttemptResult<R> = {
@@ -158,7 +169,13 @@ export namespace PluginLoader {
     const filePlugin = pluginSource(plan.spec) === "file"
 
     // Deprecated plugin packages are silently ignored because they are now built in.
-    if (plan.deprecated) return { retry: false }
+    if (plan.deprecated) {
+      report?.skip?.(candidate, "deprecated")
+      return { retry: false }
+    }
+
+    const started = performance.now()
+    const elapsed = () => Math.round(performance.now() - started)
 
     report?.start?.(candidate, retry)
 
@@ -171,18 +188,20 @@ export namespace PluginLoader {
           const value = await missing(resolved.value, candidate.origin, retry)
           if (value !== undefined) return { value, retry: false }
         }
-        report?.missing?.(candidate, retry, resolved.value.message, resolved.value)
+        report?.missing?.(candidate, retry, resolved.value.message, resolved.value, elapsed())
         return { retry: false }
       }
-      report?.error?.(candidate, retry, resolved.stage, resolved.error)
+      report?.error?.(candidate, retry, resolved.stage, resolved.error, undefined, elapsed())
       return { retry: filePlugin && isRetryableResolveError(resolved.stage, resolved.error) }
     }
 
     const loaded = await load(resolved.value)
     if (!loaded.ok) {
-      report?.error?.(candidate, retry, "load", loaded.error, resolved.value)
+      report?.error?.(candidate, retry, "load", loaded.error, resolved.value, elapsed())
       return { retry: false }
     }
+
+    report?.loaded?.(candidate, retry, loaded.value, elapsed())
 
     // The default behavior is to return the successfully loaded plugin as-is, but callers can
     // provide a finisher to adapt the result into a more specific runtime shape.
