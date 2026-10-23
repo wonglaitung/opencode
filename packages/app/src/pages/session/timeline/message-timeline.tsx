@@ -299,7 +299,8 @@ export function MessageTimeline(props: {
   const titleValue = createMemo(() => info()?.title)
   const titleLabel = createMemo(() => sessionTitle(titleValue()))
   const shareUrl = createMemo(() => info()?.share?.url)
-  const shareEnabled = createMemo(() => sync().data.config.share !== "disabled")
+  // Session sharing was discontinued; keep the share menu and popover hidden.
+  const shareEnabled = () => false
   const parentID = createMemo(() => info()?.parentID)
   const parent = createMemo(() => {
     const id = parentID()
@@ -777,6 +778,7 @@ export function MessageTimeline(props: {
   }
 
   const saveTitleEditor = () => {
+    if (!title.editing) return
     const id = sessionID()
     if (!id) return
     if (titleMutation.isPending) return
@@ -1447,6 +1449,7 @@ export function MessageTimeline(props: {
                         onInput={(event) => setTitle("draft", event.currentTarget.value)}
                         onKeyDown={(event) => {
                           event.stopPropagation()
+                          if (event.isComposing || event.keyCode === 229) return
                           if (event.key === "Enter") {
                             event.preventDefault()
                             void saveTitleEditor()
@@ -1457,7 +1460,7 @@ export function MessageTimeline(props: {
                             closeTitleEditor()
                           }
                         }}
-                        onBlur={closeTitleEditor}
+                        onBlur={saveTitleEditor}
                       />
                     </Show>
                   </Show>

@@ -7,30 +7,45 @@ export default $config({
       removal: input?.stage === "production" ? "retain" : "remove",
       protect: ["production"].includes(input?.stage),
       home: "cloudflare",
-      providers: {
-        aws: {
-          version: "7.30.0",
-          region: "us-east-1",
-          profile: process.env.GITHUB_ACTIONS
-            ? undefined
-            : input.stage === "production"
-              ? "opencode-production"
-              : "opencode-dev",
-        },
-        stripe: {
-          version: "0.0.28",
-          apiKey: process.env.STRIPE_SECRET_KEY!,
-        },
-        random: "4.19.2",
-        planetscale: "0.4.1",
-        honeycomb: "0.49.0",
-      },
+      providers:
+        input.stage === "v1"
+          ? {}
+          : {
+              aws: {
+                version: "7.30.0",
+                region: "us-east-1",
+                profile: process.env.GITHUB_ACTIONS
+                  ? undefined
+                  : input.stage === "production"
+                    ? "opencode-production"
+                    : "opencode-dev",
+              },
+              stripe: {
+                version: "0.0.28",
+                apiKey: process.env.STRIPE_SECRET_KEY!,
+              },
+              random: "4.19.2",
+              planetscale: "0.4.1",
+              honeycomb: "0.49.0",
+            },
     }
   },
   async run() {
+    // The v1 branch only serves the V1 web app; everything else deploys from dev and production.
+    if ($app.stage === "v1") {
+      const app = new sst.cloudflare.StaticSite("WebApp", {
+        domain: "app.opencode.ai",
+        path: "packages/app",
+        build: {
+          command: "bun turbo build",
+          output: "./dist",
+        },
+      })
+      return { WebAppUrl: app.url }
+    }
+
     const stage = await import("./infra/stage.js")
     await import("./infra/app.js")
-    const lake = stage.deployAws ? await import("./infra/lake.js") : undefined
     const stats = stage.deployAws ? await import("./infra/stats.js") : undefined
     const { stat } = await import("./infra/console.js")
     await import("./infra/enterprise.js")
@@ -41,12 +56,6 @@ export default $config({
     return {
       StatWorkerUrl: stat.url,
       ...(stats ? { StatsUrl: stats.app.url } : {}),
-      ...(lake
-        ? {
-            LakeUrl: lake.lakeIngest.properties.url,
-            LakeSecretSsm: lake.ingestSecretSsm.name,
-          }
-        : {}),
       AwsStage: stage.awsStage,
     }
   },

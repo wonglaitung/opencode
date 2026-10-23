@@ -1,17 +1,21 @@
 import { Resource } from "sst/resource"
 import type { R2SqlData } from "../r2-sql"
+import type { CatalogIdentity } from "./catalog-identity"
 import type { GeoStatAggregate } from "./geo"
 import type { ModelStatAggregate } from "./model"
 import {
   EXCLUDED_MODELS,
   FREE_MODELS,
   MODEL_AUTHOR_RULES,
+  MODEL_NAME_MAX_LENGTH,
   MODEL_NAME_ALIASES,
   RETIRED_STAT_PROVIDERS,
+  STEALTH_MODELS,
   statModel,
   statProvider,
 } from "./model-normalization"
 import type { ProviderStatAggregate } from "./provider"
+import type { RetentionStatAggregate } from "./retention"
 import {
   normalizeCountry,
   normalizeTier,
@@ -22,7 +26,13 @@ import {
 } from "./stat"
 
 export type StatDimension = "model" | "provider" | "geo" | "geo_model"
-export type StatsQuerySource = { namespace: string; table: string; dataset: string }
+export type StatsQuerySource = {
+  namespace: string
+  table: string
+  dataset: string
+  hiddenModels?: readonly string[]
+}
+export type RetentionQuery = { cohortDates: string[]; query: string }
 type StatsQueryFamily = "usage" | "geo"
 
 const DAY_MS = 86_400_000
@@ -32,24 +42,171 @@ const WEEK_MS = 7 * DAY_MS
 // from both sources.
 const LIVE_SOURCE_START = "2026-08-11T10:57:48.186Z"
 
-// R2 SQL limits result sets to 10,000 rows and does not support OFFSET. Two
-// queries per day/week keep each result bounded and avoid combining the costly
-// distinct user/session aggregates with the high-cardinality geo dimensions.
-export function buildStatsQueries(periodStart: Date, periodEnd: Date, input?: StatsQuerySource) {
+// R2 SQL results are cursor-paginated after aggregation. Separate usage and geo
+// queries per day/week avoid combining costly distinct user/session aggregates
+// with the high-cardinality geo dimensions.
+export function buildStatsQueries(
+  periodStart: Date,
+  periodEnd: Date,
+  input?: StatsQuerySource,
+  catalog?: CatalogIdentity,
+) {
   const source = input ?? {
     namespace: Resource.R2Sql.namespace,
     table: Resource.R2Sql.table,
     dataset: Resource.StatsSyncConfig.dataset,
+    hiddenModels: hiddenStatModels(),
   }
   return [...statPeriods("week", periodStart, periodEnd), ...statPeriods("day", periodStart, periodEnd)].flatMap(
-    (period) => [buildStatsQuery(period, source, "usage"), buildStatsQuery(period, source, "geo")],
+    (period) => [buildStatsQuery(period, source, "usage", catalog), buildStatsQuery(period, source, "geo", catalog)],
   )
+}
+
+export function buildRetentionQueries(
+  periodStart: Date,
+  periodEnd: Date,
+  input?: StatsQuerySource,
+  catalog?: CatalogIdentity,
+): RetentionQuery[] {
+  const source = input ?? {
+    namespace: Resource.R2Sql.namespace,
+    table: Resource.R2Sql.table,
+    dataset: Resource.StatsSyncConfig.dataset,
+    hiddenModels: hiddenStatModels(),
+  }
+  const periods = retentionPeriods(periodStart, periodEnd)
+  // Bound the user-level joins to one activity week and its return week.
+  // Combining the entire display window makes full syncs much more expensive.
+  return periods.map((period) => ({
+    cohortDates: [period.start.toISOString().slice(0, 10)],
+    query: buildRetentionQuery([period], source, catalog),
+  }))
+}
+
+function buildRetentionQuery(
+  periods: { start: Date; end: Date; returnStart: Date; returnEnd: Date }[],
+  source: StatsQuerySource,
+  catalog?: CatalogIdentity,
+) {
+  const first = periods[0]
+  const last = periods.at(-1)!
+  const scanStartValue = sqlString(first.start.toISOString())
+  const scanEndValue = sqlString(last.returnEnd.toISOString())
+  const ingestEndValue = sqlString(new Date(last.returnEnd.getTime() + DAY_MS).toISOString())
+  const sourceTable = [source.namespace, source.table].map(sqlIdentifier).join(".")
+  const activityWeeks = [
+    ...new Map(
+      periods.flatMap((period) => [period.start, period.returnStart]).map((date) => [date.toISOString(), date]),
+    ).values(),
+  ].toSorted((a, b) => a.getTime() - b.getTime())
+  const activityWeekSql = `CASE
+${activityWeeks
+  .map(
+    (date) =>
+      `      WHEN started_at >= ${sqlString(date.toISOString())} AND started_at < ${sqlString(new Date(date.getTime() + WEEK_MS).toISOString())} THEN ${sqlString(date.toISOString().slice(0, 10))}`,
+  )
+  .join("\n")}
+      ELSE null
+    END`
+  const cohortDates = periods.map((period) => sqlString(period.start.toISOString().slice(0, 10))).join(", ")
+  const returnDates = periods.map((period) => sqlString(period.returnStart.toISOString().slice(0, 10))).join(", ")
+  const returnCohortSql = `CASE activity_week
+${periods
+  .map(
+    (period) =>
+      `      WHEN ${sqlString(period.returnStart.toISOString().slice(0, 10))} THEN ${sqlString(period.start.toISOString().slice(0, 10))}`,
+  )
+  .join("\n")}
+    END`
+
+  return `
+WITH normalized AS (
+  SELECT
+    ${activityWeekSql} AS activity_week,
+    model_requested AS raw_model,
+    ${statModelSql("model_requested", "route_model")} AS model,
+    COALESCE(NULLIF(route_model, ''), '') AS provider_model,
+    COALESCE(NULLIF(provider_id, ''), '') AS raw_provider,
+    COALESCE(NULLIF(user_id, ''), NULLIF(workspace_id, ''), NULLIF(service_api_key_id, '')) AS user_key
+  FROM ${sourceTable}
+  WHERE event_type = 'generation.completed'
+    AND source IN ('inference', 'inference-legacy')
+    AND (
+      (source = 'inference-legacy' AND started_at < ${sqlString(LIVE_SOURCE_START)})
+      OR (source = 'inference' AND started_at >= ${sqlString(LIVE_SOURCE_START)})
+    )
+    AND product = 'go'
+    AND model_requested IS NOT NULL
+    AND model_requested <> ''
+    AND __ingest_ts >= ${scanStartValue}
+    AND __ingest_ts < ${ingestEndValue}
+    AND started_at >= ${scanStartValue}
+    AND started_at < ${scanEndValue}
+), filtered AS (
+  SELECT
+    activity_week,
+    ${statProviderSql("model", "provider_model", "raw_provider", "raw_model", catalog)} AS provider,
+    model,
+    user_key
+  FROM normalized
+  WHERE activity_week IS NOT NULL
+    AND user_key <> ''
+    AND lower(model) NOT IN (${excludedModels(source).map(sqlString).join(", ")})
+), model_usage AS (
+  SELECT
+    activity_week AS cohort_date,
+    user_key,
+    provider,
+    model,
+    COUNT(*) AS model_requests
+  FROM filtered
+  WHERE activity_week IN (${cohortDates})
+  GROUP BY activity_week, user_key, provider, model
+), user_totals AS (
+  SELECT
+    cohort_date,
+    user_key,
+    SUM(model_requests) AS total_requests,
+    MAX(model_requests) AS max_model_requests
+  FROM model_usage
+  GROUP BY cohort_date, user_key
+), primary_models AS (
+  SELECT model_usage.cohort_date, model_usage.user_key, model_usage.provider, model_usage.model
+  FROM model_usage
+  INNER JOIN user_totals ON model_usage.cohort_date = user_totals.cohort_date
+    AND model_usage.user_key = user_totals.user_key
+    AND model_usage.model_requests = user_totals.max_model_requests
+  WHERE user_totals.total_requests >= 10
+    AND CAST(model_usage.model_requests AS double) / NULLIF(user_totals.total_requests, 0) >= 0.8
+), returned AS (
+  SELECT
+    ${returnCohortSql} AS cohort_date,
+    user_key
+  FROM filtered
+  WHERE activity_week IN (${returnDates})
+  GROUP BY ${returnCohortSql}, user_key
+)
+SELECT
+  primary_models.cohort_date,
+  ${sqlString(source.dataset)} AS dataset,
+  'Go' AS tier,
+  primary_models.provider,
+  primary_models.model,
+  COUNT(*) AS eligible_users,
+  SUM(CASE WHEN returned.user_key IS NULL THEN 0 ELSE 1 END) AS retained_users
+FROM primary_models
+LEFT JOIN returned ON primary_models.user_key = returned.user_key
+  AND primary_models.cohort_date = returned.cohort_date
+GROUP BY primary_models.cohort_date, primary_models.provider, primary_models.model
+LIMIT 10000
+`
 }
 
 function buildStatsQuery(
   period: { grain: "day" | "week"; key: string; start: Date; end: Date },
   source: StatsQuerySource,
   family: StatsQueryFamily,
+  catalog?: CatalogIdentity,
 ) {
   const periodStartValue = sqlString(period.start.toISOString())
   const periodEndValue = sqlString(period.end.toISOString())
@@ -156,7 +313,7 @@ WITH normalized AS (
       THEN 'Free'
       ELSE 'Go'
     END AS tier,
-    ${statProviderSql("model", "provider_model", "raw_provider")} AS provider,
+    ${statProviderSql("model", "provider_model", "raw_provider", "raw_model", catalog)} AS provider,
     provider_model,
     model,
     country,
@@ -179,7 +336,7 @@ WITH normalized AS (
     cost_output_microcents,
     cost_total_microcents
   FROM normalized
-  WHERE lower(model) NOT IN (${[...EXCLUDED_MODELS].map(sqlString).join(", ")})
+  WHERE lower(model) NOT IN (${excludedModels(source).map(sqlString).join(", ")})
 )
 SELECT
   ${sqlString(period.grain)} AS grain,
@@ -191,13 +348,12 @@ FROM filtered
 GROUP BY GROUPING SETS (
   ${groupingSets}
 )
-LIMIT 10000
 `
 }
 
-export function toModelAggregate(data: R2SqlData): ModelStatAggregate[] {
+export function toModelAggregate(data: R2SqlData, catalog?: CatalogIdentity): ModelStatAggregate[] {
   const model = statModel(data.model, data.provider_model)
-  const provider = statProvider(model, data.provider_model, data.provider)
+  const provider = catalog ? data.provider || "unknown" : statProvider(model, data.provider_model, data.provider)
   if (!provider) return []
 
   return toStatBaseAggregate(data).flatMap((base) => [
@@ -205,22 +361,40 @@ export function toModelAggregate(data: R2SqlData): ModelStatAggregate[] {
   ])
 }
 
-export function toProviderAggregate(data: R2SqlData): ProviderStatAggregate[] {
-  return toStatBaseAggregate(data).flatMap((base) => [
-    { ...base, provider: statProvider(data.model, data.provider_model, data.provider) || "unknown" },
-  ])
-}
-
-export function toGeoAggregate(data: R2SqlData): GeoStatAggregate[] {
+export function toProviderAggregate(data: R2SqlData, catalog?: CatalogIdentity): ProviderStatAggregate[] {
   return toStatBaseAggregate(data).flatMap((base) => [
     {
       ...base,
-      provider: statProvider(data.model, data.provider_model, data.provider) || "all",
+      provider: (catalog ? data.provider : statProvider(data.model, data.provider_model, data.provider)) || "unknown",
+    },
+  ])
+}
+
+export function toGeoAggregate(data: R2SqlData, catalog?: CatalogIdentity): GeoStatAggregate[] {
+  return toStatBaseAggregate(data).flatMap((base) => [
+    {
+      ...base,
+      provider: (catalog ? data.provider : statProvider(data.model, data.provider_model, data.provider)) || "all",
       model: statModel(data.model || "all", data.provider_model),
       country: normalizeCountry(data.country),
       continent: data.continent || "",
     },
   ])
+}
+
+export function toRetentionAggregate(data: R2SqlData, catalog?: CatalogIdentity): RetentionStatAggregate[] {
+  if (!data.cohort_date || !data.model) return []
+  return [
+    {
+      cohortDate: data.cohort_date,
+      dataset: data.dataset || Resource.StatsSyncConfig.dataset,
+      tier: data.tier || "all",
+      provider: (catalog ? data.provider : statProvider(data.model, "", data.provider)) || "unknown",
+      model: statModel(data.model, undefined),
+      eligibleUsers: integer(data, "eligible_users"),
+      retainedUsers: integer(data, "retained_users"),
+    },
+  ]
 }
 
 function toStatBaseAggregate(data: R2SqlData): StatBaseAggregate[] {
@@ -281,6 +455,17 @@ function sqlIdentifier(value: string) {
   return `"${value.replace(/"/g, '""')}"`
 }
 
+export function hiddenStatModels() {
+  return Resource.StatsHiddenModels.value
+    .split(",")
+    .map((model) => model.trim().toLowerCase())
+    .filter(Boolean)
+}
+
+function excludedModels(source: StatsQuerySource) {
+  return [...EXCLUDED_MODELS, ...(source.hiddenModels ?? [])]
+}
+
 function sqlString(value: string) {
   return `'${value.replace(/'/g, "''")}'`
 }
@@ -300,14 +485,32 @@ function statPeriods(grain: "day" | "week", periodStart: Date, periodEnd: Date) 
   })
 }
 
+function retentionPeriods(periodStart: Date, periodEnd: Date) {
+  const first = startOfIsoWeek(periodStart)
+  const completeEnd = startOfIsoWeek(periodEnd)
+  const count = Math.max(0, Math.floor((completeEnd.getTime() - first.getTime()) / WEEK_MS) - 1)
+  return Array.from({ length: count }, (_, index) => {
+    const start = new Date(first.getTime() + index * WEEK_MS)
+    const end = new Date(start.getTime() + WEEK_MS)
+    return { start, end, returnStart: end, returnEnd: new Date(end.getTime() + WEEK_MS) }
+  })
+}
+
 function statModelSql(model: string, providerModel: string) {
-  return `COALESCE(NULLIF(regexp_replace(CASE
+  const normalized = `regexp_replace(CASE
       WHEN lower(${model}) = 'big-pickle' THEN regexp_replace(NULLIF(${providerModel}, ''), '^.*/', '')
-${Object.entries(MODEL_NAME_ALIASES)
-  .map(([from, to]) => `      WHEN lower(${model}) = ${sqlString(from)} THEN ${sqlString(to)}`)
-  .join("\n")}
       ELSE ${model}
-    END, '(-free|:free|:global)+$', ''), ''), 'unknown')`
+    END, '(-free|:free|:global)+$', '')`
+  const value = `CASE
+${Object.entries(MODEL_NAME_ALIASES)
+  .map(([from, to]) => `      WHEN lower(${normalized}) = ${sqlString(from)} THEN ${sqlString(to)}`)
+  .join("\n")}
+      ELSE ${normalized}
+    END`
+  return `CASE
+      WHEN length(${value}) > ${MODEL_NAME_MAX_LENGTH} THEN 'unknown'
+      ELSE COALESCE(NULLIF(${value}, ''), 'unknown')
+    END`
 }
 
 function freeTierSql(tier: string, model: string) {
@@ -317,8 +520,32 @@ function freeTierSql(tier: string, model: string) {
         OR lower(${model}) LIKE '%-free:global'`
 }
 
-function statProviderSql(model: string, providerModel: string, provider: string) {
+function statProviderSql(
+  model: string,
+  providerModel: string,
+  provider: string,
+  rawModel: string,
+  catalog?: CatalogIdentity,
+) {
+  // Preserve existing lab dimensions when a rule disagrees with the catalog;
+  // changing them requires a separate historical aggregate migration.
+  const compatible = (name: string, lab: string) => {
+    const existing = statProvider(name, "", "unknown")
+    return existing === "unknown" || existing === lab
+  }
   return `CASE
+      WHEN lower(${model}) IN (${[...STEALTH_MODELS].map(sqlString).join(", ")}) THEN 'unknown'
+${[...(catalog?.offerings ?? [])]
+  .filter(([id, lab]) => compatible(statModel(id.slice(id.indexOf("/") + 1), undefined), lab))
+  .map(([id, lab]) => {
+    const slash = id.indexOf("/")
+    return `      WHEN lower(${provider}) = ${sqlString(id.slice(0, slash))} AND lower(${rawModel}) = ${sqlString(id.slice(slash + 1))} THEN ${sqlString(lab)}`
+  })
+  .join("\n")}
+${[...(catalog?.models ?? [])]
+  .filter(([name, lab]) => compatible(name, lab))
+  .map(([name, lab]) => `      WHEN lower(${model}) = ${sqlString(name)} THEN ${sqlString(lab)}`)
+  .join("\n")}
 ${MODEL_AUTHOR_RULES.map((item) => `      WHEN strpos(lower(${providerModel}), ${sqlString(item.match)}) > 0 THEN ${sqlString(item.author)}`).join("\n")}
 ${MODEL_AUTHOR_RULES.map((item) => `      WHEN strpos(lower(${model}), ${sqlString(item.match)}) > 0 THEN ${sqlString(item.author)}`).join("\n")}
       WHEN ${provider} <> '' AND lower(${provider}) NOT IN (${RETIRED_STAT_PROVIDERS.map(sqlString).join(", ")}) THEN ${provider}
