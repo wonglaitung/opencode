@@ -1,6 +1,6 @@
 ---
 name: sync-windows-bundle
-description: Use when syncing local (WSL/Linux) source changes into the Windows-side opencode bundles so the Windows opencode (running on Node 22 at D:\Tools\node-v22.23.2-win-x64) picks up plugin/CLI/docs changes without manual copy. Covers all three sibling projects — opencode-session-mgmt (opencode-sm-bundle-0.1.0), opencode-edge-debug (opencode-edge-debug-bundle-0.0.1), opencode-server-debug (opencode-server-debug-bundle-0.0.1). Triggers 同步 / sync / 同步到 Windows / D:\Tools / node-v22 / bundle / 重启守护进程 / edge-debug / server-debug.
+description: Use when syncing local (WSL/Linux) source changes into the Windows-side opencode bundles so the Windows opencode (running on Node 22 at D:\Tools\node-v22.23.2-win-x64) picks up plugin/CLI/docs changes without manual copy. Covers all three sibling projects — opencode-session-mgmt (opencode-sm-bundle-0.1.0), opencode-edge-debug (opencode-edge-debug-bundle-0.0.1), opencode-server-debug (opencode-server-debug-bundle-0.0.1). Also asks whether to rebuild the Windows binary and copies the result into node_modules/opencode-ai/bin/opencode.exe. Triggers 同步 / sync / 同步到 Windows / 重建二进制 / D:\Tools / node-v22 / bundle / 重启守护进程 / edge-debug / server-debug.
 ---
 
 # 同步到 Windows bundle（sync-bundle）
@@ -19,7 +19,51 @@ description: Use when syncing local (WSL/Linux) source changes into the Windows-
 
 换目标：`BUNDLE="/mnt/d/其它路径/xxx-bundle" bash scripts/sync-bundle.sh`。
 
-## 运行（三个都跑，漏一个那个插件就看不到改动）
+## 同步前：先问是否重建二进制（必做）
+
+每次执行本技能前，必须先问用户：
+
+- 只同步插件/CLI/文档；
+- 还是同时重建 Windows opencode 二进制。
+
+不要默认重建，也不要在用户未确认时替换 `opencode.exe`。
+
+推荐执行顺序：
+
+1. 先询问本次是否重建二进制。
+2. 如需重建：构建 → 复制到目标路径 → `--version` 校验。
+3. 运行三个 `sync-bundle.sh`。
+4. 依赖有变化时，在 Windows 侧 bundle 执行 `bun install`。
+5. 重启 Windows 侧 opencode 守护进程。
+
+### 如需重建
+
+使用项目当前 Windows 构建流程。普通包不加 `--offline`；离线包加 `--offline`。构建完成后，必须把产物复制到：
+
+```text
+D:\Tools\node-v22.23.2-win-x64\node_modules\opencode-ai\bin\opencode.exe
+```
+
+WSL 等价路径：
+
+```bash
+cp <实际构建产物>/opencode.exe /mnt/d/Tools/node-v22.23.2-win-x64/node_modules/opencode-ai/bin/opencode.exe
+```
+
+复制后校验：
+
+```bash
+/mnt/d/Tools/node-v22.23.2-win-x64/node_modules/opencode-ai/bin/opencode.exe --version
+```
+
+注意：
+
+- 目标不是 runtime 根目录，而是 `node_modules/opencode-ai/bin/opencode.exe`。
+- 用户未要求时不要创建 `.bak` 备份。
+- 如果用户要离线包，构建时加 `--offline`。
+- 复制后仍要继续执行下面的 bundle 同步与重启。
+
+## 同步 bundle（三个都跑，漏一个那个插件就看不到改动）
 
 每个工程各自跑一次（脚本会 `cd` 到自身仓库根，从哪运行都行）：
 
@@ -48,6 +92,11 @@ edge-debug / server-debug 两个脚本只**镜像插件源码**（保留 `node_m
 ## 收尾（必做）
 
 同步完成后，**重启 Windows 侧 opencode 守护进程**（关闭再开），插件才会重新加载这批内容。只同步不重启 = 改动看不到。
+
+如果本次重建了二进制，重启前先确认：
+
+- `opencode.exe` 已复制到 `D:\Tools\node-v22.23.2-win-x64\node_modules\opencode-ai\bin\opencode.exe`。
+- `opencode.exe --version` 输出符合预期。
 
 ## 排错
 
