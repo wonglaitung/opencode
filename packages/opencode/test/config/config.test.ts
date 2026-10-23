@@ -97,13 +97,14 @@ const configLayer = (
   options: {
     auth?: Layer.Layer<Auth.Service>
     account?: Layer.Layer<Account.Service>
+    npm?: Layer.Layer<Npm.Service>
     client?: HttpClient.HttpClient
   } = {},
 ) =>
   LayerNode.compile(LayerNode.group([Config.node, FSUtil.node, Env.node, CrossSpawnSpawner.node]), [
     [Auth.node, options.auth ?? AuthTest.empty],
     [Account.node, options.account ?? AccountTest.empty],
-    [Npm.node, NpmTest.noop],
+    [Npm.node, options.npm ?? NpmTest.noop],
     [httpClient, Layer.succeed(HttpClient.HttpClient, options.client ?? unexpectedHttp)],
   ])
 
@@ -111,6 +112,11 @@ const layer = configLayer()
 
 const it = testEffect(layer)
 const configIt = (options?: Parameters<typeof configLayer>[0]) => testEffect(configLayer(options))
+
+const fakeNpm = (installs: string[]) =>
+  Layer.mock(Npm.Service)({
+    install: (dir) => Effect.sync(() => installs.push(dir)),
+  })
 
 const schemaConfig = (config: object) => ({ $schema: "https://opencode.ai/config.json", ...config })
 
@@ -1150,6 +1156,56 @@ it.effect("installs dependencies in writable OPENCODE_CONFIG_DIR", () =>
     )
 
     expect(yield* FSUtil.use.readFileString(path.join(configDir, ".gitignore"))).toContain("package-lock.json")
+  }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
+)
+
+const skippedInstalls: string[] = []
+const skipInstallIt = configIt({ npm: fakeNpm(skippedInstalls) })
+
+skipInstallIt.effect("skips plugin dependency installs when OPENCODE_DISABLE_PLUGIN_INSTALL is set", () =>
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped()
+    const configDir = path.join(dir, "configdir")
+    yield* FSUtil.use.ensureDir(configDir)
+
+    yield* withProcessEnv(
+      "OPENCODE_CONFIG_DIR",
+      configDir,
+      withProcessEnv(
+        "OPENCODE_DISABLE_PLUGIN_INSTALL",
+        "1",
+        Config.Service.use((svc) => svc.get().pipe(Effect.andThen(svc.waitForDependencies()))).pipe(
+          provideInstanceEffect(dir),
+        ),
+      ),
+    )
+
+    expect(skippedInstalls).toEqual([])
+  }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
+)
+
+const controlInstalls: string[] = []
+const installControlIt = configIt({ npm: fakeNpm(controlInstalls) })
+
+installControlIt.effect("installs plugin dependencies when OPENCODE_DISABLE_PLUGIN_INSTALL is unset", () =>
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped()
+    const configDir = path.join(dir, "configdir")
+    yield* FSUtil.use.ensureDir(configDir)
+
+    yield* withProcessEnv(
+      "OPENCODE_CONFIG_DIR",
+      configDir,
+      withProcessEnv(
+        "OPENCODE_DISABLE_PLUGIN_INSTALL",
+        undefined,
+        Config.Service.use((svc) => svc.get().pipe(Effect.andThen(svc.waitForDependencies()))).pipe(
+          provideInstanceEffect(dir),
+        ),
+      ),
+    )
+
+    expect(controlInstalls.length).toBeGreaterThan(0)
   }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
 )
 

@@ -22,6 +22,8 @@ const skipInstall = process.argv.includes("--skip-install")
 const sourcemapsFlag = process.argv.includes("--sourcemaps")
 const plugin = createSolidTransformPlugin()
 const skipEmbedWebUi = process.argv.includes("--skip-embed-web-ui")
+// Offline builds skip the automatic @opencode-ai/plugin install in config dirs.
+const offlineBuild = process.argv.includes("--offline") || process.env.OPENCODE_OFFLINE_BUILD === "1"
 
 const createEmbeddedWebUIBundle = async () => {
   console.log(`Building Web UI to embed in the binary`)
@@ -134,6 +136,8 @@ const targets = singleFlag
     })
   : allTargets
 
+if (offlineBuild) console.log("offline build: plugin dependency install disabled")
+
 await $`rm -rf dist`
 
 const binaries: Record<string, string> = {}
@@ -197,6 +201,7 @@ for (const item of targets) {
       OTUI_TREE_SITTER_WORKER_PATH: bunfsRoot + treeSitterWorkerPath,
       OPENCODE_WORKER_PATH: workerPath,
       OPENCODE_CHANNEL: `'${Script.channel}'`,
+      OPENCODE_OFFLINE_BUILD: JSON.stringify(offlineBuild),
       OPENCODE_LIBC: item.os === "linux" ? `'${item.abi ?? "glibc"}'` : "",
       ...(item.os === "linux" ? { "process.env.OPENTUI_LIBC": JSON.stringify(item.abi ?? "glibc") } : {}),
     },

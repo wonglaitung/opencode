@@ -1,4 +1,5 @@
 import { Config } from "effect"
+import { InstallationOffline } from "../installation/version"
 
 export function truthy(key: string) {
   const value = process.env[key]?.toLowerCase()
@@ -53,6 +54,9 @@ export const Flag = {
   // external tooling set these env vars at runtime.
   get OPENCODE_DISABLE_PROJECT_CONFIG() {
     return truthy("OPENCODE_DISABLE_PROJECT_CONFIG")
+  },
+  get OPENCODE_DISABLE_PLUGIN_INSTALL() {
+    return InstallationOffline || truthy("OPENCODE_DISABLE_PLUGIN_INSTALL")
   },
   get OPENCODE_EXPERIMENTAL_REFERENCES() {
     return enabledByExperimental("OPENCODE_EXPERIMENTAL_REFERENCES")

@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT=${OPENCODE_WIN_ROOT:-/mnt/d/Tools/node-v22.23.2-win-x64}
 EXPECT_VERSION=${EXPECT_VERSION:-1.19.4}
+EXPECT_NO_PLUGIN_INSTALL=${EXPECT_NO_PLUGIN_INSTALL:-0}
 CMD=${CMD:-/mnt/c/Windows/System32/cmd.exe}
 POWERSHELL=${POWERSHELL:-/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe}
 CURL=${CURL:-/mnt/c/Windows/System32/curl.exe}
@@ -148,6 +149,12 @@ check "$skipped" "0" "skipped"
 check "$missing" "0" "missing"
 check "$failed" "0" "failed"
 check "$applied_count" "$configured" "applied/configured"
+
+if [[ "$EXPECT_NO_PLUGIN_INSTALL" == "1" ]] && grep -q 'background dependency install failed' "$LOG"; then
+  echo "FAIL plugin dependency install was attempted" >&2
+  grep 'background dependency install failed' "$LOG" | tail -3 >&2
+  fail=1
+fi
 
 apply_line() { printf '%s\n' "$applied" | grep -F "spec=$1" | head -1 || true; }
 check_hooks() {

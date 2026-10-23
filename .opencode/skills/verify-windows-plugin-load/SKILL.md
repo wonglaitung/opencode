@@ -76,6 +76,7 @@ until it returns HTTP 200.
 ```bash
 OPENCODE_WIN_ROOT=/mnt/d/Tools/node-v22.23.2-win-x64 \
 EXPECT_VERSION=1.19.4 \
+EXPECT_NO_PLUGIN_INSTALL=1 \
 PORT=4100 \
 SM_PLUGIN=/mnt/d/Tools/opencode-sm-bundle-0.1.0/packages/plugin \
 EDGE_PLUGIN=/mnt/d/Tools/opencode-edge-debug-bundle-0.0.1 \
@@ -88,7 +89,9 @@ bash .opencode/skills/verify-windows-plugin-load/scripts/verify.sh
 `PORT` is optional; by default the script picks the first free port in
 `4097-4199`. It refuses to start if an explicitly requested port is occupied,
 so it never kills a pre-existing opencode instance. Set `VERBOSE=1` to print
-the tool names behind each count.
+the tool names behind each count. Set `EXPECT_NO_PLUGIN_INSTALL=1` for offline
+builds; the check fails if the log contains
+`background dependency install failed`.
 
 ## Safety
 
