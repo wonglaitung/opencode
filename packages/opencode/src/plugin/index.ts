@@ -121,10 +121,13 @@ async function applyPlugin(load: PluginLoader.Loaded, input: PluginInput, hooks:
   }
 
   const legacy = getLegacyPlugins(load.mod)
+  const applied: Hooks[] = []
   for (const server of legacy) {
-    hooks.push(await server(input, load.options))
+    const hook = await server(input, load.options)
+    hooks.push(hook)
+    applied.push(hook)
   }
-  return { id: undefined, hooks: legacy.flatMap((hook) => Object.keys(hook ?? {})) }
+  return { id: undefined, hooks: applied.flatMap((hook) => Object.keys(hook ?? {})) }
 }
 
 function pluginLogFields(
