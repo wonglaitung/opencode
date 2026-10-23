@@ -20,24 +20,13 @@ import { createSystemTransform } from "./prompt"
 import { createReporter, type Usage } from "./report"
 import { STARTUP_DELAY_MS, deferredStartup } from "./startup"
 import { createIterationCounter } from "./tools/quality"
-import { createReviewTools } from "./tools/review"
-import { createWorkflowTools } from "./tools/workflow"
+import { createToolset } from "./tools/toolset"
 import { applyBaselineProposal } from "./tools/baseline-proposal"
-import { createWorkflowStartTools } from "./tools/workflow-start"
-import { createReqdocScanTool } from "./tools/reqdoc-scan"
-import { createReqdocInitTool } from "./tools/reqdoc-dirs"
-import { createReqdocFeatureTools } from "./tools/reqdoc-features"
-import { createReqdocExportTool } from "./tools/reqdoc-export"
-import { createReqdocKbTools } from "./tools/reqdoc-kb-tools"
-import { createReqdocImportTool } from "./tools/reqdoc-import"
-import { createReqdocConventionReviewTool } from "./tools/reqdoc-review-conventions"
 import { makeSubagentChecker } from "./subagent"
 import { loadIdeConfig } from "./open-ide/config"
 import { createLockRegistry } from "./open-ide/lock"
 import { createLockGate } from "./open-ide/lock-gate"
 import { createLockHintTransform } from "./open-ide/lock-hint"
-import { createOpenIdeTool } from "./open-ide/open-ide-tool"
-import { createLockTools } from "./open-ide/tools/lock-tools"
 
 /** 经上游 SDK 汇总会话 cost/tokens（step-finish 分段求和；失败返回空值，3.1）。 */
 function createUsageProvider(client: PluginInput["client"]) {
@@ -90,8 +79,9 @@ async function syncSessionTitle(store: Store, client: PluginInput["client"], ses
 }
 
 const SessionMgmtPlugin: Plugin = async (input) => {
-  // 用户级流程选择（3.1）：新建会话时读 identity.workflowType（缺省 sdlc），身份快照语义。
-  const store = Store.open(input.directory, () => resolveWorkflowType(readIdentity()?.workflowType))
+  // 用户级流程选择（3.1）：插件加载时读 identity.workflowType（缺省 sdlc），切换后需重启。
+  const workflowType = resolveWorkflowType(readIdentity()?.workflowType)
+  const store = Store.open(input.directory, () => workflowType)
   const usageProvider = createUsageProvider(input.client)
   const reporter = createReporter(store, () => resolveIdentity(), usageProvider)
   // 子代理会话识别器（2.4 统计纯净度）：对子代理跳过建记录/打标/汇报/规则注入
@@ -123,21 +113,12 @@ const SessionMgmtPlugin: Plugin = async (input) => {
       await systemTransform(hookInput, output)
     },
 
-    tool: {
-      ...createWorkflowTools(store),
-      ...createWorkflowStartTools(store),
-      ...createReviewTools(store),
-      ...createReqdocScanTool(),
-      ...createReqdocInitTool(),
-      ...createReqdocFeatureTools(store),
-      // 阶段 2c：槽位工具组为唯一渲染路径，旧 reqdoc_score/probe/check/patch/field_dict 已移除
-      ...createReqdocKbTools(store),
-       ...createReqdocExportTool(store),
-       ...createReqdocImportTool(),
-       ...createReqdocConventionReviewTool(),
-       open_ide: createOpenIdeTool(entries, registry),
-      ...createLockTools(registry),
-    },
+    tool: createToolset({
+      store,
+      workflowType,
+      ideEntries: entries,
+      lockRegistry: registry,
+    }),
 
     // 人工文件锁拦截先行，提交门禁随后；任一 throw 即阻断本次工具调用。
     "tool.execute.before": async (hookInput, output) => {
