@@ -237,6 +237,8 @@ export default MyPlugin
 - `setup.cmd`（纯 cmd，无需 PowerShell、无需网络）把 `seed/` 铺进 config 目录：`setup.cmd seed <项目目录>` 种**全局 `%USERPROFILE%\.config\opencode\`（存在 `~/.opencode` 也种）+ 该项目 `.opencode`**——**每个要用插件的项目各跑一次**（命令幂等、可重复）。
 - 验证：内网机种后启动 <5s，日志不再出现 `background dependency install failed`；对照实验为去掉插件配置计时。
 
+> 升级 opencode 时如何复查 seed 方案、离线构建开关、插件 SDK 版本和本地 core 补丁，见 `opencode-upgrade-checklist.md`。
+
 ---
 
 ## 12. 验证清单（新插件合并前）

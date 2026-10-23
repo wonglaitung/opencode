@@ -158,4 +158,5 @@ Windows PowerShell 下可用 `Get-Content -Wait` 替代 `tail -f`。
 - `ERROR` / `WARN` 日志可能包含本地路径；对外提交 issue 或日志前先脱敏。
 - 加载失败只在当次进程内有效：修复后必须重启进程，尤其是 `stage=load` 的失败（Bun 模块缓存）。
 - `--pure` 用于二分定位；确认是插件问题后再逐个启用插件复现。
+- 升级 opencode 后如何复查本地日志补丁、插件 SDK 版本和离线构建开关，见 `opencode-upgrade-checklist.md`。
 - 如果日志里完全没有对应插件的任何事件，先确认 `opencode.json` / `tui.json` 是否在生效目录、是否被更高优先级配置覆盖；再看 `plugin.load.summary` 的 `configured` 数量。
