@@ -22,9 +22,9 @@ discover() {
   find "$ROOT" -maxdepth 4 -type d -path "$pattern" 2>/dev/null | sort -V | tail -1
 }
 
-SM_PLUGIN=${SM_PLUGIN:-$(discover "*/opencode-sm-bundle-*/packages/plugin" "$ROOT/opencode-sm-bundle-0.1.0/packages/plugin")}
-EDGE_PLUGIN=${EDGE_PLUGIN:-$(discover "*/opencode-edge-debug-bundle-*" "$ROOT/opencode-edge-debug-bundle-0.0.1")}
-SERVER_PLUGIN=${SERVER_PLUGIN:-$(discover "*/opencode-server-debug-bundle-*" "$ROOT/opencode-server-debug-bundle-0.0.1")}
+SM_PLUGIN=${SM_PLUGIN:-$(discover "*/opencode-sm-bundle*/packages/plugin" "$ROOT/opencode-sm-bundle/packages/plugin")}
+EDGE_PLUGIN=${EDGE_PLUGIN:-$(discover "*/opencode-edge-debug-bundle*" "$ROOT/opencode-edge-debug-bundle")}
+SERVER_PLUGIN=${SERVER_PLUGIN:-$(discover "*/opencode-server-debug-bundle*" "$ROOT/opencode-server-debug-bundle")}
 
 for f in "$EXE" "$SM_PLUGIN/package.json" "$EDGE_PLUGIN/package.json" "$SERVER_PLUGIN/package.json"; do
   [[ -e "$f" ]] || { echo "missing: $f" >&2; exit 2; }

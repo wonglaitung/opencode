@@ -16,7 +16,7 @@
 #
 # 目标机使用：
 #   tar xzf opencode-sm-bundle-<version>.tgz
-#   cd opencode-sm-bundle-<version>
+#   cd opencode-sm-bundle
 #   bash setup.sh                # Linux/macOS
 #   # 或 PowerShell: .\setup.ps1  # Windows
 #
@@ -39,7 +39,8 @@ if [ ! -f .npmrc ] || ! grep -q 'node-linker=hoisted' .npmrc; then
   exit 1
 fi
 
-bundle_name="opencode-sm-bundle-${version}"
+bundle_name="opencode-sm-bundle"
+bundle_artifact="opencode-sm-bundle-${version}"
 bundle_dir="dist/${bundle_name}"
 
 echo "==> 清理旧 node_modules"
@@ -329,15 +330,15 @@ EOF
 
 echo "==> 打包"
 mkdir -p dist
-tar czf "dist/${bundle_name}.tgz" -C dist "${bundle_name}"
+tar czf "dist/${bundle_artifact}.tgz" -C dist "${bundle_name}"
 rm -rf "$bundle_dir"
 
-size=$(du -sh "dist/${bundle_name}.tgz" | cut -f1)
+size=$(du -sh "dist/${bundle_artifact}.tgz" | cut -f1)
 echo ""
-echo "✅ 完成：dist/${bundle_name}.tgz（${size}）"
+echo "✅ 完成：dist/${bundle_artifact}.tgz（${size}）"
 echo ""
 echo "目标机使用："
-echo "  tar xzf dist/${bundle_name}.tgz"
+echo "  tar xzf dist/${bundle_artifact}.tgz"
 echo "  cd ${bundle_name}"
 echo "  bash setup.sh              # Linux/macOS（环境校验）"
 echo "  setup.cmd seed <项目目录>   # Windows 内网/纯 cmd：每个要用插件的项目各跑一次（种全局 + 该项目 .opencode）"

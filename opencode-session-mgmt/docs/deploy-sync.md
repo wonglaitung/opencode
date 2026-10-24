@@ -14,21 +14,21 @@
 
 ```bash
 cd /data/opencode/opencode-server-debug
-BUNDLE="/mnt/d/Tools/node-v22.23.2-win-x64/opencode-server-debug-bundle-0.0.1" bash scripts/sync-bundle.sh
+BUNDLE="/mnt/d/Tools/node-v22.23.2-win-x64/opencode-server-debug-bundle" bash scripts/sync-bundle.sh
 ```
 
 ### 2. opencode-edge-debug
 
 ```bash
 cd /data/opencode/opencode-edge-debug
-BUNDLE="/mnt/d/Tools/node-v22.23.2-win-x64/opencode-edge-debug-bundle-0.0.1" bash scripts/sync-bundle.sh
+BUNDLE="/mnt/d/Tools/node-v22.23.2-win-x64/opencode-edge-debug-bundle" bash scripts/sync-bundle.sh
 ```
 
 ### 3. opencode-session-mgmt（插件）
 
 ```bash
 cd /data/opencode/opencode-session-mgmt
-BUNDLE="/mnt/d/Tools/node-v22.23.2-win-x64/opencode-sm-bundle-0.1.0" bash scripts/sync-bundle.sh
+BUNDLE="/mnt/d/Tools/node-v22.23.2-win-x64/opencode-sm-bundle" bash scripts/sync-bundle.sh
 ```
 
 ### 4. opencode-sm CLI（可选）
@@ -41,11 +41,11 @@ cd /data/opencode/opencode-session-mgmt
 bash scripts/pack-cli.sh windows-x64
 
 # 复制到目标机
-cp dist/opencode-sm-0.1.0-windows-x64.tgz /mnt/d/Tools/node-v22.23.2-win-x64/
+cp dist/opencode-sm-1.0.0-windows-x64.tgz /mnt/d/Tools/node-v22.23.2-win-x64/
 
 # 在 Windows 上安装（npm）
 cd /mnt/d/Tools/node-v22.23.2-win-x64
-./npm install -g ./opencode-sm-0.1.0-windows-x64.tgz
+./npm install -g ./opencode-sm-1.0.0-windows-x64.tgz
 ```
 
 ## 同步后操作

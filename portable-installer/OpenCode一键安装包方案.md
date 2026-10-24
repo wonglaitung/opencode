@@ -32,7 +32,7 @@
 安装包内嵌以下已核实自包含的内容（均来自本机 `D:\Tools`）：
 
 - `node-v22.23.2-win-x64` 整目录 → `runtime\`
-  - 含 `node.exe` / `opencode` / `opencode-sm` 及三个 plugin bundle：`opencode-sm-bundle-0.1.0`、`opencode-edge-debug-bundle-0.0.1`、`opencode-server-debug-bundle-0.0.1`；无需 `npm install`
+  - 含 `node.exe` / `opencode` / `opencode-sm` 及三个 plugin bundle：`opencode-sm-bundle`、`opencode-edge-debug-bundle`、`opencode-server-debug-bundle`；无需 `npm install`
 - `Python312` 整目录 → `python\`
   - 含 `pandas 2.3.2`、`openpyxl 3.1.5`，技能（如 md-to-word）可直接调用；并已补 `python3.exe` 别名
   - **已剔除 `torch`**：单文件 `Lib\site-packages\torch\lib\dnnl.lib` 体积 2.17 GB，超出 NSIS 单文件 2 GB 上限；且技能仅需 pandas/openpyxl，不依赖 torch
@@ -54,9 +54,9 @@
         "$schema": "https://opencode.ai/config.json",
         "shell": "cmd.exe",
         "plugin": [
-          "C:/Users/<用户名>/OpenCode/runtime/opencode-sm-bundle-0.1.0/packages/plugin",
-          "C:/Users/<用户名>/OpenCode/runtime/opencode-edge-debug-bundle-0.0.1",
-          "C:/Users/<用户名>/OpenCode/runtime/opencode-server-debug-bundle-0.0.1"
+          "C:/Users/<用户名>/OpenCode/runtime/opencode-sm-bundle/packages/plugin",
+          "C:/Users/<用户名>/OpenCode/runtime/opencode-edge-debug-bundle",
+          "C:/Users/<用户名>/OpenCode/runtime/opencode-server-debug-bundle"
         ],
         "provider": {
           "athlon-coding": {

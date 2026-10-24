@@ -19,9 +19,9 @@ binary**. It does not test the source tree. Run the relevant build and
   (override with `OPENCODE_WIN_ROOT`).
 - `opencode.exe` already replaced with the build under test.
 - Windows bundles already synced and installed with Windows Bun:
-  - `opencode-sm-bundle-*/packages/plugin`
-  - `opencode-edge-debug-bundle-*`
-  - `opencode-server-debug-bundle-*`
+  - `opencode-sm-bundle/packages/plugin`
+  - `opencode-edge-debug-bundle`
+  - `opencode-server-debug-bundle`
 - Windows `cmd.exe`, `powershell.exe`, `curl.exe`, and `taskkill.exe`.
 - Windows Bun at `$OPENCODE_WIN_ROOT/node_modules/bun/bin/bun.exe`
   (override with `BUN`).
@@ -78,9 +78,9 @@ OPENCODE_WIN_ROOT=/mnt/d/Tools/node-v22.23.2-win-x64 \
 EXPECT_VERSION=1.19.4 \
 EXPECT_NO_PLUGIN_INSTALL=1 \
 PORT=4100 \
-SM_PLUGIN=/mnt/d/Tools/opencode-sm-bundle-0.1.0/packages/plugin \
-EDGE_PLUGIN=/mnt/d/Tools/opencode-edge-debug-bundle-0.0.1 \
-SERVER_PLUGIN=/mnt/d/Tools/opencode-server-debug-bundle-0.0.1 \
+SM_PLUGIN=/mnt/d/Tools/opencode-sm-bundle/packages/plugin \
+EDGE_PLUGIN=/mnt/d/Tools/opencode-edge-debug-bundle \
+SERVER_PLUGIN=/mnt/d/Tools/opencode-server-debug-bundle \
 BUN=/mnt/d/Tools/node-v22.23.2-win-x64/node_modules/bun/bin/bun.exe \
 VERBOSE=1 \
 bash .opencode/skills/verify-windows-plugin-load/scripts/verify.sh

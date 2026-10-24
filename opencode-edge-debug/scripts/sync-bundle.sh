@@ -14,7 +14,7 @@
 #
 # 用法：
 #   bash scripts/sync-bundle.sh
-#   BUNDLE="/mnt/c/其它路径/opencode-edge-debug-bundle-0.0.1" bash scripts/sync-bundle.sh
+#   BUNDLE="/mnt/c/其它路径/opencode-edge-debug-bundle" bash scripts/sync-bundle.sh
 #
 # 改完请重启 Windows 上的 opencode 守护进程（关闭再开）让插件重新加载。
 #
@@ -25,7 +25,7 @@ cd "$(dirname "$0")/.."
 REPO="$(pwd)"
 
 # 默认指向 Windows 便携 runtime 内的 bundle（WSL 下 D:\ 挂在 /mnt/d）
-BUNDLE="${BUNDLE:-/mnt/d/Tools/node-v22.23.2-win-x64/opencode-edge-debug-bundle-0.0.1}"
+BUNDLE="${BUNDLE:-/mnt/d/Tools/node-v22.23.2-win-x64/opencode-edge-debug-bundle}"
 
 if [ ! -d "$REPO/src" ]; then
   echo "错误：找不到 \$REPO/src（$REPO）" >&2

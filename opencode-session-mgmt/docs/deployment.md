@@ -238,10 +238,10 @@ OpenCode 除 TUI 外还有**桌面版**和 **IDE 扩展**。它们与 TUI 一样
 # 团队侧（联网构建机，按目标平台各打一份）：
 bun run pack:cli                       # 默认当前平台 → dist/opencode-sm-<版本>-<平台>.tgz
 bash scripts/pack-cli.sh windows-x64   # 交叉编译其它平台：darwin-arm64 / darwin-x64 / windows-x64 / linux-arm64
-VERSION=0.1.0 bash scripts/pack-cli.sh # 覆盖版本号（默认读 packages/cli/package.json）
+VERSION=1.0.0 bash scripts/pack-cli.sh # 覆盖版本号（默认读 packages/cli/package.json）
 
-# 开发者侧（把对应平台的 tgz 拷过去后；文件名里的 0.1.0 为当前版本，以 packages/cli/package.json 实际版本为准）：
-npm install -g ./opencode-sm-0.1.0-linux-x64.tgz
+# 开发者侧（把对应平台的 tgz 拷过去后；文件名里的 1.0.0 为当前版本，以 packages/cli/package.json 实际版本为准）：
+npm install -g ./opencode-sm-1.0.0-linux-x64.tgz
 opencode-sm --help                     # 全局可用
 ```
 
@@ -493,12 +493,12 @@ brew fetch --bottle-tag=... anomalyco/tap/opencode
 ```bash
 # 外网打包机（务必与内网同 OS / 同架构 / glibc 相近）：
 cd opencode-session-mgmt
-bun run pack:bundle        # → dist/opencode-sm-bundle-0.1.0.tgz（版本号取自 packages/cli/package.json）
+bun run pack:bundle        # → dist/opencode-sm-bundle-<版本>.tgz（版本号取自 packages/cli/package.json）
 # 版本号可按需覆盖： VERSION=0.2.0 bash scripts/pack-bundle.sh
 
 # 内网开发机（解压到固定位置，如 D:/tools/opencode/）：
-tar xzf opencode-sm-bundle-0.1.0.tgz -C D:/tools/opencode
-cd D:/tools/opencode/opencode-sm-bundle-0.1.0
+tar xzf opencode-sm-bundle-<版本>.tgz -C D:/tools/opencode
+cd D:/tools/opencode/opencode-sm-bundle
 setup.cmd seed D:\你的项目  # 每个要用插件的项目各跑一次：种全局 + 该项目 .opencode
 # bash setup.sh           # 可选：仅校验环境（Windows 有 PowerShell 时也可用 .\setup.ps1）
 ```
@@ -511,7 +511,7 @@ setup.cmd seed D:\你的项目  # 每个要用插件的项目各跑一次：种�
 
 ```json
 {
-  "plugin": ["D:/tools/opencode/opencode-sm-bundle-0.1.0"]
+  "plugin": ["D:/tools/opencode/opencode-sm-bundle"]
 }
 ```
 
@@ -520,8 +520,8 @@ setup.cmd seed D:\你的项目  # 每个要用插件的项目各跑一次：种�
 ```json
 {
   "plugin": [
-    "D:/tools/opencode/opencode-sm-bundle-0.1.0",
-    "D:/tools/opencode/opencode-edge-debug-bundle-0.0.1"
+    "D:/tools/opencode/opencode-sm-bundle",
+    "D:/tools/opencode/opencode-edge-debug-bundle"
   ]
 }
 ```
@@ -558,7 +558,7 @@ setup.cmd seed D:\你的项目  # 每个要用插件的项目各跑一次：种�
 
 ```json
 {
-  "plugin": ["/opt/opencode-sm-bundle-0.1.0"],
+  "plugin": ["/opt/opencode-sm-bundle"],
   "provider": {
     "internal": {
       "npm": "@ai-sdk/openai-compatible",
@@ -603,8 +603,8 @@ bun run pack:cli           # → dist/opencode-sm-<版本>-<平台>.tgz（按内
    ```json
    {
      "plugin": [
-       "D:/Tools/node-v22.23.2-win-x64/opencode-sm-bundle-0.1.0",
-       "D:/Tools/node-v22.23.2-win-x64/opencode-edge-debug-bundle-0.0.1"
+       "D:/Tools/node-v22.23.2-win-x64/opencode-sm-bundle",
+       "D:/Tools/node-v22.23.2-win-x64/opencode-edge-debug-bundle"
      ],
      "provider": {
        "internal": {

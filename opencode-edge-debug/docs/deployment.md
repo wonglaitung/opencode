@@ -287,8 +287,8 @@ cd opencode-edge-debug
 bun run pack:bundle        # → dist/opencode-edge-debug-bundle-<版本>.tgz
 
 # 内网开发机：解包即用，无需联网
-tar xzf opencode-edge-debug-bundle-0.0.1.tgz
-cd opencode-edge-debug-bundle-0.0.1
+tar xzf opencode-edge-debug-bundle-<版本>.tgz
+cd opencode-edge-debug-bundle
 bash setup.sh              # Windows 用 .\setup.ps1
 # 然后在 opencode.json 中把 plugin 指向解压目录（含 package.json）
 ```

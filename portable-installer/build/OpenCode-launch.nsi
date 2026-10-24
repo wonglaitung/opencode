@@ -62,8 +62,8 @@ Function .onInit
   StrCpy $WorkflowType "sdlc"
   StrCpy $TerminalMode "native"
   StrCpy $PluginSm "1"
-  StrCpy $PluginEdge "1"
-  StrCpy $PluginServer "1"
+  StrCpy $PluginEdge "0"
+  StrCpy $PluginServer "0"
   StrCpy $ConfigOk "0"
   StrCpy $IdentityOk "0"
 

@@ -1,6 +1,6 @@
 ---
 name: sync-windows-bundle
-description: Use when syncing local (WSL/Linux) source changes into the Windows-side opencode bundles so the Windows opencode (running on Node 22 at D:\Tools\node-v22.23.2-win-x64) picks up plugin/CLI/docs changes without manual copy. Covers all three sibling projects — opencode-session-mgmt (opencode-sm-bundle-0.1.0), opencode-edge-debug (opencode-edge-debug-bundle-0.0.1), opencode-server-debug (opencode-server-debug-bundle-0.0.1). Also asks whether to rebuild the Windows binary and copies the result into node_modules/opencode-ai/bin/opencode.exe. Triggers 同步 / sync / 同步到 Windows / 重建二进制 / D:\Tools / node-v22 / bundle / 重启守护进程 / edge-debug / server-debug.
+description: Use when syncing local (WSL/Linux) source changes into the Windows-side opencode bundles so the Windows opencode (running on Node 22 at D:\Tools\node-v22.23.2-win-x64) picks up plugin/CLI/docs changes without manual copy. Covers all three sibling projects — opencode-session-mgmt (opencode-sm-bundle), opencode-edge-debug (opencode-edge-debug-bundle), opencode-server-debug (opencode-server-debug-bundle). Also asks whether to rebuild the Windows binary and copies the result into node_modules/opencode-ai/bin/opencode.exe. Triggers 同步 / sync / 同步到 Windows / 重建二进制 / D:\Tools / node-v22 / bundle / 重启守护进程 / edge-debug / server-debug.
 ---
 
 # 同步到 Windows bundle（sync-bundle）
@@ -13,9 +13,9 @@ description: Use when syncing local (WSL/Linux) source changes into the Windows-
 
 | 工程（仓库子目录） | 脚本 | 默认 bundle（WSL） | 默认 bundle（Windows） |
 |---|---|---|---|
-| opencode-session-mgmt | scripts/sync-bundle.sh | /mnt/d/Tools/node-v22.23.2-win-x64/opencode-sm-bundle-0.1.0 | D:\Tools\node-v22.23.2-win-x64\opencode-sm-bundle-0.1.0 |
-| opencode-edge-debug | scripts/sync-bundle.sh | /mnt/d/Tools/node-v22.23.2-win-x64/opencode-edge-debug-bundle-0.0.1 | D:\Tools\node-v22.23.2-win-x64\opencode-edge-debug-bundle-0.0.1 |
-| opencode-server-debug | scripts/sync-bundle.sh | /mnt/d/Tools/node-v22.23.2-win-x64/opencode-server-debug-bundle-0.0.1 | D:\Tools\node-v22.23.2-win-x64\opencode-server-debug-bundle-0.0.1 |
+| opencode-session-mgmt | scripts/sync-bundle.sh | /mnt/d/Tools/node-v22.23.2-win-x64/opencode-sm-bundle | D:\Tools\node-v22.23.2-win-x64\opencode-sm-bundle |
+| opencode-edge-debug | scripts/sync-bundle.sh | /mnt/d/Tools/node-v22.23.2-win-x64/opencode-edge-debug-bundle | D:\Tools\node-v22.23.2-win-x64\opencode-edge-debug-bundle |
+| opencode-server-debug | scripts/sync-bundle.sh | /mnt/d/Tools/node-v22.23.2-win-x64/opencode-server-debug-bundle | D:\Tools\node-v22.23.2-win-x64\opencode-server-debug-bundle |
 
 换目标：`BUNDLE="/mnt/d/其它路径/xxx-bundle" bash scripts/sync-bundle.sh`。
 

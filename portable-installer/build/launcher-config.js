@@ -15,9 +15,17 @@ const path = require("node:path")
 
 const ORDER = ["sm", "edge", "server"]
 const BUNDLES = {
-  sm: "opencode-sm-bundle-0.1.0/packages/plugin",
-  edge: "opencode-edge-debug-bundle-0.0.1",
-  server: "opencode-server-debug-bundle-0.0.1",
+  sm: "opencode-sm-bundle/packages/plugin",
+  edge: "opencode-edge-debug-bundle",
+  server: "opencode-server-debug-bundle",
+}
+
+// 旧版本化目录（如 opencode-sm-bundle-0.1.0）在迁移时识别为同一插件，
+// 写回时统一替换为稳定路径，避免新旧路径重复注册。
+const LEGACY_BUNDLES = {
+  sm: /opencode-sm-bundle-[^/]+\/packages\/plugin/i,
+  edge: /opencode-edge-debug-bundle-[^/]+/i,
+  server: /opencode-server-debug-bundle-[^/]+/i,
 }
 
 function parseArgs(argv) {
@@ -347,15 +355,21 @@ function formatArray(values) {
   return "[\n" + values.map((v) => "    " + JSON.stringify(v)).join(",\n") + "\n  ]"
 }
 
+function pluginKey(item) {
+  const normalized = normalize(item)
+  for (const key of ORDER) {
+    if (normalized.includes(BUNDLES[key]) || LEGACY_BUNDLES[key].test(normalized)) return key
+  }
+  return undefined
+}
+
 function pluginState(text) {
   const enabled = new Set()
   const arr = findPluginArray(text)
   if (!arr) return enabled
   for (const item of collectStrings(arr.inner)) {
-    const normalized = normalize(item)
-    for (const key of ORDER) {
-      if (normalized.includes(BUNDLES[key])) enabled.add(key)
-    }
+    const key = pluginKey(item)
+    if (key) enabled.add(key)
   }
   return enabled
 }
@@ -367,19 +381,16 @@ function buildPluginText(text, enabled, root) {
   }
   const arr = findPluginArray(text)
   const desired = []
-  const known = {}
   const unknown = []
 
   if (arr) {
     for (const item of collectStrings(arr.inner)) {
-      const normalized = normalize(item)
-      const key = ORDER.find((k) => normalized.includes(BUNDLES[k]))
-      if (key) known[key] = item
-      else unknown.push(item)
+      if (pluginKey(item)) continue
+      unknown.push(item)
     }
     for (const item of unknown) desired.push(item)
     for (const key of ORDER) {
-      if (enabled.has(key)) desired.push(known[key] || canonicalPath(root, key))
+      if (enabled.has(key)) desired.push(canonicalPath(root, key))
     }
     const replacement = formatArray(desired)
     return text.slice(0, arr.start) + replacement + text.slice(arr.end + 1)
@@ -460,6 +471,9 @@ function dump(args) {
     if (pluginValue < 0 || configText[pluginValue] === "[") {
       configOk = true
       enabled = pluginState(configText)
+      // 没有 plugin 字段 = 尚未配置过插件：默认只启用工作流插件（sm）。
+      // 显式 "plugin": [] 视为用户主动全关，不强行加回。
+      if (pluginValue < 0) enabled.add("sm")
     }
   }
 
