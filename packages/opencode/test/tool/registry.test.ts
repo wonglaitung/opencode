@@ -194,6 +194,46 @@ describe("tool.registry", () => {
     }),
   )
 
+  it.instance("skips tools with unresolved dependencies without failing the registry", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const tool = path.join(test.directory, ".opencode", "tool")
+      yield* Effect.promise(() => fs.mkdir(tool, { recursive: true }))
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(tool, "broken.ts"),
+          [
+            "import 'opencode-test-missing-package'",
+            "export default {",
+            "  description: 'tool with a missing dependency',",
+            "  args: {},",
+            "  execute: async () => 'ok',",
+            "}",
+            "",
+          ].join("\n"),
+        ),
+      )
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(tool, "healthy.ts"),
+          [
+            "export default {",
+            "  description: 'healthy tool',",
+            "  args: {},",
+            "  execute: async () => 'ok',",
+            "}",
+            "",
+          ].join("\n"),
+        ),
+      )
+
+      const registry = yield* ToolRegistry.Service
+      const ids = yield* registry.ids()
+      expect(ids).not.toContain("broken")
+      expect(ids).toContain("healthy")
+    }),
+  )
+
   it.instance("ignores non-tool exports in .opencode/tool files", () =>
     Effect.gen(function* () {
       const test = yield* TestInstance

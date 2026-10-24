@@ -189,7 +189,17 @@ const layer = Layer.effect(
           const namespace = path.basename(match, path.extname(match))
           // `match` is an absolute filesystem path from `Glob.scanSync(..., { absolute: true })`.
           // Import it as `file://` so Node on Windows accepts the dynamic import.
-          const mod = yield* Effect.promise(() => import(pathToFileURL(match).href))
+          // A project tool with an unresolved dependency (for example an offline build that
+          // intentionally skips config dependency installs) must not take down the session.
+          const mod = yield* Effect.tryPromise({
+            try: () => import(pathToFileURL(match).href),
+            catch: (error) => error,
+          }).pipe(
+            Effect.catchCause((cause) =>
+              Effect.logWarning("tool.load.failed", { file: match, cause }).pipe(Effect.as(undefined)),
+            ),
+          )
+          if (!mod) continue
           for (const [id, def] of Object.entries(mod)) {
             if (!isPluginTool(def)) continue
             custom.push(fromPlugin(id === "default" ? namespace : `${namespace}_${id}`, def))
