@@ -175,7 +175,7 @@ flowchart LR
 
 ### 5.1 `POST /api/report` — 插件汇报会话摘要
 
-请求体为完整 `SessionReport`。下例为 **sdlc** 会话；reqdoc 会话形状相同，仅阶段键（`goal`/`rules`/`edge`/`prd`/`review`）与审查清单键（见下表）随其定义不同（`session-management.md` 3.2）：
+请求体为完整 `SessionReport`。下列分别为 **sdlc / reqdoc / task** 三种工作流的完整汇报；阶段键、审查清单与是否包含 `review` 阶段随 `workflow.type` 的定义不同（`session-management.md` 3.2）：
 
 ```json
 {
@@ -251,6 +251,126 @@ flowchart LR
   "reportedAt": 1750000000000
 }
 ```
+
+**reqdoc 示例**（阶段键为 `goal`/`rules`/`edge`/`prd`/`review`，审查清单为业务确认四项）：
+
+```json
+{
+  "sessionID": "sess_reqdoc_001",
+  "apiKey": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+  "workflow": {
+    "type": "reqdoc",
+    "stages": {
+      "goal": {
+        "status": "approved",
+        "revision": 0,
+        "transitions": [
+          { "action": "enter", "at": 1750100000000 },
+          { "action": "approve", "at": 1750101800000 }
+        ]
+      },
+      "rules": {
+        "status": "approved",
+        "revision": 0,
+        "transitions": [
+          { "action": "enter", "at": 1750101800000 },
+          { "action": "approve", "at": 1750103600000 }
+        ]
+      },
+      "edge": {
+        "status": "approved",
+        "revision": 1,
+        "transitions": [
+          { "action": "enter", "at": 1750103600000 },
+          { "action": "approve", "at": 1750105400000 },
+          { "action": "revisit", "at": 1750106000000, "note": "补充异常案例" },
+          { "action": "enter", "at": 1750106000000 },
+          { "action": "approve", "at": 1750107200000 }
+        ]
+      },
+      "prd": {
+        "status": "approved",
+        "revision": 0,
+        "transitions": [
+          { "action": "enter", "at": 1750107200000 },
+          { "action": "approve", "at": 1750109000000 }
+        ]
+      },
+      "review": {
+        "status": "approved",
+        "revision": 0,
+        "transitions": [
+          { "action": "enter", "at": 1750109000000 },
+          { "action": "approve", "at": 1750110000000 }
+        ],
+        "checklist": {
+          "completeness": true,
+          "clarity": true,
+          "edgeCoverage": true,
+          "resolution": true
+        },
+        "comprehension": { "total": 4, "confirmed": 4 }
+      }
+    },
+    "commit": {
+      "status": "allowed",
+      "blocked_by": []
+    },
+    "quality": {
+      "firstPassRate": 88,
+      "iterationCount": 3,
+      "reworkRate": null,
+      "testCoverage": null,
+      "lines": null
+    },
+    "baseline": { "estimatedHours": 80, "setAt": 1750100000000 }
+  },
+  "cost": 0.22,
+  "tokensInput": 42000,
+  "tokensOutput": 16000,
+  "reportedAt": 1750110000000
+}
+```
+
+**task 示例**（单阶段 `execute`，无 review/提交门禁；`firstPassRate` 与 sdlc 专属的 `lines` 为 null）：
+
+```json
+{
+  "sessionID": "sess_task_001",
+  "apiKey": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+  "workflow": {
+    "type": "task",
+    "stages": {
+      "execute": {
+        "status": "approved",
+        "revision": 0,
+        "transitions": [
+          { "action": "enter", "at": 1750200000000, "note": "一般任务开始（自动）" },
+          { "action": "approve", "at": 1750201800000, "note": "开发者明确说完成（自动收口）" }
+        ]
+      }
+    },
+    "commit": {
+      "status": "allowed",
+      "blocked_by": []
+    },
+    "quality": {
+      "firstPassRate": null,
+      "iterationCount": 1,
+      "reworkRate": null,
+      "testCoverage": null,
+      "lines": null
+    },
+    "baseline": { "estimatedHours": 2, "setAt": 1750200000000 }
+  },
+  "cost": 0.05,
+  "tokensInput": 12000,
+  "tokensOutput": 4000,
+  "reportedAt": 1750201800000
+}
+```
+
+> task 没有 `review` 阶段，因此不携带 `checklist`/`comprehension`；`quality.firstPassRate` 恒为 `null`，`quality.lines` 为 sdlc 专属，task 恒为 `null`。
 
 字段语义：
 
