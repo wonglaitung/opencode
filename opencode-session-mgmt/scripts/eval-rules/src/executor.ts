@@ -31,6 +31,7 @@ import { createReqdocImportTool } from "../../../packages/plugin/src/tools/reqdo
 import { createReqdocScanTool } from "../../../packages/plugin/src/tools/reqdoc-scan"
 import { createReqdocConventionReviewTool } from "../../../packages/plugin/src/tools/reqdoc-review-conventions"
 import { createWorkflowStartTools } from "../../../packages/plugin/src/tools/workflow-start"
+import { createTaskClassifyTool } from "../../../packages/plugin/src/tools/task-classify"
 import { createOpenIdeTool } from "../../../packages/plugin/src/open-ide/open-ide-tool"
 import { createLockTools } from "../../../packages/plugin/src/open-ide/tools/lock-tools"
 import { extractBaselineHours } from "../../../packages/plugin/src/tools/baseline-proposal"
@@ -123,6 +124,7 @@ export function buildRegistry(store: Store): Record<string, ToolLike | undefined
     ...createReqdocFeatureTools(store),
     ...createWorkflowTools(store),
     ...createWorkflowStartTools(store),
+    ...createTaskClassifyTool(store),
     ...createReviewTools(store),
     ...createReqdocInitTool(),
     ...createReqdocImportTool(),
@@ -155,6 +157,7 @@ function seed(store: Store, sessionID: string, state: WorkflowState): void {
     w.features = state.features
     w.kb = state.kb
     w.baseline = state.baseline
+    w.task = state.task
   })
 }
 

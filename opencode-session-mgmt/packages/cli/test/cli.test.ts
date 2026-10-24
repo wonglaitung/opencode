@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { asStringArray, parseArgs } from "../src/index"
-import { fmtTaskLine, fmtTitle, parsePeriodMs } from "../src/commands/stats"
+import { fmtTaskCategory, fmtTaskLine, fmtTitle, parsePeriodMs } from "../src/commands/stats"
 
 describe("parseArgs", () => {
   test("位置参数与键值", () => {
@@ -37,6 +37,18 @@ describe("fmtTitle", () => {
     const out = fmtTitle(long)
     expect(out.endsWith("…")).toBe(true)
     expect(out.length).toBe(25)
+  })
+})
+
+describe("fmtTaskCategory", () => {
+  test("展示分类码对应中文名与来源", () => {
+    expect(fmtTaskCategory({ taskCategory: "documentation", taskCategorySource: "model" })).toBe(
+      "编写文档（model）",
+    )
+  })
+
+  test("未分类明确展示", () => {
+    expect(fmtTaskCategory({ taskCategory: null, taskCategorySource: null })).toBe("未分类")
   })
 })
 

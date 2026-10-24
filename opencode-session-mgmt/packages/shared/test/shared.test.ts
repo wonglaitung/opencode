@@ -8,6 +8,8 @@ import {
   REQDOC_SCORE_DIMS,
   SDLC,
   TASK,
+  TASK_CATEGORY_KEYS,
+  TASK_CATEGORY_LABELS,
   WORKFLOW_DEFINITIONS,
   WORKFLOW_ENTRY_HINT,
   WORKFLOW_ENTRY_PHRASE,
@@ -23,6 +25,7 @@ import {
   reviewRecord,
   rulesForStage,
   summarizeWorkflow,
+  taskCategoryLabel,
   validateIdentity,
   writeIdentity,
   type Identity,
@@ -413,6 +416,42 @@ describe("TASK 一般任务工作流", () => {
     expect(WORKFLOW_ENTRY_HINT.task).toContain("直接输入任务内容")
     expect(WORKFLOW_ENTRY_HINT.sdlc).toContain(WORKFLOW_ENTRY_PHRASE.sdlc)
     expect(WORKFLOW_ENTRY_HINT.reqdoc).toContain(WORKFLOW_ENTRY_PHRASE.reqdoc)
+  })
+
+  test("分类枚举稳定且展示名唯一", () => {
+    expect(TASK_CATEGORY_KEYS).toEqual([
+      "documentation",
+      "testing",
+      "debugging",
+      "coding",
+      "research",
+      "environment",
+      "other",
+    ])
+    expect(new Set(Object.values(TASK_CATEGORY_LABELS)).size).toBe(TASK_CATEGORY_KEYS.length)
+    expect(taskCategoryLabel("documentation")).toBe("编写文档")
+    expect(taskCategoryLabel(null)).toBe("未分类")
+  })
+
+  test("task-r5 要求调用 task_classify 且不写 note", () => {
+    const rule = TASK.rules.find((r) => r.id === "task-r5")
+    expect(rule).toBeDefined()
+    expect(rule!.text).toContain("task_classify")
+    expect(rule!.text).toContain("不要写进 note")
+  })
+
+  test("汇报投影只带 task 分类，不带 setAt；非 task 不带 task", () => {
+    const state = createWorkflowState("task")
+    state.task = { category: "documentation", source: "model", setAt: 123 }
+    const summary = summarizeWorkflow(state)
+    expect(summary.task).toEqual({ category: "documentation", source: "model" })
+    expect(JSON.stringify(summary)).not.toContain("setAt")
+
+    const unclassified = summarizeWorkflow(createWorkflowState("task"))
+    expect(unclassified.task).toBeNull()
+
+    const sdlc = summarizeWorkflow(createWorkflowState("sdlc"))
+    expect(sdlc).not.toHaveProperty("task")
   })
 })
 

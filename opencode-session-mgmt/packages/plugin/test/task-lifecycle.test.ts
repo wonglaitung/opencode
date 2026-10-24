@@ -54,6 +54,21 @@ describe("task 生命周期", () => {
     }
   })
 
+  test("自动开始/收口 note 保持固定原文", () => {
+    const store = setup()
+    try {
+      startTask(store, "t1")
+      finishTask(store, "t1", "完成")
+      const transitions = store.get("t1")!.workflow!.stages.execute.transitions
+      expect(transitions.map((t) => t.note)).toEqual([
+        "一般任务开始（自动）",
+        "开发者明确说完成（自动收口）",
+      ])
+    } finally {
+      store.close()
+    }
+  })
+
   test("非 task 会话不自动开始/收口", () => {
     const store = Store.memory(() => "sdlc")
     try {

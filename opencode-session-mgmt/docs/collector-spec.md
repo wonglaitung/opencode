@@ -2,11 +2,13 @@
 
 | | |
 |---|---|
-| 版本 | v1.3 |
-| 日期 | 2026-08-26 |
+| 版本 | v1.4 |
+| 日期 | 2026-10-24 |
 | 读者 | 后端收集服务开发团队、网关集成团队 |
 | 状态 | 生效 |
 
+> **v1.4（2026-10-24）**：task 工作流新增可选字段 `workflow.task`（`{category, source} | null`），用于记录一般任务分类；sdlc/reqdoc 不携带该字段，旧收集器可原样存储并忽略，无数据库迁移。
+>
 > **v1.3（2026-08-26）**：7.4「成员行」收紧为固定 10 项最小集，移除 v1.2.2 引入的可选扩展字段（个人级 `avgEfficiency`/`linesTotal`/`tokensInput` 等下钻）。成员行不再附加任何可选字段（含 `ext.*` 对象），仅整组/整组织聚合层保留 `linesTotal`/`avgEfficiency`/`trends.*` 等聚合指标；CLI 无需容忍成员行未知字段。
 
 > **v1.3（2026-10-24）**：新增 `task` 一般任务工作流——单阶段 `execute`、无 review/提交门禁；`workflow_type`/`workflowType` 取值扩展为 `task | sdlc | reqdoc`，sdlc 专属指标对 task 同样按 null 处理。
@@ -340,6 +342,7 @@ flowchart LR
   "apiKey": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
   "workflow": {
     "type": "task",
+    "task": { "category": "documentation", "source": "model" },
     "stages": {
       "execute": {
         "status": "approved",
@@ -370,7 +373,7 @@ flowchart LR
 }
 ```
 
-> task 没有 `review` 阶段，因此不携带 `checklist`/`comprehension`；`quality.firstPassRate` 恒为 `null`，`quality.lines` 为 sdlc 专属，task 恒为 `null`。
+> task 没有 `review` 阶段，因此不携带 `checklist`/`comprehension`；`quality.firstPassRate` 恒为 `null`，`quality.lines` 为 sdlc 专属，task 恒为 `null`。`workflow.task` 仅 task 携带；未分类为 `null`，旧插件缺省该字段也按未分类处理。
 
 字段语义：
 
@@ -379,6 +382,7 @@ flowchart LR
 | `sessionID` | string | 是 | 上游会话 ID，聚合库主键 |
 | `apiKey` | string | 是 | `api_key` 的 SHA-256（hex）哈希；身份标识，网络不传明文密钥（见 2.3） |
 | `workflow.type` | `"task" \| "sdlc" \| "reqdoc"` | 否 | 工作流类型（task 一般任务 / sdlc 开发 / reqdoc 需求书）。缺省按 sdlc 处理（旧插件兼容） |
+| `workflow.task` | `{category, source} \| null` | 否 | task 专属：一般任务分类。`category ∈ {documentation, testing, debugging, coding, research, environment, other}`；`source ∈ {model, heuristic}`；task 未分类为 `null`；sdlc/reqdoc 不携带。旧收集器可忽略，无需迁移 |
 | `workflow.stages.*.status` | `"not_started" \| "in_progress" \| "approved"` | 是 | 阶段状态。键随 `workflow.type` 的定义：sdlc 为 `requirements`/`design`/`implementation`/`testing`/`review`，reqdoc 为 `goal`/`rules`/`edge`/`prd`/`review`，task 为单阶段 `execute` |
 | `workflow.stages.*.revision` | number | 是 | 阶段回退次数（需求质量信号） |
 | `workflow.stages.*.transitions` | array | 是 | 阶段转换时间戳序列（耗时统计的数据源），`action ∈ {"enter","revisit","approve"}`，`note` 可选 |
@@ -397,7 +401,7 @@ flowchart LR
 | `tokensInput` / `tokensOutput` | number \| null | 是 | Token 数 |
 | `reportedAt` | number | 是 | 汇报时间（插件本机时钟，epoch ms） |
 
-**校验规则**：`sessionID`、`apiKey` 必须为非空字符串；`workflow` 必须为对象。其余字段缺省容忍（如 `cost: null`、旧版本可能缺 `lines`）。校验不通过返回 `400 {"error": "非法的汇报 payload"}`。
+**校验规则**：`sessionID`、`apiKey` 必须为非空字符串；`workflow` 必须为对象。其余字段缺省容忍（如 `cost: null`、旧版本可能缺 `lines`/`task`）。新增可选字段不得导致旧收集器拒绝；校验不通过返回 `400 {"error": "非法的汇报 payload"}`。
 
 **响应**：`200 {"ok": true}`。
 
@@ -692,6 +696,6 @@ BASE=https://<gateway>/api
 
 ### 11.3 演进与兼容
 
-- 字段只增不删、只弱不严：新增可选字段不得导致旧客户端请求被拒；`null` 语义固定（`cost:null`=未知、`lines:null`=无代码编辑、`reworkRate/testCoverage:null`=未回写、`baseline:null`=未录入基线）。
+- 字段只增不删、只弱不严：新增可选字段不得导致旧客户端请求被拒；`null` 语义固定（`cost:null`=未知、`lines:null`=无代码编辑、`reworkRate/testCoverage:null`=未回写、`baseline:null`=未录入基线、`task:null`=task 未分类）。
 - 契约变更须保证**旧插件/旧 CLI 在新服务、新服务在旧插件**两种组合下均不报错（宽松校验 + 缺失字段容忍）。v1.1 新增字段全部可选：旧插件汇报无 `workflow.baseline` 时新服务按无基线聚合；旧服务响应无 `avgEfficiency`/`baselineSessions`/`trends.efficiency` 时，新 CLI 已按读侧可选字段降级为 N/A（见 `session-management.md` 第 6.3 章）。
 - 若网关侧需要给 `/api/stats` 加权限分层（如组长看本组、管理员看全组织），由网关在收集服务之上实现，收集服务本体不做访问控制矩阵（保持契约最小）。

@@ -6,7 +6,7 @@
  */
 import { statSync } from "node:fs"
 import { basename, resolve } from "node:path"
-import { resolveWorkflowType } from "sm-shared"
+import { TASK_CATEGORY_KEYS, resolveWorkflowType, taskCategoryLabel } from "sm-shared"
 import type { WorkflowSessionRow } from "sm-plugin/src/db/schema"
 import { HIGH_ITERATION_THRESHOLD, LOW_FIRST_PASS_THRESHOLD, aggregateProject, sessionStats, type SessionStats } from "sm-plugin/src/stats"
 import {
@@ -162,7 +162,8 @@ function printSessionStats(s: SessionStats): void {
     process.stdout.write(
       `📋 会话 ${s.sessionID}\n` +
         `工作流类型: task  标题: ${fmtTitle(s.title)}\n` +
-        `开发者: ${s.account ?? "N/A"}  周期: ${fmtDuration(s.durationMs)}  ${s.complete ? "✓ 已完成" : "进行中"}\n\n` +
+        `开发者: ${s.account ?? "N/A"}  周期: ${fmtDuration(s.durationMs)}  ${s.complete ? "✓ 已完成" : "进行中"}\n` +
+        `任务分类: ${fmtTaskCategory(s)}\n\n` +
         `任务:\n${stageLines}\n` +
         `  ${fmtTaskLine(s.baselineHours, s.durationMs, s.efficiency)}\n` +
         `\nAI 使用: ${s.cost === null ? "$N/A" : `$${s.cost.toFixed(4)}`} | ${fmtTokens(s.tokensInput)} in / ${fmtTokens(s.tokensOutput)} out\n`,
@@ -197,13 +198,19 @@ function printProjectStats(
     p.avgEfficiency === null
       ? "  AI 提效: N/A（无基线会话）"
       : `  平均 AI 提效: ${fmtEfficiency(p.avgEfficiency)}（基线会话 ${p.baselineCount}/${p.sessions}）`
+  const taskCategoryParts = TASK_CATEGORY_KEYS
+    .map((key) => ({ key, count: p.taskCategoryCounts[key] ?? 0 }))
+    .filter((x) => x.count > 0)
+    .map((x) => `${taskCategoryLabel(x.key)} ${x.count}`)
+  if (p.taskUnclassifiedCount > 0) taskCategoryParts.push(`未分类 ${p.taskUnclassifiedCount}`)
+  const taskCategoryLine = `任务分类: ${taskCategoryParts.join(" / ") || "未分类"}`
   const lines: string[] = [
     `📊 项目 "${label}" 统计`,
     ...(note ? [`（${note}）`] : []),
     `会话: ${p.sessions} | 完成率: ${(p.completionRate * 100).toFixed(0)}% | 平均周期: ${fmtDuration(p.avgDurationMs)}`,
     `费用: ${p.hasCostData ? `$${p.totalCost.toFixed(4)} 总计` : "N/A（daemon 不可达或未配置 OPENCODE_SM_SERVER）"}`,
     ...(taskOnly
-      ? [efficiencyLine]
+      ? [taskCategoryLine, efficiencyLine]
       : [
           `质量:`,
           `  平均一次通过率: ${fmtPct(p.avgFirstPassRate)}  一次通过率过低会话(<${LOW_FIRST_PASS_THRESHOLD}%): ${p.lowFirstPassCount}/${p.sessions}`,
@@ -223,15 +230,17 @@ function printProjectStats(
     const statusOf = (s: SessionStats) =>
       s.complete ? "✓完成" : s.currentStage ? `${s.currentStage}中` : s.status ?? "进行中"
     const statusWidth = Math.max(8, ...sessions.map((s) => statusOf(s).length))
+    const categoryOf = (s: SessionStats) => taskCategoryLabel(s.taskCategory)
+    const categoryWidth = Math.max(8, ...sessions.map((s) => categoryOf(s).length))
     if (taskOnly) {
       lines.push(
-        `  ${"会话ID".padEnd(idWidth)} ${"状态".padEnd(statusWidth)} ${"周期".padStart(6)} ${"预估".padStart(6)} ${"提效".padStart(6)} ${"标题".padEnd(24)}`,
+        `  ${"会话ID".padEnd(idWidth)} ${"状态".padEnd(statusWidth)} ${"分类".padEnd(categoryWidth)} ${"周期".padStart(6)} ${"预估".padStart(6)} ${"提效".padStart(6)} ${"标题".padEnd(24)}`,
       )
-      lines.push(`  ${"─".repeat(idWidth)} ${"─".repeat(statusWidth)} ${"─".repeat(6)} ${"─".repeat(6)} ${"─".repeat(6)} ${"─".repeat(24)}`)
+      lines.push(`  ${"─".repeat(idWidth)} ${"─".repeat(statusWidth)} ${"─".repeat(categoryWidth)} ${"─".repeat(6)} ${"─".repeat(6)} ${"─".repeat(6)} ${"─".repeat(24)}`)
       for (const s of sessions) {
         const estimate = s.baselineHours === null ? "N/A" : `${s.baselineHours}h`
         lines.push(
-          `  ${s.sessionID.padEnd(idWidth)} ${statusOf(s).padEnd(statusWidth)} ${fmtDuration(s.durationMs).padStart(6)} ${estimate.padStart(6)} ${fmtEfficiency(s.efficiency).padStart(6)} ${fmtTitle(s.title).padEnd(24)}`,
+          `  ${s.sessionID.padEnd(idWidth)} ${statusOf(s).padEnd(statusWidth)} ${categoryOf(s).padEnd(categoryWidth)} ${fmtDuration(s.durationMs).padStart(6)} ${estimate.padStart(6)} ${fmtEfficiency(s.efficiency).padStart(6)} ${fmtTitle(s.title).padEnd(24)}`,
         )
       }
     } else {
@@ -309,6 +318,13 @@ export function fmtLinesCategory(lines: { business: number; test: number; config
 export function fmtEfficiency(v: number | null): string {
   if (v === null) return "N/A"
   return `${Math.round(v * 100)}%`
+}
+
+/** 一般任务分类：未分类明确展示；有来源时附在括号内。 */
+export function fmtTaskCategory(s: Pick<SessionStats, "taskCategory" | "taskCategorySource">): string {
+  if (!s.taskCategory) return "未分类"
+  const label = taskCategoryLabel(s.taskCategory)
+  return s.taskCategorySource ? `${label}（${s.taskCategorySource}）` : label
 }
 
 /** 一般任务工时对比行：预估 / 实际 / 提效。 */

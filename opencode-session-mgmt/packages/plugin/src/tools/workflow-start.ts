@@ -5,7 +5,7 @@
  * 比自由文本解析可靠；global 规则 sdlc-r1/reqdoc-r1 同步指向本工具，规则条数不变。
  */
 import { tool, type ToolDefinition } from "@opencode-ai/plugin"
-import { createWorkflowState, getDefinition, WORKFLOW_ENTRY_PHRASE } from "sm-shared"
+import { getDefinition, WORKFLOW_ENTRY_PHRASE } from "sm-shared"
 import type { Store } from "../db"
 import { WorkflowOpError, applyTransition } from "../workflow-ops"
 
@@ -15,40 +15,21 @@ export function createWorkflowStartTools(store: Store): Record<string, ToolDefin
   const workflow_start = tool({
     description:
       "启动当前会话的工作流，将第一阶段置为进行中。" +
-      `开发者说「${WORKFLOW_ENTRY_PHRASE.sdlc}」「${WORKFLOW_ENTRY_PHRASE.reqdoc}」「${WORKFLOW_ENTRY_PHRASE.task}」时必须立即调用本工具，不要仅用文字回复；一般任务也会在首条消息自动开始。` +
+      `开发者说「${WORKFLOW_ENTRY_PHRASE.sdlc}」「${WORKFLOW_ENTRY_PHRASE.reqdoc}」「${WORKFLOW_ENTRY_PHRASE.task}」时调用，不要仅用文字回复；一般任务也会在首条消息自动开始。` +
+      "仅启动当前会话已定的工作流类型；类型不符会被拒绝，切换类型请在启动器选择后开新会话。" +
       "SDLC 第一阶段为 requirements（需求分析），reqdoc 为 goal（目标与场景），task 为 execute（执行）。",
     args: {
       type: z
         .enum(["task", "sdlc", "reqdoc"])
         .optional()
-        .describe("要启动的工作流类型；缺省取当前会话已定的工作流类型（由 identity.workflowType 决定，默认 sdlc）"),
+        .describe("要启动的工作流类型；必须与当前会话已定类型一致（由 identity.workflowType 决定，默认 sdlc）"),
     },
     async execute(args, context) {
       const saved = store.mutateWorkflow(context.sessionID, (workflow) => {
         if (args.type && args.type !== workflow.type) {
-          // 阶段 1 以启动器选择的 daemon 类型为主。仅允许在会话尚未开始时切到 task——
-          // task 工具集是 sdlc/reqdoc 的子集，切过去不会缺工具；反向切换会缺 review/commit 工具。
-          const untouched =
-            Object.values(workflow.stages).every((stage) => stage.transitions.length === 0) &&
-            !workflow.baseline &&
-            !workflow.kb &&
-            !workflow.features?.length &&
-            !workflow.commit.force &&
-            workflow.quality.firstPassRate === null &&
-            workflow.quality.iterationCount === null &&
-            workflow.quality.reworkRate === null &&
-            workflow.quality.testCoverage === null &&
-            !workflow.quality.iterationByFile &&
-            !workflow.quality.linesByFile
-          if (args.type !== "task" || !untouched) {
-            throw new WorkflowOpError(
-              `本会话工作流类型已是 ${workflow.type}，无法启动 ${args.type}；如需切换请开新会话重新初始化。`,
-            )
-          }
-          const next = createWorkflowState("task")
-          workflow.type = next.type
-          workflow.stages = next.stages
-          workflow.commit = next.commit
+          throw new WorkflowOpError(
+            `本会话工作流类型已是 ${workflow.type}，无法启动 ${args.type}；请在启动器切换工作流后开新会话（已有窗口需先退出）。`,
+          )
         }
         const def = getDefinition(workflow.type)
         const first = def.stages[0]!

@@ -137,6 +137,42 @@ describe("行数汇报投影（3.2、12）", () => {
   })
 })
 
+describe("task 分类汇报投影", () => {
+  const emptyUsage = { cost: null, tokensInput: null, tokensOutput: null }
+
+  test("task 汇报携带分类与来源，不携带 setAt", () => {
+    const store = Store.memory(() => "task")
+    try {
+      store.mutateWorkflow("t1", (wf) => {
+        wf.task = { category: "documentation", source: "model", setAt: 123 }
+      })
+      const built = buildReport(store.get("t1")!, "hash", emptyUsage)!
+      expect(built.workflow.task).toEqual({ category: "documentation", source: "model" })
+      expect(JSON.stringify(built.workflow)).not.toContain("setAt")
+    } finally {
+      store.close()
+    }
+  })
+
+  test("task 未分类为 null，sdlc 不携带 task", () => {
+    const taskStore = Store.memory(() => "task")
+    try {
+      taskStore.ensure("t1")
+      expect(buildReport(taskStore.get("t1")!, "hash", emptyUsage)!.workflow.task).toBeNull()
+    } finally {
+      taskStore.close()
+    }
+
+    const sdlcStore = Store.memory(() => "sdlc")
+    try {
+      sdlcStore.ensure("s1")
+      expect(buildReport(sdlcStore.get("s1")!, "hash", emptyUsage)!.workflow).not.toHaveProperty("task")
+    } finally {
+      sdlcStore.close()
+    }
+  })
+})
+
 describe("enqueueReport 身份哈希（3.1 / 12 安全）", () => {
   test("上送 payload 的 apiKey 为 SHA-256 哈希且不含明文", async () => {
     const store = Store.memory()

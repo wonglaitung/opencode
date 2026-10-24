@@ -42,9 +42,9 @@ git diff <当前上游tag>..HEAD -- packages packages/core packages/opencode > /
 | 离线构建开关 | `packages/core/src/installation/version.ts`、`packages/core/src/flag/flag.ts`、`packages/opencode/src/config/config.ts`、`packages/opencode/src/config/tui.ts`、`packages/opencode/script/build.ts`、`packages/opencode/test/config/config.test.ts` | `--offline` 构建默认跳过 `@opencode-ai/plugin` 自动安装，支持内网离线包 | 上游是否新增配置目录安装点；两个 install 调用是否仍存在；`OPENCODE_OFFLINE_BUILD` 是否仍被注入 | 上游原生支持离线/跳过安装后删除本地补丁 |
 | 项目工具加载容错 | `packages/opencode/src/tool/registry.ts`、`packages/opencode/test/tool/registry.test.ts` | 项目 `.opencode/tool` 依赖解析失败时记录 `tool.load.failed` 并跳过该工具，不再拖垮整个工具注册表与会话 | 上游是否已改为单个工具导入失败非致命；`tool.load.failed` 是否仍存在；回归测试是否仍覆盖缺失依赖工具 | 上游已提供等价容错后删除本地修改与测试 |
 | 界面品牌标识 | `packages/tui/src/feature-plugins/sidebar/footer.tsx`、`portable-installer/build/OpenCode-launch.nsi` | 会话侧栏底部显示 `AI Assistant`（不再显示 OpenCode 版本号）；启动器按钮显示“打开 AI Assistant” | 上游是否重写 `sidebar_footer`；启动器按钮文案是否被覆盖 | 不删除，属于定制品牌 |
-| 一般任务 task 工作流 | `opencode-session-mgmt/packages/shared/src/workflow.ts`、`packages/plugin/src/task-lifecycle.ts`、`tools/toolset.ts`、`prompt.ts`、`packages/cli/src/commands/stats.ts`、`portable-installer/build/OpenCode-launch.nsi`、`launcher-config.js` | 新增 task 单阶段工作流：只记预估/实际工时、首条消息自动开始、整句完成词自动收口；启动器任务项排第一 | 上游是否新增 WorkflowType/阶段定义；`task-r1` 预估话术是否仍与 sdlc/reqdoc 一致；`task-lifecycle.ts` 是否仍挂 `chat.message`；启动器三项顺序 | 不删除，属于定制功能 |
+| 一般任务 task 工作流 | `opencode-session-mgmt/packages/shared/src/workflow.ts`、`packages/plugin/src/task-lifecycle.ts`、`tools/task-classify.ts`、`tools/toolset.ts`、`prompt.ts`、`packages/cli/src/commands/stats.ts`、`portable-installer/build/OpenCode-launch.nsi`、`launcher-config.js` | 新增 task 单阶段工作流：只记预估/实际工时、首条消息自动开始、整句完成词自动收口、模型分类（仅统计）；启动器任务项排第一 | 上游是否新增 WorkflowType/阶段定义；`task-r1` 预估话术是否仍与 sdlc/reqdoc 一致；`task-r5`/`task_classify` 是否仍注册；`task-lifecycle.ts` 是否仍挂 `chat.message`；启动器三项顺序 | 不删除，属于定制功能 |
 | 自定义插件 SDK 版本 | 三个插件的 `package.json` 与 `bun.lock` | `@opencode-ai/plugin`、`@opencode-ai/sdk` 与 opencode 二进制版本对齐 | 按新版本统一升级 devDependencies；lockfile 重装 | 不删除，每次升级都要同步 |
-| session 工具按工作流注册 | `opencode-session-mgmt/packages/plugin/src/index.ts`、`src/tools/toolset.ts`、`test/toolset.test.ts` | sdlc 只注册 17 个工具；reqdoc 注册 28 个 | `Plugin`/`Hooks`/`ToolDefinition` 签名是否变化；工具数是否仍符合预期 | 不删除，属于定制功能 |
+| session 工具按工作流注册 | `opencode-session-mgmt/packages/plugin/src/index.ts`、`src/tools/toolset.ts`、`test/toolset.test.ts` | sdlc 注册 17 个工具；reqdoc 注册 28 个；task 注册 9 个（含 task 专属 `task_classify`） | `Plugin`/`Hooks`/`ToolDefinition` 签名是否变化；工具数是否仍符合预期 | 不删除，属于定制功能 |
 | Windows 插件加载实测 | `.opencode/skills/verify-windows-plugin-load/` | 校验 3 个插件加载、Hook、工具数和注册表一致性 | `EXPECT_VERSION`、示例工具数、`EXPECT_NO_PLUGIN_INSTALL` 是否需更新 | 不删除，作为升级后的固定验收 |
 | Windows bundle 同步 | 三个插件的 `scripts/sync-bundle.sh` | 把源码同步到 Windows bundle 的 `packages/*` 与 `node_modules/*` | 目标路径是否变化；同步后是否需要在 Windows 侧重装依赖 | 不删除，每次升级/改插件后执行 |
 
@@ -220,7 +220,7 @@ Windows bundle 侧也要检查：
 升级时检查：
 
 1. `Plugin`、`Hooks`、`ToolDefinition`、`tool` 的类型是否变化。
-2. `createToolset` 的 sdlc/reqdoc 分支是否仍返回预期工具数：sdlc 17、reqdoc 28。
+2. `createToolset` 的 sdlc/reqdoc/task 分支是否仍返回预期工具数：sdlc 17、reqdoc 28、task 9。
 3. 入口文件 `src/index.ts` 是否仍只有 default export；新增辅助函数不要直接 export 到入口文件，否则 legacy loader 会把它们当插件工厂。
 4. 运行 `bun test test/toolset.test.ts`，确认 sdlc 不含 `reqdoc_*`，reqdoc 不含 `commit_gate_check` / `commit_force_unlock`。
 
@@ -291,11 +291,11 @@ git grep -n "task-r1\|task-lifecycle" -- opencode-session-mgmt/packages` 应命�
 | 检查 | 命令 | 期望 |
 |------|------|------|
 | 全仓类型检查 | `bun run typecheck`（仓库根，Bun 1.4.4） | 30/30 通过 |
-| session 全量测试 | `bun test`（`opencode-session-mgmt` 根） | 全绿；当前基线 795 pass |
+| session 全量测试 | `bun test`（`opencode-session-mgmt` 根） | 全绿；当前基线 834 pass |
 | edge 测试 | `bun test`（`opencode-edge-debug`） | 全绿；当前基线 52 pass |
 | server 测试 | `bun test`（`opencode-server-debug`） | 全绿；当前基线 44 pass |
 | 验收派生 | `bun run acceptance:derive`（session-mgmt） | 11/11 通过 |
-| 评测 dry run | `bun run eval:dry`（session-mgmt） | 63 个场景正常输出 |
+| 评测 dry run | `bun run eval:dry`（session-mgmt） | 66 个场景正常输出 |
 | Windows 普通构建 | `verify.sh` | 3/3 插件加载；允许安装 WARN |
 | Windows 离线构建 | `EXPECT_NO_PLUGIN_INSTALL=1 verify.sh` | 3/3 插件加载；无安装 WARN |
 | 工具注册表 | `VERBOSE=1 verify.sh` | 每个插件工具数等于 `registered` |
@@ -341,7 +341,7 @@ git grep -n "task-r1\|task-lifecycle" -- opencode-session-mgmt/packages` | TUI �
 | 界面品牌标识 | `e56554203f`（TUI 侧栏）、`7c065744dc`（启动器按钮） |
 | 一般任务 task 工作流 | `d77ed45116` |
 | 当前 sdlc 工具数 | sm 17 + edge 8 + server 7 = 32 |
-| 当前 task 工具数 | sm 8 + edge 8 + server 7 = 23（无 review/commit 工具） |
+| 当前 task 工具数 | sm 9 + edge 8 + server 7 = 24（含 task_classify；无 review/commit 工具） |
 | 当前 reqdoc 工具数 | sm 28 + edge 8 + server 7 = 43（Windows smoke 默认 sdlc） |
 
 提交号只用于追溯当前基线；升级后不必强行复用旧提交号，按第 2 章重新记录。

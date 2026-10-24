@@ -11,6 +11,8 @@ import {
   type QualityMetrics,
   type ReviewStageRecord,
   type StageRecord,
+  type TaskCategory,
+  type TaskCategorySource,
   type Transition,
   type WorkflowState,
   type WorkflowType,
@@ -42,6 +44,12 @@ export type QualitySummary = Omit<QualityMetrics, "iterationByFile" | "linesByFi
   lines: LinesCategory | null
 }
 
+/** 一般任务分类的汇报投影（不含本机 setAt；未分类时整个 task 为 null）。 */
+export interface TaskSummary {
+  category: TaskCategory
+  source: TaskCategorySource
+}
+
 /**
  * WorkflowState 的汇报投影：剔除代码相关内容（comprehension.explanation、file/lines，
  * 以及 quality.iterationByFile 的文件路径），只保留流程时间戳、迭代、审查结论与质量指标。
@@ -55,6 +63,8 @@ export interface WorkflowSummary {
   quality: QualitySummary
   /** 基线对比（6.3）：预估人工工时；未录入为 null（纯数字，无隐私剥离需求） */
   baseline: BaselineEstimate | null
+  /** task 专属：一般任务分类；sdlc/reqdoc 不携带，task 未分类为 null */
+  task?: TaskSummary | null
 }
 
 function summarizeStage(stage: StageRecord): StageSummary {
@@ -93,6 +103,14 @@ export function summarizeWorkflow(workflow: WorkflowState): WorkflowSummary {
     },
     // 基线为纯数字 + 时间戳（预估工时），无路径/代码，直接随摘要上行（12）。
     baseline: workflow.baseline ?? null,
+    // task 分类只上行枚举码/来源；setAt 仅本机审计，不随汇报外传。
+    ...(workflow.type === "task"
+      ? {
+          task: workflow.task
+            ? { category: workflow.task.category, source: workflow.task.source }
+            : null,
+        }
+      : {}),
   }
 }
 

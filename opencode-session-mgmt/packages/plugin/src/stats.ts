@@ -11,6 +11,8 @@ import {
   sumLinesByCategory,
   type LinesCategory,
   type StageRecord,
+  type TaskCategory,
+  type TaskCategorySource,
   type WorkflowState,
 } from "sm-shared"
 import type { Usage } from "./report"
@@ -50,6 +52,10 @@ export interface SessionStats {
   lines: LinesCategory | null
   /** 基线预估人工工时（小时）；未录入为 null（6.3） */
   baselineHours: number | null
+  /** 一般任务分类；非 task 或未分类为 null */
+  taskCategory: TaskCategory | null
+  /** 分类来源；非 task 或未分类为 null */
+  taskCategorySource: TaskCategorySource | null
   /** AI 提效率 =（预估 − 实际周期）÷ 预估；无基线或无有效周期为 null，可为负（6.3） */
   efficiency: number | null
   /** 需求质量：知识库必填槽位覆盖率（2c 起替代打分卡） */
@@ -83,6 +89,10 @@ export interface ProjectStats {
   avgEfficiency: number | null
   /** 已录入基线的会话数（提效曲线覆盖率参考） */
   baselineCount: number
+  /** task 会话分类计数（非 task 会话不纳入） */
+  taskCategoryCounts: Partial<Record<TaskCategory, number>>
+  /** task 会话未分类计数 */
+  taskUnclassifiedCount: number
   stageAvgDurationMs: Record<string, number>
 }
 
@@ -161,6 +171,8 @@ export function sessionStats(row: WorkflowSessionRow, usage: Usage): SessionStat
     testCoverage: workflow.quality.testCoverage,
     lines: workflow.quality.linesByFile ? sumLinesByCategory(workflow.quality.linesByFile) : null,
     baselineHours: workflow.baseline?.estimatedHours ?? null,
+    taskCategory: workflow.task?.category ?? null,
+    taskCategorySource: workflow.task?.source ?? null,
     efficiency: complete ? efficiencyRatio(workflow.baseline?.estimatedHours, durationMs) : null,
     score: null, // @deprecated 2c 起不再产出打分卡
     // 需求质量指标（2c）：打分卡退役，改用知识库必填槽位覆盖率（服务端派生）
@@ -207,6 +219,16 @@ export function aggregateProject(rows: WorkflowSessionRow[], usageOf: (id: strin
   }
   // 提效率为比率型指标：对「有基线且有有效周期」的会话求均值（null 不参与，6.3）
   const efficiencies = stats.map((s) => s.efficiency).filter((x): x is number => x !== null)
+  const taskCategoryCounts: Partial<Record<TaskCategory, number>> = {}
+  let taskUnclassifiedCount = 0
+  for (const s of stats) {
+    if (s.type !== "task") continue
+    if (s.taskCategory) {
+      taskCategoryCounts[s.taskCategory] = (taskCategoryCounts[s.taskCategory] ?? 0) + 1
+    } else {
+      taskUnclassifiedCount++
+    }
+  }
   return {
     sessions: n,
     completed,
@@ -223,6 +245,8 @@ export function aggregateProject(rows: WorkflowSessionRow[], usageOf: (id: strin
     hasLinesData: stats.some((s) => s.lines !== null),
     avgEfficiency: efficiencies.length > 0 ? efficiencies.reduce((a, b) => a + b, 0) / efficiencies.length : null,
     baselineCount: stats.filter((s) => s.baselineHours !== null).length,
+    taskCategoryCounts,
+    taskUnclassifiedCount,
     stageAvgDurationMs: stageAvg,
   }
 }

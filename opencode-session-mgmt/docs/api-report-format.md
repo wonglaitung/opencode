@@ -101,6 +101,21 @@ not_started → in_progress → approved
 
 阶段键不同，但 `workflow.stages` 的 JSON 结构完全一致。
 
+task 额外携带可选分类字段（sdlc/reqdoc 不携带）：
+
+```json
+"workflow": {
+  "type": "task",
+  "task": { "category": "documentation", "source": "model" }
+}
+```
+
+| 字段 | 含义 |
+|------|------|
+| `task.category` | `documentation` 编写文档 / `testing` 运行测试 / `debugging` 排查错误 / `coding` 代码修改 / `research` 调研分析 / `environment` 配置环境 / `other` 其他 |
+| `task.source` | `model`（模型归类）或 `heuristic`（预留的本地兜底） |
+| `task: null` | task 尚未分类；旧插件缺省该字段同样按未分类处理 |
+
 ---
 
 ## 四、review 阶段特有字段
@@ -146,6 +161,7 @@ not_started → in_progress → approved
 | `commit.blocked_by` | 随阶段完成逐步缩短，全部 approved 后为空 |
 | `commit.force` | 强制提交授权时出现（逃生口留痕） |
 | `baseline` | 需求/目标阶段或一般任务开始时录入后出现，后续不变 |
+| `task` | task 专属；模型调用 `task_classify` 后出现，可覆盖；未分类为 null，sdlc/reqdoc 不携带 |
 
 ---
 

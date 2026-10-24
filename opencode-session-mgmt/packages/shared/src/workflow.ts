@@ -8,6 +8,44 @@
 
 export type WorkflowType = "task" | "sdlc" | "reqdoc"
 
+/** 一般任务分类码（task 专属统计维度；不存任务原文）。 */
+export const TASK_CATEGORY_KEYS = [
+  "documentation",
+  "testing",
+  "debugging",
+  "coding",
+  "research",
+  "environment",
+  "other",
+] as const
+
+export type TaskCategory = (typeof TASK_CATEGORY_KEYS)[number]
+
+export const TASK_CATEGORY_LABELS: Record<TaskCategory, string> = {
+  documentation: "编写文档",
+  testing: "运行测试",
+  debugging: "排查错误",
+  coding: "代码修改",
+  research: "调研分析",
+  environment: "配置环境",
+  other: "其他",
+}
+
+/** 分类来源：模型工具；heuristic 为后续可能的本地兜底预留。 */
+export type TaskCategorySource = "model" | "heuristic"
+
+/** 一般任务分类元数据（仅本机状态；汇报投影剔除 setAt）。 */
+export interface TaskMeta {
+  category: TaskCategory
+  source: TaskCategorySource
+  setAt: number
+}
+
+export function taskCategoryLabel(category: string | null | undefined): string {
+  if (category === null || category === undefined) return "未分类"
+  return TASK_CATEGORY_LABELS[category as TaskCategory] ?? category
+}
+
 export type StageStatus = "not_started" | "in_progress" | "approved"
 
 export type TransitionAction = "enter" | "revisit" | "approve"
@@ -282,6 +320,11 @@ export interface WorkflowState {
    * 可选字段：hook 未捕获时缺省。
    */
   baselineProposedByDev?: { hours: number; messageID: string; at: number }
+  /**
+   * 一般任务分类（task 专属；task_classify 写入，未分类缺省）。
+   * 只存枚举码，不存任务原文，避免隐私问题。
+   */
+  task?: TaskMeta
   /**
    * reqdoc 功能点清单（重构核心：prd 前置功能点拆解，业务确认后写入）。
    * 可选字段：确认前缺省；sdlc 恒缺省。随汇报上行。
@@ -659,6 +702,11 @@ export const TASK: WorkflowDefinition = {
       id: "task-r4",
       stage: "global",
       text: "入口提示：开发者说「启动一般任务」时视为任务开始（系统也会在首条消息自动开始计时），不要重复调用 workflow_start。",
+    },
+    {
+      id: "task-r5",
+      stage: "global",
+      text: "一般任务开始后，首轮必须先调用 task_classify 归类，不要只追问。根据开发者任务描述选择：documentation 编写文档、testing 运行测试、debugging 排查错误、coding 代码修改、research 调研分析、environment 配置环境、other 其他。描述不足以判断时用 other；任务类型变化时可再次调用覆盖。分类只用于统计，不改变流程，也不要写进 note。",
     },
   ],
 }

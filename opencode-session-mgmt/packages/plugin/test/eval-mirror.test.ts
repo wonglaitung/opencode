@@ -10,6 +10,7 @@
 import { describe, expect, test } from "bun:test"
 import { Store } from "../src/db"
 import { createWorkflowTools } from "../src/tools/workflow"
+import { createTaskClassifyTool } from "../src/tools/task-classify"
 import { createReviewTools } from "../src/tools/review"
 import { createReqdocScanTool } from "../src/tools/reqdoc-scan"
 import { createReqdocInitTool } from "../src/tools/reqdoc-dirs"
@@ -25,6 +26,7 @@ function runtimeToolNames(): Set<string> {
   const store = Store.memory()
   const groups: Record<string, ToolDefinition>[] = [
     createWorkflowTools(store),
+    createTaskClassifyTool(store),
     createReviewTools(store),
     createReqdocScanTool(),
     createReqdocInitTool(),

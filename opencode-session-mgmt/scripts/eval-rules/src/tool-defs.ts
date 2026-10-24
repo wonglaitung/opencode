@@ -1,4 +1,4 @@
-import type { WorkflowType } from "sm-shared"
+import { TASK_CATEGORY_KEYS, type WorkflowType } from "sm-shared"
 
 /**
  * 评测用精简工具定义(OpenAI JSON schema)。
@@ -77,6 +77,28 @@ export const EVAL_TOOLS: OpenAITool[] = [
           developer_confirmed: bool("必须为 true，表示开发者已在对话中明确给出/确认该预估值(防止 AI 杜撰基线)"),
         },
         required: ["estimated_hours", "developer_confirmed"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "task_classify",
+      description:
+        "记录本次一般任务的类型，仅用于统计，不改变流程，也不要写入 note。" +
+        "可选：documentation 编写文档 / testing 运行测试 / debugging 排查错误 / " +
+        "coding 代码修改 / research 调研分析 / environment 配置环境 / other 其他。" +
+        "一般任务首轮应先调用本工具归类，不要只追问；无法判断用 other；可重复调用覆盖。",
+      parameters: {
+        type: "object",
+        properties: {
+          category: {
+            type: "string",
+            enum: [...TASK_CATEGORY_KEYS],
+            description: "任务类型枚举码；无法判断用 other",
+          },
+        },
+        required: ["category"],
       },
     },
   },
@@ -567,6 +589,7 @@ const TASK_TOOLS = new Set([
   "workflow_advance",
   "workflow_revisit",
   "workflow_baseline",
+  "task_classify",
   "open_ide",
   "unlock_file",
   "list_locked_files",

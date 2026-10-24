@@ -37,6 +37,7 @@ describe("createToolset", () => {
       for (const name of SHARED) expect(tools[name]).toBeDefined()
       expect(tools.commit_gate_check).toBeDefined()
       expect(tools.commit_force_unlock).toBeDefined()
+      expect(tools.task_classify).toBeUndefined()
       expect(Object.keys(tools).filter((name) => name.startsWith("reqdoc_"))).toEqual([])
     } finally {
       store.close()
@@ -46,12 +47,13 @@ describe("createToolset", () => {
   test("task 只注册一般任务工具，不注册 review/提交门禁", () => {
     const { store, tools } = setup("task")
     try {
-      expect(Object.keys(tools)).toHaveLength(8)
+      expect(Object.keys(tools)).toHaveLength(9)
       for (const name of [
         "workflow_advance",
         "workflow_revisit",
         "workflow_baseline",
         "workflow_start",
+        "task_classify",
         "open_ide",
         "lock_file",
         "unlock_file",
@@ -76,19 +78,21 @@ describe("createToolset", () => {
       expect(description).toContain("启动 SDLC 工作流")
       expect(description).toContain("启动 REQDOC 工作流")
       expect(description).toContain("启动一般任务")
+      expect(description).toContain("仅启动当前会话已定的工作流类型")
     } finally {
       store.close()
     }
   })
 
-  test("未开始的 sdlc 会话可切到 task；反向切换被拒绝", async () => {
+  test("跨类型启动统一拒绝，且不改变会话状态", async () => {
     const { store, tools } = setup("sdlc")
     try {
-      const ctx = { sessionID: "s1" } as never
-      await tools.workflow_start!.execute({ type: "task" } as never, ctx)
+      await expect(
+        tools.workflow_start!.execute({ type: "task" } as never, { sessionID: "s1" } as never),
+      ).rejects.toThrow(/请在启动器切换工作流后开新会话/)
       const wf = store.get("s1")!.workflow!
-      expect(wf.type).toBe("task")
-      expect(wf.stages.execute.status).toBe("in_progress")
+      expect(wf.type).toBe("sdlc")
+      expect(wf.stages.requirements.status).toBe("not_started")
     } finally {
       store.close()
     }
@@ -96,7 +100,7 @@ describe("createToolset", () => {
     try {
       await expect(
         second.tools.workflow_start!.execute({ type: "sdlc" } as never, { sessionID: "s2" } as never),
-      ).rejects.toThrow(/无法启动/)
+      ).rejects.toThrow(/请在启动器切换工作流后开新会话/)
     } finally {
       second.store.close()
     }
@@ -110,6 +114,7 @@ describe("createToolset", () => {
       expect(tools.reqdoc_scan).toBeDefined()
       expect(tools.reqdoc_ingest).toBeDefined()
       expect(tools.reqdoc_assemble).toBeDefined()
+      expect(tools.task_classify).toBeUndefined()
       expect(tools.commit_gate_check).toBeUndefined()
       expect(tools.commit_force_unlock).toBeUndefined()
     } finally {

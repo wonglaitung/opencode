@@ -1,5 +1,5 @@
 /**
- * 评测场景集(63 个,sdlc s1-s25 + reqdoc r1-r54 子集 + task t1-t5)。覆盖关键规则:
+ * 评测场景集(66 个,sdlc s1-s25 + reqdoc r1-r54 子集 + task t1-t8)。覆盖关键规则:
  * 基线录入不重复、确认后 approve、无确认不 approve、回到XX→revisit、
  * 审查逐段不批量、前序未完成不 submit、提交前查门禁、完成后提示 /new、
  * 完成后开新需求不重启、空档态继续进入下一阶段、
@@ -1352,5 +1352,41 @@ export const SCENARIOS: Scenario[] = [
     userTurn: "完成了",
     judge: { kind: "text", type: "keyword", keyword: "/new" },
     note: "task-r3：完成态提示 /new 开始下一个任务",
+  },
+  {
+    name: "t6 分类为编写文档",
+    workflowType: "task",
+    state: (() => {
+      const s = newTask()
+      enter(s, "execute")
+      return finish(s)
+    })(),
+    userTurn: "帮我写一份 200 字左右的项目说明文档。",
+    judge: { kind: "tool", expectTool: "task_classify", args: { category: "documentation" } },
+    note: "task-r5：写文档类任务归类为 documentation",
+  },
+  {
+    name: "t7 分类为排查错误",
+    workflowType: "task",
+    state: (() => {
+      const s = newTask()
+      enter(s, "execute")
+      return finish(s)
+    })(),
+    userTurn: "登录接口报 500，帮我排查一下原因。",
+    judge: { kind: "tool", expectTool: "task_classify", args: { category: "debugging" } },
+    note: "task-r5：排查报错类任务归类为 debugging",
+  },
+  {
+    name: "t8 无法判断用 other",
+    workflowType: "task",
+    state: (() => {
+      const s = newTask()
+      enter(s, "execute")
+      return finish(s)
+    })(),
+    userTurn: "帮我处理一下这个事。",
+    judge: { kind: "tool", expectTool: "task_classify", args: { category: "other" } },
+    note: "task-r5：无法判断时用 other，不额外追问",
   },
 ]

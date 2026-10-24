@@ -351,7 +351,7 @@ export const WorkflowSessionTable = sqliteTable("workflow_session", {
 
 **快照语义**：`apiKey` 哈希随汇报固化在聚合库记录里。开发者更换 `api_key` 后重跑 `opencode-sm init`，只影响此后的汇报，**历史统计归属不追溯变更**。
 
-**workflowType 继承（用户级流程选择）**：工作流类型由**用户角色**决定，而非目录。插件每次创建新会话 `WorkflowState` 时经 `resolveType` 读取 `identity.json.workflowType`（缺省 `sdlc`）写入 `workflow.type`（快照语义，与 apiKey 一致——已存在会话不重读）。不同角色 = 不同用户（开发者走 sdlc 开发流程、需求分析师走 reqdoc 需求书流程、一般任务走 task 工时流程），故**无目录配置、无完整会话内切换工具**；启动器选择写入全局 identity，改类型只影响之后的新会话，历史归属不追溯。`workflow_start` 仅在会话尚未开始时允许切到 task（task 工具集是子集，不会缺工具）。流程定义与通用机制解耦见 3.2。
+**workflowType 继承（用户级流程选择）**：工作流类型由**用户角色**决定，而非目录。插件每次创建新会话 `WorkflowState` 时经 `resolveType` 读取 `identity.json.workflowType`（缺省 `sdlc`）写入 `workflow.type`（快照语义，与 apiKey 一致——已存在会话不重读）。不同角色 = 不同用户（开发者走 sdlc 开发流程、需求分析师走 reqdoc 需求书流程、一般任务走 task 工时流程），故**无目录配置、无完整会话内切换工具**；启动器选择写入全局 identity，改类型只影响之后的新会话，历史归属不追溯。`workflow_start` 只启动当前会话已定的工作流类型；跨类型启动会被拒绝，切换类型须在启动器选择后开新会话（已有窗口需先退出）。流程定义与通用机制解耦见 3.2。
 
 **孤儿记录清理**：上游删除会话后，`workflow_session` 中对应记录成为孤儿。插件**启动后延后**（约 2 秒，错开 TUI 首屏与 daemon 启动竞态，减少启动耗时，见部署文档 FAQ）以 `session.list` 比对惰性清理（保守策略：上游不可达或返回空列表时不清理，防瞬时不可达误删），不影响功能。清理白名单**仅含主会话**（`parentID` 为空）：子代理会话（`parentID` 非空）与孤儿一并移除，配合 2.4 的「子代理不建记录」，保证统计纯净。
 
@@ -367,6 +367,7 @@ classDiagram
         +CommitGate commit
         +QualityMetrics quality
         +BaselineEstimate? baseline
+        +TaskMeta? task
         +ReqdocFeature[]? features
         +ReqdocScore? score
     }
@@ -445,6 +446,12 @@ classDiagram
         +number setAt
     }
 
+    class TaskMeta {
+        +TaskCategory category
+        +TaskCategorySource source
+        +number setAt
+    }
+
     class WorkflowDefinition {
         +WorkflowType type
         +string[] stages
@@ -473,6 +480,7 @@ classDiagram
     CommitGate *-- "0..1" CommitForce
     WorkflowState *-- QualityMetrics
     WorkflowState *-- "0..1" BaselineEstimate
+    WorkflowState *-- "0..1" TaskMeta
     ReviewStageRecord *-- ComprehensionRecord
     StageRecord *-- StageStatus
     StageRecord *-- Transition
@@ -518,7 +526,7 @@ export function currentInProgressStage(s: WorkflowState): string | null
 export function resolveWorkflowType(v: unknown): WorkflowType   // 未知值回退 "sdlc" 并打 warning
 ```
 
-`WorkflowState` 含 `type` 字段标明本会话属于哪种工作流；`stages` 为泛化的 `Record<string, StageRecord>`，审查阶段经 `reviewRecord()` 定位（`getDefinition(s.type).reviewStage`）。系统不设 `STAGE_ORDER`/`STAGE_LABELS`/`StageName` 常量——消费方一律通过 `getDefinition(workflow.type)` 取阶段键/中文名/清单。`ComprehensionRecord` 是通用机制（sdlc 编码段与 reqdoc PRD 要点共用，reqdoc 语义见 workflow-reqdoc.md 2 章）。`metricKind`、`workflow_set_type` 工具未实现（完整会话内切换未定，避免死代码）；task 仅在 `workflow_start` 的“未开始”分支允许切过去。
+`WorkflowState` 含 `type` 字段标明本会话属于哪种工作流；`stages` 为泛化的 `Record<string, StageRecord>`，审查阶段经 `reviewRecord()` 定位（`getDefinition(s.type).reviewStage`）。系统不设 `STAGE_ORDER`/`STAGE_LABELS`/`StageName` 常量——消费方一律通过 `getDefinition(workflow.type)` 取阶段键/中文名/清单。task 可选 `task: {category, source, setAt}` 记录一般任务分类；汇报投影只带 `category/source`，未分类为 `null`。`ComprehensionRecord` 是通用机制（sdlc 编码段与 reqdoc PRD 要点共用，reqdoc 语义见 workflow-reqdoc.md 2 章）。`metricKind`、`workflow_set_type` 工具未实现（不做会话内类型切换，避免死代码）；`workflow_start` 跨类型启动直接拒绝。
 
 **sdlc 定义**（五阶段 `["requirements","design","implementation","testing","review"]`、审查阶段 `review`、四清单项 businessIntent/logicExplainable/behaviorVerifiable/designRationale、`hasCommitGate=true`）已移至 **workflow-sdlc.md 2 章**，规则全文见 **workflow-sdlc.md 3 章**。
 
@@ -1064,7 +1072,7 @@ r5/r9/r21 三处「不该调用」类判据改为「调用了但被服务端拒�
 | 3 | ~~关键约束要字面重复，不靠语义等价~~ **——已实证不成立，此条作废** | 做过两组受控实验（同一夹具、同一渲染器、同一模型与参数，**只替换被测那一行的表述形式**）：<br>① 提交门禁事实（字面 `提交状态：blocked（未完成：edge、review）` / 纯业务语 / 字面重复两次），依变量=是否尝试提交：n=5/组，**三组全 5/5**，无差异。<br>② 阶段事实（字面 `当前阶段：边界与异常（第 3/5 步），状态 进行中` / 纯业务语 / 重复），依变量=模型自己写的 📍 行是否含正确阶段名与步数：n=3/组，**三组全 3/3**；且业务语组的「目的」字段确实变了（模型复述了业务语版），证明**注入被读到并正确传达，只是不对表述形式敏感**。<br>第①组还暴露一个方法论要点：**依变量必须有变化空间**——模型无论如何都会尝试提交（然后被服务端拒），措辞改不改都一样，此时「无差异」不能读作「无影响」。<br>原据（baseline 原始 JSON 3/3 → new 业务语言 0/3）经此证明是混淆：r5 现已改判 `rejected`（测服务端防线），那条信号本就不是在测「是否察觉措辞」。**教训：别把「换了个说法模型就不听」当成结论——先做只改一个变量的对照。** |
 
 **sdlc/reqdoc 两个工作流验证集结果（同口径，本地 qwen3 + EVAL_DISABLE_THINKING=1 + EVAL_EXECUTE=1）**：
-**sdlc/reqdoc 验证集现为 50 场景**（原 51，删了 r21，见下）；task 另有 t1–t5 五个 new-only 场景，2026-10-24 用 deepseek-v4.1-flash（OpenCode Zen Go）以 `--repeat 3` 复跑：每个场景 3/3，合计 **15/15**。
+**sdlc/reqdoc 验证集现为 50 场景**（原 51，删了 r21，见下）；task 另有 t1–t8 八个 new-only 场景（t1–t5 为工时/生命周期，t6–t8 为分类）。2026-10-24 用 deepseek-v4.1-flash（OpenCode Zen Go）以 `--repeat 3` 复跑 t1–t8：每个场景 3/3，合计 **24/24**。
 
 **最新全量：44/50（88%）**——sdlc 21/22、reqdoc 23/28。6 个失败里 **4 个是端点上限所致**
 （`HTTP 400 Input length (13335 tokens) exceeds the maximum allowed length (12896 tokens)`：
@@ -1302,8 +1310,9 @@ sequenceDiagram
 |------|------|-----------|
 | `workflow_advance` | 提议进入下一阶段 / 标记当前阶段 approved | 必须携带开发者确认语义；`stage` 运行时校验须在 `getDefinition(workflow.type).stages` 内（AI 不可在无确认时调用成功）；enter 将自动确认进行中的前序阶段时**须 `developer_confirmed=true`**（防静默自动确认，sdlc-r2/reqdoc-r3），回执列出被自动确认的阶段 |
 | `workflow_revisit` | 回退到指定阶段（revision++） | 目标阶段必须存在于 `def.stages`；**级联回退**该阶段之后所有已 `approved` 的下游阶段（同样 revision++，见 3.3）；级联触及审查阶段时，已确认的理解片段 **`accepted`→`pending` 重置**（旧确认对应改动前代码，不得以 stale 确认通过 `review_submit`；revisit 审查自身不重置） |
-| `workflow_start` | 启动当前工作流第一阶段（入口短语：启动 SDLC / REQDOC 工作流、启动一般任务） | 仅在会话未开始时允许切到 `task`（task 工具集是子集；反向切换会缺 review/commit 工具） |
+| `workflow_start` | 启动当前工作流第一阶段（入口短语：启动 SDLC / REQDOC 工作流、启动一般任务） | 只接受与当前会话已定类型一致的 `type`；跨类型启动拒绝，提示在启动器切换后开新会话 |
 | `workflow_baseline` | 录入/重设基线预估人工工时（项目经理给出，如 8h，6.3） | `developer_confirmed` 必须为 true（防 AI 杜撰）；`estimated_hours > 0`；幂等覆盖记最新值 |
+| `task_classify` | 记录一般任务分类（task 专属，仅统计） | 仅 task 身份注册；仅 `workflow.type=task` 可写；`category` 必须为 7 类枚举之一；同分类重复调用幂等，不改变流程、不写 note |
 | `comprehension_add` | 登记一个片段/要点及自然语言解释（sdlc 为代码片段，reqdoc 为 PRD 要点） | 不可重复登记；sdlc 填 `file/lineStart/lineEnd`，reqdoc 省略；登记后 `decision=pending`，待逐段定夺 |
 | `comprehension_confirm` | 接受单个片段/要点（一次通过） | **单次调用只接受一个 `codeSegmentId`**，防止批量确认（见 8.6）；须处于 pending/rejected 才可接受 |
 | `comprehension_ask` | 对片段/要点追问，问答追加到 explanation | 片段/要点必须存在 |
@@ -1717,6 +1726,7 @@ AI 使用: 对话 47轮 | $0.36 | 85K tokens
 | 一次通过率 | 代码片段免重写即被接受的返工信号（会话内统计） | 未重写即被接受的片段数 / 全部定论片段数 × 100% | 插件自动统计（review 闭环） | 无硬阈值；作为返工信号展示，过低提示流程质量 |
 | AI 代码行数 | AI 净增代码量，按业务/测试/配置三分类（会话内统计） | write 整文件、edit 新行−旧行、apply_patch +行−−行，逐文件去重累计后分类汇总（逐文件 clamp ≥0） | 插件自动统计（tool.execute.after） | 无阈值；纯展示型指标（产出量参考，不与质量/绩效挂钩） |
 | AI 提效率 | 相对预估人工工时的提效百分比（会话级，6.3） | （预估人工工时 − 实际周期）÷ 预估人工工时 × 100%（实际周期由阶段时间戳推算，6.1） | 插件 `workflow_baseline` 录入 + 阶段时间戳自动计算 | 无阈值；仅展示（可为负，实际超预估即为负值） |
+| 任务分类 | 一般任务在做什么（task 专属统计维度） | `workflow.task.category` 计数；未分类单列 | 插件 `task_classify`（模型归类） | 无阈值；仅展示 |
 | 返工率 | 合并后触发修改/Bug 修复的比例 | 返工提交数 / 总会话提交数 × 100% | Git + CI 管道 | 连续 2 个月上升触发审查 |
 | 变更失败率 | 因 AI 生成代码引发的测试缺陷或生产故障 | 失败变更数 / 总变更数 × 100% | CI/CD + 缺陷跟踪 | 月度环比上升 >5% 触发告警 |
 | 测试覆盖率 | AI 参与模块的增量测试覆盖率 | 覆盖行数 / 总行数 × 100% | SonarQube / CI | <70% 触发告警，<80% 不可 approve review |
@@ -1907,7 +1917,7 @@ flowchart LR
     K --> L(["合入"])
 ```
 
-①②③ 各级的**具体命令、读输出口径与 baseline 冻结纪律**见 9.6 运行方式。本决策图 sdlc/reqdoc 共用；task 已有 t1–t5 五个 new-only 场景（无历史 baseline，不参与 baseline→new 回退对比）。第③步比对口径不同：**sdlc 只看通过率**（baseline→new 不降即可），**reqdoc 额外看打分卡八维分数**（打分卡 0-100 八维度量是 reqdoc 专属度量）。质量飞轮的三支柱机制（把 reqdoc 打分卡接进评测）、reqdoc 落地节奏（P0/P1/P2）与 reqdoc 实测轮次见 **workflow-reqdoc.md 10 章**。
+①②③ 各级的**具体命令、读输出口径与 baseline 冻结纪律**见 9.6 运行方式。本决策图 sdlc/reqdoc 共用；task 已有 t1–t8 八个 new-only 场景（无历史 baseline，不参与 baseline→new 回退对比）。第③步比对口径不同：**sdlc 只看通过率**（baseline→new 不降即可），**reqdoc 额外看打分卡八维分数**（打分卡 0-100 八维度量是 reqdoc 专属度量）。质量飞轮的三支柱机制（把 reqdoc 打分卡接进评测）、reqdoc 落地节奏（P0/P1/P2）与 reqdoc 实测轮次见 **workflow-reqdoc.md 10 章**。
 
 **可持续的保障**
 
