@@ -25,10 +25,26 @@ describe("task 生命周期", () => {
     const store = setup()
     try {
       startTask(store, "t1")
+      store.mutateWorkflow("t1", (wf) => {
+        wf.baseline = { estimatedHours: 2, setAt: 1 }
+      })
       expect(finishTask(store, "t1", "完成")).toBe(true)
       const wf = store.get("t1")!.workflow!
       expect(wf.stages.execute.status).toBe("approved")
       expect(wf.commit.status).toBe("allowed")
+    } finally {
+      store.close()
+    }
+  })
+
+  test("未录入预估不自动收口", () => {
+    const store = setup()
+    try {
+      startTask(store, "t1")
+      expect(finishTask(store, "t1", "完成")).toBe(false)
+      const wf = store.get("t1")!.workflow!
+      expect(wf.stages.execute.status).toBe("in_progress")
+      expect(wf.stages.execute.transitions.some((t) => t.action === "approve")).toBe(false)
     } finally {
       store.close()
     }
@@ -58,6 +74,9 @@ describe("task 生命周期", () => {
     const store = setup()
     try {
       startTask(store, "t1")
+      store.mutateWorkflow("t1", (wf) => {
+        wf.baseline = { estimatedHours: 2, setAt: 1 }
+      })
       finishTask(store, "t1", "完成")
       const transitions = store.get("t1")!.workflow!.stages.execute.transitions
       expect(transitions.map((t) => t.note)).toEqual([

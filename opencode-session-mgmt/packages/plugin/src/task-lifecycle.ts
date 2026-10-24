@@ -33,6 +33,8 @@ export function finishTask(store: Store, sessionID: string, text: string): boole
   if (!workflow || workflow.type !== "task") return false
   const stage = getDefinition("task").stages[0]!
   if (workflow.stages[stage]?.status !== "in_progress") return false
+  // 与 sdlc 的基线门禁一致：未录入预估不得收口，先让模型补问预估。
+  if (!workflow.baseline) return false
   store.mutateWorkflow(sessionID, (w) => {
     applyTransition(w, stage, "approve", Date.now(), "开发者明确说完成（自动收口）")
   })

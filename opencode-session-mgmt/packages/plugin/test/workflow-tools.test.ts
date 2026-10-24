@@ -383,3 +383,36 @@ describe("对抗审核 P2/P3-1：前向失效 + 幂等不受 confirm_note 门禁
     store.close()
   })
 })
+
+describe("task 完成门禁（与 sdlc 基线口径对齐）", () => {
+  test("未录入预估拒绝 approve，录入后放行", async () => {
+    const store = Store.memory(() => "task")
+    const tools = createWorkflowTools(store)
+    const taskCtx = { sessionID: "t1" } as never
+    store.mutateWorkflow("t1", (wf) => {
+      wf.stages.execute.status = "in_progress"
+      wf.stages.execute.transitions.push({ action: "enter", at: 1 })
+    })
+
+    try {
+      await expect(
+        tools.workflow_advance!.execute(
+          { stage: "execute", action: "approve", developer_confirmed: true } as never,
+          taskCtx,
+        ),
+      ).rejects.toThrow(/预估工时/)
+      expect(store.get("t1")!.workflow!.stages.execute.status).toBe("in_progress")
+
+      store.mutateWorkflow("t1", (wf) => {
+        wf.baseline = { estimatedHours: 2, setAt: 1 }
+      })
+      await tools.workflow_advance!.execute(
+        { stage: "execute", action: "approve", developer_confirmed: true } as never,
+        taskCtx,
+      )
+      expect(store.get("t1")!.workflow!.stages.execute.status).toBe("approved")
+    } finally {
+      store.close()
+    }
+  })
+})

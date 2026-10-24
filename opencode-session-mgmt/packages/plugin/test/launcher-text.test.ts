@@ -27,8 +27,13 @@ describe("OpenCode-launch 工作流选项与提示", () => {
   })
 
   test("一般任务提示完成方式，会话管理未启用时给出依赖提示", () => {
-    expect(nsi).toContain("完成后请明确说「完成」")
+    expect(nsi).toContain("完成后请说「完成」")
+    expect(nsi).toContain("未填不能完成")
     expect(nsi).toContain("未启用会话管理，工作流选择不生效，也不记录工时。")
+  })
+
+  test("切换工作流时强制重绘提示，避免旧说明残留", () => {
+    expect(nsi).toContain("RedrawWindow(i $Dialog")
   })
 
   test("launcher-config 读写 task", () => {

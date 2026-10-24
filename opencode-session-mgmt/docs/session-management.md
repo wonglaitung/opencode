@@ -536,7 +536,7 @@ export function resolveWorkflowType(v: unknown): WorkflowType   // 未知值回�
 
 **BaselineEstimate — 基线预估人工工时（6.3）**：
 
-`baseline` 记录项目经理在需求创建时给出的**预估人工工时**（`estimatedHours`，小时、可小数），`setAt` 为录入时间戳。它给出实际周期的参照系：会话结束后，系统按 `（预估工时 − 实际周期）÷ 预估工时` 计算 **AI 提效百分比**。字段可选（无基线的会话提效率为 N/A），可随时重设（幂等覆盖、记最新值，录入规则见 workflow-sdlc.md 3 章 sdlc-r6 / workflow-reqdoc.md 4 章 reqdoc-r7）；录入由开发者在 TUI 对话中转述项目经理的预估（见 8.3 `workflow_baseline`）。对含提交门禁的工作流（sdlc，`hasCommitGate=true`），**未录入基线会被提交门禁一并阻断**（见 3.4）——因此 sdlc 在允许 `git commit` 前实际已要求完成基线录入，这一点弱模型在提交前必然被门禁提示并补录。
+`baseline` 记录项目经理在需求创建时给出的**预估人工工时**（`estimatedHours`，小时、可小数），`setAt` 为录入时间戳。它给出实际周期的参照系：会话结束后，系统按 `（预估工时 − 实际周期）÷ 预估工时` 计算 **AI 提效百分比**。字段可选（无基线的会话提效率为 N/A），可随时重设（幂等覆盖、记最新值，录入规则见 workflow-sdlc.md 3 章 sdlc-r6 / workflow-reqdoc.md 4 章 reqdoc-r7）；录入由开发者在 TUI 对话中转述项目经理的预估（见 8.3 `workflow_baseline`）。对含提交门禁的工作流（sdlc，`hasCommitGate=true`），**未录入基线会被提交门禁一并阻断**（见 3.4）——因此 sdlc 在允许 `git commit` 前实际已要求完成基线录入，这一点弱模型在提交前必然被门禁提示并补录。task 无提交门禁，但 `workflow_advance(approve)` 与自动收口同样要求基线已录入，避免产生无预估的完成任务。
 
 **reqdoc 专属数据（已移至 workflow-reqdoc.md，本文件不重复定义）**：PRD 质量打分卡 `ReqdocScore`（`score` 字段语义、服务端算分、两处硬门禁、≥85 达标）与评分标准 `REQDOC_SCORE_DIMS`（8 维判定规则 + 扣分标准表）见 **workflow-reqdoc.md 5 章**；追问探针清单 `REQDOC_PROBES`（7 条，与打分卡维度一一映射）与柔性一致校验见 **workflow-reqdoc.md 6 章**；渲染结构 schema `REQDOC_TEMPLATE_CHAPTERS`/`REQDOC_TEMPLATE_FIELDS` 与 `parseRenderStructure` 见 **workflow-reqdoc.md 7 章**。
 
@@ -1072,7 +1072,7 @@ r5/r9/r21 三处「不该调用」类判据改为「调用了但被服务端拒�
 | 3 | ~~关键约束要字面重复，不靠语义等价~~ **——已实证不成立，此条作废** | 做过两组受控实验（同一夹具、同一渲染器、同一模型与参数，**只替换被测那一行的表述形式**）：<br>① 提交门禁事实（字面 `提交状态：blocked（未完成：edge、review）` / 纯业务语 / 字面重复两次），依变量=是否尝试提交：n=5/组，**三组全 5/5**，无差异。<br>② 阶段事实（字面 `当前阶段：边界与异常（第 3/5 步），状态 进行中` / 纯业务语 / 重复），依变量=模型自己写的 📍 行是否含正确阶段名与步数：n=3/组，**三组全 3/3**；且业务语组的「目的」字段确实变了（模型复述了业务语版），证明**注入被读到并正确传达，只是不对表述形式敏感**。<br>第①组还暴露一个方法论要点：**依变量必须有变化空间**——模型无论如何都会尝试提交（然后被服务端拒），措辞改不改都一样，此时「无差异」不能读作「无影响」。<br>原据（baseline 原始 JSON 3/3 → new 业务语言 0/3）经此证明是混淆：r5 现已改判 `rejected`（测服务端防线），那条信号本就不是在测「是否察觉措辞」。**教训：别把「换了个说法模型就不听」当成结论——先做只改一个变量的对照。** |
 
 **sdlc/reqdoc 两个工作流验证集结果（同口径，本地 qwen3 + EVAL_DISABLE_THINKING=1 + EVAL_EXECUTE=1）**：
-**sdlc/reqdoc 验证集现为 50 场景**（原 51，删了 r21，见下）；task 另有 t1–t8 八个 new-only 场景（t1–t5 为工时/生命周期，t6–t8 为分类）。2026-10-24 用 deepseek-v4.1-flash（OpenCode Zen Go）以 `--repeat 3` 复跑 t1–t8：每个场景 3/3，合计 **24/24**。
+**sdlc/reqdoc 验证集现为 50 场景**（原 51，删了 r21，见下）；task 另有 t1–t9 九个 new-only 场景（t1–t5 为工时/生命周期，t6–t8 为分类，t9 为未预估完成门禁）。2026-10-24 用 deepseek-v4.1-flash（OpenCode Zen Go）以 `--repeat 3` 复跑 t1–t9：每个场景 3/3，合计 **27/27**。
 
 **最新全量：44/50（88%）**——sdlc 21/22、reqdoc 23/28。6 个失败里 **4 个是端点上限所致**
 （`HTTP 400 Input length (13335 tokens) exceeds the maximum allowed length (12896 tokens)`：
@@ -1917,7 +1917,7 @@ flowchart LR
     K --> L(["合入"])
 ```
 
-①②③ 各级的**具体命令、读输出口径与 baseline 冻结纪律**见 9.6 运行方式。本决策图 sdlc/reqdoc 共用；task 已有 t1–t8 八个 new-only 场景（无历史 baseline，不参与 baseline→new 回退对比）。第③步比对口径不同：**sdlc 只看通过率**（baseline→new 不降即可），**reqdoc 额外看打分卡八维分数**（打分卡 0-100 八维度量是 reqdoc 专属度量）。质量飞轮的三支柱机制（把 reqdoc 打分卡接进评测）、reqdoc 落地节奏（P0/P1/P2）与 reqdoc 实测轮次见 **workflow-reqdoc.md 10 章**。
+①②③ 各级的**具体命令、读输出口径与 baseline 冻结纪律**见 9.6 运行方式。本决策图 sdlc/reqdoc 共用；task 已有 t1–t9 九个 new-only 场景（无历史 baseline，不参与 baseline→new 回退对比）。第③步比对口径不同：**sdlc 只看通过率**（baseline→new 不降即可），**reqdoc 额外看打分卡八维分数**（打分卡 0-100 八维度量是 reqdoc 专属度量）。质量飞轮的三支柱机制（把 reqdoc 打分卡接进评测）、reqdoc 落地节奏（P0/P1/P2）与 reqdoc 实测轮次见 **workflow-reqdoc.md 10 章**。
 
 **可持续的保障**
 

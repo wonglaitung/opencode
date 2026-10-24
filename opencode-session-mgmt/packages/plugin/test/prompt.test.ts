@@ -666,13 +666,21 @@ describe("task 一般任务状态条与入口提示", () => {
     return s
   }
 
-  test("进行中：显示预估入口与完成提示", () => {
+  test("进行中未录入预估：提示完成前先补录", () => {
     const bar = buildStateBar(taskWorkflow(), "execute")
     expect(bar).toContain("## 当前任务")
     expect(bar).toContain("任务：进行中")
     expect(bar).toContain("请回「预估 xx 小时」")
-    expect(bar).toContain("说「完成」结束计时")
+    expect(bar).toContain("完成前须先补录预估")
+    expect(bar).not.toContain("说「完成」结束计时")
     expect(bar).not.toContain("requirements")
+  })
+
+  test("进行中已录入预估：提示完成方式", () => {
+    const s = taskWorkflow()
+    s.baseline = { estimatedHours: 2, setAt: 1 }
+    const bar = buildStateBar(s, "execute")
+    expect(bar).toContain("说「完成」结束计时")
   })
 
   test("已完成：显示预估/实际/提效与 /new", () => {

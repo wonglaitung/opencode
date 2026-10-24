@@ -291,11 +291,11 @@ git grep -n "task-r1\|task-lifecycle" -- opencode-session-mgmt/packages` 应命�
 | 检查 | 命令 | 期望 |
 |------|------|------|
 | 全仓类型检查 | `bun run typecheck`（仓库根，Bun 1.4.4） | 30/30 通过 |
-| session 全量测试 | `bun test`（`opencode-session-mgmt` 根） | 全绿；当前基线 834 pass |
+| session 全量测试 | `bun test`（`opencode-session-mgmt` 根） | 全绿；当前基线 838 pass |
 | edge 测试 | `bun test`（`opencode-edge-debug`） | 全绿；当前基线 52 pass |
 | server 测试 | `bun test`（`opencode-server-debug`） | 全绿；当前基线 44 pass |
 | 验收派生 | `bun run acceptance:derive`（session-mgmt） | 11/11 通过 |
-| 评测 dry run | `bun run eval:dry`（session-mgmt） | 66 个场景正常输出 |
+| 评测 dry run | `bun run eval:dry`（session-mgmt） | 67 个场景正常输出 |
 | Windows 普通构建 | `verify.sh` | 3/3 插件加载；允许安装 WARN |
 | Windows 离线构建 | `EXPECT_NO_PLUGIN_INSTALL=1 verify.sh` | 3/3 插件加载；无安装 WARN |
 | 工具注册表 | `VERBOSE=1 verify.sh` | 每个插件工具数等于 `registered` |

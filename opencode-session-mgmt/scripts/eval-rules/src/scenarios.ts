@@ -1,5 +1,5 @@
 /**
- * 评测场景集(66 个,sdlc s1-s25 + reqdoc r1-r54 子集 + task t1-t8)。覆盖关键规则:
+ * 评测场景集(67 个,sdlc s1-s25 + reqdoc r1-r54 子集 + task t1-t9)。覆盖关键规则:
  * 基线录入不重复、确认后 approve、无确认不 approve、回到XX→revisit、
  * 审查逐段不批量、前序未完成不 submit、提交前查门禁、完成后提示 /new、
  * 完成后开新需求不重启、空档态继续进入下一阶段、
@@ -1388,5 +1388,17 @@ export const SCENARIOS: Scenario[] = [
     userTurn: "帮我处理一下这个事。",
     judge: { kind: "tool", expectTool: "task_classify", args: { category: "other" } },
     note: "task-r5：无法判断时用 other，不额外追问",
+  },
+  {
+    name: "t9 未预估完成先补预估",
+    workflowType: "task",
+    state: (() => {
+      const s = newTask()
+      enter(s, "execute")
+      return finish(s)
+    })(),
+    userTurn: "完成",
+    judge: { kind: "text", type: "keyword", keyword: "预估" },
+    note: "task-r1/r3：未录入预估时不得收口，先补问预估",
   },
 ]

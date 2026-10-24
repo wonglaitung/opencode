@@ -686,7 +686,9 @@ export const TASK: WorkflowDefinition = {
     {
       id: "task-r1",
       stage: "global",
-      text: estimatePromptRule("开发者", "任务开始时"),
+      text:
+        estimatePromptRule("开发者", "任务开始时") +
+        "本工作流未录入预估不阻塞任务进行，但完成前必须补录。",
     },
     {
       id: "task-r2",
@@ -696,7 +698,7 @@ export const TASK: WorkflowDefinition = {
     {
       id: "task-r3",
       stage: "global",
-      text: "任务完成时，若开发者明确说「完成/做完了/搞定了/结束了」，调用 workflow_advance(stage=execute, action=approve, developer_confirmed=true)；系统若已自动结束（状态条显示已完成）则不要重复调用。一个会话只记一个任务；完成后提醒开发者执行 /new 开始下一个。",
+      text: "任务完成时，若开发者明确说「完成/做完了/搞定了/结束了」，调用 workflow_advance(stage=execute, action=approve, developer_confirmed=true)；未录入预估时不得收口，先询问并调用 workflow_baseline 补录。系统若已自动结束（状态条显示已完成）则不要重复调用。一个会话只记一个任务；完成后提醒开发者执行 /new 开始下一个。",
     },
     {
       id: "task-r4",

@@ -137,7 +137,7 @@ Function SetWorkflowHint
   ${ElseIf} $PluginSm != "1"
     StrCpy $HintText "未启用会话管理，工作流选择不生效，也不记录工时。"
   ${ElseIf} $WorkflowType == "task"
-    StrCpy $HintText "直接输入任务内容即开始（自动计时）$\r$\n预估请回「预估 xx 小时」；完成后请明确说「完成」$\r$\n本次启动生效；已有窗口请先退出"
+    StrCpy $HintText "直接输入任务内容即开始（自动计时）$\r$\n预估请回「预估 xx 小时」；未填不能完成$\r$\n完成后请说「完成」；已有窗口请先退出"
   ${ElseIf} $WorkflowType == "reqdoc"
     StrCpy $HintText "输入「启动 REQDOC 工作流」进入$\r$\n目标阶段会问「预估 xx 小时」；定稿前业务逐条确认$\r$\n本次启动生效；已有窗口请先退出"
   ${Else}
@@ -149,6 +149,8 @@ Function RefreshWorkflowHint
   Call SetWorkflowHint
   ${If} $hHint != ""
     ${NSD_SetText} $hHint "$HintText"
+    ; 透明 STATIC 控件换文本时不会擦掉旧字形，强制重绘页面避免新旧说明叠在一起。
+    System::Call 'user32::RedrawWindow(i $Dialog, i 0, i 0, i 0x185)'
   ${EndIf}
 FunctionEnd
 

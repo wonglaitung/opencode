@@ -130,6 +130,12 @@ export function createWorkflowTools(store: Store): Record<string, ToolDefinition
           if (args.developer_confirmed !== true) {
             throw new WorkflowOpError("approve 需开发者明确确认：developer_confirmed 必须为 true")
           }
+          // task 与 sdlc 的基线门禁对齐：没有预估工时不得完成（否则提效率永远 N/A）。
+          if (def.type === "task" && args.stage === "execute" && !workflow.baseline) {
+            throw new WorkflowOpError(
+              "一般任务完成前必须录入预估工时：请先询问开发者，并按其数字表述调用 workflow_baseline(developer_confirmed=true)。",
+            )
+          }
         }
         // 进入下一阶段即自动确认（approve）上一阶段（工具强制，防"进入即进行中、确认未落库"缝隙，
         // 见报告#7）：仅把处于 in_progress 的前序阶段补 approve，已 approved 跳过、not_started 不动。

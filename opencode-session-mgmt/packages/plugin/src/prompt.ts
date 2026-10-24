@@ -244,7 +244,7 @@ function buildTaskStateBar(workflow: WorkflowState): string {
   return [
     "## 当前任务",
     `任务：进行中 ｜ 预估：${baseline} ｜ 已用时：${fmtDurationShort(duration)}`,
-    `说「完成」结束计时`,
+    workflow.baseline ? `说「完成」结束计时` : `完成前须先补录预估：${ESTIMATE_PROMPT_SHORT}`,
   ].join("\n")
 }
 
