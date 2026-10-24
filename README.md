@@ -39,9 +39,97 @@
   <a href="README.vi.md">Tiếng Việt</a>
 </p>
 
+> **Unofficial fork notice:** this repository is a customized fork of
+> [anomalyco/opencode](https://github.com/anomalyco/opencode), used for an internal Windows delivery.
+> It is not maintained by the OpenCode team. Upstream installation and documentation remain below.
+
 [![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
 
 ---
+
+## This fork
+
+This repository is an **unofficial fork** of [anomalyco/opencode](https://github.com/anomalyco/opencode),
+used for an internal Windows delivery. Upstream OpenCode is the base; the additions below are
+maintained in this fork and are not part of the official project. Other language READMEs are
+upstream translations and may not cover these customizations.
+
+### What this fork adds
+
+- **`opencode-session-mgmt/`** — workflow engine, rules, local statistics CLI (`opencode-sm`), and
+  report client for the external collector.
+- **Three workflows**:
+  - `task` — general work such as writing documents or analyzing errors. One stage, no review or
+    commit gate. Records estimated hours and actual duration; say **“完成”** in the session to finish.
+  - `sdlc` — five-stage software development flow with review and git commit gates.
+  - `reqdoc` — five-stage business requirements flow that produces a PRD for business confirmation.
+- **`opencode-edge-debug/` and `opencode-server-debug/`** — optional debugging plugins.
+- **`portable-installer/`** — Windows portable installer and launcher. The launcher selects the
+  workflow and uses the **AI Assistant** branding.
+- **Offline build support** — `--offline` builds skip config-directory dependency installation.
+- **`.opencode/skills/`** — local installer and Windows plugin-load verification skills.
+
+### Quick start (Windows)
+
+1. Build or run `OpenCode-Setup.exe` / `OpenCode-launch.exe` from `portable-installer/`.
+2. Run `opencode-sm init` once: API key, collector URL, and default workflow (`task` / `sdlc` / `reqdoc`).
+3. Launch the app and pick the workflow in the launcher:
+   - `task`: type the task directly; estimate with “预估 xx 小时”; say “完成” to stop the timer.
+   - `sdlc`: enter “启动 SDLC 工作流”.
+   - `reqdoc`: enter “启动 REQDOC 工作流”.
+4. Inspect local statistics with `opencode-sm stats --workflow task` (or `sdlc` / `reqdoc`).
+
+### Workflow selection
+
+The launcher writes the selected type to `~/.config/opencode/session-mgmt/identity.json`.
+It applies to all new sessions started by that opencode process; it is not a per-session switch.
+Use `/new` when moving between tasks.
+
+### Repository layout
+
+| Path | Purpose |
+|---|---|
+| `packages/*` | Upstream OpenCode packages (the base) |
+| `opencode-session-mgmt/` | Workflow engine, CLI, docs, tests |
+| `opencode-edge-debug/` | Edge debugging plugin |
+| `opencode-server-debug/` | Server debugging plugin |
+| `portable-installer/` | Windows installer / launcher |
+| `plugin-guide/` | Fork maintenance and upstream upgrade notes |
+
+### Docs
+
+- [Session management and architecture](opencode-session-mgmt/docs/session-management.md)
+- [task workflow](opencode-session-mgmt/docs/workflow-task.md)
+- [SDLC workflow](opencode-session-mgmt/docs/workflow-sdlc.md)
+- [REQDOC workflow](opencode-session-mgmt/docs/workflow-reqdoc.md)
+- [Deployment](opencode-session-mgmt/docs/deployment.md)
+- [Upstream upgrade checklist](plugin-guide/opencode-upgrade-checklist.md)
+
+### Upstream sync
+
+Daily development syncs `origin` only. `upstream` (anomalyco/opencode) is pulled manually when
+requested; local patches are tracked in the upgrade checklist. Do not treat this fork's README
+sections as upstream documentation.
+
+### Privacy
+
+Reports contain session summaries (workflow state, duration, cost/tokens) and never code content.
+The API key is SHA-256 hashed before upload.
+
+### Known limitations
+
+- `task` is covered by unit/text tests but is not yet in the model-evaluation set.
+- The Windows installer must be rebuilt after launcher/runtime changes; build artifacts are not
+  tracked in git.
+- The collector is an external project: <https://github.com/karsonto/performance_dashboard>.
+- The launcher selection is daemon-level; mixing different workflow types across historical
+  sessions in one process is not supported.
+
+---
+
+## Upstream OpenCode
+
+> Everything below is the upstream project README. It may not describe this fork's customizations.
 
 ### Installation
 

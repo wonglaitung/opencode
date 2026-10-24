@@ -339,7 +339,7 @@ git grep -n "task-r1\|task-lifecycle" -- opencode-session-mgmt/packages` | TUI �
 | 离线构建 | `--offline`，`InstallationOffline=true`，跳过配置目录的 `@opencode-ai/plugin` 安装 |
 | 项目工具加载容错 | `55b69cbb2a` |
 | 界面品牌标识 | `e56554203f`（TUI 侧栏）、`7c065744dc`（启动器按钮） |
-| 一般任务 task 工作流 | 本工作树（待提交） |
+| 一般任务 task 工作流 | `d77ed45116` |
 | 当前 sdlc 工具数 | sm 17 + edge 8 + server 7 = 32 |
 | 当前 task 工具数 | sm 8 + edge 8 + server 7 = 23（无 review/commit 工具） |
 | 当前 reqdoc 工具数 | sm 28 + edge 8 + server 7 = 43（Windows smoke 默认 sdlc） |
