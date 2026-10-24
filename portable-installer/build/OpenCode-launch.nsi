@@ -338,7 +338,7 @@ Function LaunchPage
   Pop $1
   SetCtlColors $1 666666 transparent
 
-  ${NSD_CreateButton} 0 98u 100% 16u "打开 OpenCode"
+  ${NSD_CreateButton} 0 98u 100% 16u "打开 AI Assistant"
   Pop $2
   ${NSD_OnClick} $2 DoLaunch
 
