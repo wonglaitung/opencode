@@ -19,8 +19,36 @@ description: 打包 Windows 版 OpenCode 图形化安装包（portable-installer
 
 1. NSIS 3.x 存在：优先 `C:\Program Files (x86)\NSIS\makensis.exe`，其次 `C:\Program Files\NSIS\`，最后 PATH。
 2. 源目录齐全：`D:\Tools\node-v22.23.2-win-x64`、`D:\Tools\Python312`、`D:\Tools\terminal-1.23.20211.0`。可用 `SRC_NODE`、`SRC_PY`、`SRC_TERMINAL` 覆盖。
-3. 三个 `.nsi` 保持 UTF-8 带 BOM，且脚本内 `Unicode true` 在位，否则安装界面中文乱码。
+3. 编码检查：三个 `.nsi` 为 UTF-8 带 BOM 且 `Unicode true` 在位；`build.bat` / `sync_payload.bat` 为纯 CRLF。Windows checkout 可能因 Git 换行转换改写文件，必须先用下面的自检脚本确认，不通过就修正后再构建。
 4. 空闲磁盘至少 5 GB，完整重建要同时容纳源目录、新载荷和压缩中间文件。
+
+### 编码自检
+
+```powershell
+foreach ($f in Get-ChildItem portable-installer\build\*.bat) {
+  $b = [IO.File]::ReadAllBytes($f.FullName)
+  $lf = 0; $crlf = 0
+  for ($i = 0; $i -lt $b.Length; $i++) {
+    if ($b[$i] -eq 10) {
+      $lf++
+      if ($i -gt 0 -and $b[$i-1] -eq 13) { $crlf++ }
+    }
+  }
+  if ($lf -ne $crlf) { throw "$($f.Name): 存在非 CRLF 换行 (LF=$lf, CRLF=$crlf)" }
+}
+foreach ($f in Get-ChildItem portable-installer\build\*.nsi) {
+  $b = [IO.File]::ReadAllBytes($f.FullName)
+  if ($b.Length -lt 3 -or $b[0] -ne 0xEF -or $b[1] -ne 0xBB -or $b[2] -ne 0xBF) {
+    throw "$($f.Name): 缺少 UTF-8 BOM"
+  }
+  if (-not (Select-String -Path $f.FullName -Pattern '^\s*Unicode\s+true' -Quiet)) {
+    throw "$($f.Name): 缺少 Unicode true"
+  }
+}
+"编码检查通过"
+```
+
+`build.bat` / `sync_payload.bat` 一旦混入 LF，cmd 可能把相邻命令拼在一起；`.nsi` 缺 BOM 则安装界面中文乱码。不要跳过这步。
 
 ## 完整重建步骤
 

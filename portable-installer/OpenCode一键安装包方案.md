@@ -149,7 +149,7 @@
 
 - **`sync_payload.bat`** — 从源目录重新同步载荷到 `portable-installer\payload\OpenCode`，并自动完成裁剪：同步 Node → Python → Windows Terminal，补 `python3.exe`、剔 `torch`、剔各 bundle 的 `node_modules/.bin` 符号链接。源目录可用环境变量 `SRC_NODE` / `SRC_PY` / `SRC_TERMINAL` 覆盖。
 - **`build.bat`** — 自动定位 NSIS（ProgramFiles / PATH），依次编 `OpenCode-Reset.exe`、`OpenCode-launch.exe`、`OpenCode-Setup.exe`。**任一 `makensis` 编译失败会立即报错并退出（exit /b 1），不会产出残缺的 exe。**
-- **编码注意**：三个 `.nsi` 必须保存为 **UTF-8 带 BOM**，且脚本头部已声明 `Unicode true`，否则安装页面中文会变成乱码。用其他编辑器改完请确认仍是「UTF-8 含 BOM」。
+- **编码注意**：三个 `.nsi` 必须保存为 **UTF-8 带 BOM**，且脚本头部已声明 `Unicode true`，否则安装页面中文会变成乱码；`build.bat` / `sync_payload.bat` 必须为纯 CRLF。技能的编码自检会实际读取字节校验，不通过会中止构建。Windows checkout 后若 Git 改写了换行，先修正再打包。
 
 技能不可用时的兜底流程（仍需先清空旧载荷和旧 exe）：
 
