@@ -11,7 +11,7 @@
     },
     "packages/cli": {
       "name": "opencode-sm",
-      "version": "0.1.0",
+      "version": "1.0.0",
       "bin": {
         "opencode-sm": "src/index.ts",
       },
@@ -23,7 +23,7 @@
     },
     "packages/plugin": {
       "name": "sm-plugin",
-      "version": "0.0.0",
+      "version": "1.0.0",
       "dependencies": {
         "@resvg/resvg-js": "^2.6.2",
         "beautiful-mermaid": "^1.1.3",

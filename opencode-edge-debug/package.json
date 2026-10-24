@@ -1,6 +1,6 @@
 {
   "name": "opencode-edge-debug",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "description": "OpenCode 按需 Edge 浏览器调试插件:自然语言启动/关闭浏览器,抓取 Console 与网络日志,零重型框架依赖",
   "type": "module",
   "main": "src/index.ts",

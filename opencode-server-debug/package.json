@@ -1,6 +1,6 @@
 {
   "name": "opencode-server-debug",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "description": "OpenCode 按需远程服务器日志调试插件:自然语言经 SSH 拉取/分析远端 Linux 日志文件",
   "type": "module",
   "main": "src/index.ts",

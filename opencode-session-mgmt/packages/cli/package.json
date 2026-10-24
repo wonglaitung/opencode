@@ -1,6 +1,6 @@
 {
   "name": "opencode-sm",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "module",
   "bin": {
     "opencode-sm": "src/index.ts"

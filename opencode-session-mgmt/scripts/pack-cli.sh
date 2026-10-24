@@ -10,7 +10,7 @@
 #
 # 用法：
 #   bash scripts/pack-cli.sh [target]      # target 缺省 = 当前机器平台
-#   VERSION=0.1.0 bash scripts/pack-cli.sh # 覆盖版本号（默认读 packages/cli/package.json）
+#   VERSION=1.0.0 bash scripts/pack-cli.sh # 覆盖版本号（默认读 packages/cli/package.json）
 #
 # 支持的 target：linux-x64 / linux-arm64 / darwin-x64 / darwin-arm64 / windows-x64
 #
@@ -43,7 +43,7 @@ esac
 # ---- 版本号：默认读 CLI 包，可用环境变量 VERSION 覆盖 ----
 version="${VERSION:-$(node -p "require('./packages/cli/package.json').version")}"
 if [ "$version" = "0.0.0" ]; then
-  echo "提示：当前版本为 0.0.0，可用 VERSION=x.y.z 覆盖（如 VERSION=0.1.0 bash scripts/pack-cli.sh）"
+  echo "提示：当前版本为 0.0.0，可用 VERSION=x.y.z 覆盖（如 VERSION=1.0.0 bash scripts/pack-cli.sh）"
 fi
 
 bin_name="opencode-sm$ext"
