@@ -291,7 +291,7 @@ git grep -n "task-r1\|task-lifecycle" -- opencode-session-mgmt/packages` 应命�
 | 检查 | 命令 | 期望 |
 |------|------|------|
 | 全仓类型检查 | `bun run typecheck`（仓库根，Bun 1.4.4） | 30/30 通过 |
-| session 全量测试 | `bun test`（`opencode-session-mgmt` 根） | 全绿；当前基线 838 pass |
+| session 全量测试 | `bun test`（`opencode-session-mgmt` 根） | 全绿；当前基线 839 pass |
 | edge 测试 | `bun test`（`opencode-edge-debug`） | 全绿；当前基线 52 pass |
 | server 测试 | `bun test`（`opencode-server-debug`） | 全绿；当前基线 44 pass |
 | 验收派生 | `bun run acceptance:derive`（session-mgmt） | 11/11 通过 |

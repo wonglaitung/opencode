@@ -6,6 +6,7 @@ Unicode true                    ; 生成 Unicode 安装包, 正确显示中文
 !include "nsDialogs.nsh"
 !include "LogicLib.nsh"
 !include "FileFunc.nsh"
+!include "WinMessages.nsh"
 
 Name "智能研发助手"
 Caption "智能研发助手"
@@ -38,6 +39,12 @@ Var ErrCode
 Var ErrText
 Var HintText
 Var hHint
+Var TitleFont
+Var SubFont
+Var SectionFont
+Var HintTitleFont
+Var BodyFont
+Var ButtonFont
 
 Function .onInit
   ; 内嵌配置助手, 运行期释放到 $PLUGINSDIR
@@ -318,6 +325,10 @@ Function DoLaunch
   SendMessage $HWNDPARENT ${WM_CLOSE} 0 0
 FunctionEnd
 
+Function DoCancel
+  SendMessage $HWNDPARENT ${WM_CLOSE} 0 0
+FunctionEnd
+
 Function LaunchPage
   nsDialogs::Create 1018
   Pop $Dialog
@@ -325,15 +336,46 @@ Function LaunchPage
     Abort
   ${EndIf}
 
-  ${NSD_CreateLabel} 0 0 100% 10u "请选择工作目录"
-  ${NSD_CreateDirRequest} 0 12u 75% 12u "$LastDir"
-  Pop $hDir
-  ${NSD_CreateButton} 75% 12u 25% 12u "浏览"
-  Pop $1
-  ${NSD_OnClick} $1 DirBrowse
+  ; 内容页 720x580；窗口 760x660（含标题栏与隐藏的向导按钮区）
+  System::Call 'user32::SetWindowPos(i $HWNDPARENT, i 0, i 0, i 0, i 760, i 660, i 0x0006)'
+  System::Call 'user32::SetWindowPos(i $Dialog, i 0, i 0, i 0, i 720, i 580, i 0x0004)'
 
-  ${NSD_CreateLabel} 0 32u 38u 10u "工作流"
-  ${NSD_CreateDropList} 40u 30u 108u 50u
+  CreateFont $TitleFont "$(^Font)" 20 700
+  CreateFont $SubFont "$(^Font)" 10 400
+  CreateFont $SectionFont "$(^Font)" 10 700
+  CreateFont $HintTitleFont "$(^Font)" 10 700
+  CreateFont $BodyFont "$(^Font)" 10 400
+  CreateFont $ButtonFont "$(^Font)" 11 700
+
+  ${NSD_CreateLabel} 30 18 400 30 "智能研发助手"
+  Pop $0
+  SendMessage $0 ${WM_SETFONT} $TitleFont 1
+  SetCtlColors $0 0x111827 transparent
+
+  ${NSD_CreateLabel} 30 50 540 18 "选择项目目录与工作流，然后打开 AI Assistant"
+  Pop $0
+  SendMessage $0 ${WM_SETFONT} $SubFont 1
+  SetCtlColors $0 0x6B7280 transparent
+
+  ${NSD_CreateHLine} 30 80 660 2 ""
+  Pop $0
+
+  ${NSD_CreateLabel} 30 100 200 18 "项目目录"
+  Pop $0
+  SendMessage $0 ${WM_SETFONT} $SectionFont 1
+  SetCtlColors $0 0x374151 transparent
+
+  ${NSD_CreateDirRequest} 30 120 528 32 "$LastDir"
+  Pop $hDir
+  ${NSD_CreateButton} 570 120 120 32 "浏览…"
+  Pop $0
+  ${NSD_OnClick} $0 DirBrowse
+
+  ${NSD_CreateLabel} 30 176 200 18 "工作流"
+  Pop $0
+  SendMessage $0 ${WM_SETFONT} $SectionFont 1
+  SetCtlColors $0 0x374151 transparent
+  ${NSD_CreateDropList} 30 196 360 160 ""
   Pop $hWorkflow
   ${NSD_CB_AddString} $hWorkflow "一般任务"
   ${NSD_CB_AddString} $hWorkflow "SDLC 开发流程"
@@ -347,8 +389,11 @@ Function LaunchPage
   ${EndIf}
   ${NSD_OnChange} $hWorkflow OnWorkflowChange
 
-  ${NSD_CreateLabel} 158u 32u 40u 10u "终端类型"
-  ${NSD_CreateDropList} 200u 30u 98u 50u
+  ${NSD_CreateLabel} 420 176 200 18 "终端类型"
+  Pop $0
+  SendMessage $0 ${WM_SETFONT} $SectionFont 1
+  SetCtlColors $0 0x374151 transparent
+  ${NSD_CreateDropList} 420 196 270 160 ""
   Pop $hTerminal
   ${NSD_CB_AddString} $hTerminal "原生"
   ${NSD_CB_AddString} $hTerminal "专用"
@@ -358,13 +403,19 @@ Function LaunchPage
     ${NSD_CB_SetSelectionIndex} $hTerminal 0
   ${EndIf}
 
-  ${NSD_CreateLabel} 0 52u 38u 10u "插件"
-  ${NSD_CreateCheckBox} 40u 52u 70u 10u "会话管理"
+  ${NSD_CreateGroupBox} 30 250 660 70 "插件"
+  Pop $0
+  SendMessage $0 ${WM_SETFONT} $HintTitleFont 1
+  ${NSD_CreateCheckBox} 46 274 140 18 "会话管理"
   Pop $hSm
-  ${NSD_CreateCheckBox} 115u 52u 60u 10u "Edge 调试"
+  ${NSD_CreateCheckBox} 220 274 120 18 "Edge 调试"
   Pop $hEdge
-  ${NSD_CreateCheckBox} 180u 52u 85u 10u "服务器调试"
+  ${NSD_CreateCheckBox} 395 274 130 18 "服务器调试"
   Pop $hServer
+  ${NSD_CreateLabel} 530 274 145 18 "默认仅启用会话管理"
+  Pop $0
+  SendMessage $0 ${WM_SETFONT} $SubFont 1
+  SetCtlColors $0 0x6B7280 transparent
   ${If} $PluginSm == "1"
     ${NSD_Check} $hSm
   ${Else}
@@ -382,14 +433,24 @@ Function LaunchPage
   ${EndIf}
   ${NSD_OnClick} $hSm OnSmToggle
 
-  ${NSD_CreateLabel} 0 76u 100% 28u "$HintText"
+  ${NSD_CreateGroupBox} 30 340 660 160 "工作流说明"
+  Pop $0
+  SendMessage $0 ${WM_SETFONT} $HintTitleFont 1
+  ${NSD_CreateLabel} 50 368 620 110 "$HintText"
   Pop $hHint
-  SetCtlColors $hHint 666666 transparent
+  SendMessage $hHint ${WM_SETFONT} $BodyFont 1
+  SetCtlColors $hHint 0x374151 transparent
   Call RefreshWorkflowHint
 
-  ${NSD_CreateButton} 0 108u 100% 16u "打开 AI Assistant"
+  ${NSD_CreateButton} 30 516 510 46 "打开 AI Assistant"
   Pop $2
+  SendMessage $2 ${WM_SETFONT} $ButtonFont 1
   ${NSD_OnClick} $2 DoLaunch
+
+  ${NSD_CreateButton} 552 516 138 46 "取消"
+  Pop $3
+  SendMessage $3 ${WM_SETFONT} $ButtonFont 1
+  ${NSD_OnClick} $3 DoCancel
 
   ; 配置文件或身份不可用时, 只开放仍然安全的选项
   ${If} $ConfigOk != "1"
@@ -403,11 +464,20 @@ Function LaunchPage
     EnableWindow $hWorkflow 0
   ${EndIf}
 
-  ; 向导自带按钮改成中文, 不隐藏, 避免影响主窗口显示
+  ; 窗口居中（GetSystemMetrics 0/1 = 屏幕宽/高）
+  System::Call 'user32::GetSystemMetrics(i 0) i .r0'
+  System::Call 'user32::GetSystemMetrics(i 1) i .r1'
+  IntOp $0 $0 - 760
+  IntOp $0 $0 / 2
+  IntOp $1 $1 - 660
+  IntOp $1 $1 / 2
+  System::Call 'user32::SetWindowPos(i $HWNDPARENT, i 0, i $0, i $1, i 760, i 660, i 0x0004)'
+
+  ; 页面自绘底部按钮，隐藏向导默认按钮避免重复
   GetDlgItem $0 $HWNDPARENT 1
-  SendMessage $0 ${WM_SETTEXT} 0 "STR:关闭"
+  ShowWindow $0 ${SW_HIDE}
   GetDlgItem $0 $HWNDPARENT 2
-  SendMessage $0 ${WM_SETTEXT} 0 "STR:取消"
+  ShowWindow $0 ${SW_HIDE}
 
   ShowWindow $HWNDPARENT ${SW_SHOW}
   nsDialogs::Show

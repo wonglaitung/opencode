@@ -36,6 +36,13 @@ describe("OpenCode-launch 工作流选项与提示", () => {
     expect(nsi).toContain("RedrawWindow(i $Dialog")
   })
 
+  test("使用大窗口布局与自定义底部按钮", () => {
+    expect(nsi).toContain("SetWindowPos(i $HWNDPARENT, i 0, i 0, i 0, i 760, i 660")
+    expect(nsi).toContain("SetWindowPos(i $Dialog, i 0, i 0, i 0, i 720, i 580")
+    expect(nsi).toContain("Function DoCancel")
+    expect(nsi).toContain('${NSD_CreateButton} 552 516 138 46 "取消"')
+  })
+
   test("launcher-config 读写 task", () => {
     expect(config).toContain('parsed.workflowType === "task"')
     expect(config).toContain('args.workflow !== "task"')
