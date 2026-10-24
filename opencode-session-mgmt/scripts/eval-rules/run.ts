@@ -17,7 +17,7 @@
  * 输出:控制台 per-scenario 表 + 聚合通过率,落 scripts/eval-rules/results/{variant}.json
  */
 import { existsSync } from "node:fs"
-import { EVAL_TOOLS } from "./src/tool-defs"
+import { toolsForWorkflow } from "./src/tool-defs"
 import { judgeSelfCheck } from "./src/judge-selfcheck"
 import { formatOptionQuality, parseOptionSets, reportDefaultLoad } from "./src/option-quality"
 import { optionQualitySelfCheck } from "./src/option-quality.selfcheck"
@@ -54,7 +54,7 @@ const dry = process.argv.includes("--dry")
  */
 const EXECUTE = process.env.EVAL_EXECUTE === "1"
 const workflowRaw = argValue("--workflow")
-const workflow = workflowRaw === "sdlc" || workflowRaw === "reqdoc" ? workflowRaw : undefined
+const workflow = workflowRaw === "task" || workflowRaw === "sdlc" || workflowRaw === "reqdoc" ? workflowRaw : undefined
 
 async function renderSystem(state: Parameters<typeof renderNew>[0], lockedFiles: readonly string[] = []): Promise<string> {
   return variant === "baseline" ? renderBaseline(state, lockedFiles) : renderNew(state, lockedFiles)
@@ -67,6 +67,10 @@ console.log(`评测模型: ${modelId()} | variant: ${variant} | repeat: ${repeat
 // **全量跑 baseline 仍会直接覆写它**——我这次就踩了：想跑全量对照，顺手
 // `--variant baseline` 没加 `--workflow`，冻结参照被覆盖，只能从 git 恢复。
 // 故：全量 baseline 默认拒绝写入，须显式 `EVAL_ALLOW_BASELINE_OVERWRITE=1`。
+if (variant === "baseline" && workflow === "task") {
+  console.error("❌ task 工作流没有历史 baseline，请用 --variant new 运行 task 验证集。")
+  process.exit(1)
+}
 if (variant === "baseline" && !workflow && !dry && process.env.EVAL_ALLOW_BASELINE_OVERWRITE !== "1") {
   console.error(
     "❌ 拒绝覆写冻结参照 baseline.json。\n" +
@@ -156,21 +160,22 @@ for (const sc of scenarios) {
   let scoreTotal = 0
   const scoreDims: Partial<Record<ReqdocScoreDimKey, number>> = {}
   const scores: PrdScore[] = []
+  const tools = toolsForWorkflow(sc.workflowType)
   for (let i = 0; i < repeat; i++) {
     let out: ModelOutput
     try {
       if (!EXECUTE) {
-        out = await chatComplete(system, sc.userTurn, EVAL_TOOLS)
+        out = await chatComplete(system, sc.userTurn, tools)
       } else {
         // 多轮：模型出调用 → 真实工具跑 → 结果回灌 → 续跑，直至无调用或达轮数上限
         const turn = await chatComplete(
           system,
           sc.userTurn,
-          EVAL_TOOLS,
+          tools,
         ).then((first) =>
           executeTurns(
             sc.state,
-            async (prior) => (prior.length === 0 ? first : chatComplete(system, sc.userTurn, EVAL_TOOLS, prior)),
+            async (prior) => (prior.length === 0 ? first : chatComplete(system, sc.userTurn, tools, prior)),
             { lockedFiles: sc.lockedFiles, userTurn: sc.userTurn },
           ),
         )

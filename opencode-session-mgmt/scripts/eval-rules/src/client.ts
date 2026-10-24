@@ -22,6 +22,11 @@ const REQUEST_TIMEOUT_MS = Number(process.env.EVAL_TIMEOUT_MS ?? "180000")
 // finish=stop，行为可测。**按模型开关**：deepseek 等推理模型关了会失去推理空间，
 // 反而更差，故默认不开、由调用方按模型显式传。
 const DISABLE_THINKING = process.env.EVAL_DISABLE_THINKING === "1"
+// OpenCode Zen / Zen Go 需要 opencode 专属请求头；普通 OpenAI 兼容端点不需要。
+// 默认按 base URL 识别，也可用 EVAL_ZEN=1 强制开启。
+const ZEN = process.env.EVAL_ZEN === "1" || BASE.includes("opencode.ai")
+const ZEN_SESSION = process.env.EVAL_SESSION_ID ?? "eval-session"
+const ZEN_PROJECT = process.env.EVAL_PROJECT_ID ?? "eval-project"
 
 export function modelId(): string {
   return MODEL
@@ -58,7 +63,18 @@ export async function chatComplete(
     try {
       res = await fetch(`${BASE}/chat/completions`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...(KEY ? { Authorization: `Bearer ${KEY}` } : {}) },
+        headers: {
+          "Content-Type": "application/json",
+          ...(KEY ? { Authorization: `Bearer ${KEY}` } : {}),
+          ...(ZEN
+            ? {
+                "x-opencode-session": ZEN_SESSION,
+                "x-opencode-request": crypto.randomUUID(),
+                "x-opencode-client": "eval",
+                "x-opencode-project": ZEN_PROJECT,
+              }
+            : {}),
+        },
         body,
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       })

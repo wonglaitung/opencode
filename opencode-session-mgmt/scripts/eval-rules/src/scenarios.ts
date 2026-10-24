@@ -1,5 +1,5 @@
 /**
- * 评测场景集(58 个,sdlc s1-s25 + reqdoc r1-r54 子集)。覆盖关键规则:
+ * 评测场景集(63 个,sdlc s1-s25 + reqdoc r1-r54 子集 + task t1-t5)。覆盖关键规则:
  * 基线录入不重复、确认后 approve、无确认不 approve、回到XX→revisit、
  * 审查逐段不批量、前序未完成不 submit、提交前查门禁、完成后提示 /new、
  * 完成后开新需求不重启、空档态继续进入下一阶段、
@@ -89,6 +89,7 @@ function finish(s: WorkflowState): WorkflowState {
 /** reqdoc 打分卡夹具:八维实得分,总分 = 各维之和(默认 90 达标);confirmed 默认 true。 */
 const newSdlc = () => createWorkflowState("sdlc")
 const newReqdoc = () => createWorkflowState("reqdoc")
+const newTask = () => createWorkflowState("task")
 
 /**
  * 槽位版夹具（重构 2c）：给 reqdoc state 挂上完整知识库，使其通过 kbGate。
@@ -1278,5 +1279,78 @@ export const SCENARIOS: Scenario[] = [
       keyword: "哪几个",
       note: "业务未给优先级时，AI 必须主动问「哪几个是必须先做好」（reqdoc-r13）",
     },
+  },
+  // ---- task ----
+  {
+    name: "t1 开场提示预估与完成",
+    workflowType: "task",
+    state: (() => {
+      const s = newTask()
+      enter(s, "execute")
+      return finish(s)
+    })(),
+    userTurn: "帮我写一份 200 字左右的项目说明文档，主题是 OpenCode 一般任务工作流。",
+    judge: {
+      kind: "text",
+      type: "categoryKeywords",
+      categories: [["一般任务"], ["预估"], ["完成"]],
+      minCategories: 3,
+    },
+    note: "task-r0：首次回复必须说明一般任务、预估 xx 小时与完成方式",
+  },
+  {
+    name: "t2 预估 2 小时录基线",
+    workflowType: "task",
+    state: (() => {
+      const s = newTask()
+      enter(s, "execute")
+      return finish(s)
+    })(),
+    userTurn: "预估 2 小时",
+    judge: { kind: "tool", expectTool: "workflow_baseline", args: { estimated_hours: 2, developer_confirmed: true } },
+    note: "task-r1：开发者按「预估 xx 小时」报数后录入基线",
+  },
+  {
+    name: "t3 裸 24 小时被拒",
+    workflowType: "task",
+    state: (() => {
+      const s = newTask()
+      enter(s, "execute")
+      return finish(s)
+    })(),
+    userTurn: "24小时",
+    judge: { kind: "rejected", tool: "workflow_baseline", reasonIncludes: ["未检测到"] },
+    note: "A 口径：裸数字无「预估」意图词，服务端拒收（需 EVAL_EXECUTE=1）",
+  },
+  {
+    name: "t4 完成时 approve",
+    workflowType: "task",
+    state: (() => {
+      const s = newTask()
+      enter(s, "execute")
+      s.baseline = { estimatedHours: 2, setAt: 1 }
+      return finish(s)
+    })(),
+    userTurn: "完成",
+    judge: {
+      kind: "tool",
+      expectTool: "workflow_advance",
+      args: { stage: "execute", action: "approve", developer_confirmed: true },
+    },
+    note: "task-r3：开发者明确说完成时调用 approve",
+  },
+  {
+    name: "t5 完成后提示 /new",
+    workflowType: "task",
+    state: (() => {
+      const s = newTask()
+      enter(s, "execute")
+      approve(s, "execute")
+      s.baseline = { estimatedHours: 2, setAt: 1 }
+      return finish(s)
+    })(),
+    userTurn: "完成了",
+    judge: { kind: "text", type: "keyword", keyword: "/new" },
+    note: "task-r3：完成态提示 /new 开始下一个任务",
   },
 ]

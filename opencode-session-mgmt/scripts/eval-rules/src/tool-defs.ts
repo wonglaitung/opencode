@@ -1,3 +1,5 @@
+import type { WorkflowType } from "sm-shared"
+
 /**
  * 评测用精简工具定义(OpenAI JSON schema)。
  * 与 packages/plugin/src/tools/workflow.ts、review.ts 的 description/参数名保持一致——
@@ -558,4 +560,19 @@ export function evalToolParamTypes(): Record<string, Record<string, "string" | "
     out[t.function.name] = params
   }
   return out
+}
+
+/** task 工作流只暴露运行时实际注册的工具（无 review/commit/reqdoc 工具）。 */
+const TASK_TOOLS = new Set([
+  "workflow_advance",
+  "workflow_revisit",
+  "workflow_baseline",
+  "open_ide",
+  "unlock_file",
+  "list_locked_files",
+])
+
+export function toolsForWorkflow(type: WorkflowType): OpenAITool[] {
+  if (type !== "task") return EVAL_TOOLS
+  return EVAL_TOOLS.filter((tool) => TASK_TOOLS.has(tool.function.name))
 }

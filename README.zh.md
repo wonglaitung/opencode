@@ -112,7 +112,7 @@ SHA-256 哈希。
 
 ### 已知限制
 
-- `task` 已有单元/文本契约测试，但尚未纳入模型评测集。
+- `task` 已有单元/文本契约测试，并纳入 5 个规则遵循场景（`t1`–`t5`）；用 `--workflow task --variant new` 运行。
 - Windows 安装包在启动器/运行时变更后必须重新打包；构建产物不入 git。
 - 收集服务是外部项目：<https://github.com/karsonto/performance_dashboard>。
 - 启动器选择是 daemon 级；同一进程内跨历史会话混用不同工作流类型暂不支持。

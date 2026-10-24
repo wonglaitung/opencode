@@ -63,7 +63,29 @@ sdlc / reqdoc / task 共用同一句提示：
 - 不统计：代码行数、覆盖率、返工率、审查清单、理解确认。
 - 收集端 `workflow_type = "task"`；sdlc 专属指标按 null 处理。
 
-## 7. 边界
+## 7. 评测
+
+task 有 5 个 new-only 规则遵循场景（`scripts/eval-rules/src/scenarios.ts` 的 `t1`–`t5`）：
+
+| 场景 | 考点 |
+|---|---|
+| t1 开场提示预估与完成 | task-r0：首次回复说明一般任务、预估 xx 小时、完成方式 |
+| t2 预估 2 小时录基线 | task-r1：按「预估 xx 小时」报数后调用 workflow_baseline |
+| t3 裸 24 小时被拒 | A 口径：裸数字无预估意图词，服务端拒收 |
+| t4 完成时 approve | task-r3：开发者明确说完成时调用 workflow_advance |
+| t5 完成后提示 /new | task-r3：完成态提示 /new |
+
+运行：
+
+```bash
+EVAL_BASE_URL=... EVAL_API_KEY=... EVAL_MODEL=... EVAL_EXECUTE=1 \
+  bun run scripts/eval-rules/run.ts --variant new --workflow task --repeat 1
+```
+
+task 没有改造前 baseline，因此只支持 `--variant new`；`--variant baseline --workflow task` 会直接报错。
+2026-10-24 用 `deepseek-v4.1-flash`（OpenCode Zen Go）以 `--repeat 3` 复跑：t1–t5 每个场景 3/3，合计 **15/15**；结果文件在 `scripts/eval-rules/results/new.task.json`（本机结果，不入库）。
+
+## 8. 边界
 
 - 一个会话只记一个一般任务；多任务用 `/new`。
 - task 工具集不注册 review/comprehension/commit 工具。

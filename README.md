@@ -118,7 +118,7 @@ The API key is SHA-256 hashed before upload.
 
 ### Known limitations
 
-- `task` is covered by unit/text tests but is not yet in the model-evaluation set.
+- `task` is covered by unit/text tests and five rule-following scenarios (`t1`–`t5`); run them with `--workflow task --variant new`.
 - The Windows installer must be rebuilt after launcher/runtime changes; build artifacts are not
   tracked in git.
 - The collector is an external project: <https://github.com/karsonto/performance_dashboard>.
