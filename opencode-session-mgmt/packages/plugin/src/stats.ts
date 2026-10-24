@@ -117,9 +117,9 @@ export function sessionStats(row: WorkflowSessionRow, usage: Usage): SessionStat
   const workflow = row.workflow
   if (!workflow) return null
   const def = getDefinition(workflow.type)
-  const review = reviewRecord(workflow)
-  const confirmed = review.comprehension.filter((c) => c.developerConfirmed).length
-  const checklist = review.checklist
+  const review = def.reviewStage === null ? null : reviewRecord(workflow)
+  const confirmed = review ? review.comprehension.filter((c) => c.developerConfirmed).length : 0
+  const checklist = review?.checklist ?? {}
   // 清单通过数按定义逐项计数（def 驱动；auto 项也计入通过口径，3.2）
   const checklistPassed = def.checklist.filter((item) => checklist[item.key] === true).length
   // 会话总耗时既用于展示，也作为提效率的「实际周期」（6.3）。
@@ -171,7 +171,7 @@ export function sessionStats(row: WorkflowSessionRow, usage: Usage): SessionStat
           return { filled: c.leafFilled, total: c.leafTotal, pct: c.pct }
         })()
       : null,
-    comprehension: { total: review.comprehension.length, confirmed },
+    comprehension: { total: review?.comprehension.length ?? 0, confirmed },
     checklistPassed,
     cost: usage.cost,
     tokensInput: usage.tokensInput,

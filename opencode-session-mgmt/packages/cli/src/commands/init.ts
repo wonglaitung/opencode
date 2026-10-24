@@ -34,7 +34,7 @@ export async function runInit(_args: ParsedArgs): Promise<void> {
       const answer = (await rl.question(`? ${q.prompt}: `)).trim()
       identity[q.key] = answer
     }
-    const typeAnswer = (await rl.question("? 主要工作流类型 [sdlc 开发流程 / reqdoc 需求书] (缺省 sdlc): ")).trim()
+    const typeAnswer = (await rl.question("? 主要工作流类型 [task 一般任务 / sdlc 开发流程 / reqdoc 需求书] (缺省 sdlc): ")).trim()
     identity.workflowType = resolveWorkflowType(typeAnswer || "sdlc")
   } finally {
     rl.close()

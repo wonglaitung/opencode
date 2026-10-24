@@ -171,17 +171,18 @@ graph LR
 4. 组/组织级的使用统计与质量分析
 
 
-### 2.2 文档族导览（三个文件怎么分工）
+### 2.2 文档族导览（四个文件怎么分工）
 
-本设计文档族按「**通用机制 / 两个工作流**」三层拆分为三个文件，避免原先一个文档里通用实现与两套工作流纠缠难读：
+本设计文档族按「**通用机制 / 三个工作流**」拆分为四个文件，避免通用实现与多条工作流纠缠难读：
 
 | 文件 | 内容 | 读者 |
 |------|------|------|
 | **`session-management.md`（本文档）** | 通用机制与架构：数据模型（3 章）、接口设计（4 章）、CLI（5 章）、统计（6 章）、Agent 工作流约束的机制面（7.1/7.3）、文件清单（8 章）、部署（9 章）、升级（10 章）、安全（11 章）、验证（12 章）、评测方法论（13 章） | 全角色通读 |
+| **`workflow-task.md`** | 工作流三：task 一般任务（单阶段 execute、只记预估/实际工时、完成提示与自动收口、统一预估话术、统计边界） | 需要记录一般任务工时的人 |
 | **`workflow-sdlc.md`** | 工作流一：sdlc 软件开发定义（2 章）、12 条规则全文（3 章）、场景一~四（4 章）、审查清单（5 章）、提交门禁（6 章）、统计口径（7 章）、评测场景（8 章） | 开发者 |
 | **`workflow-reqdoc.md`** | 工作流二：reqdoc 需求书定义（2 章）、需求资料目录契约（3 章）、24 条规则全文（4 章）、打分卡（5 章）、追问探针（6 章）、渲染结构校验（7 章）、专属工具（8 章）、场景五（9 章）、评测（10 章） | 需求分析师 |
 
-**阅读建议**：先读本文档 1~3 章理解通用机制，再按角色读对应工作流文件；两个工作流文件里出现的「见 session-management.md X.Y」即回指本文档的通用机制。跨文件引用带文件名前缀、不带前缀的章号指当前文件。
+**阅读建议**：先读本文档 1~3 章理解通用机制，再按角色读对应工作流文件；各工作流文件里出现的「见 session-management.md X.Y」即回指本文档的通用机制。跨文件引用带文件名前缀、不带前缀的章号指当前文件。
 
 ---
 
@@ -246,7 +247,7 @@ flowchart LR
 |------|----------------|
 | WorkflowState 每轮注入 system prompt | 插件 `experimental.chat.system.transform`，从插件 DB 读最新状态追加 |
 | 会话 tags、status、workflow 扩展属性 | 存插件自有 SQLite，以核心 sessionID 为主键关联，不动 SessionTable |
-| api_key 身份 + workflowType | 开发者 `opencode-sm init` 填写（api_key / 收集服务地址 / 可选工作流类型），存全局 `identity.json`，api_key 本机明文、上送前转 SHA-256 哈希；组/部门/组织由收集服务据哈希解析；workflowType 决定新会话走哪套工作流（见 3.1） |
+| api_key 身份 + workflowType | 开发者 `opencode-sm init` 填写（api_key / 收集服务地址 / 可选工作流类型），存全局 `identity.json`，api_key 本机明文、上送前转 SHA-256 哈希；组/部门/组织由收集服务据哈希解析；workflowType 决定新会话走哪套工作流（task / sdlc / reqdoc，见 3.1） |
 | 阶段推进 / 审查 / 理解确认 | 插件注册工具（`workflow_advance`、`comprehension_confirm`、`review_submit`），Agent 在 TUI 对话中调用，校验逻辑在工具 handler 内——天然服务端强制 |
 | 重复编辑模式检测与提交门禁 | `tool.execute.after` 计数每文件代码编辑（统计用）+ 内存短记忆检测连续重复/高频编辑模式；`tool.execute.before` 对未过审查的 `git commit` 抛错阻断；system prompt 注入 stuck 警告 |
 | QualityMetrics 采集 | 会话内指标（firstPassRate/iterationCount/linesByFile）由插件记录于本机插件库；合并后指标（reworkRate/testCoverage）由 CI 按 sessionID 回写 org 收集服务 |
@@ -274,7 +275,7 @@ flowchart LR
 
 | 存储 | 位置 | 内容 |
 |------|------|------|
-| 全局身份配置 | `~/.config/opencode/session-mgmt/identity.json` | `opencode-sm init` 写入：`{apiKey, collector_url, workflowType}`（apiKey 明文本机存储、上送前转 SHA-256 哈希；workflowType 可选，缺省 sdlc），每机器一份 |
+| 全局身份配置 | `~/.config/opencode/session-mgmt/identity.json` | `opencode-sm init` 写入：`{apiKey, collector_url, workflowType}`（apiKey 明文本机存储、上送前转 SHA-256 哈希；workflowType 可选，取值 task / sdlc / reqdoc，缺省 sdlc），每机器一份 |
 | 插件库 | `<project>/.opencode/session-mgmt.db`（插件自动建表，迁移自管） | 每会话的工作流数据 `workflow_session` |
 | 组织聚合库 | org 收集服务侧（每 org 一个） | 各机器汇报的会话摘要，组/组织结构由此自然形成 |
 
@@ -303,7 +304,7 @@ erDiagram
     IdentityConfig {
         string apiKey "init 两问 - api_key（明文本机，发送前 SHA-256）"
         string collector_url "init 两问 - 收集服务地址"
-        string workflowType "init 可选 - 工作流类型（缺省 sdlc）"
+        string workflowType "init 可选 - 工作流类型 task/sdlc/reqdoc（缺省 sdlc）"
     }
 
     ReportsTable {
@@ -350,7 +351,7 @@ export const WorkflowSessionTable = sqliteTable("workflow_session", {
 
 **快照语义**：`apiKey` 哈希随汇报固化在聚合库记录里。开发者更换 `api_key` 后重跑 `opencode-sm init`，只影响此后的汇报，**历史统计归属不追溯变更**。
 
-**workflowType 继承（用户级流程选择）**：工作流类型由**用户角色**决定，而非目录。插件每次创建新会话 `WorkflowState` 时经 `resolveType` 读取 `identity.json.workflowType`（缺省 `sdlc`）写入 `workflow.type`（快照语义，与 apiKey 一致——已存在会话不重读）。不同角色 = 不同用户（开发者走 sdlc 开发流程、需求分析师走 reqdoc 需求书流程），故**无目录配置、无会话内切换工具**；改类型只影响之后的新会话，历史归属不追溯。流程定义与通用机制解耦见 3.2。
+**workflowType 继承（用户级流程选择）**：工作流类型由**用户角色**决定，而非目录。插件每次创建新会话 `WorkflowState` 时经 `resolveType` 读取 `identity.json.workflowType`（缺省 `sdlc`）写入 `workflow.type`（快照语义，与 apiKey 一致——已存在会话不重读）。不同角色 = 不同用户（开发者走 sdlc 开发流程、需求分析师走 reqdoc 需求书流程、一般任务走 task 工时流程），故**无目录配置、无完整会话内切换工具**；启动器选择写入全局 identity，改类型只影响之后的新会话，历史归属不追溯。`workflow_start` 仅在会话尚未开始时允许切到 task（task 工具集是子集，不会缺工具）。流程定义与通用机制解耦见 3.2。
 
 **孤儿记录清理**：上游删除会话后，`workflow_session` 中对应记录成为孤儿。插件**启动后延后**（约 2 秒，错开 TUI 首屏与 daemon 启动竞态，减少启动耗时，见部署文档 FAQ）以 `session.list` 比对惰性清理（保守策略：上游不可达或返回空列表时不清理，防瞬时不可达误删），不影响功能。清理白名单**仅含主会话**（`parentID` 为空）：子代理会话（`parentID` 非空）与孤儿一并移除，配合 2.4 的「子代理不建记录」，保证统计纯净。
 
@@ -486,7 +487,7 @@ classDiagram
 插件把「工作流的定义」与「通用机制」解耦。定义（阶段键、阶段中文名、审查清单、提交门禁有无、注入的规则项）收敛为 `WorkflowDefinition`，按 `WorkflowType` 注册：
 
 ```typescript
-export type WorkflowType = "sdlc" | "reqdoc"          // 当前注册 sdlc 与 reqdoc
+export type WorkflowType = "task" | "sdlc" | "reqdoc"  // 当前注册 task / sdlc / reqdoc
 
 export interface ChecklistItem { key: string; label: string; auto?: boolean }
 
@@ -517,7 +518,7 @@ export function currentInProgressStage(s: WorkflowState): string | null
 export function resolveWorkflowType(v: unknown): WorkflowType   // 未知值回退 "sdlc" 并打 warning
 ```
 
-`WorkflowState` 含 `type` 字段标明本会话属于哪种工作流；`stages` 为泛化的 `Record<string, StageRecord>`，审查阶段经 `reviewRecord()` 定位（`getDefinition(s.type).reviewStage`）。系统不设 `STAGE_ORDER`/`STAGE_LABELS`/`StageName` 常量——消费方一律通过 `getDefinition(workflow.type)` 取阶段键/中文名/清单。`ComprehensionRecord` 是通用机制（sdlc 编码段与 reqdoc PRD 要点共用，reqdoc 语义见 workflow-reqdoc.md 2 章）。`metricKind`、`workflow_set_type` 工具未实现（reqdoc 指标模型/切换场景未定，避免死代码）。
+`WorkflowState` 含 `type` 字段标明本会话属于哪种工作流；`stages` 为泛化的 `Record<string, StageRecord>`，审查阶段经 `reviewRecord()` 定位（`getDefinition(s.type).reviewStage`）。系统不设 `STAGE_ORDER`/`STAGE_LABELS`/`StageName` 常量——消费方一律通过 `getDefinition(workflow.type)` 取阶段键/中文名/清单。`ComprehensionRecord` 是通用机制（sdlc 编码段与 reqdoc PRD 要点共用，reqdoc 语义见 workflow-reqdoc.md 2 章）。`metricKind`、`workflow_set_type` 工具未实现（完整会话内切换未定，避免死代码）；task 仅在 `workflow_start` 的“未开始”分支允许切过去。
 
 **sdlc 定义**（五阶段 `["requirements","design","implementation","testing","review"]`、审查阶段 `review`、四清单项 businessIntent/logicExplainable/behaviorVerifiable/designRationale、`hasCommitGate=true`）已移至 **workflow-sdlc.md 2 章**，规则全文见 **workflow-sdlc.md 3 章**。
 
@@ -543,7 +544,7 @@ export function resolveWorkflowType(v: unknown): WorkflowType   // 未知值回�
 
 该指标由 `review_submit` 审查通过时**插件自动计算**，不依赖 Agent 上报。它不设硬性预警阈值（重写频率因团队/任务而异），仅作**返工信号**展示：一次通过率过低提示 AI 返工偏多，应回溯 prompt 或该文件的重写轮次（`rewrites`）。纯讨论会话（无片段）不写，保持 `null`（显示 N/A）。
 
-> 一次通过率由 `review_submit` 自动计算，sdlc 与 reqdoc 均适用：sdlc 分母为「代码片段」、reqdoc 分母为「PRD 要点」，口径一致（未重写即 accepted 占比）。行数三分类/rework/coverage 为 sdlc 专属，reqdoc 为 null（见 9.5）。
+> 一次通过率由 `review_submit` 自动计算，sdlc 与 reqdoc 均适用：sdlc 分母为「代码片段」、reqdoc 分母为「PRD 要点」，口径一致（未重写即 accepted 占比）。task 无审查阶段，一次通过率/理解确认恒为 null/0。行数三分类/rework/coverage 为 sdlc 专属，reqdoc/task 为 null（见 9.5）。
 
 > 说明：业界 Copilot 的 25–35% 健康接受率针对**行级补全建议**（开发者多数跳过），而本插件是**整段 AI 代码、开发者审查后决定去留**，一次通过率天然偏高，二者口径不同，故不套用该区间。
 
@@ -692,7 +693,7 @@ stateDiagram-v2
 }
 ```
 
-这些时间戳就是统计分析的数据来源。sdlc 与 reqdoc 的各阶段适用同一套转换规则与时间戳口径。
+这些时间戳就是统计分析的数据来源。task / sdlc / reqdoc 的各阶段适用同一套转换规则与时间戳口径；task 只有 execute 一个阶段。
 
 **会话周期（durationMs）口径**：已完成会话（全部阶段 approved）取「全部转换时间戳的最早到最晚」跨度；进行中会话取「自工作流启动（最早转换）至今」，保证展示不为 0m。**AI 提效率仅对已完成会话计算**——进行中会话的周期是实时值，与整任务预估无参照意义，避免误报高提效。
 
@@ -1062,7 +1063,7 @@ r5/r9/r21 三处「不该调用」类判据改为「调用了但被服务端拒�
 
 | 3 | ~~关键约束要字面重复，不靠语义等价~~ **——已实证不成立，此条作废** | 做过两组受控实验（同一夹具、同一渲染器、同一模型与参数，**只替换被测那一行的表述形式**）：<br>① 提交门禁事实（字面 `提交状态：blocked（未完成：edge、review）` / 纯业务语 / 字面重复两次），依变量=是否尝试提交：n=5/组，**三组全 5/5**，无差异。<br>② 阶段事实（字面 `当前阶段：边界与异常（第 3/5 步），状态 进行中` / 纯业务语 / 重复），依变量=模型自己写的 📍 行是否含正确阶段名与步数：n=3/组，**三组全 3/3**；且业务语组的「目的」字段确实变了（模型复述了业务语版），证明**注入被读到并正确传达，只是不对表述形式敏感**。<br>第①组还暴露一个方法论要点：**依变量必须有变化空间**——模型无论如何都会尝试提交（然后被服务端拒），措辞改不改都一样，此时「无差异」不能读作「无影响」。<br>原据（baseline 原始 JSON 3/3 → new 业务语言 0/3）经此证明是混淆：r5 现已改判 `rejected`（测服务端防线），那条信号本就不是在测「是否察觉措辞」。**教训：别把「换了个说法模型就不听」当成结论——先做只改一个变量的对照。** |
 
-**两个工作流验证集结果（同口径，本地 qwen3 + EVAL_DISABLE_THINKING=1 + EVAL_EXECUTE=1）**：
+**sdlc/reqdoc 两个工作流验证集结果（同口径，本地 qwen3 + EVAL_DISABLE_THINKING=1 + EVAL_EXECUTE=1；task 尚未纳入评测集）**：
 **验证集现为 50 场景**（原 51，删了 r21，见下）。
 
 **最新全量：44/50（88%）**——sdlc 21/22、reqdoc 23/28。6 个失败里 **4 个是端点上限所致**
@@ -1236,7 +1237,7 @@ graph TB
 
 **采用原因**：真实开发本质上是迭代的。约束点应该是"所有必需产物是否都已完成"，而不是"当前处于哪个阶段"。
 
-**审查阶段的特殊地位（sdlc）**：审查（review）是 sdlc 五阶段中唯一**不可被 AI 自行推进**的阶段。审查不仅检查代码正确性，更检查**人是否真正理解了代码**。审查清单包含四个硬性检查项（详见 3.2），不满足则审查阶段不可 approve。审查阶段与编码、测试阶段形成迭代循环——编码完成后进入审查，审查不通过则回到编码或测试。审查阶段由 `WorkflowDefinition.reviewStage` 声明；sdlc 与 reqdoc 均声明 `review` 审查阶段（reqdoc 语义为业务确认 PRD 要点）。
+**审查阶段的特殊地位（sdlc）**：审查（review）是 sdlc 五阶段中唯一**不可被 AI 自行推进**的阶段。审查不仅检查代码正确性，更检查**人是否真正理解了代码**。审查清单包含四个硬性检查项（详见 3.2），不满足则审查阶段不可 approve。审查阶段与编码、测试阶段形成迭代循环——编码完成后进入审查，审查不通过则回到编码或测试。审查阶段由 `WorkflowDefinition.reviewStage` 声明；sdlc 与 reqdoc 均声明 `review` 审查阶段（reqdoc 语义为业务确认 PRD 要点），task 声明 `null`（无审查）。
 
 
 ### 8.2 阶段检测方式选择
@@ -1301,6 +1302,7 @@ sequenceDiagram
 |------|------|-----------|
 | `workflow_advance` | 提议进入下一阶段 / 标记当前阶段 approved | 必须携带开发者确认语义；`stage` 运行时校验须在 `getDefinition(workflow.type).stages` 内（AI 不可在无确认时调用成功）；enter 将自动确认进行中的前序阶段时**须 `developer_confirmed=true`**（防静默自动确认，sdlc-r2/reqdoc-r3），回执列出被自动确认的阶段 |
 | `workflow_revisit` | 回退到指定阶段（revision++） | 目标阶段必须存在于 `def.stages`；**级联回退**该阶段之后所有已 `approved` 的下游阶段（同样 revision++，见 3.3）；级联触及审查阶段时，已确认的理解片段 **`accepted`→`pending` 重置**（旧确认对应改动前代码，不得以 stale 确认通过 `review_submit`；revisit 审查自身不重置） |
+| `workflow_start` | 启动当前工作流第一阶段（入口短语：启动 SDLC / REQDOC 工作流、启动一般任务） | 仅在会话未开始时允许切到 `task`（task 工具集是子集；反向切换会缺 review/commit 工具） |
 | `workflow_baseline` | 录入/重设基线预估人工工时（项目经理给出，如 8h，6.3） | `developer_confirmed` 必须为 true（防 AI 杜撰）；`estimated_hours > 0`；幂等覆盖记最新值 |
 | `comprehension_add` | 登记一个片段/要点及自然语言解释（sdlc 为代码片段，reqdoc 为 PRD 要点） | 不可重复登记；sdlc 填 `file/lineStart/lineEnd`，reqdoc 省略；登记后 `decision=pending`，待逐段定夺 |
 | `comprehension_confirm` | 接受单个片段/要点（一次通过） | **单次调用只接受一个 `codeSegmentId`**，防止批量确认（见 8.6）；须处于 pending/rejected 才可接受 |
@@ -1315,7 +1317,7 @@ sequenceDiagram
 
 工具定义遵循上游插件 `ToolDefinition` 接口（`packages/plugin/src/tool.ts`），由 `tool` hook 注册后自动进入 LLM 可用工具集（上游 `tool/registry.ts` 已接线）。
 
-以上工具的行为由当前会话的 `workflow.type` 对应定义驱动：阶段键/中文名/清单项/是否有提交门禁均取自 `getDefinition(workflow.type)`。sdlc 的 `hasCommitGate=true`，行为与改动前一致；reqdoc 的 `hasCommitGate=false`，`commit_gate_*` 工具按 `def.hasCommitGate` 分支直接放行/不注册。
+以上工具的行为由当前会话的 `workflow.type` 对应定义驱动：阶段键/中文名/清单项/是否有提交门禁均取自 `getDefinition(workflow.type)`。sdlc 的 `hasCommitGate=true`，行为与改动前一致；reqdoc/task 的 `hasCommitGate=false`，`commit_gate_*` 工具按 `def.hasCommitGate` 分支不注册；task 还不注册 review/comprehension 工具。
 
 
 ### 8.4 实现机制
@@ -1574,7 +1576,7 @@ graph TB
 
 **数据来源决策**：零额外采集。工作流状态变更的时间戳即为分析数据源。
 
-**身份关联决策**：身份以 `api_key` 标识，本地明文存储、上送前转 SHA-256 哈希（网络不传明文）；组/部门/组织等归属由后台收集服务（`performance_dashboard`）据 `api_key` 哈希解析，客户端不再填写 account/group/org。另加 **workflowType（工作流类型）** 维度，由开发者 `opencode-sm init` 填写（api_key / 收集服务地址 / 可选工作流类型），存全局 `identity.json`。workflowType 决定本用户新会话走哪套工作流（开发者 `sdlc` 开发 / 需求分析师 `reqdoc` 需求书），不同角色 = 不同用户（见 3.1、3.2）。跨机聚合在收集服务侧完成（见 10.1、3.1）。
+**身份关联决策**：身份以 `api_key` 标识，本地明文存储、上送前转 SHA-256 哈希（网络不传明文）；组/部门/组织等归属由后台收集服务（`performance_dashboard`）据 `api_key` 哈希解析，客户端不再填写 account/group/org。另加 **workflowType（工作流类型）** 维度，由开发者 `opencode-sm init` 填写（api_key / 收集服务地址 / 可选工作流类型），存全局 `identity.json`。workflowType 决定本用户新会话走哪套工作流（开发者 `sdlc` 开发 / 需求分析师 `reqdoc` 需求书 / 一般任务 `task` 工时），不同角色 = 不同用户（见 3.1、3.2）。跨机聚合在收集服务侧完成（见 10.1、3.1）。
 
 
 
@@ -1735,8 +1737,8 @@ AI 使用: 对话 47轮 | $0.36 | 85K tokens
 不同工作流（sdlc / reqdoc）的指标不同，但**报告形状保持单一**，不建 union/meta-schema：
 
 - **报告**：`QualitySummary` 单一形状——sdlc 填足（含行数三分类、rework、coverage），reqdoc 填通用字段（firstPassRate/iterationCount/baseline），code 专属字段（行数三分类、rework、coverage）为 `null` → 收集/展示侧自动作为 N/A。
-- **聚合**：collector 的 `reports` 表落 `workflow_type` 列（+ 索引，见 3.1），写入侧从 `report.workflow.type` 取；查询侧 `GET /api/stats` 与 CLI `opencode-sm stats --workflow <type>` 按类型过滤——**两条流程的指标绝不混算**。
-- **本机统计**：会话级/项目级（`stats.ts`）同样按 `workflow.type` 分区——sdlc 专属指标（行数三分类、一次通过率、返工、覆盖率）仅 sdlc 会话计算；reqdoc 会话这些字段为 null。
+- **聚合**：collector 的 `reports` 表落 `workflow_type` 列（+ 索引，见 3.1），写入侧从 `report.workflow.type` 取；查询侧 `GET /api/stats` 与 CLI `opencode-sm stats --workflow <type>` 按类型过滤——**task / sdlc / reqdoc 的指标绝不混算**。
+- **本机统计**：会话级/项目级（`stats.ts`）同样按 `workflow.type` 分区——sdlc 专属指标（行数三分类、返工、覆盖率）仅 sdlc 会话计算；reqdoc 会话这些字段为 null；task 只展示预估/实际/提效，不展示审查与代码质量指标。
 - **不预建** union/meta-schema（reqdoc 专属指标未定，定义即臆测）；扩展时新增可选字段（如 `docStats`）即可，分区管道已就位。
 
 ---
@@ -1833,7 +1835,7 @@ qwen3 经 vLLM 的两个已知坑与排查顺序见 **deployment.md** 的「qwen
 危险）——场景永远绿，给的是假 assurance，而它护的正是「静默点默认不入库」这条
 防污染红线。任一项失灵即中止并指名该项。
 
-判定类分两类：**behavior 类**（`tool_use` / `no_tool` / `text`，断言「模型调了什么工具、怎么调、回复含什么」，sdlc 与 reqdoc 全部场景共用）与 **output 类**（`score` 质量飞轮 P0 / `render` 质量飞轮 P2，断言「模型渲染产出的 PRD 文本质量」，**reqdoc 专属**——reqdoc 用它将「通过/不通过」升级为 0-100 八维度量，sdlc 不跑 output 类、只走 behavior 类的通过率）。
+判定类分两类：**behavior 类**（`tool_use` / `no_tool` / `text`，断言「模型调了什么工具、怎么调、回复含什么」，task / sdlc / reqdoc 全部场景共用）与 **output 类**（`score` 质量飞轮 P0 / `render` 质量飞轮 P2，断言「模型渲染产出的 PRD 文本质量」，**reqdoc 专属**——reqdoc 用它将「通过/不通过」升级为 0-100 八维度量，sdlc 不跑 output 类、只走 behavior 类的通过率）。
 
 - 工具类比对 `tool_use` 名称与参数谓词（如 approve 时 `developer_confirmed` 必须 true）；`args` 为参数子集全等匹配，`argsContains`（质量飞轮 P1）为数组子集断言——期望每个元素须出现在实际数组参数中（如断言 asked 覆盖核心探针），两者互不影响、零回归
 - `no_tool` 类断言未调用某工具
@@ -1884,7 +1886,7 @@ flowchart TD
 - **场景 userTurn 避免二义性**：发言词不要同时是阶段名与要点 id（如「边界这块」既像 edge 阶段又像要点 id），否则强模型可能误走 `workflow_revisit`。
 - **hoisted 拷贝残留影响评测**：评测脚本经 `node_modules/sm-shared` 解析共享包，`node-linker=hoisted` 下它是真实拷贝；修改 `packages/shared` 后须删除 `node_modules/sm-shared` 并 `bun install` 重同步，否则评测读到旧规则文本（`typecheck`/`bun test` 仍全绿，易漏）。
 
-### 9.11 改动分级决策图（两个工作流共用评测门）
+### 9.11 改动分级决策图（多工作流共用评测门；task 尚未纳入评测集）
 
 不是任何改动都跑评测门——只有碰触「模型行为面」的改动才需要（模型读进上下文的内容：规则文本 / 探针清单 / 打分卡 / 模板 / 工具描述 / 状态条注入格式；**评测脚本不属于行为面**——它是对照物/量尺，改判定口径是「换尺子」不是「改被测内容」，但同样要过评测门，判据变了结果不可直接对比）；机制面改动（工具逻辑 / 门禁 / 状态机 / DB / 汇报 / CLI / collector / 纯注释文档）由 `bun test` + `typecheck` 兜底，不跑评测门。行为面改动的分级验证（①②是③的前置自检，**③真实模型对比是合入前唯一不可省的重闸**）：
 
@@ -1905,7 +1907,7 @@ flowchart LR
     K --> L(["合入"])
 ```
 
-①②③ 各级的**具体命令、读输出口径与 baseline 冻结纪律**见 9.6 运行方式。本决策图两个工作流共用，但第③步比对口径不同：**sdlc 只看通过率**（baseline→new 不降即可），**reqdoc 额外看打分卡八维分数**（打分卡 0-100 八维度量是 reqdoc 专属度量）。质量飞轮的三支柱机制（把 reqdoc 打分卡接进评测）、reqdoc 落地节奏（P0/P1/P2）与 reqdoc 实测轮次见 **workflow-reqdoc.md 10 章**。
+①②③ 各级的**具体命令、读输出口径与 baseline 冻结纪律**见 9.6 运行方式。本决策图 sdlc/reqdoc 共用；task 目前只做单测与文本契约，尚未纳入评测集。第③步比对口径不同：**sdlc 只看通过率**（baseline→new 不降即可），**reqdoc 额外看打分卡八维分数**（打分卡 0-100 八维度量是 reqdoc 专属度量）。质量飞轮的三支柱机制（把 reqdoc 打分卡接进评测）、reqdoc 落地节奏（P0/P1/P2）与 reqdoc 实测轮次见 **workflow-reqdoc.md 10 章**。
 
 **可持续的保障**
 
@@ -1942,7 +1944,7 @@ flowchart LR
 | `src/db/schema.ts` | 插件库表定义（仅 `workflow_session` 一张表） |
 | `src/db/index.ts` | 插件 SQLite 初始化与迁移（bun:sqlite，WAL 模式） |
 | `src/identity.ts` | 读全局 `identity.json`，解析 `api_key`（上送前转 SHA-256 哈希）；不再打标 account_id |
-| `src/prompt.ts` | system prompt 注入片段：阶段化注入（rulesForStage 取 global + 当前阶段规则）+ buildStateBar 阶段状态块替代冗长 JSON（含阶段表头「当前阶段（第 N/Y 步）+ 目的 + 状态」、来源覆盖 [文档]x/[问答]y、渲染校验、追问覆盖多行）；`stage===null` 三态化：未启动（起步）/ 空档态（部分 approved：继续→进入下一阶段 / 回退→revisit）/ 完成态（专用完成块：「提交 commit_gate_check / 开新需求 /new / 改本需求 workflow_revisit」，不注入常规全局规则；合并 open-ide 后完成态另读锁表提示解锁，仅 sdlc；详见 8.7） |
+| `src/prompt.ts` | system prompt 注入片段：阶段化注入（rulesForStage 取 global + 当前阶段规则）+ buildStateBar 阶段状态块替代冗长 JSON（含阶段表头「当前阶段（第 N/Y 步）+ 目的 + 状态」、来源覆盖 [文档]x/[问答]y、渲染校验、追问覆盖多行）；task 使用专用状态条（预估/已用时/完成提示）；`stage===null` 三态化：未启动（起步，含工作流入口短语）/ 空档态（部分 approved：继续→进入下一阶段 / 回退→revisit）/ 完成态（专用完成块：「提交 commit_gate_check / 开新需求 /new / 改本需求 workflow_revisit」，不注入常规全局规则；合并 open-ide 后完成态另读锁表提示解锁，仅 sdlc；详见 8.7） |
 | `src/tools/workflow.ts` | `workflow_advance`（含 reqdoc 进入 prd 的打分卡门禁）/ `workflow_revisit` / `workflow_baseline` / `commit_gate_check` / `commit_force_unlock` 工具 |
 | `src/tools/review.ts` | `comprehension_add` / `comprehension_confirm` / `comprehension_reject` / `comprehension_rewrite` / `comprehension_manual` / `comprehension_ask` / `review_submit` 工具（含防批量确认校验、终态门禁、reqdoc 定稿打分卡 + P1 探针 + P2 渲染复核兜底校验） |
 | `src/tools/reqdoc-scan.ts` / `reqdoc-features.ts` / `reqdoc-score.ts` / `reqdoc-check.ts` / `reqdoc-export.ts` | reqdoc 专属工具（文档扫描 / 功能点拆解确认 / 八维打分卡 / 渲染结构校验 / Word 导出），用途与服务端校验见 **workflow-reqdoc.md 8 章** 完整表格 |

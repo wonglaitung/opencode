@@ -3,10 +3,14 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
+  ESTIMATE_FORMAT_HINT,
   REQDOC,
   REQDOC_SCORE_DIMS,
   SDLC,
+  TASK,
   WORKFLOW_DEFINITIONS,
+  WORKFLOW_ENTRY_HINT,
+  WORKFLOW_ENTRY_PHRASE,
   createWorkflowState,
   currentInProgressStage,
   deepMerge,
@@ -196,6 +200,7 @@ describe("WorkflowDefinition 注册表（3.2）", () => {
   })
 
   test("resolveWorkflowType：合法值原样返回，未知值回退 sdlc 并打 warning", () => {
+    expect(resolveWorkflowType("task")).toBe("task")
     expect(resolveWorkflowType("sdlc")).toBe("sdlc")
     expect(resolveWorkflowType("reqdoc")).toBe("reqdoc")
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
@@ -206,7 +211,8 @@ describe("WorkflowDefinition 注册表（3.2）", () => {
   })
 
   test("WORKFLOW_DEFINITIONS 注册表与 getDefinition", () => {
-    expect(Object.keys(WORKFLOW_DEFINITIONS)).toEqual(["sdlc", "reqdoc"])
+    expect(Object.keys(WORKFLOW_DEFINITIONS)).toEqual(["task", "sdlc", "reqdoc"])
+    expect(getDefinition("task")).toBe(TASK)
     expect(getDefinition("sdlc")).toBe(SDLC)
     expect(getDefinition("reqdoc")).toBe(REQDOC)
   })
@@ -372,6 +378,41 @@ describe("summarizeWorkflow 多流程结构", () => {
     expect(review.comprehension).toEqual({ total: 0, confirmed: 0 })
     // 普通阶段为 StageSummary，无 checklist
     expect(summary.stages.requirements).not.toHaveProperty("checklist")
+  })
+})
+
+describe("TASK 一般任务工作流", () => {
+  test("单阶段、无审查、无提交门禁", () => {
+    expect(TASK.type).toBe("task")
+    expect(TASK.stages).toEqual(["execute"])
+    expect(TASK.reviewStage).toBeNull()
+    expect(TASK.checklist).toEqual([])
+    expect(TASK.hasCommitGate).toBe(false)
+    const state = createWorkflowState("task")
+    expect(state.commit.blocked_by).toEqual(["execute"])
+    expect(state.stages.execute.status).toBe("not_started")
+    expect(() => reviewRecord(state)).toThrow()
+  })
+
+  test("三工作流预估提示共用同一话术", () => {
+    const rules = [
+      SDLC.rules.find((r) => r.id === "sdlc-r6")!,
+      REQDOC.rules.find((r) => r.id === "reqdoc-r7")!,
+      TASK.rules.find((r) => r.id === "task-r1")!,
+    ]
+    expect(rules.every((r) => r.text.includes(ESTIMATE_FORMAT_HINT))).toBe(true)
+    expect(rules.every((r) => r.text.includes("预估 xx 小时"))).toBe(true)
+  })
+
+  test("入口短语与起步提示覆盖三个工作流", () => {
+    expect(WORKFLOW_ENTRY_PHRASE).toEqual({
+      task: "启动一般任务",
+      sdlc: "启动 SDLC 工作流",
+      reqdoc: "启动 REQDOC 工作流",
+    })
+    expect(WORKFLOW_ENTRY_HINT.task).toContain("直接输入任务内容")
+    expect(WORKFLOW_ENTRY_HINT.sdlc).toContain(WORKFLOW_ENTRY_PHRASE.sdlc)
+    expect(WORKFLOW_ENTRY_HINT.reqdoc).toContain(WORKFLOW_ENTRY_PHRASE.reqdoc)
   })
 })
 

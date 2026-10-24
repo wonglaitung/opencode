@@ -1,0 +1,38 @@
+import { describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
+
+const buildDir = join(import.meta.dir, "../../../../portable-installer/build")
+const nsi = readFileSync(join(buildDir, "OpenCode-launch.nsi"), "utf8")
+const config = readFileSync(join(buildDir, "launcher-config.js"), "utf8")
+
+describe("OpenCode-launch 工作流选项与提示", () => {
+  test("一般任务排在菜单第一项", () => {
+    const task = nsi.indexOf('"一般任务"')
+    const sdlc = nsi.indexOf('"SDLC 开发流程"')
+    const reqdoc = nsi.indexOf('"REQDOC 需求书"')
+    expect(task).toBeGreaterThan(-1)
+    expect(sdlc).toBeGreaterThan(task)
+    expect(reqdoc).toBeGreaterThan(sdlc)
+  })
+
+  test("三个工作流都有入口与预估提示", () => {
+    expect(nsi).toContain("输入「启动 SDLC 工作流」进入")
+    expect(nsi).toContain("输入「启动 REQDOC 工作流」进入")
+    expect(nsi).toContain("直接输入任务内容即开始")
+    for (const text of ["直接输入任务内容", "启动 SDLC 工作流", "启动 REQDOC 工作流"]) {
+      expect(nsi).toContain(text)
+    }
+    expect(nsi.match(/预估 xx 小时/g)?.length ?? 0).toBeGreaterThanOrEqual(3)
+  })
+
+  test("一般任务提示完成方式，会话管理未启用时给出依赖提示", () => {
+    expect(nsi).toContain("完成后请明确说「完成」")
+    expect(nsi).toContain("未启用会话管理，工作流选择不生效，也不记录工时。")
+  })
+
+  test("launcher-config 读写 task", () => {
+    expect(config).toContain('parsed.workflowType === "task"')
+    expect(config).toContain('args.workflow !== "task"')
+  })
+})

@@ -37,6 +37,7 @@ Var Cmd
 Var ErrCode
 Var ErrText
 Var HintText
+Var hHint
 
 Function .onInit
   ; 内嵌配置助手, 运行期释放到 $PLUGINSDIR
@@ -95,7 +96,9 @@ Function .onInit
   ${EndIf}
 
   ; 归一化, 防止空值或异常值把界面带偏
-  ${If} $WorkflowType != "reqdoc"
+  ${If} $WorkflowType == "task"
+  ${ElseIf} $WorkflowType == "reqdoc"
+  ${Else}
     StrCpy $WorkflowType "sdlc"
   ${EndIf}
   ${If} $TerminalMode != "dedicated"
@@ -122,11 +125,30 @@ Function .onInit
     StrCpy $PluginSm "0"
     StrCpy $PluginEdge "0"
     StrCpy $PluginServer "0"
+  ${EndIf}
+  Call SetWorkflowHint
+FunctionEnd
+
+Function SetWorkflowHint
+  ${If} $ConfigOk != "1"
     StrCpy $HintText "opencode.jsonc 缺失或无法解析, 插件开关不可用, 请重新运行安装包。"
   ${ElseIf} $IdentityOk != "1"
     StrCpy $HintText "身份文件缺失, 工作流不可选, 请先运行 opencode-sm init。"
+  ${ElseIf} $PluginSm != "1"
+    StrCpy $HintText "未启用会话管理，工作流选择不生效，也不记录工时。"
+  ${ElseIf} $WorkflowType == "task"
+    StrCpy $HintText "直接输入任务内容即开始（自动计时）$\r$\n预估请回「预估 xx 小时」；完成后请明确说「完成」$\r$\n本次启动生效；已有窗口请先退出"
+  ${ElseIf} $WorkflowType == "reqdoc"
+    StrCpy $HintText "输入「启动 REQDOC 工作流」进入$\r$\n目标阶段会问「预估 xx 小时」；定稿前业务逐条确认$\r$\n本次启动生效；已有窗口请先退出"
   ${Else}
-    StrCpy $HintText "改动在本次启动生效, 已有 OpenCode 窗口请先退出。"
+    StrCpy $HintText "输入「启动 SDLC 工作流」进入$\r$\n需求阶段会问「预估 xx 小时」；提交前须过审查门禁$\r$\n本次启动生效；已有窗口请先退出"
+  ${EndIf}
+FunctionEnd
+
+Function RefreshWorkflowHint
+  Call SetWorkflowHint
+  ${If} $hHint != ""
+    ${NSD_SetText} $hHint "$HintText"
   ${EndIf}
 FunctionEnd
 
@@ -144,11 +166,29 @@ FunctionEnd
 Function OnSmToggle
   ${NSD_GetState} $hSm $0
   ${If} $0 == ${BST_CHECKED}
+    StrCpy $PluginSm "1"
+  ${Else}
+    StrCpy $PluginSm "0"
+  ${EndIf}
+  ${If} $0 == ${BST_CHECKED}
   ${AndIf} $IdentityOk == "1"
     EnableWindow $hWorkflow 1
   ${Else}
     EnableWindow $hWorkflow 0
   ${EndIf}
+  Call RefreshWorkflowHint
+FunctionEnd
+
+Function OnWorkflowChange
+  ${NSD_CB_GetSelectionIndex} $hWorkflow $0
+  ${If} $0 == 0
+    StrCpy $WorkflowType "task"
+  ${ElseIf} $0 == 2
+    StrCpy $WorkflowType "reqdoc"
+  ${Else}
+    StrCpy $WorkflowType "sdlc"
+  ${EndIf}
+  Call RefreshWorkflowHint
 FunctionEnd
 
 Function DoLaunch
@@ -168,7 +208,9 @@ Function DoLaunch
 
   ; 读取三个选择
   ${NSD_CB_GetSelectionIndex} $hWorkflow $0
-  ${If} $0 == 1
+  ${If} $0 == 0
+    StrCpy $WorkflowType "task"
+  ${ElseIf} $0 == 2
     StrCpy $WorkflowType "reqdoc"
   ${Else}
     StrCpy $WorkflowType "sdlc"
@@ -291,13 +333,17 @@ Function LaunchPage
   ${NSD_CreateLabel} 0 32u 38u 10u "工作流"
   ${NSD_CreateDropList} 40u 30u 108u 50u
   Pop $hWorkflow
+  ${NSD_CB_AddString} $hWorkflow "一般任务"
   ${NSD_CB_AddString} $hWorkflow "SDLC 开发流程"
   ${NSD_CB_AddString} $hWorkflow "REQDOC 需求书"
-  ${If} $WorkflowType == "reqdoc"
-    ${NSD_CB_SetSelectionIndex} $hWorkflow 1
-  ${Else}
+  ${If} $WorkflowType == "task"
     ${NSD_CB_SetSelectionIndex} $hWorkflow 0
+  ${ElseIf} $WorkflowType == "reqdoc"
+    ${NSD_CB_SetSelectionIndex} $hWorkflow 2
+  ${Else}
+    ${NSD_CB_SetSelectionIndex} $hWorkflow 1
   ${EndIf}
+  ${NSD_OnChange} $hWorkflow OnWorkflowChange
 
   ${NSD_CreateLabel} 158u 32u 40u 10u "终端类型"
   ${NSD_CreateDropList} 200u 30u 98u 50u
@@ -334,11 +380,12 @@ Function LaunchPage
   ${EndIf}
   ${NSD_OnClick} $hSm OnSmToggle
 
-  ${NSD_CreateLabel} 0 76u 100% 18u "$HintText"
-  Pop $1
-  SetCtlColors $1 666666 transparent
+  ${NSD_CreateLabel} 0 76u 100% 28u "$HintText"
+  Pop $hHint
+  SetCtlColors $hHint 666666 transparent
+  Call RefreshWorkflowHint
 
-  ${NSD_CreateButton} 0 98u 100% 16u "打开 AI Assistant"
+  ${NSD_CreateButton} 0 108u 100% 16u "打开 AI Assistant"
   Pop $2
   ${NSD_OnClick} $2 DoLaunch
 

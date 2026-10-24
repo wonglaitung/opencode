@@ -188,7 +188,7 @@ stage: global   # 常驻全程；或某个阶段键（如 implementation / prd�
 ---
 ```
 
-- **基线**：随插件打包在 `packages/plugin/conventions/<类型>/*.md`（`sdlc`、`reqdoc` 各一套）。
+- **基线**：随插件打包在 `packages/plugin/conventions/<类型>/*.md`（`sdlc`、`reqdoc` 各一套；`task` 无编写规约）。
 - **机构覆盖**：放在项目根 `<你的项目>/conventions/<类型>/*.md`，插件自动读取并追加到基线之后（按 `workflow.type` 隔离、按 `stage` 阶段门控，不跨工作流泄漏）。
 - **通用/常驻规则**：写进项目/全局的 `AGENTS.md`（OpenCode 原生合并，适合跨工作流的机构约定），不放进 `conventions/` 目录。
 
@@ -260,7 +260,7 @@ opencode-sm init
 ```
 ? api_key（明文仅存本机 identity.json；发送前转 SHA-256 哈希，网络不传明文）: <输入>
 ? 收集服务地址（如 http://10.0.1.20:8787）: http://【收集器地址】:8088
-? 主要工作流类型（sdlc 开发 / reqdoc 需求书）[缺省 sdlc]: sdlc
+? 主要工作流类型（task 一般任务 / sdlc 开发 / reqdoc 需求书）[缺省 sdlc]: sdlc
 ✓ 已写入 ~/.config/opencode/session-mgmt/identity.json
 ```
 
@@ -626,11 +626,11 @@ bun run pack:cli           # → dist/opencode-sm-<版本>-<平台>.tgz（按内
    > {
    >   "apiKey": "<明文本机存储，发送前转 SHA-256 哈希>",
    >   "collector_url": "http://【收集器地址】:8088",
-   >   "workflowType": "sdlc"
+   >   "workflowType": "sdlc"   // task 一般任务 / sdlc 开发 / reqdoc 需求书
    > }
    > ```
    >
-   > 其中 `workflowType` 为可选字段（缺省 sdlc，`init` 会写入）；缺失 `apiKey` 或 `collector_url` 时 `readIdentity()` 校验直接判 null、汇报静默丢弃。
+   > 其中 `workflowType` 为可选字段（任务 task / 开发 sdlc / 需求书 reqdoc，缺省 sdlc，`init` 会写入）；缺失 `apiKey` 或 `collector_url` 时 `readIdentity()` 校验直接判 null、汇报静默丢弃。
 
 4. **（可选）把工具根目录加入系统 PATH**：`D:\Tools\node-v22.23.2-win-x64` 进 PATH 后，任意目录可直接 `opencode` / `opencode-sm` / `bun` / `npm`，不用敲 `.\xxx.cmd`。
 

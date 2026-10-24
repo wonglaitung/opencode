@@ -1,5 +1,5 @@
 import type { ToolDefinition } from "@opencode-ai/plugin"
-import type { WorkflowType } from "sm-shared"
+import { getDefinition, type WorkflowType } from "sm-shared"
 import type { Store } from "../db"
 import type { IdeEntry } from "../open-ide/config"
 import type { LockRegistry } from "../open-ide/lock"
@@ -24,8 +24,9 @@ type Input = {
 }
 
 export function createToolset(input: Input): Record<string, ToolDefinition> {
+  const def = getDefinition(input.workflowType)
   const workflow = createWorkflowTools(input.store)
-  if (input.workflowType === "reqdoc") {
+  if (!def.hasCommitGate) {
     delete workflow.commit_gate_check
     delete workflow.commit_force_unlock
   }
@@ -33,8 +34,8 @@ export function createToolset(input: Input): Record<string, ToolDefinition> {
   return {
     ...workflow,
     ...createWorkflowStartTools(input.store),
-    ...createReviewTools(input.store),
-    ...(input.workflowType === "reqdoc" ? reqdocTools(input.store) : {}),
+    ...(def.reviewStage === null ? {} : createReviewTools(input.store)),
+    ...(def.type === "reqdoc" ? reqdocTools(input.store) : {}),
     open_ide: createOpenIdeTool(input.ideEntries, input.lockRegistry),
     ...createLockTools(input.lockRegistry),
   }

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { asStringArray, parseArgs } from "../src/index"
-import { fmtTitle, parsePeriodMs } from "../src/commands/stats"
+import { fmtTaskLine, fmtTitle, parsePeriodMs } from "../src/commands/stats"
 
 describe("parseArgs", () => {
   test("位置参数与键值", () => {
@@ -37,5 +37,17 @@ describe("fmtTitle", () => {
     const out = fmtTitle(long)
     expect(out.endsWith("…")).toBe(true)
     expect(out.length).toBe(25)
+  })
+})
+
+describe("fmtTaskLine", () => {
+  test("一般任务显示预估/实际/提效", () => {
+    expect(fmtTaskLine(2, 30 * 60_000, 0.75)).toContain("预估 2h")
+    expect(fmtTaskLine(2, 30 * 60_000, 0.75)).toContain("提效 75%")
+  })
+
+  test("无预估或进行中降级", () => {
+    expect(fmtTaskLine(null, 1000, null)).toContain("N/A")
+    expect(fmtTaskLine(2, 30 * 60_000, null)).toContain("进行中")
   })
 })

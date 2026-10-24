@@ -426,7 +426,7 @@ function readWorkflow(identityPath) {
       parsed.apiKey.trim() !== "" &&
       typeof parsed.collector_url === "string" &&
       parsed.collector_url.trim() !== ""
-    const workflow = parsed.workflowType === "reqdoc" ? "reqdoc" : "sdlc"
+    const workflow = parsed.workflowType === "task" ? "task" : parsed.workflowType === "reqdoc" ? "reqdoc" : "sdlc"
     return { workflow, ok }
   } catch {
     return { workflow: "sdlc", ok: false }
@@ -500,7 +500,7 @@ function apply(args) {
   }
 
   if (args.workflow !== undefined) {
-    if (args.workflow !== "sdlc" && args.workflow !== "reqdoc") throw fail("WORKFLOW_UNKNOWN", "未知工作流：" + args.workflow)
+    if (args.workflow !== "task" && args.workflow !== "sdlc" && args.workflow !== "reqdoc") throw fail("WORKFLOW_UNKNOWN", "未知工作流：" + args.workflow)
     const text = readText(identity)
     if (text === null) throw fail("IDENTITY_MISSING", "未找到 identity.json，请先运行 opencode-sm init 或重新运行安装包")
     let parsed

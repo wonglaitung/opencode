@@ -20,6 +20,7 @@ import { createSystemTransform } from "./prompt"
 import { createReporter, type Usage } from "./report"
 import { STARTUP_DELAY_MS, deferredStartup } from "./startup"
 import { createIterationCounter } from "./tools/quality"
+import { finishTask, startTask } from "./task-lifecycle"
 import { createToolset } from "./tools/toolset"
 import { applyBaselineProposal } from "./tools/baseline-proposal"
 import { makeSubagentChecker } from "./subagent"
@@ -131,18 +132,18 @@ const SessionMgmtPlugin: Plugin = async (input) => {
     "chat.message": async (hookInput, output) => {
       // 子代理会话不追踪：不建记录、不汇报（2.4 统计纯净度）
       if (await isSubagent(hookInput.sessionID)) return
+      const text = output.parts.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
+      // task：首条消息自动开始计时；整句完成词自动收口（不依赖模型记得调 approve）。
+      // 只为 task daemon 建记录，避免 sdlc/reqdoc 的普通会话被确保成空工作流（统计纯净度）。
+      if (workflowType === "task") startTask(store, hookInput.sessionID)
+      finishTask(store, hookInput.sessionID, text)
       await syncSessionTitle(store, input.client, hookInput.sessionID)
       await reporter.enqueueReport(hookInput.sessionID)
       // 6.3 防 AI 杜撰基线：工时证据取**本次** hook 消息的文本。不得回读历史消息
       // ——上游 chat.message 在消息落库前触发（prompt.ts 先 trigger 后 updateMessage），
       // 回读恒少当前这条：证据滞后一条，且会被上一条无工时消息清空，workflow_baseline
       // 就会连续拒收开发者已报出的数字（线上 P1，护栏见 test/baseline-hook.test.ts）。
-      applyBaselineProposal(
-        store,
-        hookInput.sessionID,
-        output.parts.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n"),
-        output.message.id,
-      )
+      applyBaselineProposal(store, hookInput.sessionID, text, output.message.id)
     },
 
     dispose: async () => {

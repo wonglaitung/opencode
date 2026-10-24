@@ -42,6 +42,7 @@ git diff <当前上游tag>..HEAD -- packages packages/core packages/opencode > /
 | 离线构建开关 | `packages/core/src/installation/version.ts`、`packages/core/src/flag/flag.ts`、`packages/opencode/src/config/config.ts`、`packages/opencode/src/config/tui.ts`、`packages/opencode/script/build.ts`、`packages/opencode/test/config/config.test.ts` | `--offline` 构建默认跳过 `@opencode-ai/plugin` 自动安装，支持内网离线包 | 上游是否新增配置目录安装点；两个 install 调用是否仍存在；`OPENCODE_OFFLINE_BUILD` 是否仍被注入 | 上游原生支持离线/跳过安装后删除本地补丁 |
 | 项目工具加载容错 | `packages/opencode/src/tool/registry.ts`、`packages/opencode/test/tool/registry.test.ts` | 项目 `.opencode/tool` 依赖解析失败时记录 `tool.load.failed` 并跳过该工具，不再拖垮整个工具注册表与会话 | 上游是否已改为单个工具导入失败非致命；`tool.load.failed` 是否仍存在；回归测试是否仍覆盖缺失依赖工具 | 上游已提供等价容错后删除本地修改与测试 |
 | 界面品牌标识 | `packages/tui/src/feature-plugins/sidebar/footer.tsx`、`portable-installer/build/OpenCode-launch.nsi` | 会话侧栏底部显示 `AI Assistant`（不再显示 OpenCode 版本号）；启动器按钮显示“打开 AI Assistant” | 上游是否重写 `sidebar_footer`；启动器按钮文案是否被覆盖 | 不删除，属于定制品牌 |
+| 一般任务 task 工作流 | `opencode-session-mgmt/packages/shared/src/workflow.ts`、`packages/plugin/src/task-lifecycle.ts`、`tools/toolset.ts`、`prompt.ts`、`packages/cli/src/commands/stats.ts`、`portable-installer/build/OpenCode-launch.nsi`、`launcher-config.js` | 新增 task 单阶段工作流：只记预估/实际工时、首条消息自动开始、整句完成词自动收口；启动器任务项排第一 | 上游是否新增 WorkflowType/阶段定义；`task-r1` 预估话术是否仍与 sdlc/reqdoc 一致；`task-lifecycle.ts` 是否仍挂 `chat.message`；启动器三项顺序 | 不删除，属于定制功能 |
 | 自定义插件 SDK 版本 | 三个插件的 `package.json` 与 `bun.lock` | `@opencode-ai/plugin`、`@opencode-ai/sdk` 与 opencode 二进制版本对齐 | 按新版本统一升级 devDependencies；lockfile 重装 | 不删除，每次升级都要同步 |
 | session 工具按工作流注册 | `opencode-session-mgmt/packages/plugin/src/index.ts`、`src/tools/toolset.ts`、`test/toolset.test.ts` | sdlc 只注册 17 个工具；reqdoc 注册 28 个 | `Plugin`/`Hooks`/`ToolDefinition` 签名是否变化；工具数是否仍符合预期 | 不删除，属于定制功能 |
 | Windows 插件加载实测 | `.opencode/skills/verify-windows-plugin-load/` | 校验 3 个插件加载、Hook、工具数和注册表一致性 | `EXPECT_VERSION`、示例工具数、`EXPECT_NO_PLUGIN_INSTALL` 是否需更新 | 不删除，作为升级后的固定验收 |
@@ -70,6 +71,7 @@ git grep -n "npmSvc.install\|npm\.install" -- packages/opencode/src/config
 git grep -n "plugin.load.summary\|plugin.applied\|plugin.dependencies" -- packages/opencode/src/plugin
 git grep -n "tool.load.failed" -- packages/opencode/src/tool
 git grep -n "AI Assistant" -- packages/tui portable-installer/build/OpenCode-launch.nsi
+git grep -n "task-r1\|task-lifecycle" -- opencode-session-mgmt/packages
 git grep -n "createToolset\|EXPECT_NO_PLUGIN_INSTALL" -- opencode-session-mgmt .opencode/skills
 ```
 
@@ -279,7 +281,8 @@ OK binary=1.19.4 configured=3 loaded=3 tools=32 failed=0
 2. 首页 footer（`feature-plugins/home/footer.tsx`）仍只显示版本号，未改品牌；如需求变更再单独处理。
 3. 运行 `bun run typecheck`（`packages/tui`）与 `oxlint` 对应文件。
 4. 启动器改动只在 NSIS 源码；安装包内嵌旧 `OpenCode-launch.exe` 时必须重编启动器，再重编 `OpenCode-Setup.exe`，否则装出来的仍是旧文案。
-5. 文本检查：`git grep -n "AI Assistant" -- packages/tui portable-installer/build/OpenCode-launch.nsi` 应命中两处。
+5. 文本检查：`git grep -n "AI Assistant" -- packages/tui portable-installer/build/OpenCode-launch.nsi
+git grep -n "task-r1\|task-lifecycle" -- opencode-session-mgmt/packages` 应命中两处。
 
 ---
 
@@ -297,7 +300,8 @@ OK binary=1.19.4 configured=3 loaded=3 tools=32 failed=0
 | Windows 离线构建 | `EXPECT_NO_PLUGIN_INSTALL=1 verify.sh` | 3/3 插件加载；无安装 WARN |
 | 工具注册表 | `VERBOSE=1 verify.sh` | 每个插件工具数等于 `registered` |
 | 项目工具容错 | `bun test test/tool/registry.test.ts`（`packages/opencode`，Bun 1.4.4） | 16 pass；缺失依赖工具被跳过，健康工具仍加载 |
-| 品牌标识 | `git grep -n "AI Assistant" -- packages/tui portable-installer/build/OpenCode-launch.nsi` | TUI 侧栏与启动器按钮各命中一处 |
+| 品牌标识 | `git grep -n "AI Assistant" -- packages/tui portable-installer/build/OpenCode-launch.nsi
+git grep -n "task-r1\|task-lifecycle" -- opencode-session-mgmt/packages` | TUI 侧栏与启动器按钮各命中一处 |
 
 数字会随工具集/评测场景变化；升级后更新本文与验证技能里的示例数字，但不要把「当前基线」当成永久断言。
 
@@ -335,7 +339,9 @@ OK binary=1.19.4 configured=3 loaded=3 tools=32 failed=0
 | 离线构建 | `--offline`，`InstallationOffline=true`，跳过配置目录的 `@opencode-ai/plugin` 安装 |
 | 项目工具加载容错 | `55b69cbb2a` |
 | 界面品牌标识 | `e56554203f`（TUI 侧栏）、`7c065744dc`（启动器按钮） |
+| 一般任务 task 工作流 | 本工作树（待提交） |
 | 当前 sdlc 工具数 | sm 17 + edge 8 + server 7 = 32 |
+| 当前 task 工具数 | sm 8 + edge 8 + server 7 = 23（无 review/commit 工具） |
 | 当前 reqdoc 工具数 | sm 28 + edge 8 + server 7 = 43（Windows smoke 默认 sdlc） |
 
 提交号只用于追溯当前基线；升级后不必强行复用旧提交号，按第 2 章重新记录。

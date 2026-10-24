@@ -95,6 +95,7 @@ not_started → in_progress → approved
 
 | workflow.type | 阶段键 | 审查清单键 |
 |--------------|--------|-----------|
+| `task` | execute | 无 |
 | `sdlc` | requirements / design / implementation / testing / review | businessIntent / logicExplainable / behaviorVerifiable / designRationale |
 | `reqdoc` | goal / rules / edge / prd / review | completeness / clarity / edgeCoverage / resolution |
 
@@ -126,7 +127,7 @@ not_started → in_progress → approved
 
 | 字段 | 含义 |
 |------|------|
-| `checklist` | 四项审查清单，全部为 true 才可通过（sdlc = 代码理解四维度，reqdoc = PRD 四维度） |
+| `checklist` | 四项审查清单，全部为 true 才可通过（sdlc = 代码理解四维度，reqdoc = PRD 四维度；task 无 review 阶段） |
 | `comprehension.total` | 审查片段/要点总数 |
 | `comprehension.confirmed` | 已确认数 |
 
@@ -140,11 +141,11 @@ not_started → in_progress → approved
 | `tokensInput` / `tokensOutput` | 随对话轮次递增 |
 | `quality.firstPassRate` | 代码编辑/PRD 渲染后更新（0-100） |
 | `quality.iterationCount` | 文件被 AI 编辑次数的最大值 |
-| `quality.lines` | AI 净增行数三分类聚合（sdlc 专属，reqdoc 恒 null） |
+| `quality.lines` | AI 净增行数三分类聚合（sdlc 专属，reqdoc/task 恒 null） |
 | `quality.reworkRate` / `testCoverage` | 插件恒 null，CI 回写 |
 | `commit.blocked_by` | 随阶段完成逐步缩短，全部 approved 后为空 |
 | `commit.force` | 强制提交授权时出现（逃生口留痕） |
-| `baseline` | 需求阶段录入后出现，后续不变 |
+| `baseline` | 需求/目标阶段或一般任务开始时录入后出现，后续不变 |
 
 ---
 

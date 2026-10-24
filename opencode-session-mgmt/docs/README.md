@@ -10,9 +10,10 @@
 
 | 文件 | 类别 | 作用 | 被谁消费 | 能否改名 / 移动 |
 |------|------|------|----------|----------------|
-| [session-management.md](session-management.md) | 设计文档 | **主设计文档**（通用机制 / 架构 / CLI / 统计 / 部署 / 评测 / **方法论基础置顶：AI 编码质量管控四支柱框架（第 0 章）**；四支柱为主线（6 规约 / 7 知识 / 8 协同 / 9 度量），8.7 含混合开发与 open_ide 文件锁；两个工作流的专属内容已拆到下两行文件） | [CLAUDE.md](../CLAUDE.md)、[README.md](../README.md)、[.opencode/agent/rules-reviewer.md](../.opencode/agent/rules-reviewer.md)、[deployment.md](deployment.md)、[collector-spec.md](collector-spec.md) 引用其内容 | 改名需同步 5 处引用；一般不主张 |
+| [session-management.md](session-management.md) | 设计文档 | **主设计文档**（通用机制 / 架构 / CLI / 统计 / 部署 / 评测 / **方法论基础置顶：AI 编码质量管控四支柱框架（第 0 章）**；四支柱为主线（6 规约 / 7 知识 / 8 协同 / 9 度量），8.7 含混合开发与 open_ide 文件锁；task / sdlc / reqdoc 三个工作流的专属内容已拆到后续文件） | [CLAUDE.md](../CLAUDE.md)、[README.md](../README.md)、[.opencode/agent/rules-reviewer.md](../.opencode/agent/rules-reviewer.md)、[deployment.md](deployment.md)、[collector-spec.md](collector-spec.md) 引用其内容 | 改名需同步 5 处引用；一般不主张 |
 | [workflow-sdlc.md](workflow-sdlc.md) | 设计文档 | 工作流一：sdlc 软件开发定义（阶段 / 四清单 / hasCommitGate）、12 条规则全文、场景一~四、审查清单、统计口径、评测场景 | [session-management.md](session-management.md)（3.2/6.1/8.3/8.5/9 指针指向其章）、[deployment.md](deployment.md)（6.1 对话示例） | 可（同步引用方）；**新增文档进 docs/ 先登记本表** |
 | [workflow-reqdoc.md](workflow-reqdoc.md) | 设计文档 | 工作流二：reqdoc 需求书定义、需求资料目录契约、25 条规则全文、**知识库门禁（kbGate 唯一门禁）**、开放项派生、组装与幂等、专属工具、评测 | [session-management.md](session-management.md)（3.2/6.1/6.2/8.3/8.5/9 指针指向其章）、[reqdoc-prd-template.md](reqdoc-prd-template.md) | 可（同步引用方）；**新增文档进 docs/ 先登记本表** |
+| [workflow-task.md](workflow-task.md) | 设计文档 | 工作流三：task 一般任务（写文档/查错等）——单阶段、只记录预估与实际工时、完成提示与自动收口、统一预估话术、统计边界 | [session-management.md](session-management.md)（3.1/3.2/6.3/6.4）、[collector-spec.md](collector-spec.md) | 可（同步引用方）；**新增文档进 docs/ 先登记本表** |
 | [collector-spec.md](collector-spec.md) | 设计文档 | 收集服务（collector）规范：三端点、聚合、容错 | 无入站引用（独立规范） | 可，但内容被作为部署/开发依据 |
 | [collector-metrics.md](collector-metrics.md) | 设计文档 | **上报指标判读口径**：当前阶段 / 阶段耗时 / 返工的派生算法与边界（输入为 collector-spec.md 5.1 的 SessionReport） | 无入站引用（看板/收集服务实现依据） | 可 |
 | [deployment.md](deployment.md) | 设计文档 | **部署与使用手册**（新人先看）：装 OpenCode、启用插件、CLI、收集服务、内网隔离、FAQ | [README.md](../README.md) 链接；自身引用 [qwen3.6-27b.chat-template.jinja](qwen3.6-27b.chat-template.jinja) | 改名需同步 README.md |

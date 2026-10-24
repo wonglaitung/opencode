@@ -30,6 +30,7 @@ flowchart TD
 
 阶段键随工作流类型不同：
 
+- `task`：`execute`（单阶段，无 review）
 - `sdlc`：`requirements` / `design` / `implementation` / `testing` / `review`
 - `reqdoc`：`goal` / `rules` / `edge` / `prd` / `review`
 
@@ -76,6 +77,7 @@ idle_gap        = nextStage.enter.at − prevStage.approve.at
   现有「只报流程摘要」的约定做不到。
 - `reqdoc` 的 `review` 也有 `checklist` 与 `comprehension`，但清单键不同（`completeness` / `clarity` /
   `edgeCoverage` / `resolution`），聚合时不要复用 sdlc 的四个键。
+- `task` 没有 `review` 阶段；不要为 task 会话读取 checklist/comprehension，按无审查处理。
 - 旧版插件可能缺 `workflow.type`（缺省按 sdlc）、`baseline`、`lines` 等字段，缺失时按空值处理，不得报错。
 
 ## 计算示例

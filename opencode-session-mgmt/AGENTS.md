@@ -21,8 +21,9 @@ OpenCode 会话管理定制：标准化开发流程（五阶段门禁）、理�
 - **CLI 命名为 `opencode-sm`**（曾短暂叫 ocsm，已废弃，勿再用）。
 - **会话不能改名**：上游 `Session.Service` 无 update 方法，勿设计 rename 功能。
 
-### 工作流机制（sdlc / reqdoc 共用）
+### 工作流机制（task / sdlc / reqdoc 共用）
 
+- **一般任务 task 只记工时**：单阶段 `execute`，无审查/提交门禁；首条消息自动开始，用户整句说「完成/完成了/做完了/搞定了/结束了」自动收口；预估话术与 sdlc/reqdoc 共用「预估 xx 小时」，详见 `docs/workflow-task.md`。
 - **工作流推进是完成门禁模型**（AI 主动 `workflow_advance`，AI 引导人决定），不是审批流；提交门禁经 `tool.execute.before` 拦截 `git commit` 实现；含提交门禁的工作流（sdlc）失录**基线预估工时**亦阻断；迭代上限 3 轮；`comprehension_confirm` 单次只认一段（防批量走过场）。
 - **手工修改走 open_ide 锁定（sdlc-r12，软提示 + 硬拦截）**：开发者要手工改代码时 AI 先调 `open_ide`（**必须带 `file`**，防AI 覆盖）；锁定期间 AI 可继续其它任务但不得改被锁文件（`tool.execute.before` 服务端硬拦截）；须开发者明确确认后 `unlock_file`，并重新读取最新内容。**SDLC 完结时完成态注入解锁提示**（经 `hasCommitGate` 门控，reqdoc 不提示）。open-ide **物理合并**进本工程（`packages/plugin/src/open-ide/`，原 `opencode-open-ide` 已移除）：锁持久化进 SQLite `file_lock` 表（daemon 重启自动恢复）。
 - **规则阶段化注入**：`WorkflowDefinition.rules` 为 `RuleItem[]`（含 `stage`），每轮只注入 global + 当前阶段；状态以阶段状态块（`buildStateBar`）展示，替代冗长 JSON。无 in_progress 分三态，**完成态注入专用完成块**（不注入常规规则）。`applyTransition` 严格执行状态机：enter 已 approved 须走 revisit、enter 已 in_progress 幂等；**revisit 级联回退该阶段之后所有已 approved 的下游阶段**（下游结论建立在被回退阶段之上，须重走）。规则遵循度评测基线在 `scripts/eval-rules/`；**评测与质量飞轮实操手册见 `.opencode/skills/workflow-rules-eval/SKILL.md`**。
@@ -56,7 +57,7 @@ packages/plugin/     # OpenCode 插件：system prompt 注入、工具注册、�
 packages/cli/        # opencode-sm 独立 CLI：init/list/stats（本机会话/项目级聚合）
 （后台收集服务为外部项目 performance_dashboard：https://github.com/karsonto/performance_dashboard）
 deploy/              # 部署示例：opencode.json.example
-docs/                # 设计文档族：session-management.md（通用机制/架构/CLI/统计/部署/评测）+ workflow-sdlc.md（工作流一 sdlc）+ workflow-reqdoc.md（工作流二 reqdoc）；同步方案 upstream-sync.md
+docs/                # 设计文档族：session-management.md（通用机制/架构/CLI/统计/部署/评测）+ workflow-task.md（工作流三 task）+ workflow-sdlc.md（工作流一 sdlc）+ workflow-reqdoc.md（工作流二 reqdoc）；同步方案 upstream-sync.md
 ```
 
 每个源文件 stub 顶部注明对应设计文档章节，实现前先读该章节。

@@ -657,3 +657,45 @@ describe("buildStateBar 不得泄漏工具名", () => {
     expect(bar).not.toMatch(/槽位/) // 「槽位」要转述给业务，属第 1 节禁用词
   })
 })
+
+describe("task 一般任务状态条与入口提示", () => {
+  function taskWorkflow() {
+    const s = createWorkflowState("task")
+    s.stages.execute.transitions.push({ action: "enter", at: Date.now() - 60_000 })
+    s.stages.execute.status = "in_progress"
+    return s
+  }
+
+  test("进行中：显示预估入口与完成提示", () => {
+    const bar = buildStateBar(taskWorkflow(), "execute")
+    expect(bar).toContain("## 当前任务")
+    expect(bar).toContain("任务：进行中")
+    expect(bar).toContain("请回「预估 xx 小时」")
+    expect(bar).toContain("说「完成」结束计时")
+    expect(bar).not.toContain("requirements")
+  })
+
+  test("已完成：显示预估/实际/提效与 /new", () => {
+    const s = taskWorkflow()
+    s.baseline = { estimatedHours: 1, setAt: 1 }
+    s.stages.execute.status = "approved"
+    s.stages.execute.transitions.push({ action: "approve", at: Date.now() })
+    const bar = buildStateBar(s, null)
+    expect(bar).toContain("任务：已完成")
+    expect(bar).toContain("实际")
+    expect(bar).toContain("提效")
+    expect(bar).toContain("/new")
+  })
+
+  test("task 规则要求开场告知完成方式", () => {
+    const text = buildSystemFragment(createWorkflowState("task"))
+    expect(text).toContain("完成后请明确说「完成」")
+    expect(text).toContain("预估 xx 小时")
+  })
+
+  test("未开始：三工作流都给出各自入口提示", () => {
+    expect(buildSystemFragment(createWorkflowState("sdlc"))).toContain("启动 SDLC 工作流")
+    expect(buildSystemFragment(createWorkflowState("reqdoc"))).toContain("启动 REQDOC 工作流")
+    expect(buildSystemFragment(createWorkflowState("task"))).toContain("直接输入任务内容")
+  })
+})

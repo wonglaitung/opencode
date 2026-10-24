@@ -3,10 +3,10 @@
  * 插件、CLI、收集服务三方共用的契约——任何字段变更必须三包同步。
  *
  * 多流程就绪：阶段键/清单/规则/门禁均从 WorkflowDefinition 注册表驱动，而非硬编码。
- * sdlc 与 reqdoc 均已注册（设计文档 session-management.md 3.2 注册表；定义分别见 workflow-sdlc.md 2 章、workflow-reqdoc.md 2 章）。
+ * task / sdlc / reqdoc 均已注册（设计文档 session-management.md 3.2 注册表；task 见 workflow-task.md，sdlc/reqdoc 见各自文档）。
  */
 
-export type WorkflowType = "sdlc" | "reqdoc"
+export type WorkflowType = "task" | "sdlc" | "reqdoc"
 
 export type StageStatus = "not_started" | "in_progress" | "approved"
 
@@ -427,6 +427,33 @@ export interface WorkflowDefinition {
   rules: RuleItem[]
 }
 
+/** 全工作流统一的预估工时话术（sdlc/reqdoc/task 共用，避免三处文案漂移）。 */
+export const ESTIMATE_FORMAT_HINT = "按「预估 xx 小时」的数字格式回答，可直接回我「预估 xx 小时」。"
+
+/** 全工作流统一的预估工时简短提示（状态条用）。 */
+export const ESTIMATE_PROMPT_SHORT = "请回「预估 xx 小时」"
+
+/** 各工作流的会话入口短语（启动器、状态条、workflow_start 描述共用语义）。 */
+export const WORKFLOW_ENTRY_PHRASE: Record<WorkflowType, string> = {
+  task: "启动一般任务",
+  sdlc: "启动 SDLC 工作流",
+  reqdoc: "启动 REQDOC 工作流",
+}
+
+/** 各工作流的起步提示（会话尚未开始时展示给用户）。 */
+export const WORKFLOW_ENTRY_HINT: Record<WorkflowType, string> = {
+  task: "直接输入任务内容即开始（自动计时），也可输入「启动一般任务」",
+  sdlc: "输入「启动 SDLC 工作流」，或直接描述需求开始",
+  reqdoc: "输入「启动 REQDOC 工作流」，或直接说明需求开始",
+}
+
+function estimatePromptRule(audience: string, when: string): string {
+  return (
+    `${when}，主动询问预估人工工时（小时），并引导${audience}${ESTIMATE_FORMAT_HINT}` +
+    `${audience}明确给出后调用 workflow_baseline(developer_confirmed=true)。未提供不阻塞；已录入后不必重复询问。`
+  )
+}
+
 /** SDLC 五阶段审查清单项（sdlc 专属，3.2）；review_submit 从具名参数生成，字节不变。
  *  designRationale 为 auto：全部片段定论即通过，无需 Agent 逐项上报（LLM 契约仅 3 具名参数）。 */
 const SDLC_CHECKLIST: ChecklistItem[] = [
@@ -474,7 +501,7 @@ export const SDLC: WorkflowDefinition = {
     { id: "sdlc-r37", stage: "implementation", text: "每次改完代码立即自审一轮，不攒到提交前：① **波及面**——这次改动会波及哪些地方，一处不漏地列出来再动手：调用方（签名/返回值/导出改了吗）、运行与分发环境（宿主提供什么、依赖在别处会不会丢）、既有数据与产物（旧文件/已生成代码/已发出去的东西还在吗）、以及会被读到的文本（给机器的指令别混进给人看的输出，可见性去实际渲染路径核实而非凭感觉断言）。② **反例与方向**——给自己的修复构造一个能推翻它的场景（空值、并发、重复调用、顺序颠倒、上一步遗留状态），**跑出来而不是脑补**；并确认修法对齐了被比较双方的口径与方向，不只字面对上。③ **同类残留**——同类问题在别处多半也存在，grep 同模式一并处理，只修被点名的那一处等于修一半。④ **规约互查**——不与本目录其它规约（安全、日志、并发幂等）冲突。⑤ **护栏随修**——每条被证实的缺陷补一条能失败的测试钉住，与修复同一批提交；拿不准的取舍先回报再改，不静默绕过。" },
     { id: "sdlc-r38", stage: "testing", text: "进入测试阶段后先跑全量测试（项目既有测试套件），把结果摘要（通过/失败数、失败项）贴给开发者看；有失败未修复时不得请求确认通过。项目无测试套件时如实说明，并与开发者约定替代验证方式（如手工验收步骤）后再请求确认。" },
     // ---- requirements ----
-    { id: "sdlc-r6", stage: "requirements", text: "进入需求阶段时，主动询问预估人工工时（小时），并引导开发者按「预估 xx 小时」的数字格式回答（可原话示范：可直接回我「预估 xx 小时」）；开发者明确给出后调用 workflow_baseline(developer_confirmed=true)。未提供不阻塞；已录入后不必重复询问。" },
+    { id: "sdlc-r6", stage: "requirements", text: estimatePromptRule("开发者", "进入需求阶段时") },
     // ---- review（理解保障，核心）----
     { id: "sdlc-r7", stage: "review", text: "review 是唯一不可由 AI 自行推进的阶段（必须经 review_submit），目标是确保开发者真正理解代码。" },
     { id: "sdlc-r8", stage: "review", text: "进入审查后，将每个 AI 生成的代码变更拆分为可理解片段，comprehension_add 逐段登记并输出解释（做了什么、为什么这样写、被放弃的替代方案、潜在风险）。" },
@@ -553,7 +580,7 @@ export const REQDOC: WorkflowDefinition = {
 
     // ---- goal 目标与场景 ----
     { id: "reqdoc-r6", stage: "goal", text: "用一两句话引导业务说明：上线后谁在用、解决什么痛点；提炼【核心用户】【业务场景】【业务价值】，表达模糊时给出 A/B/C 选项并标注【默认推荐项】让业务勾选确认。" },
-    { id: "reqdoc-r7", stage: "goal", text: "进入 goal 阶段时，主动询问预估人工书写工时（小时），并引导业务按「预估 xx 小时」的数字格式回答（可原话示范：可直接回我「预估 xx 小时」）；业务明确给出后调用 workflow_baseline(developer_confirmed=true)。未提供不阻塞；已录入后不必重复询问。" },
+    { id: "reqdoc-r7", stage: "goal", text: estimatePromptRule("业务", "进入目标阶段时") },
     { id: "reqdoc-r8", stage: "goal", text: "目录就绪检查：项目根约定 00~07 需求资料目录（编号即五步编写流顺序）：00_初稿需求书 为已有初稿导入入口；01_背景与目标、02_流程与数据、03_制度与合规、04_角色与权限 为业务投放材料区；05_系统现状与能力 为可选目录（单位技术侧投放系统架构/现有能力/接口/数据模型）；06_功能点、07_需求规格产出为 AI 工作区。尚无时主动调用 reqdoc_init 搭建骨架（幂等，绝不重建或覆盖业务已放材料），并向业务展示各材料目录的绝对路径、明确说明「把资料放进 01~05 对应目录，有多少投多少，未投放的目录我们口述补全，无需一次备齐」；业务已有初稿则放进 00_初稿需求书/ 后调 reqdoc_import(path) 导入。**00_初稿需求书/ 里有文件时，先判定走哪个分支再选路径**（并入下面「投放材料 / 直接口述」那一次提问，不要为此单独多问一轮）：**分支二（改已有需求）**——业务自己写的初稿、或本流程上一版定稿（`PRD_V*.md`）→ 调用序按本条后续顺序不跳步：`reqdoc_import` 导入为 [文档] → `reqdoc_ingest` 提交槽位（**每项 ref 填该稿路径**，槽位一律 draft）→ `reqdoc_adopt_baseline` **先不带 confirm 预演**，把按章分组的清单给业务逐条看过 → 带 `confirm=true` + `authorized_by` + `confirm_note` 执行（**两项须来自业务，模型不得代填**，照 force_kb/force_reason 先例）+ `unmapped` 逐条申报「稿里有、模板装不下的内容」（不申报这类内容会静默消失）→ 沿用基线后**只问「旧稿未覆盖的必填项 + 新增功能点」**（新增功能点用 `reqdoc_confirm_features` 末尾追加）；**别被状态条的「必填容器未覆盖」带偏**——术语容器与字段容器（本轮清单里 kind=term / kind=field 的那两个）是**聚合判定**：旧稿里有对应内容就把它提交成容器叶子（`reqdoc_ingest`，地址形如 `<容器地址>.<术语名>` / `<容器地址>.<字段名>`，具体地址取清单，勿自造），容器即算覆盖；旧稿里确实没有才声明 `required:false` + reason，**不要因为容器报未就绪就把旧稿里已写着的术语与字段重问一遍**；业务点名要改某段已确认内容时（见 r35 ②），先问清新内容再用 `reqdoc_answer` 落定 → 定稿回执给出「本次变更」清单。**顺序反了会出事**：先沿用基线、后问业务要改什么，中间没有可对照的基线，业务要的改动会被并进旧内容里分不清；**分支一（全新流程）**——该目录为空 → 按常规五阶段从头走，不为此额外发问。业务说资料已放好、或会话中途补充了材料，则调用 reqdoc_scan(directory=01_背景与目标) 扫描提取作引导输入（可重复扫描，不必等下一轮）。init 之后、进入追问前，必须显式向业务提出「投放材料 / 直接口述」的二选一（或问清已投了哪些目录），未得到明确选择不擅自推进追问；业务选直接口述时，先回一句知情确认「那全程来源会是 [问答]，定稿时你需确认『无书面材料』」再继续，部分投放则仅对投放目录扫描、状态条自然显示 [文档]/[问答] 混合、无需该确认。" },
     { id: "reqdoc-r32", stage: "global", text: "已有初稿需求书时，引导业务把初稿放进 00_初稿需求书/ 目录后调用 reqdoc_import(path) 导入（path 可为文件或目录）：产出「按机构规约的初评」（逐份规约列 满足/缺失/矛盾），并停在起点等业务看初评后再逐阶段走（不自动 approve、不替业务快进）。初评后按三类路径补全：① AI 可直接改的结构/术语类（如术语未引原文、章节错序）；② 依赖外部依据（制度原文、系统接口、敏感字段清单）须投放 03_制度与合规 / 04_角色与权限 / 05_系统现状与能力 后 reqdoc_scan 提取；③ 仅业务知晓（真实异常实例、量化指标、权限边界）走 edge 探针追问（A/B/C + 默认推荐，≤3 轮）。初稿定位为「待完善的原始稿」，导入即诊断、不改写初稿本身。" },
     // ---- rules 流程与规则 ----
@@ -591,8 +618,54 @@ export const REQDOC: WorkflowDefinition = {
   ],
 }
 
+/**
+ * 一般任务工作流：只记录预估工时与实际用时，不设阶段审批、审查、提交门禁。
+ * 首条用户消息由插件自动进入 execute；完成时由插件自动收口或模型调用 approve。
+ */
+export const TASK: WorkflowDefinition = {
+  type: "task",
+  stages: ["execute"],
+  labels: {
+    execute: "执行",
+  },
+  stagePurpose: {
+    execute: "完成当前一般任务",
+  },
+  reviewStage: null,
+  checklist: [],
+  hasCommitGate: false,
+  rules: [
+    {
+      id: "task-r0",
+      stage: "global",
+      text: "开场提示：首次回复必须用一两句话告诉开发者——本次按一般任务记录，只统计预估/实际工时；预估请按「预估 xx 小时」回答；完成后请明确说「完成」，否则只算进行中。",
+    },
+    {
+      id: "task-r1",
+      stage: "global",
+      text: estimatePromptRule("开发者", "任务开始时"),
+    },
+    {
+      id: "task-r2",
+      stage: "global",
+      text: "本工作流只记录预估与实际用时，不要求阶段确认、审查清单或 git 提交门禁；不要主动推进阶段，也不要调用 review/comprehension 工具。",
+    },
+    {
+      id: "task-r3",
+      stage: "global",
+      text: "任务完成时，若开发者明确说「完成/做完了/搞定了/结束了」，调用 workflow_advance(stage=execute, action=approve, developer_confirmed=true)；系统若已自动结束（状态条显示已完成）则不要重复调用。一个会话只记一个任务；完成后提醒开发者执行 /new 开始下一个。",
+    },
+    {
+      id: "task-r4",
+      stage: "global",
+      text: "入口提示：开发者说「启动一般任务」时视为任务开始（系统也会在首条消息自动开始计时），不要重复调用 workflow_start。",
+    },
+  ],
+}
+
 /** 已注册的工作流定义注册表（3.2）。 */
 export const WORKFLOW_DEFINITIONS: Record<WorkflowType, WorkflowDefinition> = {
+  task: TASK,
   sdlc: SDLC,
   reqdoc: REQDOC,
 }
@@ -604,6 +677,7 @@ export function getDefinition(type: WorkflowType): WorkflowDefinition {
 
 /** 将未知值归一为合法 WorkflowType；未知值回退 "sdlc" 并打 warning（兼容旧身份/旧库）。 */
 export function resolveWorkflowType(v: unknown): WorkflowType {
+  if (v === "task") return "task"
   if (v === "sdlc") return "sdlc"
   if (v === "reqdoc") return "reqdoc"
   console.warn(`未知工作流类型 ${JSON.stringify(v)}，回退为 "sdlc"`)

@@ -214,6 +214,13 @@ describe("baseline-proposal（6.3 防杜撰解析，对抗加固）", () => {
     expect(extractBaselineHours("大概 2 人天")).toBe(16)
   })
 
+  test("A 口径：裸 24小时 不解析，按统一提示说「预估 24小时」才通过", () => {
+    expect(extractBaselineHours("24小时")).toBeNull()
+    expect(extractBaselineHours("24 小时")).toBeNull()
+    expect(extractBaselineHours("预估24小时")).toBe(24)
+    expect(extractBaselineHours("预估 24 小时")).toBe(24)
+  })
+
   test("闲聊误捕获被拒绝（无估值意图）", () => {
     expect(extractBaselineHours("昨天会议开了 2 小时")).toBeNull()
     expect(extractBaselineHours("3 天试用期")).toBeNull()

@@ -13,13 +13,16 @@ import {
   templateDrift,
   templateUnavailableNotice,
   currentInProgressStage,
+  efficiencyRatio,
+  ESTIMATE_PROMPT_SHORT,
   getDefinition,
   reviewRecord,
   rulesForStage,
+  WORKFLOW_ENTRY_HINT,
   type WorkflowState,
 } from "sm-shared"
 import type { Store } from "./db"
-import { isComplete } from "./stats"
+import { isComplete, workflowDurationMs } from "./stats"
 import { loadWorkflowConventions } from "./conventions"
 import { getStuckFiles } from "./tools/quality"
 
@@ -73,6 +76,10 @@ export function buildSystemFragment(
   // 等在完成态会与「已全部完成」自相矛盾，误导弱模型重启流程；改为给全完成态的三条可行动作：
   // 提交（如尚未）→ /new 开新需求 → revisit 改本需求。
   if (isComplete(workflow)) {
+    if (def.type === "task") {
+      parts.push("", buildStateBar(workflow, stage))
+      return parts.join("\n")
+    }
     parts.push("# Workflow 已完成", "")
     if (def.hasCommitGate) {
       parts.push("如需提交代码：先调用 commit_gate_check 确认门禁，放行后 git commit。")
@@ -127,7 +134,7 @@ export function buildSystemFragment(
     if (notStarted.length === def.stages.length) {
       parts.push(
         "",
-        `起步：工作流尚未开始，请从「${def.labels[def.stages[0]] ?? def.stages[0]}」(${def.stages[0]}) 开始推进。`,
+        `起步：工作流尚未开始。${WORKFLOW_ENTRY_HINT[def.type]}；首阶段「${def.labels[def.stages[0]] ?? def.stages[0]}」。`,
       )
     } else {
       const done = def.stages.filter((name) => workflow.stages[name].status === "approved")
@@ -210,9 +217,41 @@ function statusZh(status: string): string {
   return status === "in_progress" ? "进行中" : status === "approved" ? "已通过" : "未开始"
 }
 
+function fmtDurationShort(ms: number): string {
+  const totalMinutes = Math.max(0, Math.round(ms / 60_000))
+  if (totalMinutes < 60) return `${totalMinutes}m`
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  if (hours < 24) return minutes > 0 ? `${hours}h${minutes}m` : `${hours}h`
+  const days = Math.floor(hours / 24)
+  const rest = hours % 24
+  return rest > 0 ? `${days}d${rest}h` : `${days}d`
+}
+
+function buildTaskStateBar(workflow: WorkflowState): string {
+  const stage = workflow.stages.execute
+  const baseline = workflow.baseline ? `${workflow.baseline.estimatedHours}h` : `未录入（${ESTIMATE_PROMPT_SHORT}）`
+  const duration = workflowDurationMs(workflow)
+  if (stage?.status === "approved") {
+    const efficiency = efficiencyRatio(workflow.baseline?.estimatedHours, duration)
+    return [
+      "## 当前任务",
+      `任务：已完成 ｜ 预估：${baseline} ｜ 实际：${fmtDurationShort(duration)}` +
+        (efficiency === null ? "" : ` ｜ 提效：${Math.round(efficiency * 100)}%`),
+      "⚑ 开始下一个任务：/new；如需继续当前任务：回退到「执行」阶段",
+    ].join("\n")
+  }
+  return [
+    "## 当前任务",
+    `任务：进行中 ｜ 预估：${baseline} ｜ 已用时：${fmtDurationShort(duration)}`,
+    `说「完成」结束计时`,
+  ].join("\n")
+}
+
 /** 将工作流状态压缩为一行阶段条 + 关键状态（替代原冗长 JSON，弱模型更易读，7.1/7.3）。 */
 export function buildStateBar(workflow: WorkflowState, stage: string | null): string {
   const def = getDefinition(workflow.type)
+  if (def.type === "task") return buildTaskStateBar(workflow)
   const total = def.stages.length
   const idx = stage ? def.stages.indexOf(stage) : -1
   let header: string

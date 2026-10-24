@@ -158,6 +158,17 @@ function printSessionStats(s: SessionStats): void {
   const stageLines = s.stages
     .map((st) => `  ${st.label.padEnd(6, " ")} ${st.status.padEnd(12)} ${fmtDuration(st.durationMs)} (revision ${st.revision})`)
     .join("\n")
+  if (s.type === "task") {
+    process.stdout.write(
+      `📋 会话 ${s.sessionID}\n` +
+        `工作流类型: task  标题: ${fmtTitle(s.title)}\n` +
+        `开发者: ${s.account ?? "N/A"}  周期: ${fmtDuration(s.durationMs)}  ${s.complete ? "✓ 已完成" : "进行中"}\n\n` +
+        `任务:\n${stageLines}\n` +
+        `  ${fmtTaskLine(s.baselineHours, s.durationMs, s.efficiency)}\n` +
+        `\nAI 使用: ${s.cost === null ? "$N/A" : `$${s.cost.toFixed(4)}`} | ${fmtTokens(s.tokensInput)} in / ${fmtTokens(s.tokensOutput)} out\n`,
+    )
+    return
+  }
   process.stdout.write(
     `📋 会话 ${s.sessionID}\n` +
       `工作流类型: ${s.type}  标题: ${fmtTitle(s.title)}\n` +
@@ -181,18 +192,25 @@ function printProjectStats(
   note: string | null,
   sessions: SessionStats[],
 ): void {
+  const taskOnly = sessions.length > 0 && sessions.every((s) => s.type === "task")
+  const efficiencyLine =
+    p.avgEfficiency === null
+      ? "  AI 提效: N/A（无基线会话）"
+      : `  平均 AI 提效: ${fmtEfficiency(p.avgEfficiency)}（基线会话 ${p.baselineCount}/${p.sessions}）`
   const lines: string[] = [
     `📊 项目 "${label}" 统计`,
     ...(note ? [`（${note}）`] : []),
     `会话: ${p.sessions} | 完成率: ${(p.completionRate * 100).toFixed(0)}% | 平均周期: ${fmtDuration(p.avgDurationMs)}`,
     `费用: ${p.hasCostData ? `$${p.totalCost.toFixed(4)} 总计` : "N/A（daemon 不可达或未配置 OPENCODE_SM_SERVER）"}`,
-    `质量:`,
-    `  平均一次通过率: ${fmtPct(p.avgFirstPassRate)}  一次通过率过低会话(<${LOW_FIRST_PASS_THRESHOLD}%): ${p.lowFirstPassCount}/${p.sessions}`,
-    `  ${p.hasLinesData ? fmtLinesCategory(p.linesTotal) : "AI 净增行数: N/A"}`,
-    p.avgEfficiency === null
-      ? `  AI 提效: N/A（无基线会话）`
-      : `  平均 AI 提效: ${fmtEfficiency(p.avgEfficiency)}（基线会话 ${p.baselineCount}/${p.sessions}）`,
-    `  高迭代会话(≥${HIGH_ITERATION_THRESHOLD}轮): ${p.highIterationCount}`,
+    ...(taskOnly
+      ? [efficiencyLine]
+      : [
+          `质量:`,
+          `  平均一次通过率: ${fmtPct(p.avgFirstPassRate)}  一次通过率过低会话(<${LOW_FIRST_PASS_THRESHOLD}%): ${p.lowFirstPassCount}/${p.sessions}`,
+          `  ${p.hasLinesData ? fmtLinesCategory(p.linesTotal) : "AI 净增行数: N/A"}`,
+          efficiencyLine,
+          `  高迭代会话(≥${HIGH_ITERATION_THRESHOLD}轮): ${p.highIterationCount}`,
+        ]),
   ]
 
   // 逐会话明细表
@@ -205,29 +223,44 @@ function printProjectStats(
     const statusOf = (s: SessionStats) =>
       s.complete ? "✓完成" : s.currentStage ? `${s.currentStage}中` : s.status ?? "进行中"
     const statusWidth = Math.max(8, ...sessions.map((s) => statusOf(s).length))
-    // 表头
-    lines.push(
-      `  ${"会话ID".padEnd(idWidth)} ${"状态".padEnd(statusWidth)} ${"周期".padStart(6)} ${"一次通过率".padStart(6)} ${"迭代".padStart(4)} ${"费用".padStart(8)} ${"标题".padEnd(24)}`,
-    )
-    lines.push(`  ${"─".repeat(idWidth)} ${"─".repeat(statusWidth)} ${"─".repeat(6)} ${"─".repeat(6)} ${"─".repeat(4)} ${"─".repeat(8)} ${"─".repeat(24)}`)
-    for (const s of sessions) {
-      const id = s.sessionID
-      const status = statusOf(s)
-      const dur = fmtDuration(s.durationMs)
-      const acc = fmtPct(s.firstPassRate)
-      const iter =
-        s.iterationCount === null
-          ? "N/A"
-          : s.iterationCount >= HIGH_ITERATION_THRESHOLD
-            ? `${s.iterationCount}⚠`
-            : `${s.iterationCount}`
-      const cost = s.cost === null ? "N/A" : `$${s.cost.toFixed(4)}`
+    if (taskOnly) {
       lines.push(
-        `  ${id.padEnd(idWidth)} ${status.padEnd(statusWidth)} ${dur.padStart(6)} ${acc.padStart(6)} ${iter.padStart(4)} ${cost.padStart(8)} ${fmtTitle(s.title).padEnd(24)}`,
+        `  ${"会话ID".padEnd(idWidth)} ${"状态".padEnd(statusWidth)} ${"周期".padStart(6)} ${"预估".padStart(6)} ${"提效".padStart(6)} ${"标题".padEnd(24)}`,
       )
+      lines.push(`  ${"─".repeat(idWidth)} ${"─".repeat(statusWidth)} ${"─".repeat(6)} ${"─".repeat(6)} ${"─".repeat(6)} ${"─".repeat(24)}`)
+      for (const s of sessions) {
+        const estimate = s.baselineHours === null ? "N/A" : `${s.baselineHours}h`
+        lines.push(
+          `  ${s.sessionID.padEnd(idWidth)} ${statusOf(s).padEnd(statusWidth)} ${fmtDuration(s.durationMs).padStart(6)} ${estimate.padStart(6)} ${fmtEfficiency(s.efficiency).padStart(6)} ${fmtTitle(s.title).padEnd(24)}`,
+        )
+      }
+    } else {
+      // 表头
+      lines.push(
+        `  ${"会话ID".padEnd(idWidth)} ${"状态".padEnd(statusWidth)} ${"周期".padStart(6)} ${"一次通过率".padStart(6)} ${"迭代".padStart(4)} ${"费用".padStart(8)} ${"标题".padEnd(24)}`,
+      )
+      lines.push(`  ${"─".repeat(idWidth)} ${"─".repeat(statusWidth)} ${"─".repeat(6)} ${"─".repeat(6)} ${"─".repeat(4)} ${"─".repeat(8)} ${"─".repeat(24)}`)
+      for (const s of sessions) {
+        const id = s.sessionID
+        const status = statusOf(s)
+        const dur = fmtDuration(s.durationMs)
+        const acc = fmtPct(s.firstPassRate)
+        const iter =
+          s.iterationCount === null
+            ? "N/A"
+            : s.iterationCount >= HIGH_ITERATION_THRESHOLD
+              ? `${s.iterationCount}⚠`
+              : `${s.iterationCount}`
+        const cost = s.cost === null ? "N/A" : `$${s.cost.toFixed(4)}`
+        lines.push(
+          `  ${id.padEnd(idWidth)} ${status.padEnd(statusWidth)} ${dur.padStart(6)} ${acc.padStart(6)} ${iter.padStart(4)} ${cost.padStart(8)} ${fmtTitle(s.title).padEnd(24)}`,
+        )
+      }
     }
     lines.push("")
-    lines.push("  迭代 = 单文件被 AI 编辑的最高次数（⚠ 表示迭代较高；不是全会话编辑总数）")
+    if (!taskOnly) {
+      lines.push("  迭代 = 单文件被 AI 编辑的最高次数（⚠ 表示迭代较高；不是全会话编辑总数）")
+    }
     lines.push("  查看单个会话详情：opencode-sm stats <sessionID>")
   }
 
@@ -276,6 +309,13 @@ export function fmtLinesCategory(lines: { business: number; test: number; config
 export function fmtEfficiency(v: number | null): string {
   if (v === null) return "N/A"
   return `${Math.round(v * 100)}%`
+}
+
+/** 一般任务工时对比行：预估 / 实际 / 提效。 */
+export function fmtTaskLine(baselineHours: number | null, durationMs: number, efficiency: number | null): string {
+  if (baselineHours === null) return "工时对比: N/A（未录入预估工时）"
+  if (efficiency === null) return `工时对比: 预估 ${baselineHours}h / 进行中（${fmtDuration(durationMs)}）`
+  return `工时对比: 预估 ${baselineHours}h / 实际 ${fmtDuration(durationMs)} → 提效 ${fmtEfficiency(efficiency)}`
 }
 
 /** 基线对比行（6.3）：「基线对比: 预估 8h / 实际 1.7h → AI 提效 79%」；未录入基线显示 N/A。 */

@@ -7,7 +7,7 @@ OpenCode 会话管理定制：**标准化开发流程、理解保障与效能分
 
 - **文档索引**：[`docs/README.md`](docs/README.md)（docs/ 全部文件的分类、消费方、改名约束——新增文档先登记）
 - **部署与使用手册**：[`docs/deployment.md`](docs/deployment.md)（从零上手：装 OpenCode、启用插件、CLI、收集服务、内网隔离部署、FAQ）——**新人先看这个**
-- **设计文档族**：[`docs/session-management.md`](docs/session-management.md)（通用机制 / 架构 / CLI / 统计 / 部署 / 评测，主文档；**方法论基础置顶（第 0 章 AI 编码质量管控框架）**）、[`docs/workflow-sdlc.md`](docs/workflow-sdlc.md)（工作流一：sdlc 定义与规则）、[`docs/workflow-reqdoc.md`](docs/workflow-reqdoc.md)（工作流二：reqdoc 定义与规则）
+- **设计文档族**：[`docs/session-management.md`](docs/session-management.md)（通用机制 / 架构 / CLI / 统计 / 部署 / 评测，主文档；**方法论基础置顶（第 0 章 AI 编码质量管控框架）**）、[`docs/workflow-task.md`](docs/workflow-task.md)（工作流三：task 一般任务，只记工时）、[`docs/workflow-sdlc.md`](docs/workflow-sdlc.md)（工作流一：sdlc 定义与规则）、[`docs/workflow-reqdoc.md`](docs/workflow-reqdoc.md)（工作流二：reqdoc 定义与规则）
 - **上游同步方案**：[`docs/upstream-sync.md`](docs/upstream-sync.md)（remote 布局、同步命令、冲突预案、同步记录）
 
 ## 结构
@@ -26,7 +26,7 @@ deploy/          # 部署示例：团队预置 opencode.json
 npm i -g opencode-sm                          # 1. 装独立 CLI（发布后；开发期用 bun link）
 # 2. opencode 配置启用插件（opencode.json，可用 deploy/opencode.json.example）
 #    { "plugin": ["./opencode-session-mgmt/packages/plugin"] }
-opencode-sm init                              # 3. 两问：api_key / 收集服务地址（+ 可选主要工作流类型）
+opencode-sm init                              # 3. 两问：api_key / 收集服务地址（+ 可选主要工作流 task/sdlc/reqdoc）
 ```
 
 此后照常使用 `opencode`（TUI）：工作流规则随 system prompt 自动注入，

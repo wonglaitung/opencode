@@ -80,6 +80,15 @@ export function createWorkflowTools(store: Store): Record<string, ToolDefinition
       const saved = store.mutateWorkflow(context.sessionID, (workflow) => {
         assertStage(workflow, args.stage)
         const def = getDefinition(workflow.type)
+        // task：自动收口后模型可能再调一次 approve；幂等跳过，避免「已完成」报错。
+        if (
+          def.type === "task" &&
+          args.action === "approve" &&
+          args.stage === "execute" &&
+          workflow.stages.execute?.status === "approved"
+        ) {
+          return
+        }
         // PRD 产出门禁（重构 2c）：reqdoc 进入 prd 前，知识库必须存在且通过 kbGate
         // （必填槽位覆盖率 + 无未收口项）。旧打分卡/探针门禁已于 2c 删除。
         if (args.action === "enter" && args.stage === "prd" && def.type === "reqdoc") {

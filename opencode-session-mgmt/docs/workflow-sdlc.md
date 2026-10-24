@@ -1,10 +1,12 @@
 # 工作流一：sdlc —— 软件开发标准流程
 
-> **文档族说明**：本文档是设计文档族的一份子（`session-management.md` 通用机制与部署统计、`workflow-sdlc.md` 软件开发工作流、`workflow-reqdoc.md` 需求书工作流）。引用约定：跨文件引用带文件名前缀（如「见 session-management.md 3.2」）；不带前缀的章号（如「见 2 章」）指本文档。通用机制（WorkflowState 核心 schema、状态转换、提交门禁、理解确认、质量指标、统计、评测方法论）只在主文档定义一次，本文档只放 sdlc 专属内容并引用。
+> **文档族说明**：本文档是设计文档族的一份子（`session-management.md` 通用机制与部署统计、`workflow-task.md` 一般任务工作流、`workflow-sdlc.md` 软件开发工作流、`workflow-reqdoc.md` 需求书工作流）。引用约定：跨文件引用带文件名前缀（如「见 session-management.md 3.2」）；不带前缀的章号（如「见 2 章」）指本文档。通用机制（WorkflowState 核心 schema、状态转换、提交门禁、理解确认、质量指标、统计、评测方法论）只在主文档定义一次，本文档只放 sdlc 专属内容并引用。
 
 ## 1. 工作流定位
 
-sdlc 是**开发者**的默认工作流，覆盖一次软件开发会话的完整周期：需求分析 → 设计 → 编码 → 测试 → 审查 → 提交。核心哲学是**完成门控**（见 session-management.md 2.1 方案 B）：不强制阶段单向推进，而是约束「所有必需产物都已完成」——五阶段可自由跳转反复迭代（`workflow_revisit`），提交是唯一的硬门禁（`hasCommitGate=true`，见 session-management.md 3.4）。
+sdlc 是**开发者**的默认工作流，覆盖一次软件开发会话的完整周期：需求分析 → 设计 → 编码 → 测试 → 审查 → 提交。
+
+**入口**：启动器工作流下拉框选择「SDLC 开发流程」，或会话内输入「启动 SDLC 工作流」。预估工时统一按「预估 xx 小时」格式回答。核心哲学是**完成门控**（见 session-management.md 2.1 方案 B）：不强制阶段单向推进，而是约束「所有必需产物都已完成」——五阶段可自由跳转反复迭代（`workflow_revisit`），提交是唯一的硬门禁（`hasCommitGate=true`，见 session-management.md 3.4）。
 
 **审查是唯一不可被 AI 自行推进的阶段**（见 session-management.md 2.1）：审查不仅检查代码正确性，更检查**人是否真正理解了代码**，必须经 `review_submit` 通过（见 5 章）。审查阶段与编码、测试阶段形成迭代循环。
 

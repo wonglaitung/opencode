@@ -126,3 +126,26 @@ describe("sessionStats.currentStage：进行中会话标注当前阶段", () => 
     store.close()
   })
 })
+
+describe("task 一般任务统计", () => {
+  test("无 review 阶段不抛错，审查指标归零", () => {
+    const store = Store.memory(() => "task")
+    try {
+      store.mutateWorkflow("t1", (wf) => {
+        const start = Date.now() - 3_600_000
+        wf.stages.execute.transitions.push({ action: "enter", at: start })
+        wf.stages.execute.transitions.push({ action: "approve", at: start + 1_800_000 })
+        wf.stages.execute.status = "approved"
+        wf.baseline = { estimatedHours: 2, setAt: start }
+      })
+      const stats = sessionStats(store.get("t1")!, noUsage)!
+      expect(stats.type).toBe("task")
+      expect(stats.complete).toBe(true)
+      expect(stats.checklistPassed).toBe(0)
+      expect(stats.comprehension).toEqual({ total: 0, confirmed: 0 })
+      expect(stats.efficiency).toBeCloseTo((2 - 0.5) / 2)
+    } finally {
+      store.close()
+    }
+  })
+})
