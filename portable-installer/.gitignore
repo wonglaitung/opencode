@@ -1,0 +1,3 @@
+payload/
+build/*.exe
+build/*.log
