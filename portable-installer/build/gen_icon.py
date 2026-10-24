@@ -1,50 +1,106 @@
+"""Generate portable-installer/build/icon.ico from the robot design.
+
+Full body is used for 48px and above; 16/24/32 use a simplified head-only
+version so the icon stays readable in Explorer and the taskbar.
+"""
+import struct
 from pathlib import Path
+
 from PIL import Image, ImageDraw
 
-img = Image.new('RGBA', (256, 256), (0, 0, 0, 0))
-d = ImageDraw.Draw(img)
+DARK = (30, 41, 59, 255)
+LIGHT = (248, 250, 252, 255)
+SCREEN = (11, 18, 32, 255)
+BLUE = (56, 189, 248, 255)
+WHITE = (255, 255, 255, 255)
+BOLT = (203, 213, 225, 255)
+HAND = (226, 232, 240, 255)
 
-# Head
-d.ellipse([45, 10, 155, 110], fill=(245, 245, 245, 255), outline=(180, 180, 180, 255), width=3)
-# Face screen
-d.rounded_rectangle([70, 25, 130, 75], radius=18, fill=(26, 26, 26, 255))
-# Left eye
-d.ellipse([78, 35, 102, 59], fill=(0, 255, 255, 220))
-d.ellipse([82, 39, 98, 55], fill=(0, 153, 255, 255))
-d.ellipse([88, 43, 92, 49], fill=(255, 255, 255, 255))
-# Right eye
-d.ellipse([98, 35, 122, 59], fill=(0, 255, 255, 220))
-d.ellipse([102, 39, 118, 55], fill=(0, 153, 255, 255))
-d.ellipse([108, 43, 112, 49], fill=(255, 255, 255, 255))
-# Head side ears
-d.ellipse([32, 40, 50, 72], fill=(224, 224, 224, 255), outline=(180, 180, 180, 255))
-d.ellipse([150, 40, 168, 72], fill=(224, 224, 224, 255), outline=(180, 180, 180, 255))
-# Neck
-d.rectangle([118, 85, 138, 100], fill=(200, 200, 200, 255))
-# Body
-d.ellipse([65, 98, 191, 178], fill=(245, 245, 245, 255), outline=(180, 180, 180, 255), width=3)
-# Body blue curve
-d.arc([95, 118, 161, 152], start=200, end=340, fill=(0, 204, 255, 180), width=4)
-# Body center dot
-d.ellipse([124, 130, 132, 138], fill=(0, 204, 255, 200))
-# Left arm (waving up)
-d.rounded_rectangle([22, 55, 55, 115], radius=12, fill=(232, 232, 232, 255), outline=(180, 180, 180, 255))
-d.ellipse([15, 45, 45, 65], fill=(240, 240, 240, 255), outline=(180, 180, 180, 255))
-# Left arm connector
-d.ellipse([45, 95, 70, 120], fill=(232, 232, 232, 255), outline=(180, 180, 180, 255))
-# Right arm (down)
-d.ellipse([186, 95, 211, 120], fill=(232, 232, 232, 255), outline=(180, 180, 180, 255))
-d.rounded_rectangle([201, 110, 228, 160], radius=12, fill=(232, 232, 232, 255), outline=(180, 180, 180, 255))
-d.ellipse([205, 155, 225, 170], fill=(240, 240, 240, 255), outline=(180, 180, 180, 255))
-# Left leg
-d.rounded_rectangle([85, 172, 105, 210], radius=10, fill=(232, 232, 232, 255), outline=(180, 180, 180, 255))
-d.ellipse([78, 205, 112, 220], fill=(232, 232, 232, 255), outline=(180, 180, 180, 255))
-# Right leg
-d.rounded_rectangle([151, 172, 171, 210], radius=10, fill=(232, 232, 232, 255), outline=(180, 180, 180, 255))
-d.ellipse([144, 205, 178, 220], fill=(232, 232, 232, 255), outline=(180, 180, 180, 255))
+S = 5
 
-out = str(Path(__file__).with_name("icon.ico"))
-img.save(out, format='ICO', sizes=[(16,16),(32,32),(48,48),(64,64),(128,128),(256,256)])
-v = Image.open(out)
-px = list(v.getdata())
-print('OK size:', v.size, 'center:', px[32896], 'corner:', px[0])
+
+def px(v):
+    return int(round(v * S))
+
+
+def full_icon():
+    im = Image.new("RGBA", (200 * S, 200 * S), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    lw = lambda v: max(1, px(v))
+
+    # antenna
+    d.line([(px(100), px(34)), (px(100), px(20))], fill=DARK, width=lw(5))
+    d.ellipse([px(95), px(12), px(105), px(22)], fill=BLUE, outline=DARK, width=lw(3))
+
+    # head + screen + eyes
+    d.rounded_rectangle([px(52), px(34), px(148), px(112)], radius=px(28), fill=LIGHT, outline=DARK, width=lw(6))
+    d.rounded_rectangle([px(66), px(48), px(134), px(98)], radius=px(18), fill=SCREEN)
+    for cx in (85, 115):
+        d.ellipse([px(cx - 9), px(64), px(cx + 9), px(82)], fill=BLUE)
+        d.ellipse([px(cx - 3.5), px(69.5), px(cx + 3.5), px(76.5)], fill=WHITE)
+    for cx in (44, 156):
+        d.ellipse([px(cx - 6), px(60), px(cx + 6), px(72)], fill=BOLT, outline=DARK, width=lw(3))
+
+    # neck + body
+    d.rounded_rectangle([px(88), px(112), px(112), px(126)], radius=px(4), fill=BOLT, outline=DARK, width=lw(4))
+    d.rounded_rectangle([px(58), px(124), px(142), px(182)], radius=px(22), fill=LIGHT, outline=DARK, width=lw(6))
+
+    # symmetric arms + hands
+    for start, ctrl, end, hx in (
+        ((60, 138), (42, 146), (38, 164), 36),
+        ((140, 138), (158, 146), (162, 164), 164),
+    ):
+        d.line([(px(start[0]), px(start[1])), (px(ctrl[0]), px(ctrl[1])), (px(end[0]), px(end[1]))], fill=DARK, width=lw(10), joint="curve")
+        d.ellipse([px(hx - 8), px(160), px(hx + 8), px(176)], fill=HAND, outline=DARK, width=lw(4))
+
+    # legs + feet
+    for x in (82, 118):
+        d.line([(px(x), px(182)), (px(x - 4 if x < 100 else x + 4), px(190))], fill=DARK, width=lw(12))
+    for x0 in (66, 108):
+        d.rounded_rectangle([px(x0), px(188), px(x0 + 26), px(198)], radius=px(5), fill=HAND, outline=DARK, width=lw(3))
+
+    return im
+
+
+def small_icon():
+    im = Image.new("RGBA", (200 * S, 200 * S), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    lw = lambda v: max(1, px(v))
+    d.rounded_rectangle([px(20), px(20), px(180), px(180)], radius=px(42), fill=LIGHT, outline=DARK, width=lw(10))
+    d.rounded_rectangle([px(42), px(44), px(158), px(156)], radius=px(30), fill=SCREEN)
+    for cx in (78, 122):
+        d.ellipse([px(cx - 16), px(84), px(cx + 16), px(116)], fill=BLUE)
+        d.ellipse([px(cx - 6), px(94), px(cx + 6), px(106)], fill=WHITE)
+    return im
+
+
+def main():
+    full = full_icon()
+    small = small_icon()
+    entries = []
+    for size in (16, 24, 32, 48, 64, 128, 256):
+        src = small if size <= 32 else full
+        im = src.resize((size, size), Image.Resampling.LANCZOS)
+        entries.append((size, im))
+
+    payload = []
+    for size, im in entries:
+        buf = __import__("io").BytesIO()
+        im.save(buf, format="PNG")
+        payload.append((size, buf.getvalue()))
+
+    offset = 6 + 16 * len(payload)
+    header = struct.pack("<HHH", 0, 1, len(payload))
+    directory = []
+    for size, data in payload:
+        dim = 0 if size == 256 else size
+        directory.append(struct.pack("<BBBBHHII", dim, dim, 0, 0, 1, 32, len(data), offset))
+        offset += len(data)
+
+    out = Path(__file__).with_name("icon.ico")
+    out.write_bytes(header + b"".join(directory) + b"".join(data for _, data in payload))
+    print("OK", out, "sizes:", [s for s, _ in payload])
+
+
+if __name__ == "__main__":
+    main()
