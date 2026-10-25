@@ -15,6 +15,8 @@ Name "智能研发助手"
 OutFile "OpenCode-Setup.exe"
 InstallDir "$PROFILE\OpenCode"
 Icon "icon.ico"
+!define MUI_ICON "icon.ico"
+!define MUI_UNICON "icon.ico"
 RequestExecutionLevel user          ; 装到用户目录, 无需管理员
 SetCompressor /SOLID lzma           ; 固实压缩, 减小体积
 ManifestSupportedOS "all"
