@@ -16,6 +16,7 @@ import {
   createWorkflowState,
   currentInProgressStage,
   deepMerge,
+  defineWorkflow,
   efficiencyRatio,
   getDefinition,
   getStage,
@@ -397,14 +398,55 @@ describe("TASK 一般任务工作流", () => {
     expect(() => reviewRecord(state)).toThrow()
   })
 
-  test("三工作流预估提示共用同一话术", () => {
-    const rules = [
-      SDLC.rules.find((r) => r.id === "sdlc-r6")!,
-      REQDOC.rules.find((r) => r.id === "reqdoc-r7")!,
-      TASK.rules.find((r) => r.id === "task-r1")!,
-    ]
-    expect(rules.every((r) => r.text.includes(ESTIMATE_FORMAT_HINT))).toBe(true)
-    expect(rules.every((r) => r.text.includes("预估 xx 小时"))).toBe(true)
+  test("所有工作流内置统一预估话术与 /new 收口", () => {
+    for (const def of Object.values(WORKFLOW_DEFINITIONS)) {
+      const estimate = def.rules.find((r) => r.id === def.standard.estimate.id)
+      expect(estimate).toBeDefined()
+      expect(estimate!.text).toContain(ESTIMATE_FORMAT_HINT)
+      expect(estimate!.text).toContain("预估 xx 小时")
+      expect(estimate!.stage).toBe(def.standard.estimate.stage)
+
+      const finish = def.rules.find((r) => r.id === def.standard.finish.id)
+      expect(finish).toBeDefined()
+      expect(finish!.text).toContain("/new")
+      expect(finish!.text).toContain(def.standard.finish.trigger)
+    }
+  })
+
+  test("defineWorkflow 为缺失标准规则的新工作流自动补齐", () => {
+    const def = defineWorkflow({
+      type: "task",
+      stages: ["execute"],
+      labels: { execute: "执行" },
+      reviewStage: null,
+      checklist: [],
+      hasCommitGate: false,
+      standard: {
+        estimate: { id: "demo-estimate", stage: "execute", audience: "开发者", when: "任务开始时" },
+        finish: { id: "demo-finish", audience: "开发者", trigger: "任务完成时" },
+      },
+      rules: [],
+    })
+    expect(def.rules.find((r) => r.id === "demo-estimate")?.text).toContain(ESTIMATE_FORMAT_HINT)
+    expect(def.rules.find((r) => r.id === "demo-finish")?.text).toContain("/new")
+  })
+
+  test("defineWorkflow 拒绝已存在但缺少统一话术的预估规则", () => {
+    expect(() =>
+      defineWorkflow({
+        type: "task",
+        stages: ["execute"],
+        labels: { execute: "执行" },
+        reviewStage: null,
+        checklist: [],
+        hasCommitGate: false,
+        standard: {
+          estimate: { id: "demo-estimate", stage: "execute", audience: "开发者", when: "任务开始时" },
+          finish: { id: "demo-finish", audience: "开发者", trigger: "任务完成时" },
+        },
+        rules: [{ id: "demo-estimate", stage: "execute", text: "没有统一话术" }],
+      }),
+    ).toThrow()
   })
 
   test("入口短语与起步提示覆盖三个工作流", () => {

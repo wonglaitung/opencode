@@ -26,6 +26,7 @@ OpenCode 会话管理定制：标准化开发流程（五阶段门禁）、理�
 - **一般任务 task 只记工时**：单阶段 `execute`，无审查/提交门禁；首条消息自动开始，用户整句说「完成/完成了/做完了/搞定了/结束了」自动收口；预估话术与 sdlc/reqdoc 共用「预估 xx 小时」，详见 `docs/workflow-task.md`。
 - **工作流推进是完成门禁模型**（AI 主动 `workflow_advance`，AI 引导人决定），不是审批流；提交门禁经 `tool.execute.before` 拦截 `git commit` 实现；含提交门禁的工作流（sdlc）失录**基线预估工时**亦阻断；迭代上限 3 轮；`comprehension_confirm` 单次只认一段（防批量走过场）。
 - **手工修改走 open_ide 锁定（sdlc-r12，软提示 + 硬拦截）**：开发者要手工改代码时 AI 先调 `open_ide`（**必须带 `file`**，防AI 覆盖）；锁定期间 AI 可继续其它任务但不得改被锁文件（`tool.execute.before` 服务端硬拦截）；须开发者明确确认后 `unlock_file`，并重新读取最新内容。**SDLC 完结时完成态注入解锁提示**（经 `hasCommitGate` 门控，reqdoc 不提示）。open-ide **物理合并**进本工程（`packages/plugin/src/open-ide/`，原 `opencode-open-ide` 已移除）：锁持久化进 SQLite `file_lock` 表（daemon 重启自动恢复）。
+- **新增工作流必须经 `defineWorkflow` 构造**：`standard`（estimate / finish）为必填，工厂校验同名规则的话术与阶段、缺失则自动补齐统一预估与 `/new` 收口；`packages/shared/test/shared.test.ts` 遍历注册表兜底。
 - **规则阶段化注入**：`WorkflowDefinition.rules` 为 `RuleItem[]`（含 `stage`），每轮只注入 global + 当前阶段；状态以阶段状态块（`buildStateBar`）展示，替代冗长 JSON。无 in_progress 分三态，**完成态注入专用完成块**（不注入常规规则）。`applyTransition` 严格执行状态机：enter 已 approved 须走 revisit、enter 已 in_progress 幂等；**revisit 级联回退该阶段之后所有已 approved 的下游阶段**（下游结论建立在被回退阶段之上，须重走）。规则遵循度评测基线在 `scripts/eval-rules/`；**评测与质量飞轮实操手册见 `.opencode/skills/workflow-rules-eval/SKILL.md`**。
 
 ### reqdoc 槽位知识库（机制/调用序权威源：workflow-reqdoc.md；定点修订审核：reqdoc-scoped-edit.md）

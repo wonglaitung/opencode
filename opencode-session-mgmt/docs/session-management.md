@@ -505,6 +505,11 @@ export interface RuleItem {
   text: string                             // 只承载模型可行动作（工具/时机/确认语义）
 }
 
+export interface StandardPrompts {
+  estimate: { id: string; stage: string; audience: string; when: string }
+  finish: { id: string; audience: string; trigger: string }
+}
+
 export interface WorkflowDefinition {
   type: WorkflowType
   stages: string[]                        // 阶段键，顺序即推进顺序
@@ -512,9 +517,12 @@ export interface WorkflowDefinition {
   reviewStage: string | null              // 哪个阶段是审查阶段（可无）
   checklist: ChecklistItem[]              // 审查清单项（仅 reviewStage 存在时用）
   hasCommitGate: boolean                  // sdlc=true；reqdoc 定稿无 git 门禁 → false
+  standard: StandardPrompts               // 标准提示规格（必填）：统一预估话术 + /new 收口
   rules: RuleItem[]                       // 注入的规则项（见 10.2），阶段化注入：每轮只取 global + 当前阶段
 }
 
+export function defineWorkflow(def: WorkflowDefinition): WorkflowDefinition
+  // 所有工作流必须经此构造：standard 必填；同名规则校验话术与阶段，缺失则自动生成预估与 /new 收口规则
 export const WORKFLOW_DEFINITIONS: Record<WorkflowType, WorkflowDefinition>
 export const SDLC: WorkflowDefinition     // sdlc 定义（五阶段 + 四清单 + 门禁 + 规则）
 export const REQDOC: WorkflowDefinition   // reqdoc 定义（见 workflow-reqdoc.md 2 章、4 章）
@@ -525,6 +533,8 @@ export function currentInProgressStage(s: WorkflowState): string | null
   // 当前进行中阶段：按 stages 顺序取第一个 in_progress，无则 null
 export function resolveWorkflowType(v: unknown): WorkflowType   // 未知值回退 "sdlc" 并打 warning
 ```
+
+新增工作流必须经 `defineWorkflow` 构造并声明 `standard`（漏填过不了 typecheck）；工厂会校验同名规则是否带统一预估话术与 `/new`，缺失则自动补一条，因此新工作流不会静默漏掉「会话开始问预估、结束提示 /new」；绕过工厂手写定义时由 `packages/shared/test/shared.test.ts` 遍历 `WORKFLOW_DEFINITIONS` 的断言兜底。
 
 `WorkflowState` 含 `type` 字段标明本会话属于哪种工作流；`stages` 为泛化的 `Record<string, StageRecord>`，审查阶段经 `reviewRecord()` 定位（`getDefinition(s.type).reviewStage`）。系统不设 `STAGE_ORDER`/`STAGE_LABELS`/`StageName` 常量——消费方一律通过 `getDefinition(workflow.type)` 取阶段键/中文名/清单。task 可选 `task: {category, source, setAt}` 记录一般任务分类；汇报投影只带 `category/source`，未分类为 `null`。`ComprehensionRecord` 是通用机制（sdlc 编码段与 reqdoc PRD 要点共用，reqdoc 语义见 workflow-reqdoc.md 2 章）。`metricKind`、`workflow_set_type` 工具未实现（不做会话内类型切换，避免死代码）；`workflow_start` 跨类型启动直接拒绝。
 

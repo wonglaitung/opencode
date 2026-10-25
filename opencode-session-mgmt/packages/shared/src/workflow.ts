@@ -448,6 +448,28 @@ export interface RuleItem {
 }
 
 /**
+ * 标准提示规格（所有工作流必填，经 defineWorkflow 统一收口）：
+ * - estimate：首阶段主动询问预估人工工时，话术统一走 ESTIMATE_FORMAT_HINT；
+ * - finish：完成/收口时提醒 /new 开始下一个会话，保持统计隔离。
+ * 规则 id 若已在 rules 中存在则校验其文本与阶段，否则由工厂自动生成并追加。
+ */
+export interface StandardPrompts {
+  estimate: {
+    id: string
+    /** 生效阶段；new workflow 可用 global 保证起步态也注入 */
+    stage: string
+    audience: string
+    when: string
+  }
+  finish: {
+    id: string
+    audience: string
+    /** 何时提示 /new（如「提交门禁放行且 git commit 成功后」） */
+    trigger: string
+  }
+}
+
+/**
  * 工作流定义（3.2 注册表）：把「流程的定义」与通用机制解耦。
  * 消费方一律 getDefinition(workflow.type) 取定义，不硬编码阶段/清单/规则。
  */
@@ -466,6 +488,8 @@ export interface WorkflowDefinition {
   checklist: ChecklistItem[]
   /** sdlc=true；reqdoc 定稿无 git 门禁 → false */
   hasCommitGate: boolean
+  /** 标准提示规格：必填，defineWorkflow 据此校验或补齐预估与 /new 规则 */
+  standard: StandardPrompts
   /** 该类型注入的规则项（7.4），注入时经 rulesForStage 取 global + 当前阶段 */
   rules: RuleItem[]
 }
@@ -497,6 +521,50 @@ function estimatePromptRule(audience: string, when: string): string {
   )
 }
 
+function finishPromptRule(trigger: string, audience: string): string {
+  return `${trigger}，提醒${audience}执行 /new 开始下一个需求，保持统计隔离。`
+}
+
+/**
+ * 统一构造工作流定义：所有工作流都必须经过本工厂。
+ * `standard` 为必填项（漏填过不了 typecheck）；已有同名规则则校验，缺失则自动生成，
+ * 因此「预估工时」与「/new 收口」不会静默漏掉（绕过工厂时由注册表遍历测试兜底）。
+ */
+export function defineWorkflow(def: WorkflowDefinition): WorkflowDefinition {
+  const rules = [...def.rules]
+  const estimate = def.standard.estimate
+  const finish = def.standard.finish
+  if (estimate.id === finish.id) throw new Error(`工作流 ${def.type} 的预估与收口规则 id 不能相同：${estimate.id}`)
+  if (estimate.stage !== "global" && !def.stages.includes(estimate.stage)) {
+    throw new Error(`工作流 ${def.type} 的预估规则阶段不存在：${estimate.stage}`)
+  }
+
+  const estimateRule = rules.find((r) => r.id === estimate.id)
+  if (estimateRule) {
+    if (estimateRule.stage !== estimate.stage) {
+      throw new Error(
+        `工作流 ${def.type} 的预估规则 ${estimate.id} 阶段不一致：${estimateRule.stage} ≠ ${estimate.stage}`,
+      )
+    }
+    if (!estimateRule.text.includes(ESTIMATE_FORMAT_HINT)) {
+      throw new Error(`工作流 ${def.type} 的预估规则 ${estimate.id} 缺少统一话术 ESTIMATE_FORMAT_HINT`)
+    }
+  } else {
+    rules.push({ id: estimate.id, stage: estimate.stage, text: estimatePromptRule(estimate.audience, estimate.when) })
+  }
+
+  const finishRule = rules.find((r) => r.id === finish.id)
+  if (finishRule) {
+    if (!finishRule.text.includes("/new") || !finishRule.text.includes(finish.trigger)) {
+      throw new Error(`工作流 ${def.type} 的收口规则 ${finish.id} 缺少 /new 或触发条件「${finish.trigger}」`)
+    }
+  } else {
+    rules.push({ id: finish.id, stage: "global", text: finishPromptRule(finish.trigger, finish.audience) })
+  }
+
+  return { ...def, rules }
+}
+
 /** SDLC 五阶段审查清单项（sdlc 专属，3.2）；review_submit 从具名参数生成，字节不变。
  *  designRationale 为 auto：全部片段定论即通过，无需 Agent 逐项上报（LLM 契约仅 3 具名参数）。 */
 const SDLC_CHECKLIST: ChecklistItem[] = [
@@ -507,7 +575,7 @@ const SDLC_CHECKLIST: ChecklistItem[] = [
 ]
 
 /** SDLC 工作流定义：五阶段 + 四清单 + git 门禁 + 结构化规则（global + 阶段归属，7.4）。 */
-export const SDLC: WorkflowDefinition = {
+export const SDLC = defineWorkflow({
   type: "sdlc",
   stages: ["requirements", "design", "implementation", "testing", "review"],
   labels: {
@@ -527,6 +595,10 @@ export const SDLC: WorkflowDefinition = {
   reviewStage: "review",
   checklist: SDLC_CHECKLIST,
   hasCommitGate: true,
+  standard: {
+    estimate: { id: "sdlc-r6", stage: "requirements", audience: "开发者", when: "进入需求阶段时" },
+    finish: { id: "sdlc-r5", audience: "开发者", trigger: "提交门禁放行且 git commit 成功后" },
+  },
   rules: [
     // ---- global：所有阶段通用 ----
     { id: "sdlc-r1", stage: "global", text: "会话开始时，调用 workflow_start 初始化工作流（开发者说「启动/开始 SDLC 工作流」时也调用它，不要仅用文字回复）。" },
@@ -552,7 +624,7 @@ export const SDLC: WorkflowDefinition = {
     { id: "sdlc-r10", stage: "review", text: "开发者追问时详细解释，comprehension_ask 将问答追加到该片段的 explanation。**追问必须登记成问答，不要用 read_file 自看代码代替**——不登记的问答不进理解证据链。" },
     { id: "sdlc-r11", stage: "review", text: "每个片段须达成终态（confirm 接受 / manual 开发者自处理），不允许 pending/rejected 悬空；拒绝的片段先 comprehension_rewrite 重写或 manual 定论，全部定论且前序阶段（requirements/design/implementation/testing）全部 approved 后才可 review_submit；清单四项须全为 true，否则回到编码/测试。返工多应结合拒绝意见 rewrite 改进，而非简单重试。" },
   ],
-}
+})
 
 /** reqdoc 审查清单项（reqdoc 专属，3.2）：业务确认 PRD 要点（区别于 sdlc 的代码理解确认）。 */
 const REQDOC_CHECKLIST: ChecklistItem[] = [
@@ -588,7 +660,7 @@ function stageVisibilityRule(who: string, extra?: string): string {
   )
 }
 
-export const REQDOC: WorkflowDefinition = {
+export const REQDOC = defineWorkflow({
   type: "reqdoc",
   stages: ["goal", "rules", "edge", "prd", "review"],
   labels: {
@@ -608,6 +680,10 @@ export const REQDOC: WorkflowDefinition = {
   reviewStage: "review",
   checklist: REQDOC_CHECKLIST,
   hasCommitGate: false,
+  standard: {
+    estimate: { id: "reqdoc-r7", stage: "goal", audience: "业务", when: "进入目标阶段时" },
+    finish: { id: "reqdoc-r1", audience: "业务", trigger: "定稿完成（review_submit 通过）后" },
+  },
   rules: [
     // ---- global：所有阶段通用 ----
     { id: "reqdoc-r1", stage: "global", text: "会话开始时调用 workflow_start 初始化工作流（开发者说「启动/开始 reqdoc 工作流」时也调用它，不要仅用文字回复）。定稿完成（review_submit 通过）后建议 /new 开始下一个需求，保持统计隔离。" },
@@ -659,13 +735,13 @@ export const REQDOC: WorkflowDefinition = {
 
     { id: "reqdoc-r19", stage: "review", text: "每个要点须达成终态（confirm 接受 / manual 自处理），不允许 pending/rejected 悬空；拒绝的要点先 rewrite 重写或 manual 定论，全部定论且前序阶段（goal/rules/edge/prd）全部 approved 后才可 review_submit；清单四项须全为 true，否则回到 edge/prd。通过率低说明要点含糊，应结合拒绝意见重写，而非简单重试。" },
   ],
-}
+})
 
 /**
  * 一般任务工作流：只记录预估工时与实际用时，不设阶段审批、审查、提交门禁。
  * 首条用户消息由插件自动进入 execute；完成时由插件自动收口或模型调用 approve。
  */
-export const TASK: WorkflowDefinition = {
+export const TASK = defineWorkflow({
   type: "task",
   stages: ["execute"],
   labels: {
@@ -677,6 +753,10 @@ export const TASK: WorkflowDefinition = {
   reviewStage: null,
   checklist: [],
   hasCommitGate: false,
+  standard: {
+    estimate: { id: "task-r1", stage: "global", audience: "开发者", when: "任务开始时" },
+    finish: { id: "task-r3", audience: "开发者", trigger: "任务完成时" },
+  },
   rules: [
     {
       id: "task-r0",
@@ -711,7 +791,7 @@ export const TASK: WorkflowDefinition = {
       text: "一般任务开始后，首轮必须先调用 task_classify 归类，不要只追问。根据开发者任务描述选择：documentation 编写文档、testing 运行测试、debugging 排查错误、coding 代码修改、research 调研分析、environment 配置环境、other 其他。描述不足以判断时用 other；任务类型变化时可再次调用覆盖。分类只用于统计，不改变流程，也不要写进 note。",
     },
   ],
-}
+})
 
 /** 已注册的工作流定义注册表（3.2）。 */
 export const WORKFLOW_DEFINITIONS: Record<WorkflowType, WorkflowDefinition> = {
