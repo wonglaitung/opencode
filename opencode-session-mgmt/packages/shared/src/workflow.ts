@@ -601,7 +601,7 @@ export const SDLC = defineWorkflow({
   },
   rules: [
     // ---- global：所有阶段通用 ----
-    { id: "sdlc-r1", stage: "global", text: "会话开始时，调用 workflow_start 初始化工作流（开发者说「启动/开始 SDLC 工作流」时也调用它，不要仅用文字回复）。" },
+    { id: "sdlc-r1", stage: "global", text: "会话开始时，调用 workflow_start 初始化工作流（开发者说「启动/开始 SDLC 工作流」时也调用它，不要仅用文字回复）；状态条显示已有进行中阶段时不要重复调用。" },
     { id: "sdlc-r2", stage: "global", text: "阶段可能完成时，先输出摘要并询问确认；仅开发者明确表示「确认/通过/可以」才算确认——「你看着办」「差不多」等模糊表态不算，不得自行 approve。确认后调用 workflow_advance(action=approve, developer_confirmed=true)。询问确认时须显式点明所确认的阶段名（如「【编码 阶段】以上编码是否确认？」），不得用笼统的「以上流程与规则是否确认」。注意：enter 进入下一阶段会自动确认仍处于进行中的前序阶段（工具强制）——同样必须在开发者明确确认之后才可调用（developer_confirmed=true），回执会列出被自动确认的阶段；不要用连环 enter 绕过逐阶段确认。" },
     { id: "sdlc-r13", stage: "global", text: stageVisibilityRule("开发者") },
     { id: "sdlc-r3", stage: "global", text: "开发者说「回到XX」时，立即调用 workflow_revisit(stage=XX)。绝不自行判断阶段已完成。" },
@@ -686,7 +686,7 @@ export const REQDOC = defineWorkflow({
   },
   rules: [
     // ---- global：所有阶段通用 ----
-    { id: "reqdoc-r1", stage: "global", text: "会话开始时调用 workflow_start 初始化工作流（开发者说「启动/开始 reqdoc 工作流」时也调用它，不要仅用文字回复）。定稿完成（review_submit 通过）后建议 /new 开始下一个需求，保持统计隔离。" },
+    { id: "reqdoc-r1", stage: "global", text: "会话开始时调用 workflow_start 初始化工作流（开发者说「启动/开始 reqdoc 工作流」时也调用它，不要仅用文字回复）；状态条显示已有进行中阶段时不要重复调用。定稿完成（review_submit 通过）后建议 /new 开始下一个需求，保持统计隔离。" },
     { id: "reqdoc-r2", stage: "global", text: "采用渐进式分段引导，不要一次性抛出所有问题；单次提问最多 5 个问题，每个问题必须附 A/B/C 选项并标注【默认推荐项】（业务回复「同意默认」即按推荐确认）；同一需求追问最长 3 轮，3 轮后仍未澄清项标 [缺省] 进入下一环节，避免业务有被「质问」的挫败感。提问一律用业务语言，严禁出现「高并发、幂等性、API」等纯技术词汇——同一含义必须转述为业务说法（如并发重复提交→「同一笔交易被重复点了几次怎么处理」）；问字段取值与状态先说「这个单子/字段允许填哪几种值，比如…」，不念数据词——技术词全表见《业务口语规约》对照表。" },
     { id: "reqdoc-r3", stage: "global", text: "阶段推进纪律：阶段可能完成时先输出摘要并询问确认，仅业务明确「确认/可以」才算（模糊表态不算），询问时须点明所确认的阶段名。确认后进入下一阶段即自动确认上一阶段（工具强制，无需单独调 approve；enter 自动确认前序阶段时同样须 developer_confirmed=true）。业务说「回到XX」时立即 workflow_revisit(stage=XX)——**绝不自行判断阶段已完成，也不要用「进入下一阶段」绕过**。" },
     { id: "reqdoc-r25", stage: "global", text: stageVisibilityRule("业务", "状态条出现「信息没齐也能先出初稿」行时，必须在「下一步」之后原样带出该句（不得扩写、省略或改写）。") },

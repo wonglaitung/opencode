@@ -1,4 +1,4 @@
-import { TASK_CATEGORY_KEYS, type WorkflowType } from "sm-shared"
+import { TASK_CATEGORY_KEYS, WORKFLOW_ENTRY_PHRASE, type WorkflowType } from "sm-shared"
 
 /**
  * 评测用精简工具定义(OpenAI JSON schema)。
@@ -28,6 +28,27 @@ const str = (description: string) => ({ type: "string", description })
 const bool = (description: string) => ({ type: "boolean", description })
 
 export const EVAL_TOOLS: OpenAITool[] = [
+  {
+    type: "function",
+    function: {
+      name: "workflow_start",
+      description:
+        "启动当前会话的工作流，将第一阶段置为进行中。" +
+        `开发者说「${WORKFLOW_ENTRY_PHRASE.sdlc}」「${WORKFLOW_ENTRY_PHRASE.reqdoc}」「${WORKFLOW_ENTRY_PHRASE.task}」时调用，不要仅用文字回复；一般任务也会在首条消息自动开始。` +
+        "仅启动当前会话已定的工作流类型；类型不符会被拒绝，切换类型请在启动器选择后开新会话。" +
+        "SDLC 第一阶段为 requirements（需求分析），reqdoc 为 goal（目标与场景），task 为 execute（执行）。",
+      parameters: {
+        type: "object",
+        properties: {
+          type: {
+            type: "string",
+            enum: ["task", "sdlc", "reqdoc"],
+            description: "要启动的工作流类型；必须与当前会话已定类型一致（由 identity.workflowType 决定，默认 sdlc）",
+          },
+        },
+      },
+    },
+  },
   {
     type: "function",
     function: {
@@ -586,6 +607,7 @@ export function evalToolParamTypes(): Record<string, Record<string, "string" | "
 
 /** task 工作流只暴露运行时实际注册的工具（无 review/commit/reqdoc 工具）。 */
 const TASK_TOOLS = new Set([
+  "workflow_start",
   "workflow_advance",
   "workflow_revisit",
   "workflow_baseline",

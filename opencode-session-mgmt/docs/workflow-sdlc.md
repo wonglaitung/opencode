@@ -22,7 +22,7 @@ sdlc 是**开发者**的默认工作流，覆盖一次软件开发会话的完�
 
 | id | stage | 注入文本 |
 |----|-------|----------|
-| sdlc-r1 | global | 会话开始时，调用 workflow_start 初始化工作流（开发者说「启动/开始 SDLC 工作流」时也调用它，不要仅用文字回复）。 |
+| sdlc-r1 | global | 会话开始时，调用 workflow_start 初始化工作流（开发者说「启动/开始 SDLC 工作流」时也调用它，不要仅用文字回复）；状态条显示已有进行中阶段时不要重复调用。 |
 | sdlc-r2 | global | 阶段可能完成时，先输出摘要并询问确认；仅开发者明确表示「确认/通过/可以」才算确认——「你看着办」「差不多」等模糊表态不算，不得自行 approve。确认后调用 workflow_advance(action=approve, developer_confirmed=true)。询问确认时须显式点明所确认的阶段名（如「【编码 阶段】以上编码是否确认？」），不得用笼统的「以上流程与规则是否确认」。注意：enter 进入下一阶段会自动确认仍处于进行中的前序阶段（工具强制）——同样必须在开发者明确确认之后才可调用（developer_confirmed=true），回执会列出被自动确认的阶段；不要用连环 enter 绕过逐阶段确认。 |
 | sdlc-r3 | global | 开发者说「回到XX」时，立即调用 workflow_revisit(stage=XX)。绝不自行判断阶段已完成。 |
 | sdlc-r4 | global | 要求提交时，先调用 commit_gate_check；全部五阶段（含审查）approved 后才可 git commit。 |
