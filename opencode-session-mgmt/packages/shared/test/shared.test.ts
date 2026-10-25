@@ -438,6 +438,9 @@ describe("TASK 一般任务工作流", () => {
     expect(rule).toBeDefined()
     expect(rule!.text).toContain("task_classify")
     expect(rule!.text).toContain("不要写进 note")
+    const finishRule = TASK.rules.find((r) => r.id === "task-r3")
+    expect(finishRule!.text).toContain("/new")
+    expect(finishRule!.text).toContain("污染工时统计")
   })
 
   test("汇报投影只带 task 分类，不带 setAt；非 task 不带 task", () => {

@@ -172,12 +172,17 @@ export function createWorkflowTools(store: Store): Record<string, ToolDefinition
         nextKey && def.type === "reqdoc" && REQDOC_STAGE_PREREQS[nextKey]
           ? `\n🚧 下一阶段「${def.labels[nextKey] ?? nextKey}」前置条件（须满足后再推进）：\n  - ${REQDOC_STAGE_PREREQS[nextKey]!.join("\n  - ")}`
           : ""
+      const taskCompletionHint =
+        def.type === "task" && args.stage === "execute" && stage.status === "approved"
+          ? `\n⚑ 一般任务已完成，请提醒开发者执行 /new 开始下一个任务（避免同会话混入多个任务，导致工时统计错误）。`
+          : ""
       return (
         `✅ ${def.labels[args.stage] ?? args.stage} → ${stage.status}` +
         (autoApprovedLabels.length ? `（自动确认：${autoApprovedLabels.join("、")}）` : "") +
         `\n提交状态：${saved.commit.status}` +
         (saved.commit.blocked_by.length ? `（未完成：${saved.commit.blocked_by.join("、")}）` : "") +
-        prereqLines
+        prereqLines +
+        taskCompletionHint
       )
     },
   })

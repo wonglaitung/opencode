@@ -33,7 +33,7 @@ task 面向**写文档、分析错误、整理材料**等非开发工作：只�
 | task-r0 | global | 开场提示：首次回复必须用一两句话告诉开发者——本次按一般任务记录，只统计预估/实际工时；预估请按「预估 xx 小时」回答；完成后请明确说「完成」，否则只算进行中。 |
 | task-r1 | global | 任务开始时主动询问预估人工工时（小时），引导开发者按「预估 xx 小时」的数字格式回答；开发者明确给出后调用 `workflow_baseline(developer_confirmed=true)`。未录入不阻塞任务进行，但完成前必须补录；已录入后不重复询问。 |
 | task-r2 | global | 只记录预估与实际用时，不要求阶段确认、审查清单或 git 提交门禁；不要主动推进阶段，也不要调用 review/comprehension 工具。 |
-| task-r3 | global | 任务完成时，若开发者明确说「完成/做完了/搞定了/结束了」，调用 `workflow_advance(stage=execute, action=approve, developer_confirmed=true)`；未录入预估时不得收口，先询问并调用 `workflow_baseline` 补录。系统若已自动结束（状态条显示已完成）则不要重复调用。一个会话只记一个任务；完成后提醒执行 `/new`。 |
+| task-r3 | global | 任务完成时，若开发者明确说「完成/做完了/搞定了/结束了」，调用 `workflow_advance(stage=execute, action=approve, developer_confirmed=true)`；未录入预估时不得收口，先询问并调用 `workflow_baseline` 补录。系统若已自动结束（状态条显示已完成）则不要重复调用。一个会话只记一个任务；完成后提醒执行 `/new`，并说明这是为了避免同会话混入多个任务、污染工时统计。 |
 | task-r4 | global | 入口提示：开发者说「启动一般任务」时视为任务开始；系统也会在首条消息自动开始计时，不要重复调用 `workflow_start`。 |
 | task-r5 | global | 一般任务开始后，首轮必须先调用 `task_classify` 归类，不要只追问。根据开发者任务描述选择：documentation 编写文档、testing 运行测试、debugging 排查错误、coding 代码修改、research 调研分析、environment 配置环境、other 其他。描述不足以判断时用 other；任务类型变化时可再次调用覆盖。分类只用于统计，不改变流程，也不要写进 note。 |
 
@@ -44,7 +44,7 @@ task 面向**写文档、分析错误、整理材料**等非开发工作：只�
 3. AI 询问预估工时；用户回复「预估 xx 小时」后，经证据校验写入 `baseline`。
 4. 用户明确说「完成/完成了/做完了/搞定了/结束了」（整句，允许标点）：已录入预估时插件自动 `approve execute`；未录入预估则不收口，先补录。
    长篇句子（如「第一部分完成了」）不自动收口，由模型按 task-r3 判断。
-5. 完成后状态条显示“预估 / 实际 / 提效”，提示 `/new` 开始下一个任务。
+5. 完成后状态条显示“预估 / 实际 / 提效”，提示 `/new` 开始下一个任务，并说明复用本会话会污染工时统计。
 
 实际用时口径：`execute` 首次 `enter` 到 `approve` 的时间跨度；进行中显示“至今”。
 预估未录入时不能完成：自动收口与 `workflow_advance(approve)` 都会被拦截，须先补录基线。

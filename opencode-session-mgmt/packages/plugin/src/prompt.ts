@@ -238,7 +238,7 @@ function buildTaskStateBar(workflow: WorkflowState): string {
       "## 当前任务",
       `任务：已完成 ｜ 预估：${baseline} ｜ 实际：${fmtDurationShort(duration)}` +
         (efficiency === null ? "" : ` ｜ 提效：${Math.round(efficiency * 100)}%`),
-      "⚑ 开始下一个任务：/new；如需继续当前任务：回退到「执行」阶段",
+      "⚑ 开始下一个任务：/new（避免同会话混入多个任务、污染工时统计）；如需继续当前任务：回退到「执行」阶段",
     ].join("\n")
   }
   return [

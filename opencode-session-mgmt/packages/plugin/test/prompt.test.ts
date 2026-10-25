@@ -693,6 +693,7 @@ describe("task 一般任务状态条与入口提示", () => {
     expect(bar).toContain("实际")
     expect(bar).toContain("提效")
     expect(bar).toContain("/new")
+    expect(bar).toContain("污染工时统计")
   })
 
   test("task 规则要求开场告知完成方式", () => {

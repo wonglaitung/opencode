@@ -406,11 +406,15 @@ describe("task 完成门禁（与 sdlc 基线口径对齐）", () => {
       store.mutateWorkflow("t1", (wf) => {
         wf.baseline = { estimatedHours: 2, setAt: 1 }
       })
-      await tools.workflow_advance!.execute(
-        { stage: "execute", action: "approve", developer_confirmed: true } as never,
-        taskCtx,
+      const out = String(
+        await tools.workflow_advance!.execute(
+          { stage: "execute", action: "approve", developer_confirmed: true } as never,
+          taskCtx,
+        ),
       )
       expect(store.get("t1")!.workflow!.stages.execute.status).toBe("approved")
+      expect(out).toContain("/new")
+      expect(out).toContain("工时统计错误")
     } finally {
       store.close()
     }
