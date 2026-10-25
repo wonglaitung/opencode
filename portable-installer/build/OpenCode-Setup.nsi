@@ -89,13 +89,13 @@ Section "Install"
   SetOutPath "$PROFILE\OpenCode"
   File "OpenCode-launch.exe"
   File "OpenCode-Reset.exe"
-  File /oname=app-icon.ico "icon.ico"
+  File "icon.ico"
 
   ; 6. 快捷方式 (指向启动器, 由启动器弹目录选择)
   CreateDirectory "$SMPROGRAMS\智能研发助手"
-  CreateShortCut "$SMPROGRAMS\智能研发助手\智能研发助手.lnk" "$PROFILE\OpenCode\OpenCode-launch.exe" "" "$PROFILE\OpenCode\app-icon.ico" 0 SW_SHOWNORMAL
-  CreateShortCut "$SMPROGRAMS\智能研发助手\清空历史会话.lnk" "$PROFILE\OpenCode\OpenCode-Reset.exe" "" "$PROFILE\OpenCode\app-icon.ico" 0 SW_SHOWNORMAL
-  CreateShortCut "$DESKTOP\智能研发助手.lnk" "$PROFILE\OpenCode\OpenCode-launch.exe" "" "$PROFILE\OpenCode\app-icon.ico" 0 SW_SHOWNORMAL
+  CreateShortCut "$SMPROGRAMS\智能研发助手\智能研发助手.lnk" "$PROFILE\OpenCode\OpenCode-launch.exe" "" "$PROFILE\OpenCode\icon.ico" 0 SW_SHOWNORMAL
+  CreateShortCut "$SMPROGRAMS\智能研发助手\清空历史会话.lnk" "$PROFILE\OpenCode\OpenCode-Reset.exe" "" "$PROFILE\OpenCode\icon.ico" 0 SW_SHOWNORMAL
+  CreateShortCut "$DESKTOP\智能研发助手.lnk" "$PROFILE\OpenCode\OpenCode-launch.exe" "" "$PROFILE\OpenCode\icon.ico" 0 SW_SHOWNORMAL
   System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, i 0, i 0)'
 
   ; 7. 卸载程序
