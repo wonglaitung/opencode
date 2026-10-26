@@ -39,6 +39,14 @@ Var ErrCode
 Var ErrText
 Var HintText
 Var hHint
+Var hResume
+Var hResumeHint
+Var Resume
+Var ResumeFlag
+Var LastProject
+Var LastWorkflow
+Var CanResume
+Var ResumeHintText
 Var TitleFont
 Var SubFont
 Var SectionFont
@@ -52,17 +60,44 @@ Function .onInit
   SetOutPath "$PLUGINSDIR"
   File "${__FILEDIR__}\launcher-config.js"
 
-  ; 读取上次选择的目录
+  ; 读取上次选择的目录与工作流, 用于判断能否继续上次会话
+  StrCpy $LastProject ""
+  StrCpy $LastWorkflow ""
+  StrCpy $Resume "0"
+  StrCpy $ResumeFlag ""
   ClearErrors
   FileOpen $0 "$PROFILE\.config\opencode\last_project.txt" r
   ${If} $0 != ""
-    FileRead $0 $LastDir
+    FileRead $0 $LastProject
     FileClose $0
+    StrCpy $1 $LastProject "" -1
+    ${If} $1 == "$\n"
+      StrCpy $LastProject $LastProject -1
+    ${EndIf}
+    StrCpy $1 $LastProject "" -1
+    ${If} $1 == "$\r"
+      StrCpy $LastProject $LastProject -1
+    ${EndIf}
+    StrCpy $LastDir $LastProject
     ${If} $LastDir == ""
       StrCpy $LastDir "$PROFILE"
     ${EndIf}
   ${Else}
     StrCpy $LastDir "$PROFILE"
+  ${EndIf}
+  ClearErrors
+  FileOpen $0 "$PROFILE\.config\opencode\last_workflow.txt" r
+  ${If} $0 != ""
+    FileRead $0 $LastWorkflow
+    FileClose $0
+    StrCpy $1 $LastWorkflow "" -1
+    ${If} $1 == "$\n"
+      StrCpy $LastWorkflow $LastWorkflow -1
+    ${EndIf}
+    StrCpy $1 $LastWorkflow "" -1
+    ${If} $1 == "$\r"
+      StrCpy $LastWorkflow $LastWorkflow -1
+    ${EndIf}
   ${EndIf}
 
   ; 默认值
@@ -138,17 +173,17 @@ FunctionEnd
 
 Function SetWorkflowHint
   ${If} $ConfigOk != "1"
-    StrCpy $HintText "opencode.jsonc 缺失或无法解析, 插件开关不可用, 请重新运行安装包。"
+    StrCpy $HintText "配置文件缺失或无法解析，插件开关不可用。$\r$\n请重新运行安装包修复。"
   ${ElseIf} $IdentityOk != "1"
-    StrCpy $HintText "身份文件缺失, 工作流不可选, 请先运行 opencode-sm init。"
+    StrCpy $HintText "身份文件缺失，工作流暂时不可选。$\r$\n请先在命令窗口运行 opencode-sm init。"
   ${ElseIf} $PluginSm != "1"
-    StrCpy $HintText "未启用会话管理，工作流选择不生效，也不记录工时。"
+    StrCpy $HintText "未启用「会话管理」，工作流选择和工时统计都不会生效。$\r$\n请勾选上方「会话管理」。"
   ${ElseIf} $WorkflowType == "task"
-    StrCpy $HintText "直接输入任务内容即开始（自动计时）$\r$\n预估请回「预估 xx 小时」；未填不能完成$\r$\n完成后请说「完成」；已有窗口请先退出"
+    StrCpy $HintText "适合写文档、排查问题、整理资料等轻量工作。$\r$\n打开后直接输入要做的事，系统自动开始计时。$\r$\n若被问预估工时，请回「预估 2 小时」；做完说「完成」结束。$\r$\n不需要逐阶段确认，也不会拦截提交。$\r$\n默认新建会话；勾选「继续上次会话」可回到上次进度（已有窗口请先退出）。"
   ${ElseIf} $WorkflowType == "reqdoc"
-    StrCpy $HintText "输入「启动 REQDOC 工作流」进入$\r$\n目标阶段会问「预估 xx 小时」；定稿前业务逐条确认$\r$\n本次启动生效；已有窗口请先退出"
+    StrCpy $HintText "适合业务人员写需求书：口述或投放材料，AI 追问补全后生成 PRD。$\r$\n打开后输入「启动 REQDOC 工作流」，系统会创建资料目录并引导投放材料。$\r$\n目标阶段会问预估工时，请回「预估 2 小时」；文档由系统按阶段生成。$\r$\n定稿前业务需逐条确认要点。$\r$\n默认新建会话；勾选「继续上次会话」可回到上次进度（已有窗口请先退出）。"
   ${Else}
-    StrCpy $HintText "输入「启动 SDLC 工作流」进入$\r$\n需求阶段会问「预估 xx 小时」；提交前须过审查门禁$\r$\n本次启动生效；已有窗口请先退出"
+    StrCpy $HintText "适合完整开发：需求 → 设计 → 编码 → 测试 → 审查。$\r$\n打开后输入「启动 SDLC 工作流」，系统会带你逐阶段完成并检查产出。$\r$\n需求阶段会问预估工时，请回「预估 2 小时」；每阶段需你确认才推进。$\r$\n提交代码前须完成全部阶段（含审查）。$\r$\n默认新建会话；勾选「继续上次会话」可回到上次进度（已有窗口请先退出）。"
   ${EndIf}
 FunctionEnd
 
@@ -161,6 +196,74 @@ Function RefreshWorkflowHint
   ${EndIf}
 FunctionEnd
 
+; 判断当前选择是否可以安全续接上次会话：必须同项目、同工作流且会话管理已启用。
+Function CalcCanResume
+  StrCpy $CanResume "0"
+  ${If} $DirPath == ""
+    StrCpy $ResumeHintText "请先选择项目目录"
+  ${ElseIf} $ConfigOk != "1"
+    StrCpy $ResumeHintText "配置文件不可用，无法继续"
+  ${ElseIf} $IdentityOk != "1"
+    StrCpy $ResumeHintText "身份文件缺失，无法继续"
+  ${ElseIf} $PluginSm != "1"
+    StrCpy $ResumeHintText "需启用「会话管理」"
+  ${ElseIf} $LastWorkflow == ""
+  ${OrIf} $LastProject == ""
+    StrCpy $ResumeHintText "暂无可继续的上次会话"
+  ${ElseIf} $WorkflowType != $LastWorkflow
+    StrCpy $ResumeHintText "工作流已变化，将新建会话"
+  ${Else}
+    ; 去掉结尾分隔符再比较，避免同一个目录因尾斜杠不同而误判。
+    StrCpy $0 $DirPath
+    StrCpy $1 $0 "" -1
+    ${If} $1 == "\"
+      StrCpy $0 $0 -1
+    ${EndIf}
+    StrCpy $1 $0 "" -1
+    ${If} $1 == "/"
+      StrCpy $0 $0 -1
+    ${EndIf}
+    StrCpy $1 $LastProject
+    StrCpy $2 $1 "" -1
+    ${If} $2 == "\"
+      StrCpy $1 $1 -1
+    ${EndIf}
+    StrCpy $2 $1 "" -1
+    ${If} $2 == "/"
+      StrCpy $1 $1 -1
+    ${EndIf}
+    ${If} $0 == $1
+    ${AndIf} $0 != ""
+      StrCpy $CanResume "1"
+      StrCpy $ResumeHintText "可回到上次进度"
+    ${Else}
+      StrCpy $ResumeHintText "项目已变化，将新建会话"
+    ${EndIf}
+  ${EndIf}
+FunctionEnd
+
+Function UpdateResumeState
+  ${If} $hResume == ""
+    Return
+  ${EndIf}
+  ${NSD_GetText} $hDir $DirPath
+  Call CalcCanResume
+  ${If} $CanResume == "1"
+    EnableWindow $hResume 1
+  ${Else}
+    EnableWindow $hResume 0
+    ${NSD_Uncheck} $hResume
+    StrCpy $Resume "0"
+  ${EndIf}
+  ${If} $hResumeHint != ""
+    ${NSD_SetText} $hResumeHint "$ResumeHintText"
+  ${EndIf}
+FunctionEnd
+
+Function OnDirChange
+  Call UpdateResumeState
+FunctionEnd
+
 Function DirBrowse
   nsDialogs::SelectFolderDialog "选择项目目录" "$LastDir"
   Pop $0
@@ -169,6 +272,7 @@ Function DirBrowse
   ${AndIf} $0 != ""
     ${NSD_SetText} $hDir $0
     StrCpy $LastDir $0
+    Call UpdateResumeState
   ${EndIf}
 FunctionEnd
 
@@ -186,6 +290,7 @@ Function OnSmToggle
     EnableWindow $hWorkflow 0
   ${EndIf}
   Call RefreshWorkflowHint
+  Call UpdateResumeState
 FunctionEnd
 
 Function OnWorkflowChange
@@ -198,6 +303,7 @@ Function OnWorkflowChange
     StrCpy $WorkflowType "sdlc"
   ${EndIf}
   Call RefreshWorkflowHint
+  Call UpdateResumeState
 FunctionEnd
 
 Function DoLaunch
@@ -254,6 +360,15 @@ Function DoLaunch
     ${EndIf}
   ${EndIf}
 
+  ; 只有用户勾选且项目/工作流与上次启动一致时才续接旧会话
+  ${NSD_GetState} $hResume $Resume
+  Call CalcCanResume
+  StrCpy $ResumeFlag ""
+  ${If} $Resume == ${BST_CHECKED}
+  ${AndIf} $CanResume == "1"
+    StrCpy $ResumeFlag " -c"
+  ${EndIf}
+
   ; 只改用户实际可改的项: 配置文件不可解析时不动插件, 身份不可用时不动工作流
   StrCpy $Cmd '"$PROFILE\OpenCode\runtime\node.exe" "$PLUGINSDIR\launcher-config.js" --apply --error-file "$PLUGINSDIR\apply-error.txt"'
   ${If} $ConfigOk == "1"
@@ -308,18 +423,28 @@ Function DoLaunch
     Return
   ${EndIf}
 
-  ; 记忆上次目录
+  ; 记忆上次目录与真正生效的工作流, 供下次判断能否继续会话
   CreateDirectory "$PROFILE\.config\opencode"
   FileOpen $3 "$PROFILE\.config\opencode\last_project.txt" w
   FileWrite $3 "$DirPath"
   FileClose $3
+  ${If} $ConfigOk == "1"
+  ${AndIf} $IdentityOk == "1"
+  ${AndIf} $PluginSm == ${BST_CHECKED}
+    FileOpen $3 "$PROFILE\.config\opencode\last_workflow.txt" w
+    FileWrite $3 "$WorkflowType"
+    FileClose $3
+  ${Else}
+    ClearErrors
+    Delete "$PROFILE\.config\opencode\last_workflow.txt"
+  ${EndIf}
 
   ; 在该目录启动 opencode (cwd 即项目根)
   SetOutPath "$DirPath"
   ${If} $TerminalMode == "dedicated"
-    Exec '"$PROFILE\OpenCode\terminal\OpenConsole.exe" cmd /c "title 智能研发助手 && $PROFILE\OpenCode\runtime\opencode.cmd -c"'
+    Exec '"$PROFILE\OpenCode\terminal\OpenConsole.exe" cmd /c "title 智能研发助手 && $PROFILE\OpenCode\runtime\opencode.cmd$ResumeFlag"'
   ${Else}
-    Exec '"$PROFILE\OpenCode\runtime\opencode.cmd" -c'
+    Exec '"$PROFILE\OpenCode\runtime\opencode.cmd"$ResumeFlag'
   ${EndIf}
   ; 关闭向导窗口, 让 nsDialogs 的消息循环退出
   SendMessage $HWNDPARENT ${WM_CLOSE} 0 0
@@ -436,11 +561,21 @@ Function LaunchPage
   ${NSD_CreateGroupBox} 30 340 660 160 "工作流说明"
   Pop $0
   SendMessage $0 ${WM_SETFONT} $HintTitleFont 1
-  ${NSD_CreateLabel} 50 368 620 110 "$HintText"
+  ${NSD_CreateLabel} 50 364 620 96 "$HintText"
   Pop $hHint
   SendMessage $hHint ${WM_SETFONT} $BodyFont 1
   SetCtlColors $hHint 0x374151 transparent
   Call RefreshWorkflowHint
+
+  ${NSD_CreateCheckBox} 50 464 240 18 "继续上次会话"
+  Pop $hResume
+  ${NSD_Uncheck} $hResume
+  ${NSD_CreateLabel} 300 464 370 18 ""
+  Pop $hResumeHint
+  SendMessage $hResumeHint ${WM_SETFONT} $SubFont 1
+  SetCtlColors $hResumeHint 0x6B7280 transparent
+  ${NSD_OnChange} $hDir OnDirChange
+  Call UpdateResumeState
 
   ${NSD_CreateButton} 30 516 510 46 "打开 AI Assistant"
   Pop $2

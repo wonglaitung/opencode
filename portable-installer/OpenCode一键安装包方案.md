@@ -1,4 +1,4 @@
-# OpenCode 一键图形化安装包方案（含启动器）
+﻿# OpenCode 一键图形化安装包方案（含启动器）
 
 > 面向非技术业务人员：双击安装包 → 弹窗填一次信息 → 完成；之后每次双击「智能研发助手」快捷方式 → 选一下项目目录 → 直接进 opencode。全程无需命令行、无需管理员权限、不依赖 PowerShell。
 >
@@ -117,14 +117,14 @@
 
 用 NSIS 的 nsDialogs 画一个原生页面（不调用 PowerShell/VBScript，零运行时依赖，不受 PowerShell 禁用影响）：
 
-- 目录选择框（`DirRequest` 控件，系统级 dialog）和「浏览」按钮；下方是工作流、终端类型和三个插件开关，底部按钮「打开 OpenCode」。
+- 目录选择框（`DirRequest` 控件，系统级 dialog）和「浏览」按钮；下方是工作流、终端类型和三个插件开关，底部按钮「打开 AI Assistant」。
 - 打开前读取当前配置回填：工作流取 `identity.json` 的 `workflowType`（缺省 `sdlc`），终端取 `terminal_mode.ini` 首行（缺省 `native`），插件状态取 `opencode.jsonc` 的 `plugin` 数组。
-- 点「打开 OpenCode」时才写配置：工作流写回 `identity.json`，终端写回 `terminal_mode.ini`，插件只替换 `opencode.jsonc` 的 `plugin` 数组，其余字段原样保留。写前留 `.bak`，失败弹窗并取消启动。
-- 工作流和终端都是不可编辑下拉菜单。终端「原生」直接 `Exec opencode.cmd -c`，使用系统控制台；「专用」用 `Exec OpenConsole.exe cmd /c "title 智能研发助手 && opencode.cmd -c"`，使用打包的 Windows Terminal，退出即关。两种模式都以 `-c` 启动，自动续接上次对话。
+- 点「打开 AI Assistant」时才写配置：工作流写回 `identity.json`，终端写回 `terminal_mode.ini`，插件只替换 `opencode.jsonc` 的 `plugin` 数组，其余字段原样保留。写前留 `.bak`，失败弹窗并取消启动。
+- 工作流和终端都是不可编辑下拉菜单。终端「原生」直接 `Exec opencode.cmd`，使用系统控制台；「专用」用 `Exec OpenConsole.exe cmd /c "title 智能研发助手 && opencode.cmd"`，使用打包的 Windows Terminal，退出即关。默认启动新会话；只有勾选「继续上次会话」且项目目录、工作流都与上次启动一致时，才追加 `-c` 续接上次对话。工作流变化时复选框自动置灰并新建会话，避免旧会话沿用旧工作流。
 - 关闭「会话管理」插件时工作流菜单置灰；插件开关是机器级设置，对所有项目生效。配置文件缺失或无法解析时，插件开关置灰并提示重装；`identity.json` 缺失时工作流不可选。
 - `SetOutPath` 设为所选目录 → **该目录即项目根 `ctx.directory`**，reqdoc 扫描/导出/技能全部基于此。
 - 所选目录须为业务已取得的 doc_process 项目（含 `.claude/skills`、`工作要求.txt`、`raw/`、`00~07` 骨架）；安装包不负责分发这些项目文件。
-- 上次目录写入 `%USERPROFILE%\.config\opencode\last_project.txt`，下次打开预填（仍可改）。
+- 上次目录写入 `%USERPROFILE%\.config\opencode\last_project.txt`，上次实际生效的工作流写入 `last_workflow.txt`，下次打开预填并判断能否续接；「继续上次会话」默认不勾选。
 - 用户可随时直接编辑 `terminal_mode.ini` 切换终端类型，无需重装。
 
 > 之所以不直接把快捷方式指向 `opencode.cmd` 并写死 start-in，是因为业务的项目目录不固定；启动器把「选目录」这一步固化进打开动作，保证根目录永远正确。
@@ -187,7 +187,7 @@ cmd /c portable-installer\build\build.bat
   - `native` 模式：opencode 在系统默认控制台中运行；
   - `dedicated` 模式：opencode 在打包的 Windows Terminal 窗口中运行，退出即关；
   - `terminal_mode.ini` 为 ASCII 编码（`native` 或 `dedicated`），人可阅读、可改。
-  - 启动器回填当前工作流、终端和插件状态；改完点「打开 OpenCode」后按选择写入，点「取消」或关闭窗口不写入。
+  - 启动器回填当前工作流、终端和插件状态；改完点「打开 AI Assistant」后按选择写入，点「取消」或关闭窗口不写入。
   - 插件开关全局生效；关掉「会话管理」后工作流菜单置灰，重新勾选并打开可恢复，`identity.json` 的 `workflowType` 不会被改动。
   - **路径验证**：检查 `%USERPROFILE%\.config\opencode\opencode.jsonc` 中的 plugin 路径为实际绝对路径（如 `C:/Users/xxx/OpenCode/runtime/...`），不含 `%USERPROFILE%` 字面量。
   - **清空历史会话**：开始菜单入口存在；点“否”后 `opencode.db` 不变；opencode 运行中执行被拒绝；全部退出后执行，会话与快照消失，`.config\opencode` 与项目 `session-mgmt.db` 保留。
