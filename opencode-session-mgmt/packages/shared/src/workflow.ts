@@ -509,7 +509,7 @@ export const WORKFLOW_ENTRY_PHRASE: Record<WorkflowType, string> = {
 
 /** 各工作流的起步提示（会话尚未开始时展示给用户）。 */
 export const WORKFLOW_ENTRY_HINT: Record<WorkflowType, string> = {
-  task: "直接输入任务内容即开始（自动计时），也可输入「启动一般任务」",
+  task: "输入「启动一般任务」，或直接描述任务开始",
   sdlc: "输入「启动 SDLC 工作流」，或直接描述需求开始",
   reqdoc: "输入「启动 REQDOC 工作流」，或直接说明需求开始",
 }
@@ -739,7 +739,7 @@ export const REQDOC = defineWorkflow({
 
 /**
  * 一般任务工作流：只记录预估工时与实际用时，不设阶段审批、审查、提交门禁。
- * 首条用户消息由插件自动进入 execute；完成时由插件自动收口或模型调用 approve。
+ * 与 sdlc/reqdoc 一致，由模型调用 workflow_start 进入 execute；完成时由插件自动收口或模型调用 approve。
  */
 export const TASK = defineWorkflow({
   type: "task",
@@ -754,20 +754,22 @@ export const TASK = defineWorkflow({
   checklist: [],
   hasCommitGate: false,
   standard: {
-    estimate: { id: "task-r1", stage: "global", audience: "开发者", when: "任务开始时" },
+    estimate: { id: "task-r1", stage: "global", audience: "开发者", when: "任务启动后" },
     finish: { id: "task-r3", audience: "开发者", trigger: "任务完成时" },
   },
   rules: [
     {
       id: "task-r0",
       stage: "global",
-      text: "开场提示：首次回复必须用一两句话告诉开发者——本次按一般任务记录，只统计预估/实际工时；预估请按「预估 xx 小时」回答；完成后请明确说「完成」，否则只算进行中。",
+      text: "开场提示：首次回复必须用一两句话告诉开发者——本次按一般任务记录，只统计预估/实际工时；预估请按「预估 xx 小时」回答；完成后请明确说「本次任务已完成」（未录入预估会先询问预估；只说「完成」会先请你确认），否则只算进行中。",
     },
     {
       id: "task-r1",
       stage: "global",
       text:
-        estimatePromptRule("开发者", "任务开始时") +
+        estimatePromptRule("开发者", "任务启动后") +
+        "开发者只报数字（如「24小时」）时也先调用 workflow_baseline 试录，被拒再请其改说「预估 xx 小时」。" +
+        "用 question 选择菜单问预估时，选项文案写成完整的「预估 2 小时」；服务端会把选中的标签当作开发者证据。" +
         "本工作流未录入预估不阻塞任务进行，但完成前必须补录。",
     },
     {
@@ -778,17 +780,17 @@ export const TASK = defineWorkflow({
     {
       id: "task-r3",
       stage: "global",
-      text: "任务完成时，若开发者明确说「完成/做完了/搞定了/结束了」，调用 workflow_advance(stage=execute, action=approve, developer_confirmed=true)；未录入预估时不得收口，先询问并调用 workflow_baseline 补录。系统若已自动结束（状态条显示已完成）则不要重复调用。一个会话只记一个任务；完成后提醒开发者执行 /new 开始下一个，并说明这是为了避免同会话混入多个任务、污染工时统计。",
+      text: "任务完成时，先看状态条「预估」：未录入预估时系统不会自动收口，你只能先问开发者预估工时（例如「请按『预估 xx 小时』告诉我」），等其给出数字后再调用 workflow_baseline；不得自行填数，也不得只回复已完成。已录入预估时：开发者整句说「本次任务已完成」或带任务范围的完成句（如「任务完成了」「本次任务做完了」，问句不算）时系统会自动收口；若开发者只说「完成/完成了/做完了/搞定了/结束了」而未点明任务，不要直接 approve，先问一句「本次任务是否已完成？」并在其明确确认后再调用 workflow_advance(stage=execute, action=approve, developer_confirmed=true)。系统若已自动结束（状态条显示已完成）则不要重复调用。一个会话只记一个任务；完成后提醒开发者执行 /new 开始下一个，并说明这是为了避免同会话混入多个任务、污染工时统计。",
     },
     {
       id: "task-r4",
       stage: "global",
-      text: "入口提示：开发者说「启动一般任务」时视为任务开始（系统也会在首条消息自动开始计时），不要重复调用 workflow_start。",
+      text: "会话开始时调用 workflow_start 初始化工作流（开发者说「启动一般任务」或直接描述任务时都调用它，不要仅用文字回复）；若当前消息只有入口短语（没有任务描述），启动后先请开发者描述本次任务，不要调用 task_classify；状态条显示已有进行中/已完成阶段时不要重复调用。",
     },
     {
       id: "task-r5",
       stage: "global",
-      text: "一般任务开始后，首轮必须先调用 task_classify 归类，不要只追问。根据开发者任务描述选择：documentation 编写文档、testing 运行测试、debugging 排查错误、coding 代码修改、research 调研分析、environment 配置环境、other 其他。描述不足以判断时用 other；任务类型变化时可再次调用覆盖。分类只用于统计，不改变流程，也不要写进 note。",
+      text: "一般任务启动后，拿到任务描述的首轮必须先调用 task_classify 归类，不要只追问；只有入口短语或只有预估工时时不要归类，先请开发者描述任务；模糊但描述了要做某事的说法（如「帮我处理一下这个事」）按 other 归类，不要反问。未启动时先按 task-r4 启动，不得先归类。根据开发者任务描述选择：documentation 编写文档、testing 运行测试、debugging 排查错误、coding 代码修改、research 调研分析、environment 配置环境、other 其他；只有确实无法从任务描述判断时才用 other。任务类型变化时可再次调用覆盖。分类只用于统计，不改变流程，也不要写进 note。",
     },
   ],
 })

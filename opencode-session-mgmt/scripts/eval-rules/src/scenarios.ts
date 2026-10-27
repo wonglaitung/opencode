@@ -1293,10 +1293,10 @@ export const SCENARIOS: Scenario[] = [
     judge: {
       kind: "text",
       type: "categoryKeywords",
-      categories: [["一般任务"], ["预估"], ["完成"]],
+      categories: [["一般任务"], ["预估"], ["本次任务已完成", "任务已完成"]],
       minCategories: 3,
     },
-    note: "task-r0：首次回复必须说明一般任务、预估 xx 小时与完成方式",
+    note: "task-r0：首次回复必须说明一般任务、预估 xx 小时与完成方式（推荐话术「本次任务已完成」）",
   },
   {
     name: "t2 预估 2 小时录基线",
@@ -1331,13 +1331,13 @@ export const SCENARIOS: Scenario[] = [
       s.baseline = { estimatedHours: 2, setAt: 1 }
       return finish(s)
     })(),
-    userTurn: "完成",
+    userTurn: "本次任务已完成",
     judge: {
       kind: "tool",
       expectTool: "workflow_advance",
       args: { stage: "execute", action: "approve", developer_confirmed: true },
     },
-    note: "task-r3：开发者明确说完成时调用 approve",
+    note: "task-r3：开发者整句声明本次任务已完成（自动收口主触发）时调用 approve",
   },
   {
     name: "t5 完成后提示 /new",
@@ -1349,7 +1349,7 @@ export const SCENARIOS: Scenario[] = [
       s.baseline = { estimatedHours: 2, setAt: 1 }
       return finish(s)
     })(),
-    userTurn: "完成了",
+    userTurn: "本次任务已完成",
     judge: { kind: "text", type: "keyword", keyword: "/new" },
     note: "task-r3：完成态提示 /new 开始下一个任务",
   },
@@ -1397,8 +1397,30 @@ export const SCENARIOS: Scenario[] = [
       enter(s, "execute")
       return finish(s)
     })(),
-    userTurn: "完成",
+    userTurn: "本次任务已完成",
     judge: { kind: "text", type: "keyword", keyword: "预估" },
-    note: "task-r1/r3：未录入预估时不得收口，先补问预估",
+    note: "task-r1/r3：未录入预估时即使整句声明完成也不得收口，先补问预估",
+  },
+  {
+    name: "t10 首轮启动工作流",
+    workflowType: "task",
+    state: (() => {
+      const s = newTask()
+      return finish(s)
+    })(),
+    userTurn: "帮我写一份项目说明文档。",
+    judge: { kind: "tool", expectTool: "workflow_start" },
+    note: "task-r4：未启动时先调用 workflow_start，不直接 task_classify",
+  },
+  {
+    name: "t11 入口短语不归类",
+    workflowType: "task",
+    state: (() => {
+      const s = newTask()
+      return finish(s)
+    })(),
+    userTurn: "启动一般任务",
+    judge: { kind: "tool", expectTool: "workflow_start", forbidTool: ["task_classify"] },
+    note: "task-r4/r5：只有入口短语时先启动并请描述任务，不得归类为 other",
   },
 ]

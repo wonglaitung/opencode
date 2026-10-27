@@ -79,6 +79,20 @@ describe("createToolset", () => {
       expect(description).toContain("启动 REQDOC 工作流")
       expect(description).toContain("启动一般任务")
       expect(description).toContain("仅启动当前会话已定的工作流类型")
+      expect(description).not.toContain("自动开始")
+    } finally {
+      store.close()
+    }
+  })
+
+  test("task 由 workflow_start 启动 execute，重复调用幂等", async () => {
+    const { store, tools } = setup("task")
+    try {
+      await tools.workflow_start!.execute({} as never, { sessionID: "t1" } as never)
+      expect(store.get("t1")!.workflow!.stages.execute.status).toBe("in_progress")
+      await tools.workflow_start!.execute({} as never, { sessionID: "t1" } as never)
+      const transitions = store.get("t1")!.workflow!.stages.execute.transitions
+      expect(transitions.filter((t) => t.action === "enter")).toHaveLength(1)
     } finally {
       store.close()
     }

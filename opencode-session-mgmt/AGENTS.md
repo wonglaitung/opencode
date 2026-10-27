@@ -17,13 +17,14 @@ OpenCode 会话管理定制：标准化开发流程（五阶段门禁）、理�
 - **身份全手填**：`opencode-sm init` 交互两问（api_key / 收集服务地址）+ 可选主要工作流类型，写入全局 `~/.config/opencode/session-mgmt/identity.json`，每机器一次。`api_key` 仅本机明文存储；**不读上游登录账号**，**没有 team.yaml**。
 - **依赖面仅 Hook + REST API，不读上游数据库**：身份以 api_key 标识（上送前转 SHA-256 哈希），cost/tokens 经上游 SDK 获取；**组/组织归属由后台收集服务解析**，客户端不填、CLI 不查。
 - **后台收集服务为外部独立项目** `https://github.com/karsonto/performance_dashboard`：插件仅经 `POST /api/report` 上送会话摘要（不含代码）。收集端不可用时插件本地缓冲、恢复补推。
+- **汇报在工具返回前落盘**：状态变更工具（`workflow_*` / `task_*` / `review_*` / `comprehension_*` / `commit_*`）执行后由 `tool.execute.after` 入队（上游该 hook 是 await 的），保证最终状态先写本地 outbox 再返回；`session.status=idle` 只做 cost/tokens 的 best-effort 刷新。outbox 的删旧+插新必须同一事务。
 - **身份是汇报快照**：改 init 只影响之后的汇报，历史归属不追溯变更。
 - **CLI 命名为 `opencode-sm`**（曾短暂叫 ocsm，已废弃，勿再用）。
 - **会话不能改名**：上游 `Session.Service` 无 update 方法，勿设计 rename 功能。
 
 ### 工作流机制（task / sdlc / reqdoc 共用）
 
-- **一般任务 task 只记工时**：单阶段 `execute`，无审查/提交门禁；首条消息自动开始，用户整句说「完成/完成了/做完了/搞定了/结束了」自动收口；预估话术与 sdlc/reqdoc 共用「预估 xx 小时」，详见 `docs/workflow-task.md`。
+- **一般任务 task 只记工时**：单阶段 `execute`，无审查/提交门禁；与 sdlc/reqdoc 一致由模型调用 `workflow_start` 启动（首条消息不再自动开始），用户整句说「本次任务已完成」或带任务范围的完成句（如「任务完成了」）自动收口，未点明任务的「完成」等词由模型确认一次；`task_classify` 在未启动时拒绝，入口短语轮（无任务描述）不归类；预估话术与 sdlc/reqdoc 共用「预估 xx 小时」，详见 `docs/workflow-task.md`。
 - **工作流推进是完成门禁模型**（AI 主动 `workflow_advance`，AI 引导人决定），不是审批流；提交门禁经 `tool.execute.before` 拦截 `git commit` 实现；含提交门禁的工作流（sdlc）失录**基线预估工时**亦阻断；迭代上限 3 轮；`comprehension_confirm` 单次只认一段（防批量走过场）。
 - **手工修改走 open_ide 锁定（sdlc-r12，软提示 + 硬拦截）**：开发者要手工改代码时 AI 先调 `open_ide`（**必须带 `file`**，防AI 覆盖）；锁定期间 AI 可继续其它任务但不得改被锁文件（`tool.execute.before` 服务端硬拦截）；须开发者明确确认后 `unlock_file`，并重新读取最新内容。**SDLC 完结时完成态注入解锁提示**（经 `hasCommitGate` 门控，reqdoc 不提示）。open-ide **物理合并**进本工程（`packages/plugin/src/open-ide/`，原 `opencode-open-ide` 已移除）：锁持久化进 SQLite `file_lock` 表（daemon 重启自动恢复）。
 - **新增工作流必须经 `defineWorkflow` 构造**：`standard`（estimate / finish）为必填，工厂校验同名规则的话术与阶段、缺失则自动补齐统一预估与 `/new` 收口；`packages/shared/test/shared.test.ts` 遍历注册表兜底。

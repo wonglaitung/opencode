@@ -104,6 +104,18 @@ r23 本身在 vLLM 两变体皆红：模型习惯先 ingest 游走（baseline �
 收的拒收）+ handler 段内文本契约，回退旧实现当场实测 3/3 红。归入第 6 条：**「等价」须逐字段核对
 读取时点**——意图相同、时点不同即不等价。
 
+**第二类基线证据：question 工具的答案（P1，2026-10）。** 一般任务要求预估工时时，模型会用
+`question` 选择菜单问；选择结果以 `output.metadata.answers` 返回给模型，**不产生新的
+`chat.message`**，因此只监听 `chat.message` 的证据钩子永远看不到——用户选完，`workflow_baseline`
+仍以「未检测到数字预估工时」拒收。另有叠加坑：菜单标签若只写「2 小时」，弱单位缺少「预估」意图
+词，即使走普通消息也会被 `extractBaselineHours` 拒。修法：`tool.execute.after` 对 `question`
+读取 `args.questions` + `output.metadata.answers`，仅在问题本身属于预估类（预估/工时/工作量/人工/
+人天/人时/工作日/工期）时，把选中答案交给 `extractQuestionBaselineHours`（允许裸「2 小时」），
+写入与聊天消息相同的 `baselineProposedByDev`；无关问题的数字答案不写证据。护栏
+`test/baseline-question.test.ts`（裸数字放行 / 无关问题拒收 / 无单位不算 / 完整标签与人天）+
+`task-hook.test.ts` 端到端（question 选择后 `workflow_baseline` 成功）。规则文案同时要求菜单选项
+写成完整「预估 2 小时」，属第二道防线，不替代服务端证据通道。
+
 **渲染器的手写解析器会「静默丢行」，交付件必须差分校验（Mermaid 裸中文 ID，2026-10）。** reqdoc_export
 改纯 JS 渲染（beautiful-mermaid + resvg，替代 mermaid-cli/puppeteer）后新测试当场红出 P2：其解析器用
 `^([\w-]+)`（仅 ASCII）识别裸节点 ID，`客户 --> 系统` 整行静默丢弃；更险的是混合图 `A[开始] --> 结束`

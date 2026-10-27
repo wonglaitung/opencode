@@ -19,6 +19,7 @@ import {
   reviewRecord,
   rulesForStage,
   WORKFLOW_ENTRY_HINT,
+  WORKFLOW_ENTRY_PHRASE,
   type WorkflowState,
 } from "sm-shared"
 import type { Store } from "./db"
@@ -241,10 +242,17 @@ function buildTaskStateBar(workflow: WorkflowState): string {
       "⚑ 开始下一个任务：/new（避免同会话混入多个任务、污染工时统计）；如需继续当前任务：回退到「执行」阶段",
     ].join("\n")
   }
+  if (stage?.status === "not_started") {
+    return [
+      "## 当前任务",
+      `任务：未开始 ｜ 预估：${workflow.baseline ? baseline : "未录入"}`,
+      `输入「${WORKFLOW_ENTRY_PHRASE.task}」开始计时（也可直接描述任务，由助手初始化工作流）`,
+    ].join("\n")
+  }
   return [
     "## 当前任务",
     `任务：进行中 ｜ 预估：${baseline} ｜ 已用时：${fmtDurationShort(duration)}`,
-    workflow.baseline ? `说「完成」结束计时` : `完成前须先补录预估：${ESTIMATE_PROMPT_SHORT}`,
+    workflow.baseline ? `说「本次任务已完成」结束计时` : `完成前须先补录预估：${ESTIMATE_PROMPT_SHORT}`,
   ].join("\n")
 }
 

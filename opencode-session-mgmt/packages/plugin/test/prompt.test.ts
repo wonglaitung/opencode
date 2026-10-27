@@ -666,13 +666,20 @@ describe("task 一般任务状态条与入口提示", () => {
     return s
   }
 
+  test("未开始：状态条提示入口短语，不显示进行中", () => {
+    const bar = buildStateBar(createWorkflowState("task"), null)
+    expect(bar).toContain("任务：未开始")
+    expect(bar).toContain("启动一般任务")
+    expect(bar).not.toContain("任务：进行中")
+  })
+
   test("进行中未录入预估：提示完成前先补录", () => {
     const bar = buildStateBar(taskWorkflow(), "execute")
     expect(bar).toContain("## 当前任务")
     expect(bar).toContain("任务：进行中")
     expect(bar).toContain("请回「预估 xx 小时」")
     expect(bar).toContain("完成前须先补录预估")
-    expect(bar).not.toContain("说「完成」结束计时")
+    expect(bar).not.toContain("说「本次任务已完成」结束计时")
     expect(bar).not.toContain("requirements")
   })
 
@@ -680,7 +687,7 @@ describe("task 一般任务状态条与入口提示", () => {
     const s = taskWorkflow()
     s.baseline = { estimatedHours: 2, setAt: 1 }
     const bar = buildStateBar(s, "execute")
-    expect(bar).toContain("说「完成」结束计时")
+    expect(bar).toContain("说「本次任务已完成」结束计时")
   })
 
   test("已完成：显示预估/实际/提效与 /new", () => {
@@ -698,13 +705,20 @@ describe("task 一般任务状态条与入口提示", () => {
 
   test("task 规则要求开场告知完成方式", () => {
     const text = buildSystemFragment(createWorkflowState("task"))
-    expect(text).toContain("完成后请明确说「完成」")
+    expect(text).toContain("完成后请明确说「本次任务已完成」")
+    expect(text).toContain("先问一句「本次任务是否已完成？」")
+    expect(text).toContain("会话开始时调用 workflow_start")
+    expect(text).toContain("未启动时先按 task-r4 启动")
+    expect(text).toContain("若当前消息只有入口短语（没有任务描述）")
+    expect(text).toContain("只有入口短语或只有预估工时时不要归类")
+    expect(text).toContain("按 other 归类，不要反问")
+    expect(text).toContain("用 question 选择菜单问预估时")
     expect(text).toContain("预估 xx 小时")
   })
 
   test("未开始：三工作流都给出各自入口提示", () => {
     expect(buildSystemFragment(createWorkflowState("sdlc"))).toContain("启动 SDLC 工作流")
     expect(buildSystemFragment(createWorkflowState("reqdoc"))).toContain("启动 REQDOC 工作流")
-    expect(buildSystemFragment(createWorkflowState("task"))).toContain("直接输入任务内容")
+    expect(buildSystemFragment(createWorkflowState("task"))).toContain("启动一般任务")
   })
 })

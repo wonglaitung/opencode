@@ -17,19 +17,20 @@ describe("OpenCode-launch 工作流选项与提示", () => {
   })
 
   test("三个工作流都有入口与预估提示", () => {
-    expect(nsi).toContain("输入「启动 SDLC 工作流」进入")
-    expect(nsi).toContain("输入「启动 REQDOC 工作流」进入")
-    expect(nsi).toContain("直接输入任务内容即开始")
-    for (const text of ["直接输入任务内容", "启动 SDLC 工作流", "启动 REQDOC 工作流"]) {
+    expect(nsi).toContain("打开后输入「启动 SDLC 工作流」")
+    expect(nsi).toContain("打开后输入「启动 REQDOC 工作流」")
+    expect(nsi).toContain("打开后输入「启动一般任务」开始计时")
+    for (const text of ["打开后输入「启动一般任务」开始计时", "启动 SDLC 工作流", "启动 REQDOC 工作流"]) {
       expect(nsi).toContain(text)
     }
-    expect(nsi.match(/预估 xx 小时/g)?.length ?? 0).toBeGreaterThanOrEqual(3)
+    expect(nsi.match(/预估 2 小时/g)?.length ?? 0).toBeGreaterThanOrEqual(3)
+    expect(nsi).not.toContain("系统自动开始计时")
   })
 
   test("一般任务提示完成方式，会话管理未启用时给出依赖提示", () => {
-    expect(nsi).toContain("完成后请说「完成」")
-    expect(nsi).toContain("未填不能完成")
-    expect(nsi).toContain("未启用会话管理，工作流选择不生效，也不记录工时。")
+    expect(nsi).toContain("完成后请说「本次任务已完成」")
+    expect(nsi).toContain("身份文件缺失，工作流暂时不可选")
+    expect(nsi).toContain("未启用「会话管理」，工作流选择和工时统计都不会生效")
   })
 
   test("切换工作流时强制重绘提示，避免旧说明残留", () => {

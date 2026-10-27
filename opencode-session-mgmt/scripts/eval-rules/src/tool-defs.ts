@@ -34,7 +34,7 @@ export const EVAL_TOOLS: OpenAITool[] = [
       name: "workflow_start",
       description:
         "启动当前会话的工作流，将第一阶段置为进行中。" +
-        `开发者说「${WORKFLOW_ENTRY_PHRASE.sdlc}」「${WORKFLOW_ENTRY_PHRASE.reqdoc}」「${WORKFLOW_ENTRY_PHRASE.task}」时调用，不要仅用文字回复；一般任务也会在首条消息自动开始。` +
+        `开发者说「${WORKFLOW_ENTRY_PHRASE.sdlc}」「${WORKFLOW_ENTRY_PHRASE.reqdoc}」「${WORKFLOW_ENTRY_PHRASE.task}」时调用，不要仅用文字回复；会话开始时也应由本工具初始化工作流。` +
         "仅启动当前会话已定的工作流类型；类型不符会被拒绝，切换类型请在启动器选择后开新会话。" +
         "SDLC 第一阶段为 requirements（需求分析），reqdoc 为 goal（目标与场景），task 为 execute（执行）。",
       parameters: {
@@ -109,7 +109,7 @@ export const EVAL_TOOLS: OpenAITool[] = [
         "记录本次一般任务的类型，仅用于统计，不改变流程，也不要写入 note。" +
         "可选：documentation 编写文档 / testing 运行测试 / debugging 排查错误 / " +
         "coding 代码修改 / research 调研分析 / environment 配置环境 / other 其他。" +
-        "一般任务首轮应先调用本工具归类，不要只追问；无法判断用 other；可重复调用覆盖。",
+        "须先由 workflow_start 启动任务；一般任务首轮应先调用本工具归类，不要只追问；无法判断用 other；可重复调用覆盖。",
       parameters: {
         type: "object",
         properties: {

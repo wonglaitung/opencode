@@ -5,8 +5,9 @@
  *   - experimental.chat.system.transform  每轮注入规则 + WorkflowState（7.1）‖ 锁定提示（open-ide 5.4）
  *   - tool                                工作流工具集（4.1）+ open_ide 打开/人工文件锁（open-ide 4、5）
  *   - tool.execute.before                 提交门禁硬拦截（7.3）‖ 人工文件锁拦截（open-ide 5.2，先行）
- *   - tool.execute.after                  迭代计数
+ *   - tool.execute.after                  迭代计数 + 状态变更后汇报入队（工具返回前落盘）
  *   - chat.message                        会话首次活动汇报触发 ‖ 工时证据捕获（取本次消息文本）
+ *   - event                               session.status=idle 时可选刷新汇报（best-effort）
  * 启动后台任务（孤儿清理/标题回填/补推汇报）延后触发，见 startup.ts。
  * 合并后 open-ide 源码在 src/open-ide/；锁持久化进 Store（file_lock 表，重启自动恢复）。
  */
@@ -18,11 +19,12 @@ import { createCommitGate } from "./gate"
 import { resolveIdentity } from "./identity"
 import { createSystemTransform } from "./prompt"
 import { createReporter, type Usage } from "./report"
+import { createIdleReportHook, createToolReportHook, enqueueReportSafe } from "./report-trigger"
 import { STARTUP_DELAY_MS, deferredStartup } from "./startup"
 import { createIterationCounter } from "./tools/quality"
-import { finishTask, startTask } from "./task-lifecycle"
+import { finishTask } from "./task-lifecycle"
 import { createToolset } from "./tools/toolset"
-import { applyBaselineProposal } from "./tools/baseline-proposal"
+import { applyBaselineProposal, applyQuestionBaselineProposal } from "./tools/baseline-proposal"
 import { makeSubagentChecker } from "./subagent"
 import { loadIdeConfig } from "./open-ide/config"
 import { createLockRegistry } from "./open-ide/lock"
@@ -95,6 +97,9 @@ const SessionMgmtPlugin: Plugin = async (input) => {
   const lockHint = createLockHintTransform(registry)
   const systemTransform = createSystemTransform(store, isSubagent, input.directory)
   const commitGate = createCommitGate(store)
+  const iterationCounter = createIterationCounter(store, isSubagent)
+  const toolReport = createToolReportHook(reporter, isSubagent)
+  const idleReport = createIdleReportHook(reporter, isSubagent)
 
   // 启动后台任务延后执行（错开 TUI 首屏 / daemon 启动竞态，启动慢根因之一）：
   // 一次 session.list 完成 孤儿清理 + 标题回填（startup.ts），随后补推缓冲汇报。
@@ -127,18 +132,32 @@ const SessionMgmtPlugin: Plugin = async (input) => {
       await commitGate(hookInput, output)
     },
 
-    "tool.execute.after": createIterationCounter(store, isSubagent),
+    "tool.execute.after": async (hookInput, output) => {
+      if (hookInput.tool === "question" && !(await isSubagent(hookInput.sessionID))) {
+        applyQuestionBaselineProposal(
+          store,
+          hookInput.sessionID,
+          hookInput.args,
+          output.metadata,
+          hookInput.callID,
+        )
+      }
+      await iterationCounter(hookInput)
+      await toolReport(hookInput)
+    },
+
+    event: idleReport,
 
     "chat.message": async (hookInput, output) => {
       // 子代理会话不追踪：不建记录、不汇报（2.4 统计纯净度）
       if (await isSubagent(hookInput.sessionID)) return
       const text = output.parts.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
-      // task：首条消息自动开始计时；整句完成词自动收口（不依赖模型记得调 approve）。
-      // 只为 task daemon 建记录，避免 sdlc/reqdoc 的普通会话被确保成空工作流（统计纯净度）。
-      if (workflowType === "task") startTask(store, hookInput.sessionID)
+      // task：与 sdlc/reqdoc 一致，由模型调用 workflow_start 启动；这里只建行（不启动），
+      // 供本次消息的工时证据与汇报使用。整句完成声明的自动收口仍在此处理。
+      if (workflowType === "task") store.ensure(hookInput.sessionID)
       finishTask(store, hookInput.sessionID, text)
       await syncSessionTitle(store, input.client, hookInput.sessionID)
-      await reporter.enqueueReport(hookInput.sessionID)
+      await enqueueReportSafe(reporter, hookInput.sessionID, "chat.message")
       // 6.3 防 AI 杜撰基线：工时证据取**本次** hook 消息的文本。不得回读历史消息
       // ——上游 chat.message 在消息落库前触发（prompt.ts 先 trigger 后 updateMessage），
       // 回读恒少当前这条：证据滞后一条，且会被上一条无工时消息清空，workflow_baseline

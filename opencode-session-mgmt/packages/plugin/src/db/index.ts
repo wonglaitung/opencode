@@ -195,11 +195,14 @@ export class Store {
 
   enqueueReport(report: SessionReport): void {
     // 同一会话仅保留最新一条待发送汇报（幂等去重，避免每消息堆积，2.4）
-    // 同时删除 failed 状态的旧记录（用新内容替换）
-    this.db.query("DELETE FROM outbox WHERE session_id = ? AND sent IN (0, 2)").run(report.sessionID)
-    this.db
-      .query("INSERT INTO outbox (session_id, payload, created_at, sent) VALUES (?, ?, ?, 0)")
-      .run(report.sessionID, JSON.stringify(report), Date.now())
+    // 同时删除 failed 状态的旧记录（用新内容替换）。
+    // 删旧 + 插新必须在同一事务内：否则进程在两步之间崩溃/插入失败会连旧快照一起丢。
+    this.db.transaction(() => {
+      this.db.query("DELETE FROM outbox WHERE session_id = ? AND sent IN (0, 2)").run(report.sessionID)
+      this.db
+        .query("INSERT INTO outbox (session_id, payload, created_at, sent) VALUES (?, ?, ?, 0)")
+        .run(report.sessionID, JSON.stringify(report), Date.now())
+    })()
   }
 
   pendingReports(): OutboxRow[] {

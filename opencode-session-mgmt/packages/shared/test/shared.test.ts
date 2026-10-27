@@ -455,7 +455,8 @@ describe("TASK 一般任务工作流", () => {
       sdlc: "启动 SDLC 工作流",
       reqdoc: "启动 REQDOC 工作流",
     })
-    expect(WORKFLOW_ENTRY_HINT.task).toContain("直接输入任务内容")
+    expect(WORKFLOW_ENTRY_HINT.task).toContain(WORKFLOW_ENTRY_PHRASE.task)
+    expect(WORKFLOW_ENTRY_HINT.task).toContain("直接描述任务")
     expect(WORKFLOW_ENTRY_HINT.sdlc).toContain(WORKFLOW_ENTRY_PHRASE.sdlc)
     expect(WORKFLOW_ENTRY_HINT.reqdoc).toContain(WORKFLOW_ENTRY_PHRASE.reqdoc)
   })

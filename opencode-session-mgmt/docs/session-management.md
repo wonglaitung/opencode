@@ -258,7 +258,7 @@ flowchart LR
 - **experimental hook 稳定性**：`experimental.chat.system.transform` 带 experimental 前缀，上游可能调整签名。缓解：插件是唯一受影响面，上游升级后只需改插件代码并回归测试，成本远低于核心合并冲突。插件内以适配层封装 hook，集中变更点。
 - **rename（重命名会话）**：上游无会话标题更新 API（标题自动生成）。本方案不提供 rename；如将来必须支持，它是全部定制中唯一值得引入的小核心补丁，单独评估。
 - **身份变更是快照语义**：汇报携带当时的 `apiKey` 哈希。开发者更换 `api_key` 后重跑 `opencode-sm init`，只影响此后的汇报，历史统计归属不追溯变更。
-- **收集服务不可用**：插件在本地缓冲未送达的汇报（同一会话仅保留最新一条快照，避免堆积），服务恢复后补推；期间单机会话/项目级统计的工作流/质量数据不受影响（直读本地插件库），但 cost/tokens 经上游 daemon 取得，daemon 不可达时统计示 `N/A`（而非误导的 $0）。
+- **收集服务不可用**：插件在本地缓冲未送达的汇报（同一会话仅保留最新一条快照，避免堆积），服务恢复后补推；期间单机会话/项目级统计的工作流/质量数据不受影响（直读本地插件库），但 cost/tokens 经上游 daemon 取得，daemon 不可达时统计示 `N/A`（而非误导的 $0）。**触发与落盘**：`chat.message` 入队后，工作流状态变更工具（`workflow_*` / `task_*` / `review_*` / `comprehension_*` / `commit_*`，排除只读的 `commit_gate_check` / `comprehension_ask`）执行后由 `tool.execute.after` 在工具返回前入队（上游该 hook 是 await 的），保证最终状态先落本地 outbox 再返回；`session.status=idle` 仅作 cost/tokens 的 best-effort 刷新。outbox 的删旧+插新在同一事务内，避免插入失败时连旧快照一起丢。
 - **插件 DB 孤儿记录**：会话被上游删除后，插件 DB 中对应的扩展数据成为孤儿记录。`opencode-sm` 与插件定期以 `session.list` 比对清理（惰性清理即可，不影响功能）。
 - **子代理会话不计入统计**：上游子代理会话带 `parentID`（指向主会话）。插件据 `session.get` 的 `parentID` 识别子代理会话，对其**不建记录、不打标、不汇报、不注入规则**；启动清理时一并移除存量子代理记录（仅保留主会话），避免子代理会话污染本地统计与收集服务聚合。
 
@@ -347,7 +347,7 @@ export const WorkflowSessionTable = sqliteTable("workflow_session", {
 |------|--------|------|------|
 | identity.json（apiKey/collector_url/workflowType） | 开发者本人 | 每台机器一次，人员或角色变动时重跑 | `opencode-sm init` 交互式填写（见 5.1） |
 | `workflow_session.account_id` | 插件 | （已废弃）会话首次活动不再打标；身份改以 apiKey 哈希标识 | 本机 `account_id` 列保留但不再写入，统计显示 N/A |
-| 聚合库 api_key_hash + 归属 | 插件 + 收集服务 | 定期汇报 + 阶段事件触发 | 汇报携带 `apiKey` 哈希；组/部门/组织由收集服务据哈希解析落库 |
+| 聚合库 api_key_hash + 归属 | 插件 + 收集服务 | 定时汇报 + 状态变更工具执行后触发（`tool.execute.after`，工具返回前落盘）+ 可选 idle 刷新 | 汇报携带 `apiKey` 哈希；组/部门/组织由收集服务据哈希解析落库 |
 
 **快照语义**：`apiKey` 哈希随汇报固化在聚合库记录里。开发者更换 `api_key` 后重跑 `opencode-sm init`，只影响此后的汇报，**历史统计归属不追溯变更**。
 
@@ -1959,7 +1959,7 @@ flowchart LR
 
 | 文件 | 用途 |
 |------|------|
-| `src/index.ts` | 插件入口：注册 hooks（`experimental.chat.system.transform`、`tool`、`tool.execute.before/after`、`chat.message`），启动后台任务延后触发；`chat.message` 另捕获基线工时证据——取**本次** hook 消息文本（`output.parts` 拼接 + `output.message.id`），**不回读消息接口**（上游先触发后落库，回读恒滞后一条，坑史见 agents-notes 对抗性审查） |
+| `src/index.ts` | 插件入口：注册 hooks（`experimental.chat.system.transform`、`tool`、`tool.execute.before/after`、`chat.message`、`event`），启动后台任务延后触发；`chat.message` 另捕获基线工时证据——取**本次** hook 消息文本（`output.parts` 拼接 + `output.message.id`），**不回读消息接口**（上游先触发后落库，回读恒滞后一条，坑史见 agents-notes 对抗性审查）；`tool.execute.after` 对 `question` 工具用 `args.questions` + `output.metadata.answers` 捕获选择菜单的预估证据（选择结果不产生 `chat.message`） |
 | `src/startup.ts` | 启动后台任务：共用一次 `session.list` 完成 孤儿清理 + 标题回填（延后 2 秒，减少启动耗时） |
 | `src/db/schema.ts` | 插件库表定义（仅 `workflow_session` 一张表） |
 | `src/db/index.ts` | 插件 SQLite 初始化与迁移（bun:sqlite，WAL 模式） |
@@ -1973,7 +1973,7 @@ flowchart LR
 | `src/gate.ts` | `tool.execute.before` 提交门禁拦截（git commit 阻断） |
 | `src/open-ide/` | 人工文件锁与 IDE 协同（open-ide 合并）：`open-ide-tool.ts`（open_ide 工具）、`ide.ts`（IDE 探测/拉起）、`presets.ts`（vscode/idea 预设）、`config.ts`（config.json 读取合并）、`lock.ts`（LockRegistry）、`lock-gate.ts`（tool.execute.before 硬拦截）、`lock-hint.ts`（system.transform 锁定提示）、`tools/lock-tools.ts`（lock_file/unlock_file/list_locked_files）、`patched.ts`/`errors.ts`（8.7） |
 | `config.json` | IDE 工具配置（插件根，上溯一层）：`order` 探测次序（缺省 vscode→idea）+ `tools` 单条目覆盖 binary/kind；缺失/无效 JSON 回退内置预设（Windows 路径须用正斜杠，见 8.7.7） |
-| `src/report.ts` | 会话摘要汇报：推送至 `collector_url`，不可用时本地缓冲、恢复补推（fetch 带 5 秒超时，防止不可达时无界挂起） |
+| `src/report.ts` | 会话摘要汇报：状态变更工具执行后（`tool.execute.after`，工具返回前落盘）+ `chat.message` 入队；定时/退出 flush，不可用时本地缓冲、恢复补推（fetch 带 5 秒超时，防止不可达时无界挂起） |
 | `src/stats.ts` | 本机统计聚合查询（按 workflow.type 分区，sdlc 专属指标仅 sdlc 计算；供 opencode-sm 复用） |
 | `test/*.test.ts` | 工具校验逻辑、合并语义、门禁、汇报缓冲的单元测试 |
 | `package.json` | 插件包定义（入口、依赖） |
