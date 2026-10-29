@@ -556,7 +556,7 @@ CREATE INDEX idx_reports_type ON reports(workflow_type);
 
 | 字段 | 计算 |
 |------|------|
-| `completed` | `workflow.commit.status === "allowed"` 的行数（三类通用：reqdoc/task 无 git 门禁，但全部阶段 approved 后 `commit.status` 同样为 `"allowed"`） |
+| `completed` | `workflow.commit.status === "allowed"` 且 sdlc/task 已录 baseline 的行数；reqdoc 无 git 门禁，`allowed` 即完成 |
 | `completionRate` | `completed / sessions`（sessions=0 时为 0） |
 | `totalCost` | `Σ (cost ?? 0)`（`NULL` 按 0 计入总费用） |
 | `avgFirstPassRate` | 非 NULL `firstPassRate` 的均值（0–100 百分比） |
