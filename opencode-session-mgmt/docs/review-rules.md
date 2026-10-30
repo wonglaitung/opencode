@@ -32,7 +32,7 @@
 | `TEST-001` | major | tests | 跳过/忽略的测试 |
 | `IMP-001` | major | impact | 废弃的 `new Buffer()` |
 
-`blocker` / `critical` 视为高严重度；它们必须逐条出现在 `task_review` 的 `findings` 中（提及 `ruleId`），不能静默忽略。
+`blocker` / `critical` 视为高严重度；它们必须逐条出现在 `task_review` 的 `findings` 中（提及 `ruleId`），并写清发现与修复建议，不能静默忽略。
 
 ## 项目覆盖
 

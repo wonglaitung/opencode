@@ -8,7 +8,10 @@ import { tool, type ToolDefinition } from "@opencode-ai/plugin"
 import {
   TASK_REVIEW_DIMENSION_KEYS,
   TASK_REVIEW_DIMENSION_LABELS,
+  TASK_SCAN_SEVERITIES,
+  type TaskReviewFinding,
   type TaskReviewReport,
+  type TaskScanSeverity,
   type TaskScanSummary,
   type WorkflowState,
 } from "sm-shared"
@@ -21,6 +24,48 @@ const dimension = z.object({
   status: z.enum(["pass", "fail"]),
   notes: z.string().min(1).describe("该维度的结论与证据（必填，不能只填 pass/fail）"),
 })
+
+const finding = z.object({
+  severity: z.enum(TASK_SCAN_SEVERITIES).describe("严重度：blocker/critical/major/minor/info"),
+  file: z.string().min(1).optional().describe("文件路径（可选）"),
+  line: z.number().int().positive().optional().describe("行号（可选）"),
+  issue: z.string().min(1).describe("找到了什么问题（必填）"),
+  suggestion: z.string().min(1).describe("建议怎么改（必填，不能只写问题）"),
+  ruleId: z.string().min(1).optional().describe("来自 task_scan 时填对应 ruleId"),
+})
+
+const SEVERITY_ORDER: Record<TaskScanSeverity, number> = {
+  blocker: 0,
+  critical: 1,
+  major: 2,
+  minor: 3,
+  info: 4,
+}
+
+const SEVERITY_LABEL: Record<TaskScanSeverity, string> = {
+  blocker: "阻断",
+  critical: "严重",
+  major: "重要",
+  minor: "次要",
+  info: "提示",
+}
+
+function formatFindings(findings: TaskReviewFinding[]): string {
+  if (findings.length === 0) return "未发现需要修复的问题。"
+  return [...findings]
+    .sort(
+      (a, b) =>
+        SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] ||
+        (a.file ?? "").localeCompare(b.file ?? "") ||
+        (a.line ?? 0) - (b.line ?? 0),
+    )
+    .map((item, index) => {
+      const location = item.file ? ` ${item.file}${item.line ? `:${item.line}` : ""}` : ""
+      const rule = item.ruleId ? ` · ${item.ruleId}` : ""
+      return `${index + 1}. [${SEVERITY_LABEL[item.severity]}]${location}${rule}\n   发现：${item.issue}\n   建议：${item.suggestion}`
+    })
+    .join("\n\n")
+}
 
 /** 当前会话是否是 code_review 任务；不是则给出明确错误。 */
 function requireCodeReviewTask(workflow: WorkflowState | null | undefined): WorkflowState {
@@ -43,7 +88,8 @@ export function createTaskReviewTool(store: Store): Record<string, ToolDefinitio
     description:
       "提交一次独立代码审核任务的报告（仅 task 工作流的 code_review 分类）。" +
       "审核任务只读，不执行项目 build/test/lint 或任何命令；只读代码、测试代码，可先调用 task_scan 做 regex 扫描。" +
-      "按六维给出静态审查结论；报告提交后审核任务才能完成；结论可以是 approved 或 changes_requested。" +
+      "按六维给出静态审查结论；findings 每条写清 issue（发现）和 suggestion（建议怎么改），报告会按严重度逐条展示；结论可以是 approved 或 changes_requested。" +
+      "报告提交后审核任务才能完成。" +
       "不涉及 sdlc/reqdoc，也不约束任何编码任务。",
     args: {
       scope: z.array(z.string().min(1)).min(1).describe("审核范围：diff / commit / PR / 文件"),
@@ -55,7 +101,7 @@ export function createTaskReviewTool(store: Store): Record<string, ToolDefinitio
         impact: dimension.describe(TASK_REVIEW_DIMENSION_LABELS.impact),
         readability: dimension.describe(TASK_REVIEW_DIMENSION_LABELS.readability),
       }),
-      findings: z.array(z.string().min(1)).optional().describe("问题/风险清单（有未通过项时必填）"),
+      findings: z.array(finding).optional().describe("问题/风险清单（有未通过项时必填；每条必须包含 issue 与 suggestion）"),
     },
     async execute(args, context) {
       const current = store.get(context.sessionID)?.workflow
@@ -70,7 +116,10 @@ export function createTaskReviewTool(store: Store): Record<string, ToolDefinitio
         (finding) => finding.severity === "blocker" || finding.severity === "critical",
       )
       const missing = highFindings.filter(
-        (finding) => !findings.some((text) => text.includes(finding.ruleId)),
+        (finding) =>
+          !findings.some(
+            (text) => text.ruleId === finding.ruleId || text.issue.includes(finding.ruleId),
+          ),
       )
       if (missing.length > 0) {
         throw new WorkflowOpError(
@@ -81,7 +130,10 @@ export function createTaskReviewTool(store: Store): Record<string, ToolDefinitio
       }
       const size = current?.taskScan?.reviewSize
       if (size && (size.files > 50 || size.lines > 1500)) {
-        const rationale = [...args.scope, ...findings].join(" ")
+        const rationale = [
+          ...args.scope,
+          ...findings.flatMap((item) => [item.issue, item.suggestion]),
+        ].join(" ")
         if (!/(拆分|规模|超|分批)/.test(rationale)) {
           throw new WorkflowOpError(
             `审核规模超过 50 文件/1500 行（${size.files} 文件/${size.lines} 行）：请在 findings 或 scope 中说明拆分理由，或拆成多次审核。`,
@@ -124,7 +176,8 @@ export function createTaskReviewTool(store: Store): Record<string, ToolDefinitio
       return (
         `✅ 代码审核报告已提交：${
           verdict === "approved" ? "通过" : "发现问题，需修改"
-        }；维度 ${passDims}/6 通过${scanNote}；findings ${findings.length} 条。审核任务现在可以完成。`
+        }；维度 ${passDims}/6 通过${scanNote}；findings ${findings.length} 条。\n\n` +
+        `审核发现与修复建议\n${formatFindings(findings)}\n\n审核任务现在可以完成。`
       )
     },
   })

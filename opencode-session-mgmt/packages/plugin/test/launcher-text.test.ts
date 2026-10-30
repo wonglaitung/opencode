@@ -60,6 +60,8 @@ describe("OpenCode-launch 工作流选项与提示", () => {
     expect(nsi).toContain("SetWindowPos(i $Dialog, i 0, i 0, i 0, i 720, i 580")
     expect(nsi).toContain("Function DoCancel")
     expect(nsi).toContain('${NSD_CreateButton} 552 516 138 46 "取消"')
+    expect(nsi).toContain('${NSD_CreateDirRequest} 30 120 528 28')
+    expect(nsi).toContain('${NSD_CreateButton} 570 120 120 28 "浏览…"')
   })
 
   test("launcher-config 读写 task", () => {

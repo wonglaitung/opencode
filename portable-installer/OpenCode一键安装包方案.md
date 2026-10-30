@@ -118,7 +118,7 @@
 用 NSIS 的 nsDialogs 画一个原生页面（不调用 PowerShell/VBScript，零运行时依赖，不受 PowerShell 禁用影响）：
 
 - 目录选择框（`DirRequest` 控件，系统级 dialog）和「浏览」按钮；下方是工作流、终端类型和三个插件开关，底部按钮「打开 AI Assistant」。
-- 工作流说明区为卡片式布局：左侧三行短提示，右侧独立帮助区「查看使用说明」，按当前工作流弹出详细步骤。一般任务的详细说明包含代码审核用法（输入「启动一般任务」后说明审核范围；审核只读、不跑 build/test/lint，报告提交后才能完成）。
+- 工作流说明区为卡片式布局：左侧三行短提示，右侧独立帮助区「查看使用说明」，按当前工作流弹出详细步骤。一般任务的详细说明包含代码审核用法（输入「启动一般任务」后说明审核范围；审核只读、不跑 build/test/lint，报告逐条列出发现与建议，提交后才能完成）。
 - 打开前读取当前配置回填：工作流取 `identity.json` 的 `workflowType`（缺省 `sdlc`），终端取 `terminal_mode.ini` 首行（缺省 `native`），插件状态取 `opencode.jsonc` 的 `plugin` 数组。
 - 点「打开 AI Assistant」时才写配置：工作流写回 `identity.json`，终端写回 `terminal_mode.ini`，插件只替换 `opencode.jsonc` 的 `plugin` 数组，其余字段原样保留。写前留 `.bak`，失败弹窗并取消启动。
 - 工作流和终端都是不可编辑下拉菜单。终端「原生」直接 `Exec opencode.cmd`，使用系统控制台；「专用」用 `Exec OpenConsole.exe cmd /c "title 数字程序员 && opencode.cmd"`，使用打包的 Windows Terminal，退出即关。默认启动新会话；只有勾选「继续上次会话」且项目目录、工作流都与上次启动一致时，才追加 `-c` 续接上次对话。工作流变化时复选框自动置灰并新建会话，避免旧会话沿用旧工作流。

@@ -87,6 +87,16 @@ export interface TaskScanFinding {
   sonarKey?: string
 }
 
+/** 审核报告中的单条发现：问题与修复建议成对出现，方便审核人员直接阅读。 */
+export interface TaskReviewFinding {
+  severity: TaskScanSeverity
+  file?: string
+  line?: number
+  issue: string
+  suggestion: string
+  ruleId?: string
+}
+
 /** 扫描摘要（可进入审核报告；不含文件路径/代码）。 */
 export interface TaskScanSummary {
   status: "completed" | "skipped"
@@ -117,7 +127,7 @@ export interface TaskReviewReport {
   status: "submitted"
   scope: string[]
   dimensions: Record<TaskReviewDimensionKey, TaskReviewDimension>
-  findings: string[]
+  findings: TaskReviewFinding[]
   verdict: "approved" | "changes_requested"
   scan?: TaskScanSummary
   submittedAt: number

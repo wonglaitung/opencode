@@ -195,7 +195,7 @@ FunctionEnd
 
 Function SetHelpText
   ${If} $WorkflowType == "task"
-    StrCpy $HelpText "一般任务$\r$\n$\r$\n适合：写文档、排查问题、整理资料、配置环境、代码审核等轻量工作。$\r$\n$\r$\n1. 打开后输入「启动一般任务」。$\r$\n2. 启动后描述任务；AI 会归类任务类型。一般分类只影响统计，代码审核例外。$\r$\n3. 会问预估工时，请回「预估 2 小时」；完成后说「本次任务已完成」。$\r$\n4. 不需要逐阶段确认；普通任务不拦截提交，代码审核任务只读、不可提交。$\r$\n$\r$\n代码审核也选「一般任务」：$\r$\n- 输入「启动一般任务」后，说明审核范围，例如「帮我审核这次 diff」$\r$\n  「审核 src/auth.ts 的登录改动」或「审核这个 commit：<commit>」。$\r$\n- AI 只读：不改代码、不提交、不跑 build/test/lint。$\r$\n- AI 先用只读 git 检查范围，必要时做规则扫描。$\r$\n- 按六维输出报告，结论为 approved 或 changes_requested。$\r$\n- 报告提交后才能完成审核任务；changes_requested 不代表自动修改代码。$\r$\n- 非 Git 项目请直接指定文件；扫描是辅助，可能误报。$\r$\n- 超过 20 文件/500 行会提示拆分审核。$\r$\n$\r$\n默认新会话；勾选「继续上次会话」可回到上次进度。"
+    StrCpy $HelpText "一般任务$\r$\n$\r$\n适合：写文档、排查问题、整理资料、配置环境、代码审核等轻量工作。$\r$\n$\r$\n1. 打开后输入「启动一般任务」。$\r$\n2. 启动后描述任务；AI 会归类任务类型。一般分类只影响统计，代码审核例外。$\r$\n3. 会问预估工时，请回「预估 2 小时」；完成后说「本次任务已完成」。$\r$\n4. 不需要逐阶段确认；普通任务不拦截提交，代码审核任务只读、不可提交。$\r$\n$\r$\n代码审核也选「一般任务」：$\r$\n- 输入「启动一般任务」后，说明审核范围，例如「帮我审核这次 diff」$\r$\n  「审核 src/auth.ts 的登录改动」或「审核这个 commit：<commit>」。$\r$\n- AI 只读：不改代码、不提交、不跑 build/test/lint。$\r$\n- AI 先用只读 git 检查范围，必要时做规则扫描。$\r$\n- 按六维输出报告，逐条列出发现与修复建议；结论为 approved 或 changes_requested。$\r$\n- 报告提交后才能完成审核任务；changes_requested 不代表自动修改代码。$\r$\n- 非 Git 项目请直接指定文件；扫描是辅助，可能误报。$\r$\n- 超过 20 文件/500 行会提示拆分审核。$\r$\n$\r$\n默认新会话；勾选「继续上次会话」可回到上次进度。"
   ${ElseIf} $WorkflowType == "reqdoc"
     StrCpy $HelpText "REQDOC 需求书$\r$\n$\r$\n适合：业务人员通过口述或投放材料，由 AI 追问补全并生成 PRD。$\r$\n$\r$\n1. 打开后输入「启动 REQDOC 工作流」。$\r$\n2. 系统创建 00~07 资料目录，按目标 → 规则 → 边界 → PRD → 审查推进。$\r$\n3. 目标阶段会问预估工时，请回「预估 2 小时」。$\r$\n4. 材料可投放到对应目录，AI 扫描后追问缺失信息。$\r$\n5. PRD 由系统按模板生成，不要手工编辑产物。$\r$\n6. 定稿前业务需逐条确认要点；只改某一章时使用定点修订。$\r$\n7. 默认新会话；勾选「继续上次会话」可回到上次进度。$\r$\n$\r$\n提示：必填槽位未确认或有未收口项时，进入 PRD/定稿会被拦截。"
   ${Else}
@@ -529,9 +529,9 @@ Function LaunchPage
   SendMessage $0 ${WM_SETFONT} $SectionFont 1
   SetCtlColors $0 0x374151 transparent
 
-  ${NSD_CreateDirRequest} 30 120 528 32 "$LastDir"
+  ${NSD_CreateDirRequest} 30 120 528 28 "$LastDir"
   Pop $hDir
-  ${NSD_CreateButton} 570 120 120 32 "浏览…"
+  ${NSD_CreateButton} 570 120 120 28 "浏览…"
   Pop $0
   ${NSD_OnClick} $0 DirBrowse
 

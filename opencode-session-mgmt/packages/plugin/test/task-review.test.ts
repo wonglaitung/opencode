@@ -65,7 +65,15 @@ describe("task_review（code_review 子任务）", () => {
         review.execute({
           scope: ["src/auth.ts"],
           dimensions: failed,
-          findings: ["src/auth.ts:42 日志打印 token"],
+          findings: [
+            {
+              severity: "major",
+              file: "src/auth.ts",
+              line: 42,
+              issue: "日志打印 token",
+              suggestion: "移除日志中的 token，或改为脱敏字段",
+            },
+          ],
         } as never, ctx),
       ).resolves.toContain("需修改")
       expect(store.get("s1")!.workflow!.taskReview?.verdict).toBe("changes_requested")
@@ -114,9 +122,21 @@ describe("task_review（code_review 子任务）", () => {
       const result = await review.execute({
         scope: ["src/auth.ts"],
         dimensions,
-        findings: ["SEC-001 src/key.pem:1 私钥文件不应提交"],
+        findings: [
+          {
+            severity: "blocker",
+            file: "src/key.pem",
+            line: 1,
+            issue: "SEC-001 私钥文件不应提交",
+            suggestion: "移除私钥并轮换密钥",
+            ruleId: "SEC-001",
+          },
+        ],
       } as never, ctx)
       expect(result).toContain("扫描 1 条")
+      expect(result).toContain("审核发现与修复建议")
+      expect(result).toContain("发现：SEC-001 私钥文件不应提交")
+      expect(result).toContain("建议：移除私钥并轮换密钥")
       expect(store.get("s1")!.workflow!.taskReview?.scan?.findingCount).toBe(1)
     } finally {
       store.close()
@@ -148,9 +168,26 @@ describe("task_review（code_review 子任务）", () => {
         review.execute({
           scope: ["src/auth.ts"],
           dimensions,
-          findings: ["规模超过 50 文件/1500 行，建议拆分为登录与权限两次审核"],
+          findings: [
+            {
+              severity: "minor",
+              issue: "规模超过 50 文件/1500 行",
+              suggestion: "拆分为登录与权限两次审核",
+            },
+          ],
         } as never, ctx),
       ).resolves.toContain("代码审核报告已提交")
+    } finally {
+      store.close()
+    }
+  })
+
+  test("无 finding 时明确说明未发现问题", async () => {
+    const { store, review } = setup()
+    try {
+      const result = await review.execute({ scope: ["src/auth.ts"], dimensions } as never, ctx)
+      expect(result).toContain("未发现需要修复的问题")
+      expect(store.get("s1")!.workflow!.taskReview?.findings).toEqual([])
     } finally {
       store.close()
     }

@@ -36,8 +36,9 @@ const TASK_CODE_REVIEW_GUIDANCE = [
   "按六维逐项做静态审查，每项必须给结论和证据：正确性与边界、安全与隐私、设计与可维护性、测试与证据、影响面与兼容性、可理解性。",
   "测试与证据维度只审查测试代码本身（覆盖意图、断言、跳过/伪造）；不得声称执行过测试，也不得写测试已通过/构建成功等背书。",
   "扫描是可选证据；若 task_scan 报出 blocker/critical，必须在 findings 中逐条提及 ruleId。",
+  "findings 每条必须同时写清 issue（发现）和 suggestion（建议怎么改）；可带 severity/file/line/ruleId，不能只写问题。",
   "不含需求理解、可运维性。",
-  "审核完成后把报告摘要展示给开发者，并调用 task_review 提交结构化报告（scope/六维/findings，无 checks 字段）；未提交报告不能完成本任务。",
+  "审核完成后把报告摘要展示给开发者，并调用 task_review 提交结构化报告（scope/六维/findings）；findings 会按严重度逐条展示发现与建议。未提交报告不能完成本任务。",
   "结论可以是 approved 或 changes_requested，两者都能完成审核任务；任务完成仍按一般任务规则（预估、/new）。",
 ].join("\n")
 

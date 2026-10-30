@@ -149,7 +149,22 @@ export const EVAL_TOOLS: OpenAITool[] = [
             },
             required: ["correctness", "security", "design", "tests", "impact", "readability"],
           },
-          findings: { type: "array", items: { type: "string" }, description: "问题/风险清单（有未通过项时必填）" },
+          findings: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                severity: { type: "string", enum: ["blocker", "critical", "major", "minor", "info"] },
+                file: { type: "string" },
+                line: { type: "number" },
+                issue: { type: "string" },
+                suggestion: { type: "string" },
+                ruleId: { type: "string" },
+              },
+              required: ["severity", "issue", "suggestion"],
+            },
+            description: "问题与修复建议清单（有未通过项时必填）",
+          },
         },
         required: ["scope", "dimensions"],
       },
