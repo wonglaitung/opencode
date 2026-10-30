@@ -41,6 +41,8 @@ describe("task_review（code_review 子任务）", () => {
       ).rejects.toThrow(/task_review|报告/)
       const result = await review.execute({ scope: ["src/auth.ts"], dimensions } as never, ctx)
       expect(result).toContain("代码审核报告已提交")
+      expect(result).toContain("结论：approved（通过）")
+      expect(result).toContain("范围：src/auth.ts")
       expect(result).toContain("六维报告")
       expect(result).toContain("正确性与边界：通过 — 覆盖了空值与重复提交")
       const text = typeof result === "string" ? result : result.output
@@ -78,6 +80,7 @@ describe("task_review（code_review 子任务）", () => {
         ],
       } as never, ctx)
       expect(result).toContain("需修改")
+      expect(result).toContain("结论：changes_requested")
       expect(result).toContain("安全与隐私：未通过 — 日志打印了 token")
       expect(store.get("s1")!.workflow!.taskReview?.verdict).toBe("changes_requested")
     } finally {
@@ -136,7 +139,7 @@ describe("task_review（code_review 子任务）", () => {
           },
         ],
       } as never, ctx)
-      expect(result).toContain("扫描：1 条")
+      expect(result).toContain("- 文件：1；发现：1 条")
       expect(result).toContain("审核发现与修复建议")
       expect(result).toContain("发现：SEC-001 私钥文件不应提交")
       expect(result).toContain("建议：移除私钥并轮换密钥")

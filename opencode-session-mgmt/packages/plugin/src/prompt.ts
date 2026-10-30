@@ -38,7 +38,7 @@ const TASK_CODE_REVIEW_GUIDANCE = [
   "扫描是可选证据；若 task_scan 报出 blocker/critical，必须在 findings 中逐条提及 ruleId。",
   "findings 每条必须同时写清 issue（发现）和 suggestion（建议怎么改）；可带 severity/file/line/ruleId，不能只写问题。",
   "不含需求理解、可运维性。",
-  "审核完成后把六维结论与发现/建议展示给开发者，并调用 task_review 提交结构化报告；task_review 回执会带六维明细与 findings。未提交报告不能完成本任务。",
+  "审核完成后把完整报告展示给开发者，并调用 task_review 提交结构化报告；回执会带范围、结论、六维、扫描和发现/建议。未提交报告不能完成本任务。",
   "结论可以是 approved 或 changes_requested，两者都能完成审核任务；任务完成仍按一般任务规则（预估、/new）。",
 ].join("\n")
 

@@ -57,6 +57,26 @@ function formatDimensions(dimensions: TaskReviewReport["dimensions"]): string {
   }).join("\n")
 }
 
+function formatScan(scan: TaskScanSummary | undefined): string {
+  if (!scan) return "- 状态：未运行"
+  const lines = [`- 状态：${scan.status === "completed" ? "已完成" : "跳过"}`]
+  if (scan.status === "completed") {
+    lines.push(
+      `- 文件：${scan.scannedFiles}；发现：${scan.findingCount} 条（阻断 ${scan.bySeverity.blocker} / 严重 ${scan.bySeverity.critical} / 重要 ${scan.bySeverity.major} / 次要 ${scan.bySeverity.minor} / 提示 ${scan.bySeverity.info}）`,
+    )
+    if (scan.diffStats) {
+      lines.push(
+        `- 改动规模：${scan.diffStats.files} 文件，+${scan.diffStats.insertions}/-${scan.diffStats.deletions} 行`,
+      )
+    }
+    if (scan.reviewSize) lines.push(`- 审核规模：${scan.reviewSize.files} 文件/${scan.reviewSize.lines} 行`)
+  } else {
+    lines.push(`- 原因：${scan.skippedReason ?? "未知"}`)
+  }
+  if (scan.warnings.length > 0) lines.push(`- 提示：${scan.warnings.join("；")}`)
+  return lines.join("\n")
+}
+
 function formatFindings(findings: TaskReviewFinding[]): string {
   if (findings.length === 0) return "未发现需要修复的问题。"
   return [...findings]
@@ -177,18 +197,15 @@ export function createTaskReviewTool(store: Store): Record<string, ToolDefinitio
       const passDims = TASK_REVIEW_DIMENSION_KEYS.filter(
         (key) => args.dimensions[key].status === "pass",
       ).length
-      const scanNote = scan
-        ? scan.status === "completed"
-          ? `扫描：${scan.findingCount} 条（blocker ${scan.bySeverity.blocker} / critical ${scan.bySeverity.critical}）`
-          : `扫描：跳过（${scan.skippedReason ?? "未知"}）`
-        : "扫描：未运行"
       return (
-        `✅ 代码审核报告已提交：${
-          verdict === "approved" ? "通过" : "发现问题，需修改"
-        }；维度 ${passDims}/6 通过。\n\n` +
+        `✅ 代码审核报告已提交\n` +
+        `结论：${verdict === "approved" ? "approved（通过）" : "changes_requested（发现问题，需修改）"}\n` +
+        `范围：${args.scope.join("、")}\n` +
+        `维度：${passDims}/6 通过\n\n` +
         `六维报告\n${formatDimensions(args.dimensions)}\n\n` +
-        `${scanNote}\n\n` +
-        `审核发现与修复建议\n${formatFindings(findings)}\n\n审核任务现在可以完成。`
+        `扫描\n${formatScan(scan)}\n\n` +
+        `审核发现与修复建议\n${formatFindings(findings)}\n\n` +
+        `审核任务现在可以完成。`
       )
     },
   })
