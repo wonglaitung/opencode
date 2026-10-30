@@ -697,11 +697,27 @@ describe("task 一般任务状态条与入口提示", () => {
     const text = buildSystemFragment(s)
     expect(text).toContain("代码审核任务规则（只读）")
     expect(text).toContain("task_review")
+    expect(text).toContain("task_scan")
+    expect(text).toContain("task_check")
+    expect(text).toContain("不得执行 bash")
+    expect(text).toContain("代码扫描：未运行")
     expect(text).toContain("代码审核报告：待提交")
+    s.taskScan = {
+      status: "completed",
+      scannedFiles: 2,
+      findingCount: 1,
+      bySeverity: { blocker: 0, critical: 1, major: 0, minor: 0, info: 0 },
+      byDimension: { correctness: 0, security: 1, design: 0, tests: 0, impact: 0, readability: 0 },
+      warnings: [],
+      scope: ["diff"],
+      findings: [],
+      engine: "regex",
+      scannedAt: 1,
+    }
+    expect(buildStateBar(s, "execute")).toContain("代码扫描：已完成（1 条")
     s.taskReview = {
       status: "submitted",
       scope: ["src/auth.ts"],
-      checks: [{ name: "typecheck", status: "passed", evidence: "ok" }],
       dimensions: {
         correctness: { status: "pass", notes: "ok" },
         security: { status: "pass", notes: "ok" },

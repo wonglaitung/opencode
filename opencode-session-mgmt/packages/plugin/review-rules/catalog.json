@@ -1,0 +1,204 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "id": "SEC-001",
+      "title": "提交了私钥",
+      "severity": "blocker",
+      "dimension": "security",
+      "globs": [
+        "**/*"
+      ],
+      "pattern": "-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----",
+      "message": "检测到 PEM 私钥内容；私钥不应出现在代码或仓库中。",
+      "remediation": "立即从代码中移除并轮换该密钥；检查 git 历史与构建产物。",
+      "sonarKey": "secrets:private-key"
+    },
+    {
+      "id": "SEC-002",
+      "title": "疑似硬编码凭据",
+      "severity": "critical",
+      "dimension": "security",
+      "globs": [
+        "**/*"
+      ],
+      "excludeGlobs": [
+        "**/*.md",
+        "**/*.mdx",
+        "**/*.txt"
+      ],
+      "pattern": "\\b(api[_-]?key|secret|token|password|passwd|pwd|access[_-]?key)\\b\\s*[:=]\\s*[\"'][^\"'\\s]{8,}[\"']",
+      "flags": "i",
+      "message": "疑似将密钥/口令/令牌硬编码在源码中。",
+      "remediation": "改为从环境变量或密钥管理服务读取，并轮换已暴露的凭据。"
+    },
+    {
+      "id": "SEC-003",
+      "title": "关闭了 TLS 证书校验",
+      "severity": "critical",
+      "dimension": "security",
+      "globs": [
+        "**/*"
+      ],
+      "pattern": "(rejectUnauthorized\\s*:\\s*false|InsecureSkipVerify\\s*:\\s*true|verify\\s*=\\s*False|VERIFY_SSL\\s*=\\s*False|strictSSL\\s*:\\s*false)",
+      "flags": "i",
+      "message": "代码显式关闭了 TLS 证书校验，容易遭受中间人攻击。",
+      "remediation": "恢复证书校验；测试环境如需绕过，应限定在测试配置并加注释说明。",
+      "sonarKey": "security:ssl-verification"
+    },
+    {
+      "id": "SEC-004",
+      "title": "外部命令执行入口",
+      "severity": "major",
+      "dimension": "security",
+      "globs": [
+        "**/*.{js,jsx,ts,tsx,py,rb,php,java,kt}"
+      ],
+      "pattern": "(child_process\\.(exec|execSync)\\s*\\(|os\\.system\\s*\\(|Runtime\\.getRuntime\\(\\)\\.exec\\s*\\(|subprocess\\.(call|run|Popen)\\s*\\([^)\\n]*shell\\s*=\\s*True)",
+      "flags": "i",
+      "message": "检测到命令执行调用；确认入参不可由用户控制，且未拼接 shell 字符串。",
+      "remediation": "优先使用参数数组形式的 execFile/spawn；避免 shell=True 与字符串拼接。"
+    },
+    {
+      "id": "SEC-005",
+      "title": "使用 eval 动态执行",
+      "severity": "major",
+      "dimension": "security",
+      "globs": [
+        "**/*.{js,jsx,ts,tsx,py,rb,php}"
+      ],
+      "pattern": "\\beval\\s*\\(",
+      "message": "eval 会执行任意代码，输入不可信时风险很高。",
+      "remediation": "改用显式解析/分派逻辑；确需动态执行时限制输入来源。"
+    },
+    {
+      "id": "SEC-006",
+      "title": "疑似 SQL 拼接",
+      "severity": "major",
+      "dimension": "security",
+      "globs": [
+        "**/*.{js,jsx,ts,tsx,py,rb,php,java,kt,go}"
+      ],
+      "pattern": "\\b(select|insert|update|delete)\\b[^\\n]{0,120}(\\+\\s*|\\|\\|\\s*)(req|request|input|params|args|body|user|id)",
+      "flags": "i",
+      "message": "SQL 语句疑似与请求参数拼接，存在注入风险。",
+      "remediation": "使用参数化查询/预编译语句；不要拼接外部输入。"
+    },
+    {
+      "id": "SEC-007",
+      "title": "日志可能泄露敏感信息",
+      "severity": "major",
+      "dimension": "security",
+      "globs": [
+        "**/*"
+      ],
+      "pattern": "(console\\.(log|info|warn|error)|logger\\.\\w+|print|log\\.\\w+)\\s*\\([^\\n)]*(password|passwd|token|secret|api[_-]?key)",
+      "flags": "i",
+      "message": "日志/打印语句中包含口令、令牌或密钥字段。",
+      "remediation": "记录前脱敏，或只记录字段名与非敏感摘要。"
+    },
+    {
+      "id": "COR-001",
+      "title": "空 catch 吞掉异常",
+      "severity": "major",
+      "dimension": "correctness",
+      "globs": [
+        "**/*.{js,jsx,ts,tsx,java,kt,cs}"
+      ],
+      "pattern": "catch\\s*(\\([^)]*\\))?\\s*\\{\\s*\\}",
+      "flags": "m",
+      "message": "异常被静默吞掉，调用方无法感知失败。",
+      "remediation": "至少记录错误并向上传递，或明确注释为何可以忽略。"
+    },
+    {
+      "id": "COR-002",
+      "title": "catch 仅含注释",
+      "severity": "major",
+      "dimension": "correctness",
+      "globs": [
+        "**/*.{js,jsx,ts,tsx,java,kt,cs}"
+      ],
+      "pattern": "catch\\s*\\([^)]*\\)\\s*\\{\\s*//[^\\n]*\\s*\\}",
+      "flags": "m",
+      "message": "catch 块只有注释没有处理逻辑，可能隐藏失败。",
+      "remediation": "记录错误、返回明确结果或向上抛出。"
+    },
+    {
+      "id": "DES-001",
+      "title": "遗留 TODO/FIXME",
+      "severity": "minor",
+      "dimension": "design",
+      "globs": [
+        "**/*.{js,jsx,ts,tsx,py,rb,php,java,kt,go,rs,cs,cpp,c,h}"
+      ],
+      "pattern": "\\b(TODO|FIXME|HACK)\\b",
+      "message": "存在未完成标记，确认是否应在本次变更中处理或记录 issue。",
+      "remediation": "补充说明或拆分为明确的后续任务。"
+    },
+    {
+      "id": "DES-002",
+      "title": "压制类型检查",
+      "severity": "major",
+      "dimension": "design",
+      "globs": [
+        "**/*.{ts,tsx}"
+      ],
+      "pattern": "@ts-(ignore|nocheck|expect-error)",
+      "message": "使用 @ts-ignore/@ts-nocheck 掩盖了类型错误。",
+      "remediation": "优先修正类型；确需抑制时使用 @ts-expect-error 并说明原因。"
+    },
+    {
+      "id": "DES-003",
+      "title": "显式 any 类型",
+      "severity": "minor",
+      "dimension": "design",
+      "globs": [
+        "**/*.{ts,tsx}"
+      ],
+      "pattern": ":\\s*any\\b",
+      "message": "显式 any 会削弱类型约束，确认是否为必要边界。",
+      "remediation": "改用 unknown + 收窄，或定义具体类型。"
+    },
+    {
+      "id": "READ-001",
+      "title": "超长代码行",
+      "severity": "minor",
+      "dimension": "readability",
+      "globs": [
+        "**/*"
+      ],
+      "pattern": "^.{201,}$",
+      "flags": "m",
+      "message": "单行超过 200 字符，降低可读性。",
+      "remediation": "按表达式/参数拆分，或提取命名变量。"
+    },
+    {
+      "id": "TEST-001",
+      "title": "跳过或忽略的测试",
+      "severity": "major",
+      "dimension": "tests",
+      "globs": [
+        "**/*.{test,spec}.{js,jsx,ts,tsx}",
+        "**/test_*.py",
+        "**/*_test.py",
+        "**/tests/**/*.py",
+        "**/*{Test,Spec}.{java,kt}"
+      ],
+      "pattern": "(\\.skip\\s*\\(|@Ignore\\b|pytest\\.mark\\.skip|t\\.Skip\\()",
+      "message": "测试被跳过/忽略，确认是否有替代覆盖或应删除。",
+      "remediation": "恢复测试，或记录跳过原因并跟踪补测。"
+    },
+    {
+      "id": "IMP-001",
+      "title": "使用已废弃的 Buffer 构造",
+      "severity": "major",
+      "dimension": "impact",
+      "globs": [
+        "**/*.{js,jsx,ts,tsx}"
+      ],
+      "pattern": "new Buffer\\s*\\(",
+      "message": "new Buffer() 已废弃且可能带来安全问题。",
+      "remediation": "改用 Buffer.from() / Buffer.alloc()。"
+    }
+  ]
+}

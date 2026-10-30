@@ -118,7 +118,6 @@ describe("task 启动链路", () => {
         hooks.tool!.task_review!.execute(
           {
             scope: ["src/auth.ts"],
-            checks: [{ name: "typecheck", command: "bun typecheck", status: "passed", evidence: "0 errors" }],
             dimensions,
             findings: [],
           } as never,

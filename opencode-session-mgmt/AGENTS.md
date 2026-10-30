@@ -25,7 +25,7 @@ OpenCode 会话管理定制：标准化开发流程（五阶段门禁）、理�
 ### 工作流机制（task / sdlc / reqdoc 共用）
 
 - **一般任务 task 只记工时**：单阶段 `execute`，无审查/提交门禁；与 sdlc/reqdoc 一致由模型调用 `workflow_start` 启动（首条消息不再自动开始），用户整句说「本次任务已完成」或带任务范围的完成句（如「任务完成了」）自动收口，未点明任务的「完成」等词由模型确认一次；`task_classify` 在未启动时拒绝，入口短语轮（无任务描述）不归类；预估话术与 sdlc/reqdoc 共用「预估 xx 小时」，详见 `docs/workflow-task.md`。
-- **task 的 `code_review` 子任务**：只是 TASK 的一个任务分类，不是新工作流，不与 sdlc/reqdoc 或任何编码任务关联。审核任务只读（硬拦截 `write`/`edit`/`apply_patch` 与 `git commit`），按六维产出报告并调用 `task_review`；报告提交是审核任务自身的完成条件，不约束任何编码任务。其他 task 分类不提示、不强制审核。
+- **task 的 `code_review` 子任务**：只是 TASK 的一个任务分类，不是新工作流，不与 sdlc/reqdoc 或任何编码任务关联。审核任务纯只读（硬拦截 `bash`、`write`/`edit`/`apply_patch` 与 `git commit`；git 只经 `task_check` 固定只读动作，regex 扫描经 `task_scan`），按六维静态审查并调用 `task_review`；报告提交是审核任务自身的完成条件，不约束任何编码任务。其他 task 分类不提示、不强制审核。
 - **工作流推进是完成门禁模型**（AI 主动 `workflow_advance`，AI 引导人决定），不是审批流；提交门禁经 `tool.execute.before` 拦截 `git commit` 实现；含提交门禁的工作流（sdlc）失录**基线预估工时**亦阻断；迭代上限 3 轮；`comprehension_confirm` 单次只认一段（防批量走过场）。
 - **手工修改走 open_ide 锁定（sdlc-r12，软提示 + 硬拦截）**：开发者要手工改代码时 AI 先调 `open_ide`（**必须带 `file`**，防AI 覆盖）；锁定期间 AI 可继续其它任务但不得改被锁文件（`tool.execute.before` 服务端硬拦截）；须开发者明确确认后 `unlock_file`，并重新读取最新内容。**SDLC 完结时完成态注入解锁提示**（经 `hasCommitGate` 门控，reqdoc 不提示）。open-ide **物理合并**进本工程（`packages/plugin/src/open-ide/`，原 `opencode-open-ide` 已移除）：锁持久化进 SQLite `file_lock` 表（daemon 重启自动恢复）。
 - **新增工作流必须经 `defineWorkflow` 构造**：`standard`（estimate / finish）为必填，工厂校验同名规则的话术与阶段、缺失则自动补齐统一预估与 `/new` 收口；`packages/shared/test/shared.test.ts` 遍历注册表兜底。

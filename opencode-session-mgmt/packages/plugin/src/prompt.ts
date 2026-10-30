@@ -30,12 +30,14 @@ import { getStuckFiles } from "./tools/quality"
 /** 独立 code_review 子任务的注入规则（仅 TASK 的 code_review 分类）。 */
 const TASK_CODE_REVIEW_GUIDANCE = [
   "本次是独立的代码审核子任务（code_review），只属于 TASK，不与 sdlc/reqdoc 或任何编码任务关联。",
-  "只读：不得修改代码、不得 git commit；发现问题只写 findings，交给后续编码任务修复。",
-  "先确认审核范围（diff / commit / PR / 文件）；不确定就先问开发者。",
-  "运行或读取项目现有 typecheck/test/lint，记录命令与结果；无检查时说明原因。",
-  "按六维逐项审查，每项必须给结论和证据：正确性与边界、安全与隐私、设计与可维护性、测试与证据、影响面与兼容性、可理解性。",
+  "只读：不得执行 bash（不跑 build/test/lint、不装依赖、不联网），不得修改代码、不得 git commit；发现问题只写 findings，交给后续编码任务修复。",
+  "需要 git 信息时只用 task_check（diff/status/log/show/ls-files，固定只读命令，GIT_OPTIONAL_LOCKS=0；非 Git 项目会返回跳过）；不要用 bash 跑 git。",
+  "需要规则扫描时可用 task_scan（可选，纯 regex，默认只扫 diff 改动文件；不执行项目命令）；也可用 read/grep 读显式文件。先确认审核范围（diff / commit / PR / 文件），不确定就先问开发者。",
+  "按六维逐项做静态审查，每项必须给结论和证据：正确性与边界、安全与隐私、设计与可维护性、测试与证据、影响面与兼容性、可理解性。",
+  "测试与证据维度只审查测试代码本身（覆盖意图、断言、跳过/伪造）；不得声称执行过测试，也不得写测试已通过/构建成功等背书。",
+  "扫描是可选证据；若 task_scan 报出 blocker/critical，必须在 findings 中逐条提及 ruleId。",
   "不含需求理解、可运维性。",
-  "审核完成后把报告摘要展示给开发者，并调用 task_review 提交结构化报告（scope/checks/六维/findings）；未提交报告不能完成本任务。",
+  "审核完成后把报告摘要展示给开发者，并调用 task_review 提交结构化报告（scope/六维/findings，无 checks 字段）；未提交报告不能完成本任务。",
   "结论可以是 approved 或 changes_requested，两者都能完成审核任务；任务完成仍按一般任务规则（预估、/new）。",
 ].join("\n")
 
@@ -271,6 +273,14 @@ function buildTaskStateBar(workflow: WorkflowState): string {
     workflow.baseline ? `说「本次任务已完成」结束计时` : `完成前须先补录预估：${ESTIMATE_PROMPT_SHORT}`,
   ]
   if (workflow.task?.category === "code_review") {
+    const scan = workflow.taskScan
+    lines.push(
+      scan
+        ? scan.status === "completed"
+          ? `代码扫描：已完成（${scan.findingCount} 条，blocker ${scan.bySeverity.blocker} / critical ${scan.bySeverity.critical}）`
+          : `代码扫描：跳过（${scan.skippedReason ?? "未知"}）`
+        : "代码扫描：未运行（可选，调用 task_scan）",
+    )
     lines.push(
       workflow.taskReview
         ? "代码审核报告：已提交（可以完成）"

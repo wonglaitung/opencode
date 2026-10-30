@@ -13,8 +13,10 @@ import { createReqdocInitTool } from "./reqdoc-dirs"
 import { createReqdocKbTools } from "./reqdoc-kb-tools"
 import { createReqdocScanTool } from "./reqdoc-scan"
 import { createReviewTools } from "./review"
+import { createTaskCheckTool } from "./task-check"
 import { createTaskClassifyTool } from "./task-classify"
 import { createTaskReviewTool } from "./task-review"
+import { createTaskScanTool } from "./task-scan"
 import { createWorkflowStartTools } from "./workflow-start"
 import { createWorkflowTools } from "./workflow"
 
@@ -38,6 +40,8 @@ export function createToolset(input: Input): Record<string, ToolDefinition> {
     ...createWorkflowStartTools(input.store),
     ...(def.type === "task" ? createTaskClassifyTool(input.store) : {}),
     ...(def.type === "task" ? createTaskReviewTool(input.store) : {}),
+    ...(def.type === "task" ? createTaskScanTool(input.store) : {}),
+    ...(def.type === "task" ? createTaskCheckTool(input.store) : {}),
     ...(def.reviewStage === null ? {} : createReviewTools(input.store)),
     ...(def.type === "reqdoc" ? reqdocTools(input.store) : {}),
     open_ide: createOpenIdeTool(input.ideEntries, input.lockRegistry),

@@ -47,7 +47,7 @@ describe("createToolset", () => {
   test("task 只注册一般任务工具，不注册 review/提交门禁", () => {
     const { store, tools } = setup("task")
     try {
-      expect(Object.keys(tools)).toHaveLength(10)
+      expect(Object.keys(tools)).toHaveLength(12)
       for (const name of [
         "workflow_advance",
         "workflow_revisit",
@@ -55,6 +55,8 @@ describe("createToolset", () => {
         "workflow_start",
         "task_classify",
         "task_review",
+        "task_scan",
+        "task_check",
         "open_ide",
         "lock_file",
         "unlock_file",

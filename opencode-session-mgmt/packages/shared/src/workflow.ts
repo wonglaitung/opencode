@@ -69,11 +69,44 @@ export interface TaskReviewDimension {
   notes: string
 }
 
-export interface TaskReviewCheck {
-  name: string
-  command?: string
-  status: "passed" | "failed" | "skipped"
-  evidence: string
+export const TASK_SCAN_SEVERITIES = ["blocker", "critical", "major", "minor", "info"] as const
+
+export type TaskScanSeverity = (typeof TASK_SCAN_SEVERITIES)[number]
+
+/** 纯只读 regex 扫描的单个 finding（仅存本机，不进汇报投影）。 */
+export interface TaskScanFinding {
+  ruleId: string
+  title: string
+  severity: TaskScanSeverity
+  dimension: TaskReviewDimensionKey
+  file: string
+  line: number
+  column?: number
+  message: string
+  remediation?: string
+  sonarKey?: string
+}
+
+/** 扫描摘要（可进入审核报告；不含文件路径/代码）。 */
+export interface TaskScanSummary {
+  status: "completed" | "skipped"
+  scannedFiles: number
+  findingCount: number
+  bySeverity: Record<TaskScanSeverity, number>
+  byDimension: Record<TaskReviewDimensionKey, number>
+  diffStats?: { files: number; insertions: number; deletions: number }
+  /** 审核规模：diff 用 numstat，显式文件用实际文件数/行数。 */
+  reviewSize?: { files: number; lines: number }
+  skippedReason?: string
+  warnings: string[]
+}
+
+/** 审核任务本地扫描报告。 */
+export interface TaskScanReport extends TaskScanSummary {
+  scope: string[]
+  findings: TaskScanFinding[]
+  engine: "regex"
+  scannedAt: number
 }
 
 /**
@@ -83,10 +116,10 @@ export interface TaskReviewCheck {
 export interface TaskReviewReport {
   status: "submitted"
   scope: string[]
-  checks: TaskReviewCheck[]
   dimensions: Record<TaskReviewDimensionKey, TaskReviewDimension>
   findings: string[]
   verdict: "approved" | "changes_requested"
+  scan?: TaskScanSummary
   submittedAt: number
 }
 
@@ -376,6 +409,8 @@ export interface WorkflowState {
   task?: TaskMeta
   /** task 代码审核子任务的报告（code_review 分类；可选，其他 task 分类缺省）。 */
   taskReview?: TaskReviewReport
+  /** 本次 code_review 任务最近一次只读 regex 扫描报告（可选）。 */
+  taskScan?: TaskScanReport
   /**
    * reqdoc 功能点清单（重构核心：prd 前置功能点拆解，业务确认后写入）。
    * 可选字段：确认前缺省；sdlc 恒缺省。随汇报上行。

@@ -1,5 +1,5 @@
 /**
- * code_review 子任务只读门禁：只拦截代码编辑与 git commit，不拦截读/测试。
+ * code_review 子任务只读门禁：拦截 bash、代码编辑与 git commit；只允许读取。
  */
 import { describe, expect, test } from "bun:test"
 import { Store } from "../src/db"
@@ -31,12 +31,24 @@ describe("code_review 只读门禁", () => {
     }
   })
 
-  test("允许读取与测试命令", async () => {
+  test("拦截所有 bash（包括测试与 git 只读命令）", async () => {
+    const { store, gate } = setup("code_review")
+    try {
+      for (const command of ["bun test auth", "git diff", "bun run build", "npm run lint"]) {
+        await expect(gate(input("bash"), output({ command }))).rejects.toThrow(/只读/)
+      }
+    } finally {
+      store.close()
+    }
+  })
+
+  test("允许 read 与专用只读工具", async () => {
     const { store, gate } = setup("code_review")
     try {
       await expect(gate(input("read"), output({ filePath: "src/auth.ts" }))).resolves.toBeUndefined()
-      await expect(gate(input("bash"), output({ command: "bun test auth" }))).resolves.toBeUndefined()
-      await expect(gate(input("bash"), output({ command: "git diff" }))).resolves.toBeUndefined()
+      await expect(gate(input("grep"), output({ pattern: "TODO" }))).resolves.toBeUndefined()
+      await expect(gate(input("task_check"), output({ action: "diff" }))).resolves.toBeUndefined()
+      await expect(gate(input("task_scan"), output({ scope: "diff" }))).resolves.toBeUndefined()
     } finally {
       store.close()
     }

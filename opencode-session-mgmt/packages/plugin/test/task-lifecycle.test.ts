@@ -126,7 +126,6 @@ describe("task 生命周期", () => {
         wf.taskReview = {
           status: "submitted",
           scope: ["src/auth.ts"],
-          checks: [],
           dimensions: {
             correctness: { status: "pass", notes: "ok" },
             security: { status: "pass", notes: "ok" },

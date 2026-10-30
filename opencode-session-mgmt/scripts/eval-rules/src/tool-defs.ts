@@ -129,27 +129,14 @@ export const EVAL_TOOLS: OpenAITool[] = [
       name: "task_review",
       description:
         "提交一次独立代码审核任务的报告（仅 task 工作流的 code_review 分类）。" +
-        "审核任务只读，不修改代码；必须先确认范围、运行/读取项目检查，并按六维给出结论。" +
+        "审核任务纯只读，不执行命令、不跑 build/test/lint；按六维做静态审查。" +
+        "可先用 task_scan 做可选 regex 扫描；blocker/critical 必须逐条提及 ruleId。" +
         "报告提交后审核任务才能完成；结论可以是 approved 或 changes_requested。" +
         "不涉及 sdlc/reqdoc，也不约束任何编码任务。",
       parameters: {
         type: "object",
         properties: {
           scope: { type: "array", items: { type: "string" }, description: "审核范围：diff / commit / PR / 文件" },
-          checks: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                name: { type: "string" },
-                command: { type: "string" },
-                status: { type: "string", enum: ["passed", "failed", "skipped"] },
-                evidence: { type: "string" },
-              },
-              required: ["name", "status", "evidence"],
-            },
-            description: "自动化或手工检查结果",
-          },
           dimensions: {
             type: "object",
             properties: {
@@ -164,7 +151,43 @@ export const EVAL_TOOLS: OpenAITool[] = [
           },
           findings: { type: "array", items: { type: "string" }, description: "问题/风险清单（有未通过项时必填）" },
         },
-        required: ["scope", "checks", "dimensions"],
+        required: ["scope", "dimensions"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "task_scan",
+      description:
+        "code_review 任务的可选纯只读 regex 扫描（不执行 build/test/lint，不联网，不写文件）。" +
+        "默认扫描 diff 改动文件；结果写入 taskScan；blocker/critical 必须在 task_review findings 中提及 ruleId。",
+      parameters: {
+        type: "object",
+        properties: {
+          scope: { type: "string", enum: ["diff", "files", "all"], description: "diff=改动文件（默认）；files=显式文件；all=项目文本文件" },
+          files: { type: "array", items: { type: "string" }, description: "scope=files 时的文件列表（相对项目根）" },
+          rules: { type: "array", items: { type: "string" }, description: "只运行指定规则 id；省略运行全部" },
+          severity: { type: "string", enum: ["blocker", "critical", "major", "minor", "info"], description: "最低严重度阈值" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "task_check",
+      description:
+        "code_review 任务的只读 git 检查：diff/status/log/show/ls-files。" +
+        "固定只读命令，GIT_OPTIONAL_LOCKS=0；非 Git 项目返回跳过。",
+      parameters: {
+        type: "object",
+        properties: {
+          action: { type: "string", enum: ["diff", "status", "log", "show", "ls-files"], description: "只读动作" },
+          target: { type: "string", description: "show 的 ref/commit；省略为 HEAD" },
+          limit: { type: "number", description: "log 条数（默认 20）" },
+        },
+        required: ["action"],
       },
     },
   },
@@ -658,6 +681,8 @@ const TASK_TOOLS = new Set([
   "workflow_baseline",
   "task_classify",
   "task_review",
+  "task_scan",
+  "task_check",
   "open_ide",
   "unlock_file",
   "list_locked_files",

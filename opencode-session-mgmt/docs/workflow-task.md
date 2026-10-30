@@ -56,11 +56,14 @@ task 面向**写文档、分析错误、整理材料**等非开发工作：只�
 代码审核只是 **TASK 工作流的一个分类子任务**，不是新工作流，也不与 sdlc/reqdoc 或任何编码任务关联：
 
 - 审核人员直接 `/new` 开一般任务，描述审核范围（diff / commit / PR / 文件）；不需要前置编码任务。
-- **只读**：`code_review` 分类下服务端硬拦截 `write` / `edit` / `apply_patch` 与 `git commit`；`bash` 仍可用于读文件、跑测试、查 diff。发现问题只写 findings，交给后续编码任务修复。
+- **纯只读**：`code_review` 分类下服务端硬拦截 `bash`（不跑 build/test/lint、不装依赖、不联网）以及 `write` / `edit` / `apply_patch` / `git commit`。发现问题只写 findings，交给后续编码任务修复。
+- **只读 git 信息**：只允许 `task_check` 的固定动作 `diff` / `status` / `log` / `show` / `ls-files`，统一 `GIT_OPTIONAL_LOCKS=0`，不经过 shell；非 Git 项目返回 `skipped + 原因`，不报错。
+- **可选 regex 扫描**：`task_scan` 默认扫描 diff 改动文件，也可指定 `files` 或 `all`；只做文件文本匹配，不执行项目命令。内置规则与项目 `.opencode/review-rules/catalog.json` 覆盖/追加（见 `docs/review-rules.md`）。扫描是可选证据；扫描产生的 `blocker`/`critical` 必须在 findings 中逐条提及 `ruleId`。
 - **报告为完成条件**：审核任务必须调用 `task_review` 提交结构化报告；未提交时自动收口与 `workflow_advance(approve)` 都会被拒绝。报告提交后即可完成，即使结论是 `changes_requested`。
-- **六维报告**：正确性与边界、安全与隐私、设计与可维护性、测试与证据、影响面与兼容性、可理解性；不含需求理解、可运维性。每维必须给出结论与证据，并记录 scope、checks、findings。
+- **六维报告**：正确性与边界、安全与隐私、设计与可维护性、测试与证据、影响面与兼容性、可理解性；不含需求理解、可运维性。每维必须给出结论与证据，并记录 scope、findings；报告没有 `checks` 字段，也不写人工/CI 背书。测试与证据维度只静态审查测试代码本身，不声称执行过测试。
+- **审核规模建议**：改动建议控制在 20 个文件/500 行以内；超过 50 个文件/1500 行应说明拆分理由，或建议拆成多次审核。`task_scan` 的 diff 摘要提供文件数与行数。
 - 多次审核 = 多次 `/new`，每次独立估算/计时/报告。
-- 普通 coding/debugging 等分类完全不受影响：不提示、不强制审核，也不能调用 `task_review`（工具会拒绝并提示另开 `code_review` 任务）。
+- 普通 coding/debugging 等分类完全不受影响：不提示、不强制审核，也不能调用 `task_review` / `task_scan` / `task_check`（工具会拒绝并提示另开 `code_review` 任务）。
 
 ## 5. 预估话术（三工作流一致）
 
@@ -116,7 +119,7 @@ task 没有改造前 baseline，因此只支持 `--variant new`；`--variant bas
 - 一个会话只记一个一般任务；多任务用 `/new`。
 - 启动与 sdlc/reqdoc 一致：由模型调用 `workflow_start`；未启动时 `task_classify` 拒绝，避免留下“只有分类、没有启动”的半成品。
 - task 类型由启动器写入 identity 决定；不能在 sdlc/reqdoc 会话内切换，须在启动器选择 task 后开新会话（已有窗口需先退出）。
-- task 工具集不注册 sdlc 的 review/comprehension/commit 工具；`code_review` 分类使用独立的 `task_review`，不与其他工作流关联。
+- task 工具集不注册 sdlc 的 review/comprehension/commit 工具；`code_review` 分类使用独立的 `task_review`、`task_scan`、`task_check`，不与其他工作流关联。
 - `code_review` 是唯一带报告完成门禁的分类；其他 task 分类仍只记工时，不因未审核被拦。
 - 分类一般是元数据；`code_review` 例外——它只约束审核任务自身的报告提交，不影响编码任务。模型可重复调用覆盖分类，保留最新值。
 - 分类只存枚举码，不存任务原文；不解析 note，也不把分类写进 note。

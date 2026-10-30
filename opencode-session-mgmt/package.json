@@ -7,7 +7,7 @@
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc -p packages/shared && tsc -p packages/plugin && tsc -p packages/cli",
-    "build:plugin": "bun build packages/plugin/src/index.ts --outdir dist/plugin --target bun",
+    "build:plugin": "bun build packages/plugin/src/index.ts --outdir dist/plugin --target bun && rm -rf dist/plugin/review-rules && cp -r packages/plugin/review-rules dist/plugin/review-rules",
     "build:cli": "bun build packages/cli/src/index.ts --compile --outfile dist/opencode-sm",
     "pack:cli": "bash scripts/pack-cli.sh",
     "pack:bundle": "bash scripts/pack-bundle.sh",
