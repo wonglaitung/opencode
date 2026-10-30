@@ -27,6 +27,18 @@ import { isComplete, workflowDurationMs } from "./stats"
 import { loadWorkflowConventions } from "./conventions"
 import { getStuckFiles } from "./tools/quality"
 
+/** 独立 code_review 子任务的注入规则（仅 TASK 的 code_review 分类）。 */
+const TASK_CODE_REVIEW_GUIDANCE = [
+  "本次是独立的代码审核子任务（code_review），只属于 TASK，不与 sdlc/reqdoc 或任何编码任务关联。",
+  "只读：不得修改代码、不得 git commit；发现问题只写 findings，交给后续编码任务修复。",
+  "先确认审核范围（diff / commit / PR / 文件）；不确定就先问开发者。",
+  "运行或读取项目现有 typecheck/test/lint，记录命令与结果；无检查时说明原因。",
+  "按六维逐项审查，每项必须给结论和证据：正确性与边界、安全与隐私、设计与可维护性、测试与证据、影响面与兼容性、可理解性。",
+  "不含需求理解、可运维性。",
+  "审核完成后把报告摘要展示给开发者，并调用 task_review 提交结构化报告（scope/checks/六维/findings）；未提交报告不能完成本任务。",
+  "结论可以是 approved 或 changes_requested，两者都能完成审核任务；任务完成仍按一般任务规则（预估、/new）。",
+].join("\n")
+
 /** 将当前工作流压缩为注入片段：阶段化规则 + 状态条 + stuck 警告（完成态见下方专用分支）。 */
 export function buildSystemFragment(
   workflow: WorkflowState,
@@ -123,6 +135,10 @@ export function buildSystemFragment(
     ? `# Workflow 规则（通用 + 当前阶段 ${def.labels[stage] ?? stage}）`
     : "# Workflow 规则（通用）"
   parts.push(header, "", rules.map((r, i) => `${i + 1}. ${r.text}`).join("\n"))
+
+  if (def.type === "task" && workflow.task?.category === "code_review") {
+    parts.push("", "# 代码审核任务规则（只读）", "", TASK_CODE_REVIEW_GUIDANCE)
+  }
 
   if (conventions) {
     parts.push("", `# 《${def.type} 编写规约》自遵循清单（插件按工作流阶段自动送达）`, "", conventions)
@@ -249,11 +265,19 @@ function buildTaskStateBar(workflow: WorkflowState): string {
       `输入「${WORKFLOW_ENTRY_PHRASE.task}」开始计时（也可直接描述任务，由助手初始化工作流）`,
     ].join("\n")
   }
-  return [
+  const lines = [
     "## 当前任务",
     `任务：进行中 ｜ 预估：${baseline} ｜ 已用时：${fmtDurationShort(duration)}`,
     workflow.baseline ? `说「本次任务已完成」结束计时` : `完成前须先补录预估：${ESTIMATE_PROMPT_SHORT}`,
-  ].join("\n")
+  ]
+  if (workflow.task?.category === "code_review") {
+    lines.push(
+      workflow.taskReview
+        ? "代码审核报告：已提交（可以完成）"
+        : "代码审核报告：待提交（审核完成后调用 task_review）",
+    )
+  }
+  return lines.join("\n")
 }
 
 /** 将工作流状态压缩为一行阶段条 + 关键状态（替代原冗长 JSON，弱模型更易读，7.1/7.3）。 */

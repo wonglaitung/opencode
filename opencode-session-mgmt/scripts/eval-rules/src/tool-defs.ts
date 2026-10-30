@@ -108,7 +108,7 @@ export const EVAL_TOOLS: OpenAITool[] = [
       description:
         "记录本次一般任务的类型，仅用于统计，不改变流程，也不要写入 note。" +
         "可选：documentation 编写文档 / testing 运行测试 / debugging 排查错误 / " +
-        "coding 代码修改 / research 调研分析 / environment 配置环境 / other 其他。" +
+        "coding 代码修改 / code_review 代码审核 / research 调研分析 / environment 配置环境 / other 其他。" +
         "须先由 workflow_start 启动任务；一般任务首轮应先调用本工具归类，不要只追问；无法判断用 other；可重复调用覆盖。",
       parameters: {
         type: "object",
@@ -120,6 +120,51 @@ export const EVAL_TOOLS: OpenAITool[] = [
           },
         },
         required: ["category"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "task_review",
+      description:
+        "提交一次独立代码审核任务的报告（仅 task 工作流的 code_review 分类）。" +
+        "审核任务只读，不修改代码；必须先确认范围、运行/读取项目检查，并按六维给出结论。" +
+        "报告提交后审核任务才能完成；结论可以是 approved 或 changes_requested。" +
+        "不涉及 sdlc/reqdoc，也不约束任何编码任务。",
+      parameters: {
+        type: "object",
+        properties: {
+          scope: { type: "array", items: { type: "string" }, description: "审核范围：diff / commit / PR / 文件" },
+          checks: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                name: { type: "string" },
+                command: { type: "string" },
+                status: { type: "string", enum: ["passed", "failed", "skipped"] },
+                evidence: { type: "string" },
+              },
+              required: ["name", "status", "evidence"],
+            },
+            description: "自动化或手工检查结果",
+          },
+          dimensions: {
+            type: "object",
+            properties: {
+              correctness: { type: "object", properties: { status: { type: "string", enum: ["pass", "fail"] }, notes: { type: "string" } }, required: ["status", "notes"] },
+              security: { type: "object", properties: { status: { type: "string", enum: ["pass", "fail"] }, notes: { type: "string" } }, required: ["status", "notes"] },
+              design: { type: "object", properties: { status: { type: "string", enum: ["pass", "fail"] }, notes: { type: "string" } }, required: ["status", "notes"] },
+              tests: { type: "object", properties: { status: { type: "string", enum: ["pass", "fail"] }, notes: { type: "string" } }, required: ["status", "notes"] },
+              impact: { type: "object", properties: { status: { type: "string", enum: ["pass", "fail"] }, notes: { type: "string" } }, required: ["status", "notes"] },
+              readability: { type: "object", properties: { status: { type: "string", enum: ["pass", "fail"] }, notes: { type: "string" } }, required: ["status", "notes"] },
+            },
+            required: ["correctness", "security", "design", "tests", "impact", "readability"],
+          },
+          findings: { type: "array", items: { type: "string" }, description: "问题/风险清单（有未通过项时必填）" },
+        },
+        required: ["scope", "checks", "dimensions"],
       },
     },
   },
@@ -612,6 +657,7 @@ const TASK_TOOLS = new Set([
   "workflow_revisit",
   "workflow_baseline",
   "task_classify",
+  "task_review",
   "open_ide",
   "unlock_file",
   "list_locked_files",

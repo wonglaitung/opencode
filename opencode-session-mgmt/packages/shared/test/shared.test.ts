@@ -467,12 +467,14 @@ describe("TASK 一般任务工作流", () => {
       "testing",
       "debugging",
       "coding",
+      "code_review",
       "research",
       "environment",
       "other",
     ])
     expect(new Set(Object.values(TASK_CATEGORY_LABELS)).size).toBe(TASK_CATEGORY_KEYS.length)
     expect(taskCategoryLabel("documentation")).toBe("编写文档")
+    expect(taskCategoryLabel("code_review")).toBe("代码审核")
     expect(taskCategoryLabel(null)).toBe("未分类")
   })
 

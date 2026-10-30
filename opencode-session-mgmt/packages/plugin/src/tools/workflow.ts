@@ -9,6 +9,8 @@ import { tool, type ToolDefinition } from "@opencode-ai/plugin"
 import {
   deriveQuestions,
   getDefinition,
+  hasTaskReviewReport,
+  isCodeReviewTask,
   kbGate,
   templateGateCauseNotice,
   type WorkflowState,
@@ -134,6 +136,17 @@ export function createWorkflowTools(store: Store): Record<string, ToolDefinition
           if (def.type === "task" && args.stage === "execute" && !workflow.baseline) {
             throw new WorkflowOpError(
               "一般任务完成前必须录入预估工时：请先询问开发者，并按其数字表述调用 workflow_baseline(developer_confirmed=true)。",
+            )
+          }
+          // 独立 code_review 子任务要求先提交结构化审核报告；其他 task 分类不受影响。
+          if (
+            def.type === "task" &&
+            args.stage === "execute" &&
+            isCodeReviewTask(workflow) &&
+            !hasTaskReviewReport(workflow)
+          ) {
+            throw new WorkflowOpError(
+              "代码审核任务完成前必须提交 task_review 报告：请先完成六维审核并调用 task_review。",
             )
           }
         }

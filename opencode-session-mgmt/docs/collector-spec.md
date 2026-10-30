@@ -2,11 +2,13 @@
 
 | | |
 |---|---|
-| 版本 | v1.4 |
-| 日期 | 2026-10-24 |
+| 版本 | v1.5 |
+| 日期 | 2026-10-30 |
 | 读者 | 后端收集服务开发团队、网关集成团队 |
 | 状态 | 生效 |
 
+> **v1.5（2026-10-30）**：task 分类新增 `code_review`（代码审核）。审核报告（scope/checks/六维/findings）只存插件本地，不上报；收集端只按任务分类统计，无需数据库迁移。
+>
 > **v1.4（2026-10-24）**：task 工作流新增可选字段 `workflow.task`（`{category, source} | null`），用于记录一般任务分类；sdlc/reqdoc 不携带该字段，旧收集器可原样存储并忽略，无数据库迁移。
 >
 > **v1.3（2026-08-26）**：7.4「成员行」收紧为固定 10 项最小集，移除 v1.2.2 引入的可选扩展字段（个人级 `avgEfficiency`/`linesTotal`/`tokensInput` 等下钻）。成员行不再附加任何可选字段（含 `ext.*` 对象），仅整组/整组织聚合层保留 `linesTotal`/`avgEfficiency`/`trends.*` 等聚合指标；CLI 无需容忍成员行未知字段。
@@ -382,7 +384,7 @@ flowchart LR
 | `sessionID` | string | 是 | 上游会话 ID，聚合库主键 |
 | `apiKey` | string | 是 | `api_key` 的 SHA-256（hex）哈希；身份标识，网络不传明文密钥（见 2.3） |
 | `workflow.type` | `"task" \| "sdlc" \| "reqdoc"` | 否 | 工作流类型（task 一般任务 / sdlc 开发 / reqdoc 需求书）。缺省按 sdlc 处理（旧插件兼容） |
-| `workflow.task` | `{category, source} \| null` | 否 | task 专属：一般任务分类。`category ∈ {documentation, testing, debugging, coding, research, environment, other}`；`source ∈ {model, heuristic}`；task 未分类为 `null`；sdlc/reqdoc 不携带。旧收集器可忽略，无需迁移 |
+| `workflow.task` | `{category, source} \| null` | 否 | task 专属：一般任务分类。`category ∈ {documentation, testing, debugging, coding, code_review, research, environment, other}`；`source ∈ {model, heuristic}`；task 未分类为 `null`；sdlc/reqdoc 不携带。旧收集器可忽略，无需迁移 |
 | `workflow.stages.*.status` | `"not_started" \| "in_progress" \| "approved"` | 是 | 阶段状态。键随 `workflow.type` 的定义：sdlc 为 `requirements`/`design`/`implementation`/`testing`/`review`，reqdoc 为 `goal`/`rules`/`edge`/`prd`/`review`，task 为单阶段 `execute` |
 | `workflow.stages.*.revision` | number | 是 | 阶段回退次数（需求质量信号） |
 | `workflow.stages.*.transitions` | array | 是 | 阶段转换时间戳序列（耗时统计的数据源），`action ∈ {"enter","revisit","approve"}`，`note` 可选 |

@@ -1423,4 +1423,16 @@ export const SCENARIOS: Scenario[] = [
     judge: { kind: "tool", expectTool: "workflow_start", forbidTool: ["task_classify"] },
     note: "task-r4/r5：只有入口短语时先启动并请描述任务，不得归类为 other",
   },
+  {
+    name: "t12 代码审核请求归类",
+    workflowType: "task",
+    state: (() => {
+      const s = newTask()
+      enter(s, "execute")
+      return finish(s)
+    })(),
+    userTurn: "帮我审核一下 src/auth.ts 的登录改动。",
+    judge: { kind: "tool", expectTool: "task_classify", args: { category: "code_review" } },
+    note: "task-r5：代码审核请求归类为 code_review（独立审核子任务）",
+  },
 ]

@@ -14,6 +14,7 @@ export const TASK_CATEGORY_KEYS = [
   "testing",
   "debugging",
   "coding",
+  "code_review",
   "research",
   "environment",
   "other",
@@ -26,6 +27,7 @@ export const TASK_CATEGORY_LABELS: Record<TaskCategory, string> = {
   testing: "运行测试",
   debugging: "排查错误",
   coding: "代码修改",
+  code_review: "代码审核",
   research: "调研分析",
   environment: "配置环境",
   other: "其他",
@@ -39,6 +41,53 @@ export interface TaskMeta {
   category: TaskCategory
   source: TaskCategorySource
   setAt: number
+}
+
+/** 代码审核任务的六个审核维度（不含需求理解、可运维性）。 */
+export const TASK_REVIEW_DIMENSION_KEYS = [
+  "correctness",
+  "security",
+  "design",
+  "tests",
+  "impact",
+  "readability",
+] as const
+
+export type TaskReviewDimensionKey = (typeof TASK_REVIEW_DIMENSION_KEYS)[number]
+
+export const TASK_REVIEW_DIMENSION_LABELS: Record<TaskReviewDimensionKey, string> = {
+  correctness: "正确性与边界",
+  security: "安全与隐私",
+  design: "设计与可维护性",
+  tests: "测试与证据",
+  impact: "影响面与兼容性",
+  readability: "可理解性",
+}
+
+export interface TaskReviewDimension {
+  status: "pass" | "fail"
+  notes: string
+}
+
+export interface TaskReviewCheck {
+  name: string
+  command?: string
+  status: "passed" | "failed" | "skipped"
+  evidence: string
+}
+
+/**
+ * 独立 code_review 任务的交付报告（仅存本机 WorkflowState，不进汇报投影）。
+ * 报告提交是 code_review 任务的完成条件；不约束任何编码任务。
+ */
+export interface TaskReviewReport {
+  status: "submitted"
+  scope: string[]
+  checks: TaskReviewCheck[]
+  dimensions: Record<TaskReviewDimensionKey, TaskReviewDimension>
+  findings: string[]
+  verdict: "approved" | "changes_requested"
+  submittedAt: number
 }
 
 export function taskCategoryLabel(category: string | null | undefined): string {
@@ -325,6 +374,8 @@ export interface WorkflowState {
    * 只存枚举码，不存任务原文，避免隐私问题。
    */
   task?: TaskMeta
+  /** task 代码审核子任务的报告（code_review 分类；可选，其他 task 分类缺省）。 */
+  taskReview?: TaskReviewReport
   /**
    * reqdoc 功能点清单（重构核心：prd 前置功能点拆解，业务确认后写入）。
    * 可选字段：确认前缺省；sdlc 恒缺省。随汇报上行。
@@ -775,12 +826,12 @@ export const TASK = defineWorkflow({
     {
       id: "task-r2",
       stage: "global",
-      text: "本工作流只记录预估与实际用时，不要求阶段确认、审查清单或 git 提交门禁；不要主动推进阶段，也不要调用 review/comprehension 工具。",
+      text: "本工作流只记录预估与实际用时，不要求阶段确认、审查清单或 git 提交门禁；不要主动推进阶段，也不要调用 sdlc 的 review/comprehension 工具。",
     },
     {
       id: "task-r3",
       stage: "global",
-      text: "任务完成时，先看状态条「预估」：未录入预估时系统不会自动收口，你只能先问开发者预估工时（例如「请按『预估 xx 小时』告诉我」），等其给出数字后再调用 workflow_baseline；不得自行填数，也不得只回复已完成。已录入预估时：开发者整句说「本次任务已完成」或带任务范围的完成句（如「任务完成了」「本次任务做完了」，问句不算）时系统会自动收口；若开发者只说「完成/完成了/做完了/搞定了/结束了」而未点明任务，不要直接 approve，先问一句「本次任务是否已完成？」并在其明确确认后再调用 workflow_advance(stage=execute, action=approve, developer_confirmed=true)。系统若已自动结束（状态条显示已完成）则不要重复调用。一个会话只记一个任务；完成后提醒开发者执行 /new 开始下一个，并说明这是为了避免同会话混入多个任务、污染工时统计。",
+      text: "任务完成时，先看状态条「预估」：未录入预估时系统不会自动收口，你只能先问开发者预估工时（例如「请按『预估 xx 小时』告诉我」），等其给出数字后再调用 workflow_baseline；不得自行填数，也不得只回复已完成。已录入预估时：开发者整句说「本次任务已完成」或带任务范围的完成句（如「任务完成了」「本次任务做完了」，问句不算）时系统会自动收口；若状态条仍显示进行中，调用 workflow_advance(stage=execute, action=approve, developer_confirmed=true)。若开发者只说「完成/完成了/做完了/搞定了/结束了」而未点明任务，不要直接 approve，先问一句「本次任务是否已完成？」并在其明确确认后再调用 workflow_advance(stage=execute, action=approve, developer_confirmed=true)。系统若已自动结束（状态条显示已完成）则不要重复调用。一个会话只记一个任务；完成后提醒开发者执行 /new 开始下一个，并说明这是为了避免同会话混入多个任务、污染工时统计。",
     },
     {
       id: "task-r4",
@@ -790,7 +841,7 @@ export const TASK = defineWorkflow({
     {
       id: "task-r5",
       stage: "global",
-      text: "一般任务启动后，拿到任务描述的首轮必须先调用 task_classify 归类，不要只追问；只有入口短语或只有预估工时时不要归类，先请开发者描述任务；模糊但描述了要做某事的说法（如「帮我处理一下这个事」）按 other 归类，不要反问。未启动时先按 task-r4 启动，不得先归类。根据开发者任务描述选择：documentation 编写文档、testing 运行测试、debugging 排查错误、coding 代码修改、research 调研分析、environment 配置环境、other 其他；只有确实无法从任务描述判断时才用 other。任务类型变化时可再次调用覆盖。分类只用于统计，不改变流程，也不要写进 note。",
+      text: "一般任务启动后，拿到任务描述的首轮必须先调用 task_classify 归类，不要只追问；只有入口短语或只有预估工时时不要归类，先请开发者描述任务；模糊但描述了要做某事的说法（如「帮我处理一下这个事」）按 other 归类，不要反问。未启动时先按 task-r4 启动，不得先归类。根据开发者任务描述选择：documentation 编写文档、testing 运行测试、debugging 排查错误、coding 代码修改、code_review 代码审核、research 调研分析、environment 配置环境、other 其他；只有确实无法从任务描述判断时才用 other。任务类型变化时可再次调用覆盖。分类一般只用于统计，不改变流程，也不要写进 note；code_review 例外，按代码审核子任务规则执行。",
     },
   ],
 })
@@ -863,6 +914,16 @@ export function reviewRecord(s: WorkflowState): ReviewStageRecord {
   const def = getDefinition(s.type)
   if (def.reviewStage === null) throw new Error(`工作流类型 ${s.type} 无审查阶段`)
   return getStage(s, def.reviewStage) as ReviewStageRecord
+}
+
+/** task 的 code_review 子任务：唯一会启用只读门禁与报告提交门禁的分类。 */
+export function isCodeReviewTask(workflow: WorkflowState): boolean {
+  return workflow.type === "task" && workflow.task?.category === "code_review"
+}
+
+/** code_review 子任务是否已提交结构化审核报告。 */
+export function hasTaskReviewReport(workflow: WorkflowState): boolean {
+  return isCodeReviewTask(workflow) && workflow.taskReview?.status === "submitted"
 }
 
 /** 取指定阶段应注入的规则：global + 该阶段规则；stage 为 null 时只给 global（7.4 阶段化注入）。 */

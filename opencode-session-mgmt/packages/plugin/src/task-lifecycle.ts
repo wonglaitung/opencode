@@ -5,7 +5,7 @@
  * 未点明任务的说法只算进行中，交给模型按 task-r3 先确认一次。
  * 长篇句子（如「第一部分完成了」）与问句（如「本次任务已完成？」）不自动收口。
  */
-import { getDefinition } from "sm-shared"
+import { getDefinition, hasTaskReviewReport, isCodeReviewTask } from "sm-shared"
 import type { Store } from "./db"
 import { applyTransition } from "./workflow-ops"
 
@@ -25,6 +25,8 @@ export function finishTask(store: Store, sessionID: string, text: string): boole
   if (workflow.stages[stage]?.status !== "in_progress") return false
   // 与 sdlc 的基线门禁一致：未录入预估不得收口，先让模型补问预估。
   if (!workflow.baseline) return false
+  // 独立 code_review 子任务要求先提交结构化审核报告；其他 task 分类不受影响。
+  if (isCodeReviewTask(workflow) && !hasTaskReviewReport(workflow)) return false
   store.mutateWorkflow(sessionID, (w) => {
     applyTransition(w, stage, "approve", Date.now(), "开发者明确说完成（自动收口）")
   })

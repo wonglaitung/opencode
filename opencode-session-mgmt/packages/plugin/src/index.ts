@@ -16,6 +16,7 @@ import type { Plugin, PluginInput } from "@opencode-ai/plugin"
 import { readIdentity, resolveWorkflowType } from "sm-shared"
 import { Store, isPlaceholderTitle } from "./db"
 import { createCommitGate } from "./gate"
+import { createTaskReviewGate } from "./task-review-gate"
 import { resolveIdentity } from "./identity"
 import { createSystemTransform } from "./prompt"
 import { createReporter, type Usage } from "./report"
@@ -97,6 +98,7 @@ const SessionMgmtPlugin: Plugin = async (input) => {
   const lockHint = createLockHintTransform(registry)
   const systemTransform = createSystemTransform(store, isSubagent, input.directory)
   const commitGate = createCommitGate(store)
+  const reviewGate = createTaskReviewGate(store)
   const iterationCounter = createIterationCounter(store, isSubagent)
   const toolReport = createToolReportHook(reporter, isSubagent)
   const idleReport = createIdleReportHook(reporter, isSubagent)
@@ -129,6 +131,7 @@ const SessionMgmtPlugin: Plugin = async (input) => {
     // 人工文件锁拦截先行，提交门禁随后；任一 throw 即阻断本次工具调用。
     "tool.execute.before": async (hookInput, output) => {
       await lockGate(hookInput, output)
+      await reviewGate(hookInput, output)
       await commitGate(hookInput, output)
     },
 

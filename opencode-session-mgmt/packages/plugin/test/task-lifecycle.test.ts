@@ -113,6 +113,39 @@ describe("task 生命周期", () => {
     }
   })
 
+  test("code_review 任务未提交报告不自动收口", () => {
+    const store = setup()
+    try {
+      start(store, "t1")
+      store.mutateWorkflow("t1", (wf) => {
+        wf.baseline = { estimatedHours: 2, setAt: 1 }
+        wf.task = { category: "code_review", source: "model", setAt: 1 }
+      })
+      expect(finishTask(store, "t1", "本次任务已完成")).toBe(false)
+      store.mutateWorkflow("t1", (wf) => {
+        wf.taskReview = {
+          status: "submitted",
+          scope: ["src/auth.ts"],
+          checks: [],
+          dimensions: {
+            correctness: { status: "pass", notes: "ok" },
+            security: { status: "pass", notes: "ok" },
+            design: { status: "pass", notes: "ok" },
+            tests: { status: "pass", notes: "ok" },
+            impact: { status: "pass", notes: "ok" },
+            readability: { status: "pass", notes: "ok" },
+          },
+          findings: [],
+          verdict: "approved",
+          submittedAt: 1,
+        }
+      })
+      expect(finishTask(store, "t1", "本次任务已完成")).toBe(true)
+    } finally {
+      store.close()
+    }
+  })
+
   test("非 task 会话不自动收口", () => {
     const store = Store.memory(() => "sdlc")
     try {

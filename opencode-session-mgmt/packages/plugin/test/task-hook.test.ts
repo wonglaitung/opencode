@@ -79,6 +79,64 @@ describe("task 启动链路", () => {
     }
   })
 
+  test("code_review 只读、报告后完成，完全不关联其他工作流", async () => {
+    const { hooks, project } = await startTaskPlugin()
+    const sessionID = "r1"
+    const c = ctx(sessionID)
+    const dimensions = {
+      correctness: { status: "pass", notes: "ok" },
+      security: { status: "pass", notes: "ok" },
+      design: { status: "pass", notes: "ok" },
+      tests: { status: "pass", notes: "ok" },
+      impact: { status: "pass", notes: "ok" },
+      readability: { status: "pass", notes: "ok" },
+    }
+    try {
+      await hooks["chat.message"]!(
+        { sessionID, messageID: "m3" },
+        current(sessionID, "m3", "帮我审核 src/auth.ts 的登录改动，预估 2 小时"),
+      )
+      await hooks.tool!.workflow_start!.execute({} as never, c)
+      await hooks.tool!.workflow_baseline!.execute(
+        { estimated_hours: 2, developer_confirmed: true } as never,
+        c,
+      )
+      await hooks.tool!.task_classify!.execute({ category: "code_review" } as never, c)
+      await expect(
+        hooks["tool.execute.before"]!(
+          { tool: "edit", sessionID, callID: "e1" },
+          { args: { filePath: "src/auth.ts" } } as never,
+        ),
+      ).rejects.toThrow(/只读/)
+      await expect(
+        hooks.tool!.workflow_advance!.execute(
+          { stage: "execute", action: "approve", developer_confirmed: true } as never,
+          c,
+        ),
+      ).rejects.toThrow(/task_review|报告/)
+      await expect(
+        hooks.tool!.task_review!.execute(
+          {
+            scope: ["src/auth.ts"],
+            checks: [{ name: "typecheck", command: "bun typecheck", status: "passed", evidence: "0 errors" }],
+            dimensions,
+            findings: [],
+          } as never,
+          c,
+        ),
+      ).resolves.toContain("代码审核报告已提交")
+      await expect(
+        hooks.tool!.workflow_advance!.execute(
+          { stage: "execute", action: "approve", developer_confirmed: true } as never,
+          c,
+        ),
+      ).resolves.toContain("approve")
+    } finally {
+      await hooks.dispose!()
+      rmSync(project, { recursive: true, force: true })
+    }
+  })
+
   test("question 选择菜单的预估作为证据，workflow_baseline 放行", async () => {
     const { hooks, project } = await startTaskPlugin()
     const sessionID = "s2"

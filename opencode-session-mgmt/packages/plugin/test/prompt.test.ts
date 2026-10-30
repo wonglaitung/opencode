@@ -690,6 +690,41 @@ describe("task 一般任务状态条与入口提示", () => {
     expect(bar).toContain("说「本次任务已完成」结束计时")
   })
 
+  test("code_review 注入只读审核规则与报告状态", () => {
+    const s = taskWorkflow()
+    s.baseline = { estimatedHours: 2, setAt: 1 }
+    s.task = { category: "code_review", source: "model", setAt: 1 }
+    const text = buildSystemFragment(s)
+    expect(text).toContain("代码审核任务规则（只读）")
+    expect(text).toContain("task_review")
+    expect(text).toContain("代码审核报告：待提交")
+    s.taskReview = {
+      status: "submitted",
+      scope: ["src/auth.ts"],
+      checks: [{ name: "typecheck", status: "passed", evidence: "ok" }],
+      dimensions: {
+        correctness: { status: "pass", notes: "ok" },
+        security: { status: "pass", notes: "ok" },
+        design: { status: "pass", notes: "ok" },
+        tests: { status: "pass", notes: "ok" },
+        impact: { status: "pass", notes: "ok" },
+        readability: { status: "pass", notes: "ok" },
+      },
+      findings: [],
+      verdict: "approved",
+      submittedAt: 1,
+    }
+    expect(buildStateBar(s, "execute")).toContain("代码审核报告：已提交")
+  })
+
+  test("普通 coding 任务不注入代码审核规则", () => {
+    const s = taskWorkflow()
+    s.task = { category: "coding", source: "model", setAt: 1 }
+    const text = buildSystemFragment(s)
+    expect(text).not.toContain("代码审核任务规则")
+    expect(text).not.toContain("task_review")
+  })
+
   test("已完成：显示预估/实际/提效与 /new", () => {
     const s = taskWorkflow()
     s.baseline = { estimatedHours: 1, setAt: 1 }

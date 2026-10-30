@@ -32,6 +32,7 @@ import { createReqdocScanTool } from "../../../packages/plugin/src/tools/reqdoc-
 import { createReqdocConventionReviewTool } from "../../../packages/plugin/src/tools/reqdoc-review-conventions"
 import { createWorkflowStartTools } from "../../../packages/plugin/src/tools/workflow-start"
 import { createTaskClassifyTool } from "../../../packages/plugin/src/tools/task-classify"
+import { createTaskReviewTool } from "../../../packages/plugin/src/tools/task-review"
 import { createOpenIdeTool } from "../../../packages/plugin/src/open-ide/open-ide-tool"
 import { createLockTools } from "../../../packages/plugin/src/open-ide/tools/lock-tools"
 import { extractBaselineHours } from "../../../packages/plugin/src/tools/baseline-proposal"
@@ -125,6 +126,7 @@ export function buildRegistry(store: Store): Record<string, ToolLike | undefined
     ...createWorkflowTools(store),
     ...createWorkflowStartTools(store),
     ...createTaskClassifyTool(store),
+    ...createTaskReviewTool(store),
     ...createReviewTools(store),
     ...createReqdocInitTool(),
     ...createReqdocImportTool(),
