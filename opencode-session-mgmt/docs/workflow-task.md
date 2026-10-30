@@ -60,7 +60,7 @@ task 面向**写文档、分析错误、整理材料**等非开发工作：只�
 - **只读 git 信息**：只允许 `task_check` 的固定动作 `diff` / `status` / `log` / `show` / `ls-files`，统一 `GIT_OPTIONAL_LOCKS=0`，不经过 shell；非 Git 项目返回 `skipped + 原因`，不报错。
 - **可选 regex 扫描**：`task_scan` 默认扫描 diff 改动文件，也可指定 `files` 或 `all`；只做文件文本匹配，不执行项目命令。内置规则与项目 `.opencode/review-rules/catalog.json` 覆盖/追加（见 `docs/review-rules.md`）。扫描是可选证据；扫描产生的 `blocker`/`critical` 必须在 findings 中逐条提及 `ruleId`。
 - **报告为完成条件**：审核任务必须调用 `task_review` 提交结构化报告；未提交时自动收口与 `workflow_advance(approve)` 都会被拒绝。报告提交后即可完成，即使结论是 `changes_requested`。
-- **六维报告**：正确性与边界、安全与隐私、设计与可维护性、测试与证据、影响面与兼容性、可理解性；不含需求理解、可运维性。每维必须给出结论与证据，并记录 scope、findings（每条含 severity/issue/suggestion，可带 file/line/ruleId）；`task_review` 回执会展示完整报告：范围、结论、六维明细、扫描摘要、findings（发现与建议）。报告没有 `checks` 字段，也不写人工/CI 背书。测试与证据维度只静态审查测试代码本身，不声称执行过测试。
+- **六维报告**：正确性与边界、安全与隐私、设计与可维护性、测试与证据、影响面与兼容性、可理解性；不含需求理解、可运维性。每维必须给出结论与证据，并记录 scope、findings（每条含 severity/issue/suggestion，可带 file/line/ruleId）；`task_review` 回执会展示完整报告：范围、结论、六维明细、扫描摘要、findings（发现与建议）；审核完成后 AI 必须完整展示回执，不能只给摘要或只报条数。报告没有 `checks` 字段，也不写人工/CI 背书。测试与证据维度只静态审查测试代码本身，不声称执行过测试。
 - **审核规模建议**：改动建议控制在 20 个文件/500 行以内；超过 50 个文件/1500 行应说明拆分理由，或建议拆成多次审核。`task_scan` 的 diff 摘要提供文件数与行数。
 - 多次审核 = 多次 `/new`，每次独立估算/计时/报告。
 - 普通 coding/debugging 等分类完全不受影响：不提示、不强制审核，也不能调用 `task_review` / `task_scan` / `task_check`（工具会拒绝并提示另开 `code_review` 任务）。

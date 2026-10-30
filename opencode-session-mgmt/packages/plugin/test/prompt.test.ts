@@ -702,6 +702,8 @@ describe("task 一般任务状态条与入口提示", () => {
     expect(text).toContain("不得执行 bash")
     expect(text).toContain("代码扫描：未运行")
     expect(text).toContain("代码审核报告：待提交")
+    expect(text).toContain("禁止只回复「审核完成」")
+    expect(text).toContain("六维逐项")
     s.taskScan = {
       status: "completed",
       scannedFiles: 2,

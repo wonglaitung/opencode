@@ -116,6 +116,7 @@ export function createTaskReviewTool(store: Store): Record<string, ToolDefinitio
       "提交一次独立代码审核任务的报告（仅 task 工作流的 code_review 分类）。" +
       "审核任务只读，不执行项目 build/test/lint 或任何命令；只读代码、测试代码，可先调用 task_scan 做 regex 扫描。" +
       "按六维给出静态审查结论；findings 每条写清 issue（发现）和 suggestion（建议怎么改），报告会按严重度逐条展示；结论可以是 approved 或 changes_requested。" +
+      "回执包含范围、结论、六维明细、扫描摘要和全部 findings；调用后必须把回执完整展示给开发者，不能只给摘要或只报条数。" +
       "报告提交后审核任务才能完成。" +
       "不涉及 sdlc/reqdoc，也不约束任何编码任务。",
     args: {
