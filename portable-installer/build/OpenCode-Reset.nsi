@@ -40,7 +40,7 @@ reset_has_data:
   StrCpy $running ""
   Call CheckProcess
   ${If} $running != ""
-    MessageBox MB_OK|MB_ICONEXCLAMATION "检测到智能研发助手仍在运行（$running）。$\r$\n请先完全退出所有窗口，再执行本工具。"
+    MessageBox MB_OK|MB_ICONEXCLAMATION "检测到数字程序员仍在运行（$running）。$\r$\n请先完全退出所有窗口，再执行本工具。"
     Quit
   ${EndIf}
 
@@ -66,7 +66,7 @@ reset_has_data:
   Quit
 
 reset_failed:
-  MessageBox MB_OK|MB_ICONSTOP "未能删除会话库：$\r$\n${SHARE}\opencode.db$\r$\n$\r$\n请关闭所有智能研发助手窗口后重试。"
+  MessageBox MB_OK|MB_ICONSTOP "未能删除会话库：$\r$\n${SHARE}\opencode.db$\r$\n$\r$\n请关闭所有数字程序员窗口后重试。"
   Quit
 
 reset_cancel:

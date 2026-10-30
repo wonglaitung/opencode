@@ -1,6 +1,6 @@
 ﻿# OpenCode 一键图形化安装包方案（含启动器）
 
-> 面向非技术业务人员：双击安装包 → 弹窗填一次信息 → 完成；之后每次双击「智能研发助手」快捷方式 → 选一下项目目录 → 直接进 opencode。全程无需命令行、无需管理员权限、不依赖 PowerShell。
+> 面向非技术业务人员：双击安装包 → 弹窗填一次信息 → 完成；之后每次双击「数字程序员」快捷方式 → 选一下项目目录 → 直接进 opencode。全程无需命令行、无需管理员权限、不依赖 PowerShell。
 >
 > **打包入口**：正式打包优先使用 `opencode-installer` 技能（`.opencode/skills/opencode-installer/SKILL.md`）。本文档第 6 节的 `build.bat` / `sync_payload.bat` 是技能内部调用的底层脚本，仅在技能不可用时手工兜底。
 
@@ -14,7 +14,7 @@
 
 | 项 | 取值 |
 |---|---|
-| 产品名称 | 智能研发助手（安装包显示名、快捷方式、终端标题；原称「数字员工」） |
+| 产品名称 | 数字程序员（安装包显示名、快捷方式、终端标题；原称「数字员工」） |
 | 安装包形态 | 主安装包 `OpenCode-Setup.exe`（NSIS，含卸载）+ 启动器 `OpenCode-launch.exe`（NSIS）+ 清空历史工具 `OpenCode-Reset.exe`（NSIS） |
 | 安装根目录 | `%USERPROFILE%\OpenCode`（用户目录、路径无空格、无需管理员） |
 | Node 工具链目录 | `%USERPROFILE%\OpenCode\runtime` |
@@ -100,14 +100,14 @@
       启动器每次启动时读取首行决定终端类型（`native` 或 `dedicated`）；用户可直接编辑此文件切换，无需重装。
 4. 当前用户 PATH（HKCU）追加两条：`%USERPROFILE%\OpenCode\runtime`、`%USERPROFILE%\OpenCode\python`。
 5. 部署 `OpenCode-launch.exe` 与 `OpenCode-Reset.exe` 到 `%USERPROFILE%\OpenCode\`。
-6. 桌面 + 开始菜单「智能研发助手」快捷方式 → `%USERPROFILE%\OpenCode\OpenCode-launch.exe`；开始菜单同一文件夹下另建「清空历史会话」→ `%USERPROFILE%\OpenCode\OpenCode-Reset.exe`。
+6. 桌面 + 开始菜单「数字程序员」快捷方式 → `%USERPROFILE%\OpenCode\OpenCode-launch.exe`；开始菜单同一文件夹下另建「清空历史会话」→ `%USERPROFILE%\OpenCode\OpenCode-Reset.exe`。
 7. 生成卸载程序（删目录、去 PATH、删配置、删两个开始菜单快捷方式）。
 
 ## 4.1 清空历史会话工具（`OpenCode-Reset.exe`）
 
 重装不会删除 `%USERPROFILE%\.local\share\opencode`，旧会话会一直留在 `/sessions`。这个工具提供独立入口，不依赖 PowerShell，也不改启动器。
 
-- 开始菜单「智能研发助手\清空历史会话」，确认框默认按钮为“否”。
+- 开始菜单「数字程序员\清空历史会话」，确认框默认按钮为“否”。
 - 检测到 `opencode.exe` 或 `opencode-sm.exe` 在运行就拒绝执行。
 - 删除 `opencode.db` 及 `-wal`/`-shm`/`-journal`、`snapshot\`、`tool-output\`、`repos\`、`prompt-history.jsonl`。
 - 保留 `.config\opencode`、`model.json`、`kv.json`、`models.json`、项目 `.opencode\session-mgmt.db`。
@@ -120,7 +120,7 @@
 - 目录选择框（`DirRequest` 控件，系统级 dialog）和「浏览」按钮；下方是工作流、终端类型和三个插件开关，底部按钮「打开 AI Assistant」。
 - 打开前读取当前配置回填：工作流取 `identity.json` 的 `workflowType`（缺省 `sdlc`），终端取 `terminal_mode.ini` 首行（缺省 `native`），插件状态取 `opencode.jsonc` 的 `plugin` 数组。
 - 点「打开 AI Assistant」时才写配置：工作流写回 `identity.json`，终端写回 `terminal_mode.ini`，插件只替换 `opencode.jsonc` 的 `plugin` 数组，其余字段原样保留。写前留 `.bak`，失败弹窗并取消启动。
-- 工作流和终端都是不可编辑下拉菜单。终端「原生」直接 `Exec opencode.cmd`，使用系统控制台；「专用」用 `Exec OpenConsole.exe cmd /c "title 智能研发助手 && opencode.cmd"`，使用打包的 Windows Terminal，退出即关。默认启动新会话；只有勾选「继续上次会话」且项目目录、工作流都与上次启动一致时，才追加 `-c` 续接上次对话。工作流变化时复选框自动置灰并新建会话，避免旧会话沿用旧工作流。
+- 工作流和终端都是不可编辑下拉菜单。终端「原生」直接 `Exec opencode.cmd`，使用系统控制台；「专用」用 `Exec OpenConsole.exe cmd /c "title 数字程序员 && opencode.cmd"`，使用打包的 Windows Terminal，退出即关。默认启动新会话；只有勾选「继续上次会话」且项目目录、工作流都与上次启动一致时，才追加 `-c` 续接上次对话。工作流变化时复选框自动置灰并新建会话，避免旧会话沿用旧工作流。
 - 关闭「会话管理」插件时工作流菜单置灰；插件开关是机器级设置，对所有项目生效。配置文件缺失或无法解析时，插件开关置灰并提示重装；`identity.json` 缺失时工作流不可选。
 - `SetOutPath` 设为所选目录 → **该目录即项目根 `ctx.directory`**，reqdoc 扫描/导出/技能全部基于此。
 - 所选目录须为业务已取得的 doc_process 项目（含 `.claude/skills`、`工作要求.txt`、`raw/`、`00~07` 骨架）；安装包不负责分发这些项目文件。
@@ -217,6 +217,6 @@ cmd /c portable-installer\build\build.bat
 | `portable-installer/payload/OpenCode/terminal` | Windows Terminal 载荷（`OpenConsole.exe`，所有用户均部署） |
 | `OpenCode-Setup.exe`（构建产物） | **唯一需要分发给业务的文件**：内置载荷 + 启动器 + 清空历史工具，双击即装 |
 
-> **交付与安装只需一个文件**：业务侧只分发并双击 `OpenCode-Setup.exe` 即可。`OpenCode-launch.exe` 与 `OpenCode-Reset.exe` 是构建中间产物，已被主安装包内嵌并释放到 `%USERPROFILE%\OpenCode\`，桌面/开始菜单的「智能研发助手」快捷方式指向启动器，开始菜单的「清空历史会话」指向重置工具，无需单独安装或分发。安装后双击「智能研发助手」快捷方式 → 选项目目录 → 进 opencode。
+> **交付与安装只需一个文件**：业务侧只分发并双击 `OpenCode-Setup.exe` 即可。`OpenCode-launch.exe` 与 `OpenCode-Reset.exe` 是构建中间产物，已被主安装包内嵌并释放到 `%USERPROFILE%\OpenCode\`，桌面/开始菜单的「数字程序员」快捷方式指向启动器，开始菜单的「清空历史会话」指向重置工具，无需单独安装或分发。安装后双击「数字程序员」快捷方式 → 选项目目录 → 进 opencode。
 >
 > 项目目录里的 `doc_process` 文件（`.claude/skills`、`工作要求.txt`、`raw/`、`00~07` 骨架）仍按方案②另行取得，安装包不负责分发。

@@ -120,7 +120,7 @@ foreach($n in @('opencode-ai','opencode-sm','npm','corepack','bun','@mermaid-js/
 
 ## 清空历史会话工具
 
-`OpenCode-Reset.nsi` 编译出 `OpenCode-Reset.exe`，安装到 `%USERPROFILE%\OpenCode`，开始菜单「智能研发助手\清空历史会话」指向它。目标机没有 PowerShell，这个工具只用 NSIS 原生命令和系统 `tasklist.exe`，不调用脚本解释器。
+`OpenCode-Reset.nsi` 编译出 `OpenCode-Reset.exe`，安装到 `%USERPROFILE%\OpenCode`，开始菜单「数字程序员\清空历史会话」指向它。目标机没有 PowerShell，这个工具只用 NSIS 原生命令和系统 `tasklist.exe`，不调用脚本解释器。
 
 行为：
 

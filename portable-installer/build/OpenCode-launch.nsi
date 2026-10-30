@@ -8,8 +8,8 @@ Unicode true                    ; 生成 Unicode 安装包, 正确显示中文
 !include "FileFunc.nsh"
 !include "WinMessages.nsh"
 
-Name "智能研发助手"
-Caption "智能研发助手"
+Name "数字程序员"
+Caption "数字程序员"
 BrandingText " "
 OutFile "OpenCode-launch.exe"
 Icon "icon.ico"
@@ -442,7 +442,7 @@ Function DoLaunch
   ; 在该目录启动 opencode (cwd 即项目根)
   SetOutPath "$DirPath"
   ${If} $TerminalMode == "dedicated"
-    Exec '"$PROFILE\OpenCode\terminal\OpenConsole.exe" cmd /c "title 智能研发助手 && $PROFILE\OpenCode\runtime\opencode.cmd$ResumeFlag"'
+    Exec '"$PROFILE\OpenCode\terminal\OpenConsole.exe" cmd /c "title 数字程序员 && $PROFILE\OpenCode\runtime\opencode.cmd$ResumeFlag"'
   ${Else}
     Exec '"$PROFILE\OpenCode\runtime\opencode.cmd"$ResumeFlag'
   ${EndIf}
@@ -472,7 +472,7 @@ Function LaunchPage
   CreateFont $BodyFont "$(^Font)" 10 400
   CreateFont $ButtonFont "$(^Font)" 11 700
 
-  ${NSD_CreateLabel} 30 18 400 30 "智能研发助手"
+  ${NSD_CreateLabel} 30 18 400 30 "数字程序员"
   Pop $0
   SendMessage $0 ${WM_SETFONT} $TitleFont 1
   SetCtlColors $0 0x111827 transparent

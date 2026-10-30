@@ -11,7 +11,7 @@ Unicode true                    ; 生成 Unicode 安装包, 正确显示中文
 ${Using:StrFunc} StrStr
 
 ;---------------- 基本信息 ----------------
-Name "智能研发助手"
+Name "数字程序员"
 OutFile "OpenCode-Setup.exe"
 InstallDir "$PROFILE\OpenCode"
 Icon "icon.ico"
@@ -92,10 +92,15 @@ Section "Install"
   File "icon.ico"
 
   ; 6. 快捷方式 (指向启动器, 由启动器弹目录选择)
-  CreateDirectory "$SMPROGRAMS\智能研发助手"
-  CreateShortCut "$SMPROGRAMS\智能研发助手\智能研发助手.lnk" "$PROFILE\OpenCode\OpenCode-launch.exe" "" "$PROFILE\OpenCode\icon.ico" 0 SW_SHOWNORMAL
-  CreateShortCut "$SMPROGRAMS\智能研发助手\清空历史会话.lnk" "$PROFILE\OpenCode\OpenCode-Reset.exe" "" "$PROFILE\OpenCode\icon.ico" 0 SW_SHOWNORMAL
-  CreateShortCut "$DESKTOP\智能研发助手.lnk" "$PROFILE\OpenCode\OpenCode-launch.exe" "" "$PROFILE\OpenCode\icon.ico" 0 SW_SHOWNORMAL
+  ; 兼容旧版名称：清理旧快捷方式，避免升级后同时出现两个名字。
+  Delete "$SMPROGRAMS\智能研发助手\智能研发助手.lnk"
+  Delete "$SMPROGRAMS\智能研发助手\清空历史会话.lnk"
+  RMDir "$SMPROGRAMS\智能研发助手"
+  Delete "$DESKTOP\智能研发助手.lnk"
+  CreateDirectory "$SMPROGRAMS\数字程序员"
+  CreateShortCut "$SMPROGRAMS\数字程序员\数字程序员.lnk" "$PROFILE\OpenCode\OpenCode-launch.exe" "" "$PROFILE\OpenCode\icon.ico" 0 SW_SHOWNORMAL
+  CreateShortCut "$SMPROGRAMS\数字程序员\清空历史会话.lnk" "$PROFILE\OpenCode\OpenCode-Reset.exe" "" "$PROFILE\OpenCode\icon.ico" 0 SW_SHOWNORMAL
+  CreateShortCut "$DESKTOP\数字程序员.lnk" "$PROFILE\OpenCode\OpenCode-launch.exe" "" "$PROFILE\OpenCode\icon.ico" 0 SW_SHOWNORMAL
   System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, i 0, i 0)'
 
   ; 7. 卸载程序
@@ -341,11 +346,15 @@ Section "Uninstall"
   Push "$PROFILE\OpenCode\python"
   Call un.RemoveFromPath
 
-  ; 删除快捷方式
+  ; 删除快捷方式（含旧版名称，便于历史安装卸载干净）
   Delete "$SMPROGRAMS\智能研发助手\智能研发助手.lnk"
   Delete "$SMPROGRAMS\智能研发助手\清空历史会话.lnk"
   RMDir "$SMPROGRAMS\智能研发助手"
   Delete "$DESKTOP\智能研发助手.lnk"
+  Delete "$SMPROGRAMS\数字程序员\数字程序员.lnk"
+  Delete "$SMPROGRAMS\数字程序员\清空历史会话.lnk"
+  RMDir "$SMPROGRAMS\数字程序员"
+  Delete "$DESKTOP\数字程序员.lnk"
 
   ; 删除安装目录与配置
   RMDir /r "$PROFILE\OpenCode"
