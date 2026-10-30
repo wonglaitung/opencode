@@ -16,7 +16,7 @@ describe("OpenCode-launch 工作流选项与提示", () => {
     expect(reqdoc).toBeGreaterThan(sdlc)
   })
 
-  test("三个工作流都有短提示、入口与帮助按钮", () => {
+  test("三个工作流都有短提示、入口与帮助链接", () => {
     for (const text of [
       "输入「启动一般任务」",
       "输入「启动 SDLC 工作流」",
@@ -26,6 +26,8 @@ describe("OpenCode-launch 工作流选项与提示", () => {
       expect(nsi).toContain(text)
     }
     expect(nsi).toContain("代码审核也选这里")
+    expect(nsi).toContain("输入「启动一般任务」后，再说明审核范围")
+    expect(nsi).not.toContain("直接说「帮我审核")
     expect(nsi.match(/预估 2 小时/g)?.length ?? 0).toBeGreaterThanOrEqual(3)
     expect(nsi).not.toContain("系统自动开始计时")
   })
@@ -38,11 +40,15 @@ describe("OpenCode-launch 工作流选项与提示", () => {
 
   test("工作流说明为卡片布局，帮助按当前工作流动态生成", () => {
     expect(nsi).toContain("NSD_CreateVLine} 492 356 1 94")
-    expect(nsi).toContain('NSD_CreateButton} 512 380 158 32 "查看使用说明"')
+    expect(nsi).toContain('NSD_CreateLink} 512 382 158 20 "查看使用说明 ›"')
     expect(nsi).toContain("Function SetHelpText")
     expect(nsi).toContain("Function ShowUsageHelp")
     expect(nsi).toContain("代码审核也选「一般任务」")
+    expect(nsi).toContain("输入「启动一般任务」后，说明审核范围，例如")
     expect(nsi).toContain("报告提交后才能完成审核任务")
+    expect(nsi).toContain("EnableWindow $hHelp 1")
+    expect(nsi).toContain("EnableWindow $hHelp 0")
+    expect(nsi).toContain("SetCtlColors $hHelp 0x9CA3AF")
   })
 
   test("切换工作流时强制重绘提示，避免旧说明残留", () => {
