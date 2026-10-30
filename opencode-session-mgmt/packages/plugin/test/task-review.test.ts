@@ -39,9 +39,12 @@ describe("task_review（code_review 子任务）", () => {
       await expect(
         advance.execute({ stage: "execute", action: "approve", developer_confirmed: true } as never, ctx),
       ).rejects.toThrow(/task_review|报告/)
-      await expect(
-        review.execute({ scope: ["src/auth.ts"], dimensions } as never, ctx),
-      ).resolves.toContain("代码审核报告已提交")
+      const result = await review.execute({ scope: ["src/auth.ts"], dimensions } as never, ctx)
+      expect(result).toContain("代码审核报告已提交")
+      expect(result).toContain("六维报告")
+      expect(result).toContain("正确性与边界：通过 — 覆盖了空值与重复提交")
+      const text = typeof result === "string" ? result : result.output
+      expect(text.indexOf("六维报告")).toBeLessThan(text.indexOf("审核发现与修复建议"))
       expect(store.get("s1")!.workflow!.taskReview?.verdict).toBe("approved")
       await expect(
         advance.execute({ stage: "execute", action: "approve", developer_confirmed: true } as never, ctx),
@@ -61,21 +64,21 @@ describe("task_review（code_review 子任务）", () => {
       await expect(
         review.execute({ scope: ["src/auth.ts"], dimensions: failed } as never, ctx),
       ).rejects.toThrow(/findings/)
-      await expect(
-        review.execute({
-          scope: ["src/auth.ts"],
-          dimensions: failed,
-          findings: [
-            {
-              severity: "major",
-              file: "src/auth.ts",
-              line: 42,
-              issue: "日志打印 token",
-              suggestion: "移除日志中的 token，或改为脱敏字段",
-            },
-          ],
-        } as never, ctx),
-      ).resolves.toContain("需修改")
+      const result = await review.execute({
+        scope: ["src/auth.ts"],
+        dimensions: failed,
+        findings: [
+          {
+            severity: "major",
+            file: "src/auth.ts",
+            line: 42,
+            issue: "日志打印 token",
+            suggestion: "移除日志中的 token，或改为脱敏字段",
+          },
+        ],
+      } as never, ctx)
+      expect(result).toContain("需修改")
+      expect(result).toContain("安全与隐私：未通过 — 日志打印了 token")
       expect(store.get("s1")!.workflow!.taskReview?.verdict).toBe("changes_requested")
     } finally {
       store.close()
@@ -133,7 +136,7 @@ describe("task_review（code_review 子任务）", () => {
           },
         ],
       } as never, ctx)
-      expect(result).toContain("扫描 1 条")
+      expect(result).toContain("扫描：1 条")
       expect(result).toContain("审核发现与修复建议")
       expect(result).toContain("发现：SEC-001 私钥文件不应提交")
       expect(result).toContain("建议：移除私钥并轮换密钥")
@@ -187,6 +190,7 @@ describe("task_review（code_review 子任务）", () => {
     try {
       const result = await review.execute({ scope: ["src/auth.ts"], dimensions } as never, ctx)
       expect(result).toContain("未发现需要修复的问题")
+      expect(result).toContain("可理解性：通过 — 命名与现有风格一致")
       expect(store.get("s1")!.workflow!.taskReview?.findings).toEqual([])
     } finally {
       store.close()

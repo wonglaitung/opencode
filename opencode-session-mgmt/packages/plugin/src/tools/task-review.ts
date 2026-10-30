@@ -50,6 +50,13 @@ const SEVERITY_LABEL: Record<TaskScanSeverity, string> = {
   info: "提示",
 }
 
+function formatDimensions(dimensions: TaskReviewReport["dimensions"]): string {
+  return TASK_REVIEW_DIMENSION_KEYS.map((key) => {
+    const item = dimensions[key]
+    return `- ${TASK_REVIEW_DIMENSION_LABELS[key]}：${item.status === "pass" ? "通过" : "未通过"} — ${item.notes}`
+  }).join("\n")
+}
+
 function formatFindings(findings: TaskReviewFinding[]): string {
   if (findings.length === 0) return "未发现需要修复的问题。"
   return [...findings]
@@ -171,12 +178,16 @@ export function createTaskReviewTool(store: Store): Record<string, ToolDefinitio
         (key) => args.dimensions[key].status === "pass",
       ).length
       const scanNote = scan
-        ? `；扫描 ${scan.status === "completed" ? `${scan.findingCount} 条（blocker ${scan.bySeverity.blocker} / critical ${scan.bySeverity.critical}）` : `跳过：${scan.skippedReason ?? "未知"}`}`
-        : ""
+        ? scan.status === "completed"
+          ? `扫描：${scan.findingCount} 条（blocker ${scan.bySeverity.blocker} / critical ${scan.bySeverity.critical}）`
+          : `扫描：跳过（${scan.skippedReason ?? "未知"}）`
+        : "扫描：未运行"
       return (
         `✅ 代码审核报告已提交：${
           verdict === "approved" ? "通过" : "发现问题，需修改"
-        }；维度 ${passDims}/6 通过${scanNote}；findings ${findings.length} 条。\n\n` +
+        }；维度 ${passDims}/6 通过。\n\n` +
+        `六维报告\n${formatDimensions(args.dimensions)}\n\n` +
+        `${scanNote}\n\n` +
         `审核发现与修复建议\n${formatFindings(findings)}\n\n审核任务现在可以完成。`
       )
     },
