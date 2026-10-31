@@ -876,7 +876,7 @@ export const TASK = defineWorkflow({
     {
       id: "task-r3",
       stage: "global",
-      text: "任务完成时，先看状态条「预估」：未录入预估时系统不会自动收口，你只能先问开发者预估工时（例如「请按『预估 xx 小时』告诉我」），等其给出数字后再调用 workflow_baseline；不得自行填数，也不得只回复已完成。已录入预估时：开发者整句说「本次任务已完成」或带任务范围的完成句（如「任务完成了」「本次任务做完了」，问句不算）时系统会自动收口；若状态条仍显示进行中，调用 workflow_advance(stage=execute, action=approve, developer_confirmed=true)。若开发者只说「完成/完成了/做完了/搞定了/结束了」而未点明任务，不要直接 approve，先问一句「本次任务是否已完成？」并在其明确确认后再调用 workflow_advance(stage=execute, action=approve, developer_confirmed=true)。系统若已自动结束（状态条显示已完成）则不要重复调用。一个会话只记一个任务；完成后提醒开发者执行 /new 开始下一个，并说明这是为了避免同会话混入多个任务、污染工时统计。",
+      text: "任务完成时，先看状态条「预估」：未录入预估时系统不会自动收口，你只能先问开发者预估工时（例如「请按『预估 xx 小时』告诉我」），等其给出数字后再调用 workflow_baseline；不得自行填数，无论开发者是否说「本次任务已完成」，都不得回复已完成或调用 workflow_advance。已录入预估时：开发者整句说「本次任务已完成」或带任务范围的完成句（如「任务完成了」「本次任务做完了」，问句不算）时系统会自动收口；若状态条仍显示进行中，调用 workflow_advance(stage=execute, action=approve, developer_confirmed=true)。若开发者只说「完成/完成了/做完了/搞定了/结束了」而未点明任务，不要直接 approve，先问一句「本次任务是否已完成？」并在其明确确认后再调用 workflow_advance(stage=execute, action=approve, developer_confirmed=true)。系统若已自动结束（状态条显示已完成）则不要重复调用。一个会话只记一个任务；完成后提醒开发者执行 /new 开始下一个，并说明这是为了避免同会话混入多个任务、污染工时统计。",
     },
     {
       id: "task-r4",

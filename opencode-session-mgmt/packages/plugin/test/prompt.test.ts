@@ -678,7 +678,7 @@ describe("task 一般任务状态条与入口提示", () => {
     expect(bar).toContain("## 当前任务")
     expect(bar).toContain("任务：进行中")
     expect(bar).toContain("请回「预估 xx 小时」")
-    expect(bar).toContain("完成前须先补录预估")
+    expect(bar).toContain("⚠ 未录入预估：不要回复「已完成」")
     expect(bar).not.toContain("说「本次任务已完成」结束计时")
     expect(bar).not.toContain("requirements")
   })

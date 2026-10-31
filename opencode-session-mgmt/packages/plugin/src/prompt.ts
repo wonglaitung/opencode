@@ -271,7 +271,9 @@ function buildTaskStateBar(workflow: WorkflowState): string {
   const lines = [
     "## 当前任务",
     `任务：进行中 ｜ 预估：${baseline} ｜ 已用时：${fmtDurationShort(duration)}`,
-    workflow.baseline ? `说「本次任务已完成」结束计时` : `完成前须先补录预估：${ESTIMATE_PROMPT_SHORT}`,
+    workflow.baseline
+      ? `说「本次任务已完成」结束计时；若仍显示进行中，调用 workflow_advance(stage=execute, action=approve, developer_confirmed=true)`
+      : `⚠ 未录入预估：不要回复「已完成」，也不要调用 workflow_advance；先请开发者回「预估 xx 小时」。`,
   ]
   if (workflow.task?.category === "code_review") {
     const scan = workflow.taskScan
