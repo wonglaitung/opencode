@@ -2,7 +2,7 @@
   "variant": "new",
   "model": "qwen3",
   "dry": false,
-  "runAt": "2026-10-31T11:26:43.376Z",
+  "runAt": "2026-10-31T17:25:09.591Z",
   "results": [
     {
       "name": "s1 进需求问基线",
@@ -278,7 +278,7 @@
       "name": "r54 进 goal 问工时并给格式示范",
       "workflowType": "reqdoc",
       "pass": true,
-      "optionQuality": "选项质量（观察项，不计通过率）：问 4 个｜选项数 3~4 的 4｜带兜底出口的 0｜有机械重复的 0",
+      "optionQuality": "选项质量（观察项，不计通过率）：问 2 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
       "defaultLoad": "限流未触发（连续默认 0 轮，本轮不该生效）：仍带默认推荐（命中 默认推荐）",
       "termHygiene": "术语白话（观察项，不计通过率）：0 处命中",
       "passCount": 1,
@@ -425,6 +425,9 @@
       "name": "r18 材料齐全 → 组装成稿并评真实产物质量（高分）",
       "workflowType": "reqdoc",
       "pass": false,
+      "optionQuality": "选项质量：未解析出问句（该场景本就少提问，或模型只调工具不说话）",
+      "defaultLoad": "限流未触发（连续默认 0 轮，本轮不该生效）：未带默认推荐",
+      "termHygiene": "术语白话（观察项，不计通过率）：0 处命中",
       "passCount": 0,
       "runCount": 1,
       "detail": "通过 0/1;末次:✗ 渲染命中 2 标记;总分 75(需≥60);未达标:flowClosure 5<10、compliance 6<10 [businessValue:12/12 flowClosure:5/20 edgeControl:22/22 compliance:6/16 authority:8/8 material:8/8 nfr:7/7 acceptability:7/7]",
@@ -666,7 +669,7 @@
       "name": "t1 开场提示预估与完成",
       "workflowType": "task",
       "pass": true,
-      "optionQuality": "选项质量：未解析出问句（该场景本就少提问，或模型只调工具不说话）",
+      "optionQuality": "选项质量（观察项，不计通过率）：问 1 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
       "defaultLoad": "限流未触发（连续默认 0 轮，本轮不该生效）：未带默认推荐",
       "termHygiene": "术语白话（观察项，不计通过率）：0 处命中",
       "passCount": 1,
@@ -718,9 +721,9 @@
       "name": "t6 分类为编写文档",
       "workflowType": "task",
       "pass": true,
-      "optionQuality": "选项质量：未解析出问句（该场景本就少提问，或模型只调工具不说话）",
+      "optionQuality": "选项质量（观察项，不计通过率）：问 5 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
       "defaultLoad": "限流未触发（连续默认 0 轮，本轮不该生效）：未带默认推荐",
-      "termHygiene": "术语白话（观察项，不计通过率）：命中 2 处（高并发×1、微服务×1）",
+      "termHygiene": "术语白话（观察项，不计通过率）：命中 1 处（API×1）",
       "passCount": 1,
       "runCount": 1,
       "detail": "✓ task_classify {\"category\":\"documentation\"}"
@@ -729,6 +732,9 @@
       "name": "t7 分类为排查错误",
       "workflowType": "task",
       "pass": true,
+      "optionQuality": "选项质量：未解析出问句（该场景本就少提问，或模型只调工具不说话）",
+      "defaultLoad": "限流未触发（连续默认 0 轮，本轮不该生效）：未带默认推荐",
+      "termHygiene": "术语白话（观察项，不计通过率）：0 处命中",
       "passCount": 1,
       "runCount": 1,
       "detail": "✓ task_classify {\"category\":\"debugging\"}"
@@ -737,7 +743,7 @@
       "name": "t8 无法判断用 other",
       "workflowType": "task",
       "pass": true,
-      "optionQuality": "选项质量：未解析出问句（该场景本就少提问，或模型只调工具不说话）",
+      "optionQuality": "选项质量（观察项，不计通过率）：问 1 个｜选项数 3~4 的 0｜带兜底出口的 0｜有机械重复的 0",
       "defaultLoad": "限流未触发（连续默认 0 轮，本轮不该生效）：未带默认推荐",
       "termHygiene": "术语白话（观察项，不计通过率）：0 处命中",
       "passCount": 1,
@@ -747,13 +753,13 @@
     {
       "name": "t9 未预估完成先补预估",
       "workflowType": "task",
-      "pass": false,
+      "pass": true,
       "optionQuality": "选项质量：未解析出问句（该场景本就少提问，或模型只调工具不说话）",
       "defaultLoad": "限流未触发（连续默认 0 轮，本轮不该生效）：未带默认推荐",
       "termHygiene": "术语白话（观察项，不计通过率）：0 处命中",
-      "passCount": 0,
+      "passCount": 1,
       "runCount": 1,
-      "detail": "通过 0/1;末次:回复未包含「预估」;全文:好的，本次任务已完成。\n\n\n好的，本次任务已完成。\n\n\n好的，本次任务已完成。\n\n\n好的，本次任务已完成。\n\n"
+      "detail": "✓ 回复包含「预估」"
     },
     {
       "name": "t10 首轮启动工作流",
@@ -788,9 +794,9 @@
   ],
   "summary": {
     "overall": {
-      "pass": 57,
+      "pass": 58,
       "total": 70,
-      "rate": 81
+      "rate": 83
     },
     "sdlc": {
       "pass": 23,
