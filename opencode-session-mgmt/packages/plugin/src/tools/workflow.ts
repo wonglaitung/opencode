@@ -284,15 +284,20 @@ export function createWorkflowTools(store: Store): Record<string, ToolDefinition
       if (!def.hasCommitGate) {
         return `本工作流类型（${def.type}）无 git 提交门禁，无需检查。`
       }
+      const locks = store.listLocks(context.sessionID)
+      const lockNote =
+        locks.length > 0
+          ? `\n⚠ 仍有 ${locks.length} 个文件被人工锁定（${locks.join("、")}）。请询问开发者是否已完成手工修改；明确确认后逐个调用 unlock_file 解锁。`
+          : ""
       if (saved.commit.status === "allowed") {
-        return `✓ 全部 ${def.stages.length} 个阶段已 approved，允许提交。`
+        return `✓ 全部 ${def.stages.length} 个阶段已 approved，允许提交。${lockNote}`
       }
       const pending = saved.commit.blocked_by.map((s) => def.labels[s] ?? s).join("、")
       const forceNote =
         saved.commit.force && !saved.commit.force.used
           ? `\n⚠ 已有一次性强制提交授权（原因：${saved.commit.force.reason}），下次 git commit 将放行。`
           : ""
-      return `✗ 尚不可提交，未完成阶段：${pending}${forceNote}`
+      return `✗ 尚不可提交，未完成阶段：${pending}${forceNote}${lockNote}`
     },
   })
 

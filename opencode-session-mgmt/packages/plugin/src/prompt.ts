@@ -98,7 +98,9 @@ export function buildSystemFragment(
     }
     parts.push("# Workflow 已完成", "")
     if (def.hasCommitGate) {
-      parts.push("如需提交代码：先调用 commit_gate_check 确认门禁，放行后 git commit。")
+      parts.push(
+        "如需提交代码：先调用 commit_gate_check 确认门禁；门禁已 allowed 或本轮不提交时不要重复调用，直接回复开发者。",
+      )
       // 完成态解锁提示（合并决策）：仅 sdlc（hasCommitGate）注入——reqdoc 无代码编辑不提示。
       if (lockedFiles.length > 0) {
         parts.push(
