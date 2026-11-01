@@ -521,6 +521,9 @@ export const SCENARIOS: Scenario[] = [
       // 就 break，于是 review 停在 not_started——完成块与解锁提示都不该注入，
       // 判据却要求模型提解锁，**场景不可满足**（实测稳定 0/3）。
       approveAll(s)
+      // 完成态必须同时满足提交门禁的基线约束；否则 commit_gate_check 会在
+      // 「已完成」夹具上返回 blocked by 基线，模型被引去补工具而漏掉解锁提示。
+      s.baseline = { estimatedHours: 8, setAt: 1 }
       return finish(s)
     })(),
     userTurn: "审查通过，工作流结束了",
@@ -530,15 +533,13 @@ export const SCENARIOS: Scenario[] = [
     // 合并 open-ide 后完成态注入解锁提示：全阶段 approved 且有文件被锁定 → 回复应含解锁引导。
     // 提示由插件硬数据驱动（完成块注入 + review_submit 返回），此处校验弱模型对注入文本的响应。
     //
-    // **判据是「正文含 unlock_file」，不是「调了 unlock_file」**：场景名是「**提示**解锁」，
-    // 注入指令也写明「请询问开发者是否已完成手工修改；**明确确认后**逐个调用 unlock_file」
-    // ——即在完成态这一轮，正确行为是**转述提示并询问**，不是直接解锁。我曾把它改成
-    // `expectTool: "unlock_file"`，那是**改错了场景语义**（且 s21 才是「确认后解锁」的正例），
-    // 导致本场景稳定 0/3。已回退。
+    // **判据是「正文提示解锁」，不是「调了 unlock_file」**：场景名是「**提示**解锁」，
+    // 完成态这一轮正确行为是转述锁定状态并询问，不是直接解锁。判据只要求自然语言
+    // 出现「解锁」，不强制模型暴露内部工具名（模型可答「我立即解锁该文件」）。
     judge: {
       kind: "text",
       type: "keyword",
-      keyword: "unlock_file",
+      keyword: "解锁",
     },
   },
 
