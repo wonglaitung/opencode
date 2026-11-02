@@ -36,7 +36,9 @@ function parseConvention(text: string): ConventionFile {
 
 /** 基线候选路径（相对 import.meta.dir，覆盖源码与打包两种形态）。 */
 function baselineCandidates(type: string): string[] {
-  const here = import.meta.dir
+  // Bun 提供 import.meta.dir；Node/tsx 下回退到 import.meta.dirname。
+  const meta = import.meta as ImportMeta & { dir?: string; dirname?: string }
+  const here = meta.dir ?? meta.dirname ?? process.cwd()
   return [join(here, "../conventions", type), join(here, "conventions", type)]
 }
 

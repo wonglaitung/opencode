@@ -1,0 +1,28 @@
+description: "Workflow evaluation PoC (single-turn subset)"
+prompts:
+  - "{{scenario}}"
+providers:
+  - id: file://./provider.ts
+    label: local-qwen3-via-eval-rules
+defaultTest:
+  assert:
+    - type: javascript
+      value: |
+        const result = JSON.parse(output);
+        return {
+          pass: result.judge.pass,
+          score: result.judge.pass ? 1 : 0,
+          reason: result.judge.detail,
+        };
+tests:
+  - vars: { scenario: "t1 开场提示预估与完成" }
+  - vars: { scenario: "t2 预估 2 小时录基线" }
+  - vars: { scenario: "t4 完成时 approve" }
+  - vars: { scenario: "t5 完成后提示 /new" }
+  - vars: { scenario: "t6 分类为编写文档" }
+  - vars: { scenario: "t7 分类为排查错误" }
+  - vars: { scenario: "t8 无法判断用 other" }
+  - vars: { scenario: "t9 未预估完成先补预估" }
+  - vars: { scenario: "t10 首轮启动工作流" }
+  - vars: { scenario: "t11 入口短语不归类" }
+  - vars: { scenario: "t12 代码审核请求归类" }
