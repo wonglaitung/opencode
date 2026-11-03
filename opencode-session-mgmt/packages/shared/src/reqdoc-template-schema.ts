@@ -426,9 +426,7 @@ const TEMPLATE_FILENAME = "reqdoc-prd-template.md"
  * 这是把加载器搬进 shared 的前提（否则 11 个消费点要加参数传模板文本）。
  */
 function templateCandidates(): string[] {
-  // Bun 提供 import.meta.dir；Node/tsx 下回退到 import.meta.dirname。
-  const meta = import.meta as ImportMeta & { dir?: string; dirname?: string }
-  const here = meta.dir ?? meta.dirname ?? process.cwd()
+  const here = import.meta.dir
   return [
     join(here, "../../../docs", TEMPLATE_FILENAME),
     join(here, "../../docs", TEMPLATE_FILENAME),
