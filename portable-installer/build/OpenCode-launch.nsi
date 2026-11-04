@@ -629,21 +629,6 @@ Function LaunchPage
   ${EndIf}
   ShowWindow $hWorkflow ${SW_HIDE}
 
-  ; 侧栏插件开关
-  ${NSD_CreateLabel} 24 294 212 18 "插件"
-  Pop $0
-  SendMessage $0 ${WM_SETFONT} $SectionFont 1
-  SetCtlColors $0 0x64748B 0x0F172A
-  ${NSD_CreateCheckBox} 24 322 180 18 "会话管理"
-  Pop $hSm
-  SetCtlColors $hSm 0xE2E8F0 0x0F172A
-  ${If} $PluginSm == "1"
-    ${NSD_Check} $hSm
-  ${Else}
-    ${NSD_Uncheck} $hSm
-  ${EndIf}
-  ${NSD_OnClick} $hSm OnSmToggle
-
   ${NSD_CreateLabel} 24 616 212 18 "本地设置 · 工作流与插件"
   Pop $0
   SendMessage $0 ${WM_SETFONT} $SubFont 1
@@ -714,14 +699,22 @@ Function LaunchPage
     ${NSD_CB_SetSelectionIndex} $hTerminal 0
   ${EndIf}
 
-  ${NSD_CreateCheckBox} 570 466 110 18 "Edge 调试"
+  ${NSD_CreateCheckBox} 560 466 100 18 "会话管理"
+  Pop $hSm
+  ${If} $PluginSm == "1"
+    ${NSD_Check} $hSm
+  ${Else}
+    ${NSD_Uncheck} $hSm
+  ${EndIf}
+  ${NSD_OnClick} $hSm OnSmToggle
+  ${NSD_CreateCheckBox} 670 466 110 18 "Edge 调试"
   Pop $hEdge
   ${If} $PluginEdge == "1"
     ${NSD_Check} $hEdge
   ${Else}
     ${NSD_Uncheck} $hEdge
   ${EndIf}
-  ${NSD_CreateCheckBox} 690 466 130 18 "服务器调试"
+  ${NSD_CreateCheckBox} 790 466 130 18 "服务器调试"
   Pop $hServer
   ${If} $PluginServer == "1"
     ${NSD_Check} $hServer
