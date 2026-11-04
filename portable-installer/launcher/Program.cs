@@ -52,10 +52,10 @@ internal sealed class LauncherForm : Form
     {
         Text = "数字程序员";
         StartPosition = FormStartPosition.CenterScreen;
-        FormBorderStyle = FormBorderStyle.FixedSingle;
-        MaximizeBox = false;
+        FormBorderStyle = FormBorderStyle.Sizable;
+        MaximizeBox = true;
         ClientSize = new Size(1180, 760);
-        MinimumSize = new Size(1180, 760);
+        MinimumSize = new Size(900, 600);
         BackColor = Color.FromArgb(248, 250, 252);
         ApplyWindowIcon();
         Controls.Add(web);
@@ -291,12 +291,31 @@ internal sealed class LauncherForm : Form
                 };
                 Process.Start(psi);
             }
+            SaveLast(state, dir, workflow, plugins.Contains("sm"));
             BeginInvoke(new Action(Close));
             return new { ok = true };
         }
         catch (Exception ex)
         {
             return new { ok = false, error = ex.Message };
+        }
+    }
+
+    private static void SaveLast(ConfigState state, string dir, string workflow, bool sm)
+    {
+        try
+        {
+            var configDir = Path.Combine(Home, ".config", "opencode");
+            Directory.CreateDirectory(configDir);
+            File.WriteAllText(Path.Combine(configDir, "last_project.txt"), dir);
+            if (state.ConfigOk && state.IdentityOk && sm)
+                File.WriteAllText(Path.Combine(configDir, "last_workflow.txt"), workflow);
+            else
+                File.Delete(Path.Combine(configDir, "last_workflow.txt"));
+        }
+        catch
+        {
+            // 最近项目写入失败不应阻止启动。
         }
     }
 
