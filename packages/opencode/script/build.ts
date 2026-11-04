@@ -17,6 +17,7 @@ import { Script } from "@opencode-ai/script"
 import pkg from "../package.json"
 
 const singleFlag = process.argv.includes("--single")
+const targetFlag = process.argv.find((arg) => arg.startsWith("--target="))?.slice("--target=".length)
 const baselineFlag = process.argv.includes("--baseline")
 const skipInstall = process.argv.includes("--skip-install")
 const sourcemapsFlag = process.argv.includes("--sourcemaps")
@@ -115,7 +116,12 @@ const allTargets: {
   },
 ]
 
-const targets = singleFlag
+const targets = targetFlag
+  ? allTargets.filter((item) => {
+      const name = `${item.os}-${item.arch}${item.avx2 === false ? "-baseline" : ""}${item.abi ? `-${item.abi}` : ""}`
+      return name === targetFlag
+    })
+  : singleFlag
   ? allTargets.filter((item) => {
       if (item.os !== process.platform || item.arch !== process.arch) {
         return false
