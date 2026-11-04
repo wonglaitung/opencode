@@ -39,8 +39,10 @@ describe("OpenCode-launch 工作流选项与提示", () => {
   })
 
   test("工作流说明为卡片布局，帮助按当前工作流动态生成", () => {
-    expect(nsi).toContain("NSD_CreateVLine} 492 356 1 94")
-    expect(nsi).toContain('NSD_CreateLink} 512 382 158 20 "查看使用说明 ›"')
+    expect(nsi).toContain('NSD_CreateGroupBox} 320 292 660 160 "工作流说明"')
+    expect(nsi).toContain('NSD_CreateLink} 770 316 190 20 "查看使用说明 ›"')
+    expect(nsi).toContain("Function SyncWorkflowLabels")
+    expect(nsi).toContain("Function SelectTaskWorkflow")
     expect(nsi).toContain("Function SetHelpText")
     expect(nsi).toContain("Function ShowUsageHelp")
     expect(nsi).toContain("代码审核也选「一般任务」")
@@ -56,12 +58,13 @@ describe("OpenCode-launch 工作流选项与提示", () => {
   })
 
   test("使用大窗口布局与自定义底部按钮", () => {
-    expect(nsi).toContain("SetWindowPos(i $HWNDPARENT, i 0, i 0, i 0, i 760, i 660")
-    expect(nsi).toContain("SetWindowPos(i $Dialog, i 0, i 0, i 0, i 720, i 580")
+    expect(nsi).toContain("SetWindowPos(i $HWNDPARENT, i 0, i 0, i 0, i 1120, i 720")
+    expect(nsi).toContain("SetWindowPos(i $Dialog, i 0, i 0, i 0, i 1080, i 680")
     expect(nsi).toContain("Function DoCancel")
-    expect(nsi).toContain('${NSD_CreateButton} 552 516 138 46 "取消"')
-    expect(nsi).toContain('${NSD_CreateDirRequest} 30 120 528 28')
-    expect(nsi).toContain('${NSD_CreateButton} 570 120 120 28 "浏览…"')
+    expect(nsi).toContain('${NSD_CreateLabel} 980 236 80 28 "取消"')
+    expect(nsi).toContain('${NSD_CreateLabel} 320 228 650 44 "打开 AI Assistant"')
+    expect(nsi).toContain('${NSD_CreateDirRequest} 320 180 560 28')
+    expect(nsi).toContain('${NSD_CreateButton} 890 180 100 28 "浏览…"')
     expect(nsi).toContain('--prompt=启动一般任务')
     expect(nsi).toContain('--prompt=启动SDLC工作流')
     expect(nsi).toContain('--prompt=启动REQDOC工作流')

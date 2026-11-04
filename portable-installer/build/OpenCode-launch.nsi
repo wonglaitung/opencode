@@ -30,6 +30,9 @@ Var ConfigOk
 Var IdentityOk
 Var Plugins
 Var hWorkflow
+Var hWfTask
+Var hWfSdlc
+Var hWfReqdoc
 Var hTerminal
 Var hSm
 Var hEdge
@@ -225,6 +228,7 @@ Function RefreshWorkflowHint
     ; 透明 STATIC 控件换文本时不会擦掉旧字形，强制重绘页面避免新旧说明叠在一起。
     System::Call 'user32::RedrawWindow(i $Dialog, i 0, i 0, i 0x185)'
   ${EndIf}
+  Call SyncWorkflowLabels
 FunctionEnd
 
 ; 判断当前选择是否可以安全续接上次会话：必须同项目、同工作流且会话管理已启用。
@@ -320,6 +324,7 @@ Function OnSmToggle
   ${Else}
     EnableWindow $hWorkflow 0
   ${EndIf}
+  Call UpdateWorkflowEnabled
   ${If} $hHelp != ""
     ${If} $PluginSm == "1"
       SetCtlColors $hHelp 000080 transparent
@@ -502,6 +507,58 @@ Function DoCancel
   SendMessage $HWNDPARENT ${WM_CLOSE} 0 0
 FunctionEnd
 
+Function SyncWorkflowLabels
+  ${If} $hWfTask == ""
+    Return
+  ${EndIf}
+  ${If} $WorkflowType == "task"
+    SetCtlColors $hWfTask 0xFFFFFF 0x2563EB
+  ${Else}
+    SetCtlColors $hWfTask 0xCBD5E1 0x0F172A
+  ${EndIf}
+  ${If} $WorkflowType == "sdlc"
+    SetCtlColors $hWfSdlc 0xFFFFFF 0x2563EB
+  ${Else}
+    SetCtlColors $hWfSdlc 0xCBD5E1 0x0F172A
+  ${EndIf}
+  ${If} $WorkflowType == "reqdoc"
+    SetCtlColors $hWfReqdoc 0xFFFFFF 0x2563EB
+  ${Else}
+    SetCtlColors $hWfReqdoc 0xCBD5E1 0x0F172A
+  ${EndIf}
+FunctionEnd
+
+Function UpdateWorkflowEnabled
+  ${If} $hWfTask == ""
+    Return
+  ${EndIf}
+  ${If} $PluginSm == "1"
+  ${AndIf} $IdentityOk == "1"
+    EnableWindow $hWfTask 1
+    EnableWindow $hWfSdlc 1
+    EnableWindow $hWfReqdoc 1
+  ${Else}
+    EnableWindow $hWfTask 0
+    EnableWindow $hWfSdlc 0
+    EnableWindow $hWfReqdoc 0
+  ${EndIf}
+FunctionEnd
+
+Function SelectTaskWorkflow
+  ${NSD_CB_SetSelectionIndex} $hWorkflow 0
+  Call OnWorkflowChange
+FunctionEnd
+
+Function SelectSdlcWorkflow
+  ${NSD_CB_SetSelectionIndex} $hWorkflow 1
+  Call OnWorkflowChange
+FunctionEnd
+
+Function SelectReqdocWorkflow
+  ${NSD_CB_SetSelectionIndex} $hWorkflow 2
+  Call OnWorkflowChange
+FunctionEnd
+
 Function LaunchPage
   nsDialogs::Create 1018
   Pop $Dialog
@@ -509,9 +566,10 @@ Function LaunchPage
     Abort
   ${EndIf}
 
-  ; 内容页 720x580；窗口 760x660（含标题栏与隐藏的向导按钮区）
-  System::Call 'user32::SetWindowPos(i $HWNDPARENT, i 0, i 0, i 0, i 760, i 660, i 0x0006)'
-  System::Call 'user32::SetWindowPos(i $Dialog, i 0, i 0, i 0, i 720, i 580, i 0x0004)'
+  ; 参考 GUI.png：深色侧栏 + 浅色主区 + 大输入卡片。
+  ; 内容页 1080x680；窗口 1120x720（含标题栏与隐藏的向导按钮区）
+  System::Call 'user32::SetWindowPos(i $HWNDPARENT, i 0, i 0, i 0, i 1120, i 720, i 0x0006)'
+  System::Call 'user32::SetWindowPos(i $Dialog, i 0, i 0, i 0, i 1080, i 680, i 0x0004)'
 
   CreateFont $TitleFont "$(^Font)" 20 700
   CreateFont $SubFont "$(^Font)" 10 400
@@ -520,35 +578,44 @@ Function LaunchPage
   CreateFont $BodyFont "$(^Font)" 10 400
   CreateFont $ButtonFont "$(^Font)" 11 700
 
-  ${NSD_CreateLabel} 30 18 400 30 "数字程序员"
+  ; 侧栏与主区底色
+  ${NSD_CreateLabel} 0 0 260 680 " "
+  Pop $0
+  SetCtlColors $0 0x0F172A 0x0F172A
+  ${NSD_CreateLabel} 260 0 820 680 " "
+  Pop $0
+  SetCtlColors $0 0xF8FAFC 0xF8FAFC
+
+  ; 品牌区
+  ${NSD_CreateLabel} 24 24 212 28 "数字程序员"
   Pop $0
   SendMessage $0 ${WM_SETFONT} $TitleFont 1
-  SetCtlColors $0 0x111827 transparent
-
-  ${NSD_CreateLabel} 30 50 540 18 "选择项目目录与工作流，然后打开 AI Assistant"
+  SetCtlColors $0 0xFFFFFF 0x0F172A
+  ${NSD_CreateLabel} 24 58 212 18 "AI Assistant"
   Pop $0
   SendMessage $0 ${WM_SETFONT} $SubFont 1
-  SetCtlColors $0 0x6B7280 transparent
+  SetCtlColors $0 0x94A3B8 0x0F172A
 
-  ${NSD_CreateHLine} 30 80 660 2 ""
-  Pop $0
-
-  ${NSD_CreateLabel} 30 100 200 18 "项目目录"
+  ${NSD_CreateLabel} 24 104 212 18 "工作流"
   Pop $0
   SendMessage $0 ${WM_SETFONT} $SectionFont 1
-  SetCtlColors $0 0x374151 transparent
+  SetCtlColors $0 0x64748B 0x0F172A
 
-  ${NSD_CreateDirRequest} 30 120 528 28 "$LastDir"
-  Pop $hDir
-  ${NSD_CreateButton} 570 120 120 28 "浏览…"
-  Pop $0
-  ${NSD_OnClick} $0 DirBrowse
+  ${NSD_CreateLabel} 20 130 220 38 "  一般任务"
+  Pop $hWfTask
+  SendMessage $hWfTask ${WM_SETFONT} $SectionFont 1
+  ${NSD_OnClick} $hWfTask SelectTaskWorkflow
+  ${NSD_CreateLabel} 20 174 220 38 "  SDLC 开发流程"
+  Pop $hWfSdlc
+  SendMessage $hWfSdlc ${WM_SETFONT} $SectionFont 1
+  ${NSD_OnClick} $hWfSdlc SelectSdlcWorkflow
+  ${NSD_CreateLabel} 20 218 220 38 "  REQDOC 需求书"
+  Pop $hWfReqdoc
+  SendMessage $hWfReqdoc ${WM_SETFONT} $SectionFont 1
+  ${NSD_OnClick} $hWfReqdoc SelectReqdocWorkflow
 
-  ${NSD_CreateLabel} 30 176 200 18 "工作流"
-  Pop $0
-  SendMessage $0 ${WM_SETFONT} $SectionFont 1
-  SetCtlColors $0 0x374151 transparent
-  ${NSD_CreateDropList} 30 196 360 160 ""
+  ; 隐藏的原生下拉框：保留既有配置/续接判断逻辑，不参与视觉。
+  ${NSD_CreateDropList} -100 -100 1 1 ""
   Pop $hWorkflow
   ${NSD_CB_AddString} $hWorkflow "一般任务"
   ${NSD_CB_AddString} $hWorkflow "SDLC 开发流程"
@@ -560,13 +627,84 @@ Function LaunchPage
   ${Else}
     ${NSD_CB_SetSelectionIndex} $hWorkflow 1
   ${EndIf}
-  ${NSD_OnChange} $hWorkflow OnWorkflowChange
+  ShowWindow $hWorkflow ${SW_HIDE}
 
-  ${NSD_CreateLabel} 420 176 200 18 "终端类型"
+  ; 侧栏插件开关
+  ${NSD_CreateLabel} 24 294 212 18 "插件"
   Pop $0
   SendMessage $0 ${WM_SETFONT} $SectionFont 1
-  SetCtlColors $0 0x374151 transparent
-  ${NSD_CreateDropList} 420 196 270 160 ""
+  SetCtlColors $0 0x64748B 0x0F172A
+  ${NSD_CreateCheckBox} 24 322 180 18 "会话管理"
+  Pop $hSm
+  SetCtlColors $hSm 0xE2E8F0 0x0F172A
+  ${If} $PluginSm == "1"
+    ${NSD_Check} $hSm
+  ${Else}
+    ${NSD_Uncheck} $hSm
+  ${EndIf}
+  ${NSD_OnClick} $hSm OnSmToggle
+
+  ${NSD_CreateLabel} 24 616 212 18 "本地设置 · 工作流与插件"
+  Pop $0
+  SendMessage $0 ${WM_SETFONT} $SubFont 1
+  SetCtlColors $0 0x64748B 0x0F172A
+
+  ; 主区标题与输入卡片
+  ${NSD_CreateLabel} 320 76 600 30 "需要帮你做什么？"
+  Pop $0
+  SendMessage $0 ${WM_SETFONT} $TitleFont 1
+  SetCtlColors $0 0x0F172A 0xF8FAFC
+  ${NSD_CreateLabel} 320 112 620 18 "选择项目目录与工作流，然后打开 AI Assistant"
+  Pop $0
+  SendMessage $0 ${WM_SETFONT} $SubFont 1
+  SetCtlColors $0 0x64748B 0xF8FAFC
+
+  ${NSD_CreateLabel} 320 156 200 18 "项目目录"
+  Pop $0
+  SendMessage $0 ${WM_SETFONT} $SectionFont 1
+  SetCtlColors $0 0x334155 0xF8FAFC
+  ${NSD_CreateDirRequest} 320 180 560 28 "$LastDir"
+  Pop $hDir
+  ${NSD_CreateButton} 890 180 100 28 "浏览…"
+  Pop $0
+  ${NSD_OnClick} $0 DirBrowse
+
+  ${NSD_CreateLabel} 320 228 650 44 "打开 AI Assistant"
+  Pop $2
+  SendMessage $2 ${WM_SETFONT} $ButtonFont 1
+  SetCtlColors $2 0xFFFFFF 0x2563EB
+  System::Call 'user32::SetWindowLong(i $2, i -16, i 0x50000101)'
+  ${NSD_OnClick} $2 DoLaunch
+  ${NSD_CreateLabel} 980 236 80 28 "取消"
+  Pop $3
+  SendMessage $3 ${WM_SETFONT} $SubFont 1
+  SetCtlColors $3 0x64748B 0xF8FAFC
+  ${NSD_OnClick} $3 DoCancel
+
+  ; 工作流说明卡片
+  ${NSD_CreateGroupBox} 320 292 660 160 "工作流说明"
+  Pop $0
+  SendMessage $0 ${WM_SETFONT} $HintTitleFont 1
+  ${NSD_CreateLabel} 340 316 410 96 "$HintText"
+  Pop $hHint
+  SendMessage $hHint ${WM_SETFONT} $BodyFont 1
+  SetCtlColors $hHint 0x334155 0xFFFFFF
+  ${NSD_CreateLink} 770 316 190 20 "查看使用说明 ›"
+  Pop $hHelp
+  SendMessage $hHelp ${WM_SETFONT} $SubFont 1
+  SetCtlColors $hHelp 0x2563EB 0xFFFFFF
+  ${NSD_OnClick} $hHelp ShowUsageHelp
+  ${NSD_CreateLabel} 770 340 190 40 "含示例、步骤与限制说明"
+  Pop $0
+  SendMessage $0 ${WM_SETFONT} $SubFont 1
+  SetCtlColors $0 0x94A3B8 0xFFFFFF
+
+  ; 底部运行选项
+  ${NSD_CreateLabel} 320 466 50 18 "终端"
+  Pop $0
+  SendMessage $0 ${WM_SETFONT} $SectionFont 1
+  SetCtlColors $0 0x334155 0xF8FAFC
+  ${NSD_CreateDropList} 380 460 150 120 ""
   Pop $hTerminal
   ${NSD_CB_AddString} $hTerminal "原生"
   ${NSD_CB_AddString} $hTerminal "专用"
@@ -576,106 +714,54 @@ Function LaunchPage
     ${NSD_CB_SetSelectionIndex} $hTerminal 0
   ${EndIf}
 
-  ${NSD_CreateGroupBox} 30 250 660 70 "插件"
-  Pop $0
-  SendMessage $0 ${WM_SETFONT} $HintTitleFont 1
-  ${NSD_CreateCheckBox} 46 274 140 18 "会话管理"
-  Pop $hSm
-  ${NSD_CreateCheckBox} 220 274 120 18 "Edge 调试"
+  ${NSD_CreateCheckBox} 570 466 110 18 "Edge 调试"
   Pop $hEdge
-  ${NSD_CreateCheckBox} 395 274 130 18 "服务器调试"
-  Pop $hServer
-  ${NSD_CreateLabel} 530 274 145 18 "默认仅启用会话管理"
-  Pop $0
-  SendMessage $0 ${WM_SETFONT} $SubFont 1
-  SetCtlColors $0 0x6B7280 transparent
-  ${If} $PluginSm == "1"
-    ${NSD_Check} $hSm
-  ${Else}
-    ${NSD_Uncheck} $hSm
-  ${EndIf}
   ${If} $PluginEdge == "1"
     ${NSD_Check} $hEdge
   ${Else}
     ${NSD_Uncheck} $hEdge
   ${EndIf}
+  ${NSD_CreateCheckBox} 690 466 130 18 "服务器调试"
+  Pop $hServer
   ${If} $PluginServer == "1"
     ${NSD_Check} $hServer
   ${Else}
     ${NSD_Uncheck} $hServer
   ${EndIf}
-  ${NSD_OnClick} $hSm OnSmToggle
 
-  ${NSD_CreateGroupBox} 30 340 660 160 "工作流说明"
-  Pop $0
-  SendMessage $0 ${WM_SETFONT} $HintTitleFont 1
-  ${NSD_CreateLabel} 50 364 430 96 "$HintText"
-  Pop $hHint
-  SendMessage $hHint ${WM_SETFONT} $BodyFont 1
-  SetCtlColors $hHint 0x374151 transparent
-  Call RefreshWorkflowHint
-
-  ; 右侧帮助卡片：与左侧短提示分开，避免把按钮塞进 GroupBox 标题栏。
-  ${NSD_CreateVLine} 492 356 1 94 ""
-  Pop $0
-  ${NSD_CreateLabel} 512 356 158 18 "需要更多帮助？"
-  Pop $0
-  SendMessage $0 ${WM_SETFONT} $SectionFont 1
-  SetCtlColors $0 0x374151 transparent
-  ${NSD_CreateLink} 512 382 158 20 "查看使用说明 ›"
-  Pop $hHelp
-  SendMessage $hHelp ${WM_SETFONT} $SubFont 1
-  SetCtlColors $hHelp 000080 transparent
-  ${NSD_OnClick} $hHelp ShowUsageHelp
-  ${NSD_CreateLabel} 512 418 158 32 "含示例与限制说明"
-  Pop $0
-  SendMessage $0 ${WM_SETFONT} $SubFont 1
-  SetCtlColors $0 0x6B7280 transparent
-
-  ${NSD_CreateCheckBox} 50 464 240 18 "继续上次会话"
+  ${NSD_CreateCheckBox} 320 500 230 18 "继续上次会话"
   Pop $hResume
   ${NSD_Uncheck} $hResume
-  ${NSD_CreateLabel} 300 464 370 18 ""
+  ${NSD_CreateLabel} 550 500 430 18 ""
   Pop $hResumeHint
   SendMessage $hResumeHint ${WM_SETFONT} $SubFont 1
-  SetCtlColors $hResumeHint 0x6B7280 transparent
+  SetCtlColors $hResumeHint 0x64748B 0xF8FAFC
   ${NSD_OnChange} $hDir OnDirChange
+
+  ${NSD_CreateLabel} 320 548 660 18 "会话管理默认启用 · 审核与工时数据保存在本机"
+  Pop $0
+  SendMessage $0 ${WM_SETFONT} $SubFont 1
+  SetCtlColors $0 0x94A3B8 0xF8FAFC
+
+  Call RefreshWorkflowHint
   Call UpdateResumeState
+  Call UpdateWorkflowEnabled
 
-  ${NSD_CreateButton} 30 516 510 46 "打开 AI Assistant"
-  Pop $2
-  SendMessage $2 ${WM_SETFONT} $ButtonFont 1
-  ${NSD_OnClick} $2 DoLaunch
-
-  ${NSD_CreateButton} 552 516 138 46 "取消"
-  Pop $3
-  SendMessage $3 ${WM_SETFONT} $ButtonFont 1
-  ${NSD_OnClick} $3 DoCancel
-
-  ; 配置文件或身份不可用时, 只开放仍然安全的选项
+  ; 配置文件或身份不可用时，只开放仍然安全的选项
   ${If} $ConfigOk != "1"
     EnableWindow $hSm 0
     EnableWindow $hEdge 0
     EnableWindow $hServer 0
   ${EndIf}
-  ${If} $IdentityOk != "1"
-    EnableWindow $hWorkflow 0
-  ${ElseIf} $PluginSm != "1"
-    EnableWindow $hWorkflow 0
-  ${EndIf}
-  ${If} $PluginSm != "1"
-    SetCtlColors $hHelp 0x9CA3AF transparent
-    EnableWindow $hHelp 0
-  ${EndIf}
 
   ; 窗口居中（GetSystemMetrics 0/1 = 屏幕宽/高）
   System::Call 'user32::GetSystemMetrics(i 0) i .r0'
   System::Call 'user32::GetSystemMetrics(i 1) i .r1'
-  IntOp $0 $0 - 760
+  IntOp $0 $0 - 1120
   IntOp $0 $0 / 2
-  IntOp $1 $1 - 660
+  IntOp $1 $1 - 720
   IntOp $1 $1 / 2
-  System::Call 'user32::SetWindowPos(i $HWNDPARENT, i 0, i $0, i $1, i 760, i 660, i 0x0004)'
+  System::Call 'user32::SetWindowPos(i $HWNDPARENT, i 0, i $0, i $1, i 1120, i 720, i 0x0004)'
 
   ; 页面自绘底部按钮，隐藏向导默认按钮避免重复
   GetDlgItem $0 $HWNDPARENT 1

@@ -119,6 +119,7 @@
 
 - 目录选择框（`DirRequest` 控件，系统级 dialog）和「浏览」按钮；下方是工作流、终端类型和三个插件开关，底部按钮「打开 AI Assistant」。
 - 工作流说明区为卡片式布局：左侧三行短提示，右侧独立帮助区「查看使用说明」，按当前工作流弹出详细步骤。一般任务的详细说明包含代码审核用法（输入「启动一般任务」后说明审核范围；审核只读、不跑 build/test/lint，报告逐条列出发现与建议，提交后才能完成）。
+- 界面按 `GUI.png` 统一为深色侧栏 + 浅色主区：侧栏放工作流列表与插件开关，主区放项目目录卡片、启动按钮、工作流说明卡片和底部运行选项；主按钮使用蓝色卡片式操作区。
 - 启动时按当前工作流向 opencode 注入 `--prompt` 启动短语（一般任务 / SDLC / REQDOC）。新会话会自动发送；勾选「继续上次会话」时只预填输入框，不自动发送。
 - 打开前读取当前配置回填：工作流取 `identity.json` 的 `workflowType`（缺省 `sdlc`），终端取 `terminal_mode.ini` 首行（缺省 `native`），插件状态取 `opencode.jsonc` 的 `plugin` 数组。
 - 点「打开 AI Assistant」时才写配置：工作流写回 `identity.json`，终端写回 `terminal_mode.ini`，插件只替换 `opencode.jsonc` 的 `plugin` 数组，其余字段原样保留。写前留 `.bak`，失败弹窗并取消启动。
