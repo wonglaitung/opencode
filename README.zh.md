@@ -61,7 +61,7 @@ Windows 交付。上游 OpenCode 是基础，以下新增能力由本仓维护�
   - `sdlc`：五阶段软件开发流程，含审查与 git 提交门禁。
   - `reqdoc`：五阶段业务需求书流程，产出 PRD 供业务逐条确认。
 - **`opencode-edge-debug/`、`opencode-server-debug/`**：可选调试插件。
-- **`portable-installer/`**：Windows 便携安装包与启动器；启动器可选择工作流，界面使用 **AI Assistant** 品牌。
+- **`portable-installer/`**：Windows 便携安装包与启动器；启动器可选择工作流，界面使用 **Digital Programmer** 品牌。
 - **离线构建**：`--offline` 构建跳过配置目录依赖安装。
 - **`.opencode/skills/`**：本机安装包与 Windows 插件加载实测技能。
 

@@ -69,7 +69,7 @@ function View(props: { api: TuiPluginApi; sessionID: string }) {
         <span style={{ fg: theme().text }}>{path().name}</span>
       </text>
       <text fg={theme().textMuted}>
-        <span style={{ fg: theme().success }}>•</span> <b>AI Assistant</b>
+        <span style={{ fg: theme().success }}>•</span> <b>Digital Programmer</b>
       </text>
     </box>
   )

@@ -65,7 +65,7 @@ upstream translations and may not cover these customizations.
   - `reqdoc` — five-stage business requirements flow that produces a PRD for business confirmation.
 - **`opencode-edge-debug/` and `opencode-server-debug/`** — optional debugging plugins.
 - **`portable-installer/`** — Windows portable installer and launcher. The launcher selects the
-  workflow and uses the **AI Assistant** branding.
+  workflow and uses the **Digital Programmer** branding.
 - **Offline build support** — `--offline` builds skip config-directory dependency installation.
 - **`.opencode/skills/`** — local installer and Windows plugin-load verification skills.
 
