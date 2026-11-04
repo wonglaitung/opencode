@@ -30,6 +30,7 @@ Var ConfigOk
 Var IdentityOk
 Var Plugins
 Var hWorkflow
+Var hSidebarBg
 Var hWfTask
 Var hWfSdlc
 Var hWfReqdoc
@@ -580,11 +581,8 @@ Function LaunchPage
 
   ; 侧栏与主区底色
   ${NSD_CreateLabel} 0 0 260 680 " "
-  Pop $0
-  SetCtlColors $0 0x0F172A 0x0F172A
-  ${NSD_CreateLabel} 260 0 820 680 " "
-  Pop $0
-  SetCtlColors $0 0xF8FAFC 0xF8FAFC
+  Pop $hSidebarBg
+  SetCtlColors $hSidebarBg 0x0F172A 0x0F172A
 
   ; 品牌区
   ${NSD_CreateLabel} 24 24 212 28 "数字程序员"
@@ -601,15 +599,15 @@ Function LaunchPage
   SendMessage $0 ${WM_SETFONT} $SectionFont 1
   SetCtlColors $0 0x64748B 0x0F172A
 
-  ${NSD_CreateLink} 20 130 220 24 "一般任务"
+  ${NSD_CreateButton} 20 130 220 24 "一般任务"
   Pop $hWfTask
   SendMessage $hWfTask ${WM_SETFONT} $SectionFont 1
   ${NSD_OnClick} $hWfTask SelectTaskWorkflow
-  ${NSD_CreateLink} 20 174 220 24 "SDLC 开发流程"
+  ${NSD_CreateButton} 20 174 220 24 "SDLC 开发流程"
   Pop $hWfSdlc
   SendMessage $hWfSdlc ${WM_SETFONT} $SectionFont 1
   ${NSD_OnClick} $hWfSdlc SelectSdlcWorkflow
-  ${NSD_CreateLink} 20 218 220 24 "REQDOC 需求书"
+  ${NSD_CreateButton} 20 218 220 24 "REQDOC 需求书"
   Pop $hWfReqdoc
   SendMessage $hWfReqdoc ${WM_SETFONT} $SectionFont 1
   ${NSD_OnClick} $hWfReqdoc SelectReqdocWorkflow
@@ -638,16 +636,16 @@ Function LaunchPage
   ${NSD_CreateLabel} 320 76 600 30 "需要帮你做什么？"
   Pop $0
   SendMessage $0 ${WM_SETFONT} $TitleFont 1
-  SetCtlColors $0 0x0F172A 0xF8FAFC
+  SetCtlColors $0 0x0F172A transparent
   ${NSD_CreateLabel} 320 112 620 18 "选择项目目录与工作流，然后打开 AI Assistant"
   Pop $0
   SendMessage $0 ${WM_SETFONT} $SubFont 1
-  SetCtlColors $0 0x64748B 0xF8FAFC
+  SetCtlColors $0 0x64748B transparent
 
   ${NSD_CreateLabel} 320 156 200 18 "项目目录"
   Pop $0
   SendMessage $0 ${WM_SETFONT} $SectionFont 1
-  SetCtlColors $0 0x334155 0xF8FAFC
+  SetCtlColors $0 0x334155 transparent
   ${NSD_CreateDirRequest} 320 180 560 28 "$LastDir"
   Pop $hDir
   ${NSD_CreateButton} 890 180 100 28 "浏览…"
@@ -685,7 +683,7 @@ Function LaunchPage
   ${NSD_CreateLabel} 320 466 50 18 "终端"
   Pop $0
   SendMessage $0 ${WM_SETFONT} $SectionFont 1
-  SetCtlColors $0 0x334155 0xF8FAFC
+  SetCtlColors $0 0x334155 transparent
   ${NSD_CreateDropList} 380 460 150 120 ""
   Pop $hTerminal
   ${NSD_CB_AddString} $hTerminal "原生"
@@ -725,17 +723,20 @@ Function LaunchPage
   ${NSD_CreateLabel} 550 500 430 18 ""
   Pop $hResumeHint
   SendMessage $hResumeHint ${WM_SETFONT} $SubFont 1
-  SetCtlColors $hResumeHint 0x64748B 0xF8FAFC
+  SetCtlColors $hResumeHint 0x64748B transparent
   ${NSD_OnChange} $hDir OnDirChange
 
   ${NSD_CreateLabel} 320 548 660 18 "会话管理默认启用 · 审核与工时数据保存在本机"
   Pop $0
   SendMessage $0 ${WM_SETFONT} $SubFont 1
-  SetCtlColors $0 0x94A3B8 0xF8FAFC
+  SetCtlColors $0 0x94A3B8 transparent
 
   Call RefreshWorkflowHint
   Call UpdateResumeState
   Call UpdateWorkflowEnabled
+
+  ; 两块整页底色必须压到最底层，否则会盖住输入框/按钮/下拉框等交互控件。
+  System::Call 'user32::SetWindowPos(i $hSidebarBg, i 1, i 0, i 0, i 0, i 0, i 0x0013)'
 
   ; 配置文件或身份不可用时，只开放仍然安全的选项
   ${If} $ConfigOk != "1"
