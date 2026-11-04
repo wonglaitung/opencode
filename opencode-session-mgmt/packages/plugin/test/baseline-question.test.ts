@@ -41,6 +41,7 @@ describe("question 预估证据", () => {
     expect(extractQuestionBaselineHours("请提供预估工时", "预估 2 小时")).toBe(2)
     expect(extractQuestionBaselineHours("请提供预估工时", "2 人天")).toBe(16)
     expect(extractQuestionBaselineHours("请提供预估工时（小时）", "2 小时")).toBe(2)
+    expect(extractQuestionBaselineHours("請提供預估工時（小時）", "2 小時")).toBe(2)
   })
 
   test("无关问题不写入证据，workflow_baseline 仍拒绝", async () => {

@@ -162,7 +162,7 @@ export function createTaskReviewTool(store: Store): Record<string, ToolDefinitio
           ...args.scope,
           ...findings.flatMap((item) => [item.issue, item.suggestion]),
         ].join(" ")
-        if (!/(拆分|规模|超|分批)/.test(rationale)) {
+        if (!/(拆分|规模|規模|超|分批)/.test(rationale)) {
           throw new WorkflowOpError(
             `审核规模超过 50 文件/1500 行（${size.files} 文件/${size.lines} 行）：请在 findings 或 scope 中说明拆分理由，或拆成多次审核。`,
           )

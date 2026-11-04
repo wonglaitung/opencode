@@ -10,7 +10,7 @@ import type { Store } from "./db"
 import { applyTransition } from "./workflow-ops"
 
 /** 整句点明「任务」的完成声明才自动收口；问号是提问，不能收口。 */
-const COMPLETION_RE = /^\s*(?:本次|这个|当前)?任务(?:已经|已)?(?:完成|做完|搞定|结束)了?\s*[。.!！]?\s*$/u
+const COMPLETION_RE = /^\s*(?:本次|这个|這個|当前|當前)?(?:任务|任務)(?:已经|已經|已)?(?:完成|做完|搞定|结束|結束)了?\s*[。.!！]?\s*$/u
 
 export function isTaskCompletionMessage(text: string): boolean {
   return COMPLETION_RE.test(text)

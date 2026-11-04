@@ -212,6 +212,9 @@ describe("baseline-proposal（6.3 防杜撰解析，对抗加固）", () => {
     expect(extractBaselineHours("预算是 8 小时，开始做吧")).toBe(8)
     expect(extractBaselineHours("手写约 24 小时")).toBe(24)
     expect(extractBaselineHours("大概 2 人天")).toBe(16)
+    expect(extractBaselineHours("預估 24 小時")).toBe(24)
+    expect(extractBaselineHours("預算 2 人天")).toBe(16)
+    expect(extractBaselineHours("估計要 8 小時")).toBe(8)
   })
 
   test("A 口径：裸 24小时 不解析，按统一提示说「预估 24小时」才通过", () => {
