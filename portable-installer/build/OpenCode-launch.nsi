@@ -46,6 +46,7 @@ Var hResume
 Var hResumeHint
 Var Resume
 Var ResumeFlag
+Var PromptFlag
 Var LastProject
 Var LastWorkflow
 Var CanResume
@@ -408,6 +409,14 @@ Function DoLaunch
     StrCpy $ResumeFlag " -c"
   ${EndIf}
 
+  ; 按当前工作流注入启动短语；新会话会自动发送，续接会话只预填输入框。
+  StrCpy $PromptFlag ' --prompt=启动一般任务'
+  ${If} $WorkflowType == "sdlc"
+    StrCpy $PromptFlag ' --prompt=启动SDLC工作流'
+  ${ElseIf} $WorkflowType == "reqdoc"
+    StrCpy $PromptFlag ' --prompt=启动REQDOC工作流'
+  ${EndIf}
+
   ; 只改用户实际可改的项: 配置文件不可解析时不动插件, 身份不可用时不动工作流
   StrCpy $Cmd '"$PROFILE\OpenCode\runtime\node.exe" "$PLUGINSDIR\launcher-config.js" --apply --error-file "$PLUGINSDIR\apply-error.txt"'
   ${If} $ConfigOk == "1"
@@ -481,9 +490,9 @@ Function DoLaunch
   ; 在该目录启动 opencode (cwd 即项目根)
   SetOutPath "$DirPath"
   ${If} $TerminalMode == "dedicated"
-    Exec '"$PROFILE\OpenCode\terminal\OpenConsole.exe" cmd /c "title 数字程序员 && $PROFILE\OpenCode\runtime\opencode.cmd$ResumeFlag"'
+    Exec '"$PROFILE\OpenCode\terminal\OpenConsole.exe" cmd /c "title 数字程序员 && $PROFILE\OpenCode\runtime\opencode.cmd$ResumeFlag$PromptFlag"'
   ${Else}
-    Exec '"$PROFILE\OpenCode\runtime\opencode.cmd"$ResumeFlag'
+    Exec '"$PROFILE\OpenCode\runtime\opencode.cmd"$ResumeFlag$PromptFlag'
   ${EndIf}
   ; 关闭向导窗口, 让 nsDialogs 的消息循环退出
   SendMessage $HWNDPARENT ${WM_CLOSE} 0 0

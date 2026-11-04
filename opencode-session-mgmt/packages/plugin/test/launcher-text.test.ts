@@ -62,6 +62,10 @@ describe("OpenCode-launch 工作流选项与提示", () => {
     expect(nsi).toContain('${NSD_CreateButton} 552 516 138 46 "取消"')
     expect(nsi).toContain('${NSD_CreateDirRequest} 30 120 528 28')
     expect(nsi).toContain('${NSD_CreateButton} 570 120 120 28 "浏览…"')
+    expect(nsi).toContain('--prompt=启动一般任务')
+    expect(nsi).toContain('--prompt=启动SDLC工作流')
+    expect(nsi).toContain('--prompt=启动REQDOC工作流')
+    expect(nsi).toContain('$ResumeFlag$PromptFlag')
   })
 
   test("launcher-config 读写 task", () => {
