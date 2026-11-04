@@ -29,7 +29,8 @@ internal sealed record ConfigState(
     string LastProject,
     string LastWorkflow,
     string DefaultDir,
-    string Home
+    string Home,
+    string? ConfigProblem = null
 );
 
 internal sealed class LauncherForm : Form
@@ -39,6 +40,7 @@ internal sealed class LauncherForm : Form
     private static readonly string Root = Path.Combine(Home, "OpenCode");
     private static readonly string Node = Path.Combine(Root, "runtime", "node.exe");
     private static readonly string ConfigHelper = Path.Combine(AppContext.BaseDirectory, "launcher-config.js");
+    private const string SmartHubUrl = "http://123.33.13.9:9090";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -55,8 +57,24 @@ internal sealed class LauncherForm : Form
         ClientSize = new Size(1180, 760);
         MinimumSize = new Size(1180, 760);
         BackColor = Color.FromArgb(248, 250, 252);
+        ApplyWindowIcon();
         Controls.Add(web);
         Load += OnLoadAsync;
+    }
+
+    private void ApplyWindowIcon()
+    {
+        try
+        {
+            var iconPath = Path.Combine(AppContext.BaseDirectory, "icon.ico");
+            Icon = File.Exists(iconPath)
+                ? new Icon(iconPath)
+                : Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+        }
+        catch
+        {
+            // 图标缺失不应阻止启动器打开。
+        }
     }
 
     private async void OnLoadAsync(object? sender, EventArgs e)
@@ -112,6 +130,9 @@ internal sealed class LauncherForm : Form
                 case "init":
                     Post("state", LoadState());
                     break;
+                case "openHub":
+                    Process.Start(new ProcessStartInfo(SmartHubUrl) { UseShellExecute = true });
+                    break;
                 case "browse":
                     Post("browse", Browse(root.GetProperty("payload").GetProperty("dir").GetString() ?? ""));
                     break;
@@ -149,32 +170,37 @@ internal sealed class LauncherForm : Form
             "sdlc", "native", true, false, false, false, false,
             ReadLast("last_project.txt"), ReadLast("last_workflow.txt"), Home, Home
         );
-        if (!File.Exists(Node) || !File.Exists(ConfigHelper)) return fallback;
+        if (!File.Exists(ConfigHelper))
+            return fallback with { ConfigProblem = "launcher-config-missing" };
+        if (!File.Exists(Node))
+            return fallback with { ConfigProblem = "runtime-missing" };
         var temp = Path.Combine(Path.GetTempPath(), "opencode-launcher-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(temp);
         try
         {
             var run = RunNode(new[] { ConfigHelper, "--dump", temp, "--home", Home }, 10000);
-            if (run.ExitCode != 0) return fallback;
+            if (run.ExitCode != 0) return fallback with { ConfigProblem = "config-read-failed" };
             var ini = File.ReadAllLines(Path.Combine(temp, "state.ini"))
                 .Select(line => line.Split('=', 2))
                 .Where(parts => parts.Length == 2)
                 .ToDictionary(parts => parts[0].Trim(), parts => parts[1].Trim());
             string Get(string key, string value) => ini.TryGetValue(key, out var found) ? found : value;
             bool Flag(string key) => Get(key, "0") == "1";
+            var configOk = Flag("config_ok");
             return new ConfigState(
                 Get("workflow", "sdlc"),
                 Get("terminal", "native"),
                 Flag("sm"), Flag("edge"), Flag("server"),
-                Flag("config_ok"), Flag("identity_ok"),
+                configOk, Flag("identity_ok"),
                 ReadLast("last_project.txt"), ReadLast("last_workflow.txt"),
                 Directory.Exists(ReadLast("last_project.txt")) ? ReadLast("last_project.txt") : Home,
-                Home
+                Home,
+                configOk ? null : "config-invalid"
             );
         }
         catch
         {
-            return fallback;
+            return fallback with { ConfigProblem = "config-read-failed" };
         }
         finally
         {
@@ -238,13 +264,16 @@ internal sealed class LauncherForm : Form
         };
         var common = new List<string>();
         if (resume && canResume) common.Add("-c");
-        common.Add("--prompt");
-        common.Add(prompt);
+        else
+        {
+            common.Add("--prompt");
+            common.Add(prompt);
+        }
 
         try
         {
             var opencode = Path.Combine(Root, "runtime", "opencode.cmd");
-            if (!File.Exists(opencode)) return new { ok = false, error = "未找到 OpenCode 运行时，请重新运行安装包" };
+            if (!File.Exists(opencode)) return new { ok = false, error = "未找到运行环境，请重新运行安装包" };
             if (terminal == "dedicated")
             {
                 var openConsole = Path.Combine(Root, "terminal", "OpenConsole.exe");

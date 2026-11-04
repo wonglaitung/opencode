@@ -18,15 +18,15 @@ describe("OpenCode-launch 工作流选项与提示", () => {
 
   test("三个工作流都有短提示、入口与帮助链接", () => {
     for (const text of [
-      "输入「启动一般任务」",
-      "输入「启动 SDLC 工作流」",
-      "输入「启动 REQDOC 工作流」",
+      "新会话自动发送「启动一般任务」",
+      "新会话自动发送「启动 SDLC 工作流」",
+      "新会话自动发送「启动 REQDOC 工作流」",
       "查看使用说明",
     ]) {
       expect(nsi).toContain(text)
     }
     expect(nsi).toContain("代码审核也选这里")
-    expect(nsi).toContain("输入「启动一般任务」后，再说明审核范围")
+    expect(nsi).toContain("启动后说明审核范围")
     expect(nsi).not.toContain("直接说「帮我审核")
     expect(nsi.match(/预估 2 小时/g)?.length ?? 0).toBeGreaterThanOrEqual(3)
     expect(nsi).not.toContain("系统自动开始计时")
@@ -46,7 +46,7 @@ describe("OpenCode-launch 工作流选项与提示", () => {
     expect(nsi).toContain("Function SetHelpText")
     expect(nsi).toContain("Function ShowUsageHelp")
     expect(nsi).toContain("代码审核也选「一般任务」")
-    expect(nsi).toContain("输入「启动一般任务」后，说明审核范围，例如")
+    expect(nsi).toContain("新会话自动发送「启动一般任务」后，说明审核范围，例如")
     expect(nsi).toContain("报告提交后才能完成审核任务")
     expect(nsi).toContain("EnableWindow $hHelp 1")
     expect(nsi).toContain("EnableWindow $hHelp 0")
@@ -62,13 +62,14 @@ describe("OpenCode-launch 工作流选项与提示", () => {
     expect(nsi).toContain("SetWindowPos(i $Dialog, i 0, i 0, i 0, i 1080, i 680")
     expect(nsi).toContain("Function DoCancel")
     expect(nsi).toContain('${NSD_CreateButton} 980 236 80 28 "取消"')
-    expect(nsi).toContain('${NSD_CreateButton} 320 228 650 44 "打开 AI Assistant"')
+    expect(nsi).toContain('${NSD_CreateButton} 320 228 650 44 "打开 Digital Programmer"')
     expect(nsi).toContain('${NSD_CreateDirRequest} 320 180 560 28')
     expect(nsi).toContain('${NSD_CreateButton} 890 180 100 28 "浏览…"')
     expect(nsi).toContain('--prompt=启动一般任务')
     expect(nsi).toContain('--prompt=启动SDLC工作流')
     expect(nsi).toContain('--prompt=启动REQDOC工作流')
     expect(nsi).toContain('$ResumeFlag$PromptFlag')
+    expect(nsi).toContain('$ResumeFlag != " -c"')
   })
 
   test("launcher-config 读写 task", () => {

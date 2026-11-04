@@ -16,6 +16,8 @@ button,input,select{font:inherit}
 button{cursor:pointer}
 .app{height:100%;display:flex;overflow:hidden}
 .sidebar{width:260px;min-width:260px;background:var(--sidebar);color:#e2e8f0;display:flex;flex-direction:column;padding:26px 18px 18px}
+.brand-row{display:flex;align-items:center;gap:10px}
+.brand-row svg{width:36px;height:36px;flex:none}
 .brand .name{font-size:22px;font-weight:700;letter-spacing:.5px;color:#fff}
 .brand .sub{margin-top:6px;color:#94a3b8;font-size:12px;letter-spacing:.8px}
 .side-label{margin:34px 8px 10px;color:#64748b;font-size:11px;font-weight:700;letter-spacing:.12em}
@@ -28,6 +30,8 @@ button{cursor:pointer}
 .main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--main)}
 .topbar{height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 26px;border-bottom:1px solid var(--line);color:#64748b;background:#fff}
 .topbar b{color:#334155;font-weight:600}
+.hub-link{border:0;background:transparent;color:#2563eb;font-size:13px;font-weight:600;padding:4px 6px;border-radius:6px}
+.hub-link:hover{background:#eff6ff;text-decoration:underline}
 .content{flex:1;overflow:auto;padding:28px 34px 24px;max-width:1040px;width:100%;margin:0 auto}
 h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
 .sub{margin:0 0 24px;color:var(--muted)}
@@ -51,8 +55,17 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
 .field{margin-bottom:12px}
 .field label{display:block;margin-bottom:5px;color:#64748b;font-size:12px}
 .field select{width:100%;border:1px solid #cbd5e1;border-radius:8px;padding:8px 9px;background:#fff;color:#0f172a}
-.checks{display:flex;flex-wrap:wrap;gap:8px 14px;margin:8px 0 12px;color:#475569;font-size:13px}
-.checks label{display:flex;align-items:center;gap:6px}
+.plugin-card{margin-top:16px}
+.plugin-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:12px}
+.plugin-head h2{margin:0}
+.plugin-head span{color:#94a3b8;font-size:12px}
+.plugin-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.plugin-item{display:flex;align-items:flex-start;gap:9px;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;color:#334155;cursor:pointer}
+.plugin-item:hover{border-color:#bfdbfe;background:#f0f7ff}
+.plugin-item input{margin-top:2px}
+.plugin-copy{display:flex;flex-direction:column;gap:3px;min-width:0}
+.plugin-copy b{font-size:13px}
+.plugin-copy small{color:#64748b;font-size:11px;line-height:1.35}
 .resume{display:flex;align-items:center;gap:8px;color:#475569;font-size:13px}
 #resumeHint{display:block;margin-top:8px;color:#94a3b8;font-size:12px;min-height:18px}
 .footer{display:flex;justify-content:space-between;gap:12px;margin-top:18px;color:#94a3b8;font-size:12px}
@@ -64,13 +77,34 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
 .modal-card h2{margin:0 0 10px;font-size:18px}
 .modal-card pre{white-space:pre-wrap;color:#334155;font:13px/1.65 "Segoe UI","Microsoft YaHei",sans-serif;margin:0}
 .modal-close{float:right;border:0;background:#f1f5f9;border-radius:8px;padding:6px 11px;color:#334155}
+@media(max-width:1000px){.plugin-list{grid-template-columns:1fr}}
 @media(max-width:900px){.grid{grid-template-columns:1fr}.sidebar{width:220px;min-width:220px}.content{padding:20px}}
 </style>
 </head>
 <body>
 <div class="app">
   <aside class="sidebar">
-    <div class="brand"><div class="name">数字程序员</div><div class="sub">AI Assistant</div></div>
+    <div class="brand">
+      <div class="brand-row">
+        <svg viewBox="0 0 200 200" aria-hidden="true">
+          <line x1="100" y1="34" x2="100" y2="20" stroke="#1E293B" stroke-width="5" stroke-linecap="round"/>
+          <circle cx="100" cy="17" r="5" fill="#38BDF8" stroke="#1E293B" stroke-width="3"/>
+          <rect x="52" y="34" width="96" height="78" rx="28" fill="#F8FAFC" stroke="#1E293B" stroke-width="6"/>
+          <rect x="66" y="48" width="68" height="50" rx="18" fill="#0B1220"/>
+          <circle cx="85" cy="73" r="9" fill="#38BDF8"/><circle cx="85" cy="73" r="3.5" fill="#FFFFFF"/>
+          <circle cx="115" cy="73" r="9" fill="#38BDF8"/><circle cx="115" cy="73" r="3.5" fill="#FFFFFF"/>
+          <circle cx="44" cy="66" r="6" fill="#CBD5E1" stroke="#1E293B" stroke-width="3"/>
+          <circle cx="156" cy="66" r="6" fill="#CBD5E1" stroke="#1E293B" stroke-width="3"/>
+          <rect x="88" y="112" width="24" height="14" rx="4" fill="#CBD5E1" stroke="#1E293B" stroke-width="4"/>
+          <rect x="58" y="124" width="84" height="58" rx="22" fill="#F8FAFC" stroke="#1E293B" stroke-width="6"/>
+          <path d="M 60 138 Q 42 146 38 164" stroke="#1E293B" stroke-width="10" fill="none" stroke-linecap="round"/>
+          <circle cx="36" cy="168" r="8" fill="#E2E8F0" stroke="#1E293B" stroke-width="4"/>
+          <path d="M 140 138 Q 158 146 162 164" stroke="#1E293B" stroke-width="10" fill="none" stroke-linecap="round"/>
+          <circle cx="164" cy="168" r="8" fill="#E2E8F0" stroke="#1E293B" stroke-width="4"/>
+        </svg>
+        <div><div class="name">数字程序员</div><div class="sub">Digital Programmer</div></div>
+      </div>
+    </div>
     <div class="side-label">工作流</div>
     <div class="workflow" id="workflows"></div>
     <div class="side-label">最近项目</div>
@@ -78,27 +112,30 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
     <div class="side-footer">本地模型 · 工作流与插件</div>
   </aside>
   <main class="main">
-    <div class="topbar"><span><b>Help</b> · 使用说明</span><span>OpenCode AI</span></div>
+    <div class="topbar"><span></span><button class="hub-link" id="hub">灵枢SmartHub</button></div>
     <div class="content">
       <div class="notice" id="notice"></div>
       <h1>需要帮你做什么？</h1>
-      <p class="sub">选择项目目录与工作流，然后打开 AI Assistant</p>
+      <p class="sub">选择项目目录与工作流，然后打开 Digital Programmer</p>
       <div class="prompt-card">
         <label for="dir">项目目录</label>
         <div class="path-row"><input id="dir" placeholder="选择项目目录" autocomplete="off"><button id="browse">浏览</button></div>
-        <div class="action-row"><button class="primary" id="launch">打开 AI Assistant</button><button class="ghost" id="cancel">取消</button></div>
-        <div class="footer"><span id="status">会话管理默认启用 · 数据保存在本机</span><span id="version">OpenCode</span></div>
+        <div class="action-row"><button class="primary" id="launch">打开 Digital Programmer</button><button class="ghost" id="cancel">取消</button></div>
+        <div class="footer"><span id="status">会话管理默认启用 · 数据保存在本机</span></div>
       </div>
       <div class="grid">
         <section class="card"><h2>工作流说明</h2><p class="hint" id="hint"></p><button class="link" id="help">查看使用说明 ›</button></section>
         <section class="card">
-          <h2>快捷设置</h2>
+          <h2>启动设置</h2>
           <div class="field"><label for="terminal">终端类型</label><select id="terminal"><option value="native">原生</option><option value="dedicated">专用</option></select></div>
-          <div class="checks" id="plugins"></div>
           <label class="resume"><input type="checkbox" id="resume"> 继续上次会话</label>
           <span id="resumeHint"></span>
         </section>
       </div>
+      <section class="card plugin-card">
+        <div class="plugin-head"><h2>插件</h2><span>对本机所有项目生效</span></div>
+        <div class="plugin-list" id="plugins"></div>
+      </section>
     </div>
   </main>
 </div>
@@ -107,21 +144,25 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
 const WORKFLOWS = {
   task: {
     label: "一般任务",
-    hint: "适合文档、排查、整理、代码审核等轻量任务。\n打开后输入「启动一般任务」；完成后说「本次任务已完成」。\n代码审核也选这里：输入「启动一般任务」后，再说明审核范围；AI 只读审查。",
-    help: "一般任务\n\n适合：写文档、排查问题、整理资料、配置环境、代码审核等轻量工作。\n\n1. 打开后输入「启动一般任务」。\n2. 启动后描述任务；AI 会归类任务类型。一般分类只影响统计，代码审核例外。\n3. 会问预估工时，请回「预估 2 小时」；完成后说「本次任务已完成」。\n4. 不需要逐阶段确认；普通任务不拦截提交，代码审核任务只读、不可提交。\n\n代码审核也选「一般任务」：\n- 输入「启动一般任务」后，说明审核范围，例如「帮我审核这次 diff」\n  「审核 src/auth.ts 的登录改动」或「审核这个 commit：<commit>」。\n- AI 只读：不改代码、不提交、不跑 build/test/lint。\n- AI 先用只读 git 检查范围，必要时做规则扫描。\n- 按六维输出报告，逐条列出发现与修复建议；结论为 approved 或 changes_requested。\n- 报告提交后才能完成审核任务；changes_requested 不代表自动修改代码。\n- 非 Git 项目请直接指定文件；扫描是辅助，可能误报。\n- 超过 20 文件/500 行会提示拆分审核。\n\n默认新会话；勾选「继续上次会话」可回到上次进度。"
+    hint: "适合文档、排查、整理、代码审核等轻量任务。\n新会话自动发送「启动一般任务」；继续上次会话直接恢复。完成后说「本次任务已完成」。\n代码审核也选这里：启动后说明审核范围；AI 只读审查。",
+    help: "一般任务\n\n适合：写文档、排查问题、整理资料、配置环境、代码审核等轻量工作。\n\n1. 新会话自动发送「启动一般任务」；勾选「继续上次会话」时直接恢复原会话，不再发送启动短语。\n2. 启动后描述任务；AI 会归类任务类型。一般分类只影响统计，代码审核例外。\n3. 会问预估工时，请回「预估 2 小时」；完成后说「本次任务已完成」。\n4. 不需要逐阶段确认；普通任务不拦截提交，代码审核任务只读、不可提交。\n\n代码审核也选「一般任务」：\n- 新会话自动发送「启动一般任务」后，说明审核范围，例如「帮我审核这次 diff」\n  「审核 src/auth.ts 的登录改动」或「审核这个 commit：<commit>」。\n- AI 只读：不改代码、不提交、不跑 build/test/lint。\n- AI 先用只读 git 检查范围，必要时做规则扫描。\n- 按六维输出报告，逐条列出发现与修复建议；结论为 approved 或 changes_requested。\n- 报告提交后才能完成审核任务；changes_requested 不代表自动修改代码。\n- 非 Git 项目请直接指定文件；扫描是辅助，可能误报。\n- 超过 20 文件/500 行会提示拆分审核。\n\n默认新会话；勾选「继续上次会话」可回到上次进度。"
   },
   sdlc: {
     label: "SDLC 开发流程",
-    hint: "适合完整开发：需求 → 设计 → 编码 → 测试 → 审查。\n输入「启动 SDLC 工作流」，每阶段需你确认；提交前完成全部阶段。\n会问预估工时；点「查看使用说明」看详细步骤。",
-    help: "SDLC 开发流程\n\n适合：从需求到设计、编码、测试、审查的完整开发。\n\n1. 打开后输入「启动 SDLC 工作流」。\n2. 按 需求 → 设计 → 编码 → 测试 → 审查 推进。\n3. 每阶段完成时需你明确确认，AI 不会自行确认。\n4. 需求阶段会问预估工时，请回「预估 2 小时」。\n5. 提交代码前必须完成全部阶段，提交门禁会检查。\n6. 需要人工改文件时，AI 会先锁定文件；改完确认后解锁。\n7. 默认新会话；勾选「继续上次会话」可回到上次进度。\n\n提示：阶段未确认不会自动推进；切换工作流会新建会话。"
+    hint: "适合完整开发：需求 → 设计 → 编码 → 测试 → 审查。\n新会话自动发送「启动 SDLC 工作流」；继续上次会话直接恢复。每阶段需你确认。\n会问预估工时；点「查看使用说明」看详细步骤。",
+    help: "SDLC 开发流程\n\n适合：从需求到设计、编码、测试、审查的完整开发。\n\n1. 新会话自动发送「启动 SDLC 工作流」；勾选「继续上次会话」时直接恢复原会话，不再发送启动短语。\n2. 按 需求 → 设计 → 编码 → 测试 → 审查 推进。\n3. 每阶段完成时需你明确确认，AI 不会自行确认。\n4. 需求阶段会问预估工时，请回「预估 2 小时」。\n5. 提交代码前必须完成全部阶段，提交门禁会检查。\n6. 需要人工改文件时，AI 会先锁定文件；改完确认后解锁。\n7. 默认新会话；勾选「继续上次会话」可回到上次进度。\n\n提示：阶段未确认不会自动推进；切换工作流会新建会话。"
   },
   reqdoc: {
     label: "REQDOC 需求书",
-    hint: "适合业务写需求书：口述或投放材料，AI 追问补全后生成 PRD。\n输入「启动 REQDOC 工作流」，按阶段推进；定稿前逐条确认要点。\n目标阶段会问预估工时；点「查看使用说明」看详细步骤。",
-    help: "REQDOC 需求书\n\n适合：业务人员通过口述或投放材料，由 AI 追问补全并生成 PRD。\n\n1. 打开后输入「启动 REQDOC 工作流」。\n2. 系统创建 00~07 资料目录，按目标 → 规则 → 边界 → PRD → 审查推进。\n3. 目标阶段会问预估工时，请回「预估 2 小时」。\n4. 材料可投放到对应目录，AI 扫描后追问缺失信息。\n5. PRD 由系统按模板生成，不要手工编辑产物。\n6. 定稿前业务需逐条确认要点；只改某一章时使用定点修订。\n7. 默认新会话；勾选「继续上次会话」可回到上次进度。\n\n提示：必填槽位未确认或有未收口项时，进入 PRD/定稿会被拦截。"
+    hint: "适合业务写需求书：口述或投放材料，AI 追问补全后生成 PRD。\n新会话自动发送「启动 REQDOC 工作流」；继续上次会话直接恢复。定稿前逐条确认要点。\n目标阶段会问预估工时；点「查看使用说明」看详细步骤。",
+    help: "REQDOC 需求书\n\n适合：业务人员通过口述或投放材料，由 AI 追问补全并生成 PRD。\n\n1. 新会话自动发送「启动 REQDOC 工作流」；勾选「继续上次会话」时直接恢复原会话，不再发送启动短语。\n2. 系统创建 00~07 资料目录，按目标 → 规则 → 边界 → PRD → 审查推进。\n3. 目标阶段会问预估工时，请回「预估 2 小时」。\n4. 材料可投放到对应目录，AI 扫描后追问缺失信息。\n5. PRD 由系统按模板生成，不要手工编辑产物。\n6. 定稿前业务需逐条确认要点；只改某一章时使用定点修订。\n7. 默认新会话；勾选「继续上次会话」可回到上次进度。\n\n提示：必填槽位未确认或有未收口项时，进入 PRD/定稿会被拦截。"
   }
 };
-const PLUGIN_LABELS = { sm: "会话管理", edge: "Edge 调试", server: "服务器调试" };
+const PLUGINS = {
+  sm: { label: "会话管理", desc: "默认启用；关闭后工作流、工时与审核报告不可用" },
+  edge: { label: "Edge 调试", desc: "启用浏览器调试插件" },
+  server: { label: "服务器调试", desc: "启用服务器调试插件" }
+};
 const state = { workflow: "sdlc", terminal: "native", plugins: ["sm"], configOk: true, identityOk: true, lastProject: "", dir: "", resume: false };
 let canResume = false;
 
@@ -144,8 +185,8 @@ function renderHint() {
   $("hint").textContent = WORKFLOWS[state.workflow]?.hint ?? "";
 }
 function renderPlugins() {
-  $("plugins").innerHTML = Object.entries(PLUGIN_LABELS).map(([key, label]) =>
-    `<label><input type="checkbox" data-plugin="${key}" ${state.plugins.includes(key) ? "checked" : ""} ${state.configOk ? "" : "disabled"}> ${esc(label)}</label>`
+  $("plugins").innerHTML = Object.entries(PLUGINS).map(([key, item]) =>
+    `<label class="plugin-item"><input type="checkbox" data-plugin="${key}" ${state.plugins.includes(key) ? "checked" : ""} ${state.configOk ? "" : "disabled"}><span class="plugin-copy"><b>${esc(item.label)}</b><small>${esc(item.desc)}</small></span></label>`
   ).join("");
   document.querySelectorAll("[data-plugin]").forEach(input => {
     input.addEventListener("change", () => {
@@ -159,9 +200,25 @@ function renderState() {
   $("resume").checked = false;
   $("lastProject").textContent = state.lastProject || "暂无";
   $("lastProject").title = state.lastProject || "";
-  if (state.configOk === false) {
-    $("notice").textContent = "配置文件不完整：插件开关不可用；请先修复配置或身份文件。";
+  const notices = [];
+  const componentProblems = {
+    "launcher-config-missing": "启动器组件 launcher-config.js 缺失，请重新运行安装包修复。",
+    "runtime-missing": "运行环境 node.exe 缺失，请重新运行安装包修复。",
+    "config-read-failed": "配置读取失败，请检查 opencode.jsonc 或重新运行安装包。",
+    "config-invalid": "配置文件缺失或无法解析，请检查 opencode.jsonc 或重新运行安装包。"
+  };
+  if (state.configProblem) {
+    notices.push(componentProblems[state.configProblem] || "启动器配置读取失败，请重新运行安装包。");
+  } else if (!state.configOk) {
+    notices.push("配置文件缺失或无法解析，插件开关不可用；请检查 opencode.jsonc 或重新运行安装包。");
+  } else if (!state.identityOk) {
+    notices.push("身份文件缺失，工作流暂不可用；请先运行 opencode-sm init。");
+  }
+  if (notices.length > 0) {
+    $("notice").textContent = notices.join(" ");
     $("notice").classList.add("show");
+  } else {
+    $("notice").classList.remove("show");
   }
   renderWorkflows(); renderPlugins(); renderHint();
   checkResume();
@@ -184,6 +241,7 @@ function clearError() {
   $("notice").textContent = "";
   $("notice").classList.remove("show");
 }
+$("hub").addEventListener("click", () => post("openHub"));
 $("browse").addEventListener("click", () => post("browse", { dir: state.dir }));
 $("dir").addEventListener("input", () => { state.dir = $("dir").value.trim(); checkResume(); });
 $("terminal").addEventListener("change", () => { state.terminal = $("terminal").value; });
@@ -222,7 +280,7 @@ window.chrome.webview.addEventListener("message", (event) => {
       updateResume(payload);
       break;
     case "launch":
-      if (payload?.ok) { $("status").textContent = "正在打开 AI Assistant…"; }
+      if (payload?.ok) { $("status").textContent = "正在打开 Digital Programmer…"; }
       else { $("launch").disabled = false; showError(payload?.error || "启动失败"); }
       break;
     case "error":
