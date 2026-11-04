@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>数字程序员</title>
+<style>
+:root{
+  --sidebar:#0f172a; --sidebar-soft:#162033; --main:#f8fafc; --ink:#0f172a;
+  --muted:#64748b; --line:#e2e8f0; --blue:#2563eb; --blue-soft:#dbeafe;
+  --card:#ffffff; --green:#10b981;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--main);color:var(--ink);font:14px/1.45 "Segoe UI","Microsoft YaHei",sans-serif}
+button,input,select{font:inherit}
+button{cursor:pointer}
+.app{height:100%;display:flex;overflow:hidden}
+.sidebar{width:260px;min-width:260px;background:var(--sidebar);color:#e2e8f0;display:flex;flex-direction:column;padding:26px 18px 18px}
+.brand .name{font-size:22px;font-weight:700;letter-spacing:.5px;color:#fff}
+.brand .sub{margin-top:6px;color:#94a3b8;font-size:12px;letter-spacing:.8px}
+.side-label{margin:34px 8px 10px;color:#64748b;font-size:11px;font-weight:700;letter-spacing:.12em}
+.workflow{display:flex;flex-direction:column;gap:4px}
+.workflow button{width:100%;padding:11px 12px;border:0;border-radius:8px;background:transparent;color:#cbd5e1;text-align:left;font-size:14px}
+.workflow button:hover{background:#1e293b;color:#fff}
+.workflow button.active{background:#1d4ed8;color:#fff;font-weight:600}
+.last-project{margin:6px 8px;padding:10px 11px;border:1px solid #243047;border-radius:8px;color:#94a3b8;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.side-footer{margin-top:auto;padding:10px 8px 0;border-top:1px solid #243047;color:#64748b;font-size:11px}
+.main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--main)}
+.topbar{height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 26px;border-bottom:1px solid var(--line);color:#64748b;background:#fff}
+.topbar b{color:#334155;font-weight:600}
+.content{flex:1;overflow:auto;padding:28px 34px 24px;max-width:1040px;width:100%;margin:0 auto}
+h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
+.sub{margin:0 0 24px;color:var(--muted)}
+.prompt-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px;box-shadow:0 8px 28px rgba(15,23,42,.06)}
+.prompt-card label{display:block;margin-bottom:9px;color:#334155;font-weight:600;font-size:13px}
+.path-row{display:flex;gap:10px}
+.path-row input{flex:1;min-width:0;border:1px solid #cbd5e1;border-radius:9px;padding:11px 12px;background:#fff;color:#0f172a;outline:none}
+.path-row input:focus{border-color:#60a5fa;box-shadow:0 0 0 3px #dbeafe}
+.path-row button,.ghost{border:1px solid #cbd5e1;background:#fff;color:#334155;border-radius:9px;padding:11px 16px}
+.path-row button:hover,.ghost:hover{border-color:#94a3b8;background:#f8fafc}
+.action-row{display:flex;gap:10px;margin-top:14px}
+.primary{flex:1;border:0;border-radius:9px;padding:13px 18px;background:var(--blue);color:#fff;font-size:15px;font-weight:700}
+.primary:hover{background:#1d4ed8}
+.ghost{padding:13px 18px}
+.grid{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(260px,.9fr);gap:16px;margin-top:16px}
+.card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px;box-shadow:0 8px 28px rgba(15,23,42,.04)}
+.card h2{font-size:15px;margin:0 0 10px;color:#334155}
+.hint{min-height:76px;margin:0;color:#475569;white-space:pre-line}
+.link{margin-top:10px;border:0;background:transparent;color:var(--blue);padding:0;font-size:13px}
+.link:hover{text-decoration:underline}
+.field{margin-bottom:12px}
+.field label{display:block;margin-bottom:5px;color:#64748b;font-size:12px}
+.field select{width:100%;border:1px solid #cbd5e1;border-radius:8px;padding:8px 9px;background:#fff;color:#0f172a}
+.checks{display:flex;flex-wrap:wrap;gap:8px 14px;margin:8px 0 12px;color:#475569;font-size:13px}
+.checks label{display:flex;align-items:center;gap:6px}
+.resume{display:flex;align-items:center;gap:8px;color:#475569;font-size:13px}
+#resumeHint{display:block;margin-top:8px;color:#94a3b8;font-size:12px;min-height:18px}
+.footer{display:flex;justify-content:space-between;gap:12px;margin-top:18px;color:#94a3b8;font-size:12px}
+.notice{margin-bottom:14px;padding:10px 12px;border-radius:8px;background:#fffbeb;border:1px solid #fde68a;color:#92400e;font-size:12px;display:none}
+.notice.show{display:block}
+.modal{position:fixed;inset:0;background:rgba(15,23,42,.45);display:none;align-items:center;justify-content:center;padding:24px}
+.modal.open{display:flex}
+.modal-card{width:min(680px,100%);max-height:80vh;overflow:auto;background:#fff;border-radius:16px;padding:22px;box-shadow:0 24px 80px rgba(15,23,42,.25)}
+.modal-card h2{margin:0 0 10px;font-size:18px}
+.modal-card pre{white-space:pre-wrap;color:#334155;font:13px/1.65 "Segoe UI","Microsoft YaHei",sans-serif;margin:0}
+.modal-close{float:right;border:0;background:#f1f5f9;border-radius:8px;padding:6px 11px;color:#334155}
+@media(max-width:900px){.grid{grid-template-columns:1fr}.sidebar{width:220px;min-width:220px}.content{padding:20px}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand"><div class="name">数字程序员</div><div class="sub">AI Assistant</div></div>
+    <div class="side-label">工作流</div>
+    <div class="workflow" id="workflows"></div>
+    <div class="side-label">最近项目</div>
+    <div class="last-project" id="lastProject">暂无</div>
+    <div class="side-footer">本地模型 · 工作流与插件</div>
+  </aside>
+  <main class="main">
+    <div class="topbar"><span><b>Help</b> · 使用说明</span><span>OpenCode AI</span></div>
+    <div class="content">
+      <div class="notice" id="notice"></div>
+      <h1>需要帮你做什么？</h1>
+      <p class="sub">选择项目目录与工作流，然后打开 AI Assistant</p>
+      <div class="prompt-card">
+        <label for="dir">项目目录</label>
+        <div class="path-row"><input id="dir" placeholder="选择项目目录" autocomplete="off"><button id="browse">浏览</button></div>
+        <div class="action-row"><button class="primary" id="launch">打开 AI Assistant</button><button class="ghost" id="cancel">取消</button></div>
+        <div class="footer"><span id="status">会话管理默认启用 · 数据保存在本机</span><span id="version">OpenCode</span></div>
+      </div>
+      <div class="grid">
+        <section class="card"><h2>工作流说明</h2><p class="hint" id="hint"></p><button class="link" id="help">查看使用说明 ›</button></section>
+        <section class="card">
+          <h2>快捷设置</h2>
+          <div class="field"><label for="terminal">终端类型</label><select id="terminal"><option value="native">原生</option><option value="dedicated">专用</option></select></div>
+          <div class="checks" id="plugins"></div>
+          <label class="resume"><input type="checkbox" id="resume"> 继续上次会话</label>
+          <span id="resumeHint"></span>
+        </section>
+      </div>
+    </div>
+  </main>
+</div>
+<div class="modal" id="modal"><div class="modal-card"><button class="modal-close" id="closeHelp">关闭</button><h2 id="helpTitle">使用说明</h2><pre id="helpBody"></pre></div></div>
+<script>
+const WORKFLOWS = {
+  task: {
+    label: "一般任务",
+    hint: "适合文档、排查、整理、代码审核等轻量任务。\n打开后输入「启动一般任务」；完成后说「本次任务已完成」。\n代码审核也选这里：输入「启动一般任务」后，再说明审核范围；AI 只读审查。",
+    help: "一般任务\n\n适合：写文档、排查问题、整理资料、配置环境、代码审核等轻量工作。\n\n1. 打开后输入「启动一般任务」。\n2. 启动后描述任务；AI 会归类任务类型。一般分类只影响统计，代码审核例外。\n3. 会问预估工时，请回「预估 2 小时」；完成后说「本次任务已完成」。\n4. 不需要逐阶段确认；普通任务不拦截提交，代码审核任务只读、不可提交。\n\n代码审核也选「一般任务」：\n- 输入「启动一般任务」后，说明审核范围，例如「帮我审核这次 diff」\n  「审核 src/auth.ts 的登录改动」或「审核这个 commit：<commit>」。\n- AI 只读：不改代码、不提交、不跑 build/test/lint。\n- AI 先用只读 git 检查范围，必要时做规则扫描。\n- 按六维输出报告，逐条列出发现与修复建议；结论为 approved 或 changes_requested。\n- 报告提交后才能完成审核任务；changes_requested 不代表自动修改代码。\n- 非 Git 项目请直接指定文件；扫描是辅助，可能误报。\n- 超过 20 文件/500 行会提示拆分审核。\n\n默认新会话；勾选「继续上次会话」可回到上次进度。"
+  },
+  sdlc: {
+    label: "SDLC 开发流程",
+    hint: "适合完整开发：需求 → 设计 → 编码 → 测试 → 审查。\n输入「启动 SDLC 工作流」，每阶段需你确认；提交前完成全部阶段。\n会问预估工时；点「查看使用说明」看详细步骤。",
+    help: "SDLC 开发流程\n\n适合：从需求到设计、编码、测试、审查的完整开发。\n\n1. 打开后输入「启动 SDLC 工作流」。\n2. 按 需求 → 设计 → 编码 → 测试 → 审查 推进。\n3. 每阶段完成时需你明确确认，AI 不会自行确认。\n4. 需求阶段会问预估工时，请回「预估 2 小时」。\n5. 提交代码前必须完成全部阶段，提交门禁会检查。\n6. 需要人工改文件时，AI 会先锁定文件；改完确认后解锁。\n7. 默认新会话；勾选「继续上次会话」可回到上次进度。\n\n提示：阶段未确认不会自动推进；切换工作流会新建会话。"
+  },
+  reqdoc: {
+    label: "REQDOC 需求书",
+    hint: "适合业务写需求书：口述或投放材料，AI 追问补全后生成 PRD。\n输入「启动 REQDOC 工作流」，按阶段推进；定稿前逐条确认要点。\n目标阶段会问预估工时；点「查看使用说明」看详细步骤。",
+    help: "REQDOC 需求书\n\n适合：业务人员通过口述或投放材料，由 AI 追问补全并生成 PRD。\n\n1. 打开后输入「启动 REQDOC 工作流」。\n2. 系统创建 00~07 资料目录，按目标 → 规则 → 边界 → PRD → 审查推进。\n3. 目标阶段会问预估工时，请回「预估 2 小时」。\n4. 材料可投放到对应目录，AI 扫描后追问缺失信息。\n5. PRD 由系统按模板生成，不要手工编辑产物。\n6. 定稿前业务需逐条确认要点；只改某一章时使用定点修订。\n7. 默认新会话；勾选「继续上次会话」可回到上次进度。\n\n提示：必填槽位未确认或有未收口项时，进入 PRD/定稿会被拦截。"
+  }
+};
+const PLUGIN_LABELS = { sm: "会话管理", edge: "Edge 调试", server: "服务器调试" };
+const state = { workflow: "sdlc", terminal: "native", plugins: ["sm"], configOk: true, identityOk: true, lastProject: "", dir: "", resume: false };
+let canResume = false;
+
+const $ = (id) => document.getElementById(id);
+const post = (type, payload = {}) => window.chrome.webview.postMessage({ type, payload });
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+
+function renderWorkflows() {
+  $("workflows").innerHTML = Object.entries(WORKFLOWS).map(([key, item]) =>
+    `<button data-workflow="${key}" class="${state.workflow === key ? "active" : ""}">${esc(item.label)}</button>`
+  ).join("");
+  document.querySelectorAll("[data-workflow]").forEach(button => {
+    button.addEventListener("click", () => {
+      state.workflow = button.dataset.workflow;
+      renderWorkflows(); renderHint(); checkResume();
+    });
+  });
+}
+function renderHint() {
+  $("hint").textContent = WORKFLOWS[state.workflow]?.hint ?? "";
+}
+function renderPlugins() {
+  $("plugins").innerHTML = Object.entries(PLUGIN_LABELS).map(([key, label]) =>
+    `<label><input type="checkbox" data-plugin="${key}" ${state.plugins.includes(key) ? "checked" : ""} ${state.configOk ? "" : "disabled"}> ${esc(label)}</label>`
+  ).join("");
+  document.querySelectorAll("[data-plugin]").forEach(input => {
+    input.addEventListener("change", () => {
+      state.plugins = [...document.querySelectorAll("[data-plugin]")].filter(x => x.checked).map(x => x.dataset.plugin);
+    });
+  });
+}
+function renderState() {
+  $("dir").value = state.dir || state.lastProject || "";
+  $("terminal").value = state.terminal;
+  $("resume").checked = false;
+  $("lastProject").textContent = state.lastProject || "暂无";
+  $("lastProject").title = state.lastProject || "";
+  if (state.configOk === false) {
+    $("notice").textContent = "配置文件不完整：插件开关不可用；请先修复配置或身份文件。";
+    $("notice").classList.add("show");
+  }
+  renderWorkflows(); renderPlugins(); renderHint();
+  checkResume();
+}
+function checkResume() {
+  if (!state.dir) return;
+  post("resume", { dir: state.dir, workflow: state.workflow });
+}
+function updateResume(result) {
+  canResume = !!result?.can;
+  $("resume").disabled = !canResume;
+  if (!canResume) $("resume").checked = false;
+  $("resumeHint").textContent = result?.hint || "";
+}
+function showError(message) {
+  $("notice").textContent = message;
+  $("notice").classList.add("show");
+}
+function clearError() {
+  $("notice").textContent = "";
+  $("notice").classList.remove("show");
+}
+$("browse").addEventListener("click", () => post("browse", { dir: state.dir }));
+$("dir").addEventListener("input", () => { state.dir = $("dir").value.trim(); checkResume(); });
+$("terminal").addEventListener("change", () => { state.terminal = $("terminal").value; });
+$("resume").addEventListener("change", () => { state.resume = $("resume").checked; });
+$("launch").addEventListener("click", () => {
+  clearError();
+  state.dir = $("dir").value.trim();
+  if (!state.dir) { showError("请先选择项目目录"); return; }
+  $("launch").disabled = true;
+  post("launch", { dir: state.dir, workflow: state.workflow, terminal: state.terminal, plugins: state.plugins, resume: $("resume").checked });
+});
+$("cancel").addEventListener("click", () => post("cancel"));
+$("help").addEventListener("click", () => {
+  $("helpTitle").textContent = WORKFLOWS[state.workflow]?.label + " · 使用说明";
+  $("helpBody").textContent = WORKFLOWS[state.workflow]?.help ?? "";
+  $("modal").classList.add("open");
+});
+$("closeHelp").addEventListener("click", () => $("modal").classList.remove("open"));
+$("modal").addEventListener("click", (event) => { if (event.target === $("modal")) $("modal").classList.remove("open"); });
+
+window.chrome.webview.addEventListener("message", (event) => {
+  const message = event.data || {};
+  const payload = message.payload;
+  switch (message.type) {
+    case "state":
+      Object.assign(state, payload || {});
+      if (!Array.isArray(state.plugins)) {
+        state.plugins = ["sm", "edge", "server"].filter(key => state[key] === true);
+      }
+      renderState();
+      break;
+    case "browse":
+      if (payload) { state.dir = payload; $("dir").value = payload; checkResume(); }
+      break;
+    case "resume":
+      updateResume(payload);
+      break;
+    case "launch":
+      if (payload?.ok) { $("status").textContent = "正在打开 AI Assistant…"; }
+      else { $("launch").disabled = false; showError(payload?.error || "启动失败"); }
+      break;
+    case "error":
+      $("launch").disabled = false;
+      showError(String(payload || "启动器发生错误"));
+      break;
+  }
+});
+post("init");
+</script>
+</body>
+</html>

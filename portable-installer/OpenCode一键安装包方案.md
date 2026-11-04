@@ -113,19 +113,19 @@
 - 保留 `.config\opencode`、`model.json`、`kv.json`、`models.json`、项目 `.opencode\session-mgmt.db`。
 - 清除范围是所有项目共用的会话库；不做备份，确认框已写明不可恢复。
 
-## 5. 启动器流程（`OpenCode-launch.exe`，方案②）
+## 5. 启动器流程（`OpenCode-launch.exe`，WebView2 方案 B）
 
-用 NSIS 的 nsDialogs 画一个原生页面（不调用 PowerShell/VBScript，零运行时依赖，不受 PowerShell 禁用影响）：
+启动器改为 **.NET 8 WinForms + WebView2 + 内嵌 HTML/CSS**，界面按 `GUI.png` 统一为深色侧栏、浅色主区和卡片式操作区。需要目标机安装 Microsoft Edge WebView2 Runtime（Win10/11 通常已随 Edge 提供）。NSIS 仅负责安装和释放文件，不再绘制启动器页面。
 
-- 目录选择框（`DirRequest` 控件，系统级 dialog）和「浏览」按钮；下方是工作流、终端类型和三个插件开关，底部按钮「打开 AI Assistant」。
+- 目录输入框和「浏览」按钮（WinForms FolderBrowserDialog）；侧栏选择工作流按钮，主区选择终端和插件，底部按钮「打开 AI Assistant」。
 - 工作流说明区为卡片式布局：左侧三行短提示，右侧独立帮助区「查看使用说明」，按当前工作流弹出详细步骤。一般任务的详细说明包含代码审核用法（输入「启动一般任务」后说明审核范围；审核只读、不跑 build/test/lint，报告逐条列出发现与建议，提交后才能完成）。
 - 界面按 `GUI.png` 统一为深色侧栏 + 浅色主区：侧栏放工作流列表与插件开关，主区放项目目录卡片、启动按钮、工作流说明卡片和底部运行选项；主按钮使用蓝色卡片式操作区。
 - 启动时按当前工作流向 opencode 注入 `--prompt` 启动短语（一般任务 / SDLC / REQDOC）。新会话会自动发送；勾选「继续上次会话」时只预填输入框，不自动发送。
 - 打开前读取当前配置回填：工作流取 `identity.json` 的 `workflowType`（缺省 `sdlc`），终端取 `terminal_mode.ini` 首行（缺省 `native`），插件状态取 `opencode.jsonc` 的 `plugin` 数组。
 - 点「打开 AI Assistant」时才写配置：工作流写回 `identity.json`，终端写回 `terminal_mode.ini`，插件只替换 `opencode.jsonc` 的 `plugin` 数组，其余字段原样保留。写前留 `.bak`，失败弹窗并取消启动。
-- 工作流和终端都是不可编辑下拉菜单。终端「原生」直接 `Exec opencode.cmd`，使用系统控制台；「专用」用 `Exec OpenConsole.exe cmd /c "title 数字程序员 && opencode.cmd"`，使用打包的 Windows Terminal，退出即关。默认启动新会话；只有勾选「继续上次会话」且项目目录、工作流都与上次启动一致时，才追加 `-c` 续接上次对话。工作流变化时复选框自动置灰并新建会话，避免旧会话沿用旧工作流。
+- 工作流用侧栏按钮选择，终端用 HTML 下拉框选择。终端「原生」由 WebView2 host 启动 `opencode.cmd`，使用系统控制台；「专用」启动 `OpenConsole.exe cmd /c "title 数字程序员 && opencode.cmd"`，使用打包的 Windows Terminal，退出即关。默认启动新会话；只有勾选「继续上次会话」且项目目录、工作流都与上次启动一致时，才追加 `-c` 续接上次对话。工作流变化时复选框自动置灰并新建会话，避免旧会话沿用旧工作流。
 - 关闭「会话管理」插件时工作流菜单置灰；插件开关是机器级设置，对所有项目生效。配置文件缺失或无法解析时，插件开关置灰并提示重装；`identity.json` 缺失时工作流不可选。
-- `SetOutPath` 设为所选目录 → **该目录即项目根 `ctx.directory`**，reqdoc 扫描/导出/技能全部基于此。
+- 启动时把 WebView2 host 的 `WorkingDirectory` 设为所选目录 → **该目录即项目根 `ctx.directory`**，reqdoc 扫描/导出/技能全部基于此。
 - 所选目录须为业务已取得的 doc_process 项目（含 `.claude/skills`、`工作要求.txt`、`raw/`、`00~07` 骨架）；安装包不负责分发这些项目文件。
 - 上次目录写入 `%USERPROFILE%\.config\opencode\last_project.txt`，上次实际生效的工作流写入 `last_workflow.txt`，下次打开预填并判断能否续接；「继续上次会话」默认不勾选。
 - 用户可随时直接编辑 `terminal_mode.ini` 切换终端类型，无需重装。
@@ -170,13 +170,14 @@ cmd /c portable-installer\build\build.bat
 仅在排查 NSI 语法时使用；手工编译不会清理载荷和缓存，产物不能作为最终交付包。
 
 1. 载荷由 `sync_payload.bat` 生成到 `portable-installer\payload\OpenCode`（`payload/` 不入库）。
-2. 安装 NSIS 3.x（官方源 https://nsis.sourceforge.io/ ，本站已装于 `C:\Program Files (x86)\NSIS`）。PATH 维护用 NSIS 自带的 `StrFunc`/`WordFunc`（无需额外 `EnvVarUpdate.nsh`）。
+2. 安装 NSIS 3.x（官方源 https://nsis.sourceforge.io/ ，本站已装于 `C:\Program Files (x86)\NSIS`）和 .NET 8 SDK（构建 WebView2 启动器）。PATH 维护用 NSIS 自带的 `StrFunc`/`WordFunc`（无需额外 `EnvVarUpdate.nsh`）。
 3. 按序编译（清空工具和启动器先出，主包再内嵌）：
    ```
    cd portable-installer\build
    "C:\Program Files (x86)\NSIS\makensis.exe" OpenCode-Reset.nsi    ; 产出 OpenCode-Reset.exe
-   "C:\Program Files (x86)\NSIS\makensis.exe" OpenCode-launch.nsi   ; 产出 OpenCode-launch.exe
-   "C:\Program Files (x86)\NSIS\makensis.exe" OpenCode-Setup.nsi    ; 嵌入载荷 + 两个 exe → OpenCode-Setup.exe (~330MB)
+   dotnet publish ..\launcher\Launcher.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o launcher-publish
+   copy /Y launcher-publish\OpenCode-launch.exe OpenCode-launch.exe   ; WebView2 启动器
+   "C:\Program Files (x86)\NSIS\makensis.exe" OpenCode-Setup.nsi    ; 嵌入载荷 + 启动器/清空工具 → OpenCode-Setup.exe
    ```
 4. （可选）用内部证书对两 exe 签名；未签名则业务首次运行点「仍要运行」。
 

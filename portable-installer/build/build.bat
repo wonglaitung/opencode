@@ -1,4 +1,4 @@
-@echo off
+﻿@echo off
 setlocal
 set BUILD=%~dp0
 set PAYLOAD=%BUILD%..\payload\OpenCode
@@ -25,9 +25,13 @@ echo [1/3] 构建清空历史会话工具 OpenCode-Reset.exe ...
 "%MAKENSIS%" "%BUILD%OpenCode-Reset.nsi"
 if errorlevel 1 (echo [FAIL] 清空历史会话工具构建失败 & exit /b 1)
 
-echo [2/3] 构建启动器 OpenCode-launch.exe ...
-"%MAKENSIS%" "%BUILD%OpenCode-launch.nsi"
-if errorlevel 1 (echo [FAIL] 启动器构建失败 & exit /b 1)
+echo [2/3] 构建 WebView2 启动器 OpenCode-launch.exe ...
+where dotnet >nul 2>nul
+if errorlevel 1 (echo [FAIL] 未找到 dotnet SDK，无法构建 WebView2 启动器 & exit /b 1)
+dotnet publish "%BUILD%..\launcher\Launcher.csproj" -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o "%BUILD%launcher-publish"
+if errorlevel 1 (echo [FAIL] WebView2 启动器构建失败 & exit /b 1)
+copy /Y "%BUILD%launcher-publish\OpenCode-launch.exe" "%BUILD%OpenCode-launch.exe" >nul
+if errorlevel 1 (echo [FAIL] 启动器复制失败 & exit /b 1)
 
 echo [3/3] 构建主安装包 OpenCode-Setup.exe ...
 "%MAKENSIS%" "%BUILD%OpenCode-Setup.nsi"

@@ -88,6 +88,7 @@ Section "Install"
   ; 5. 部署启动器与清空历史会话工具
   SetOutPath "$PROFILE\OpenCode"
   File "OpenCode-launch.exe"
+  File "launcher-config.js"
   File "OpenCode-Reset.exe"
   File "icon.ico"
 

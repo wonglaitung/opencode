@@ -30,7 +30,6 @@ Var ConfigOk
 Var IdentityOk
 Var Plugins
 Var hWorkflow
-Var hSidebarBg
 Var hWfTask
 Var hWfSdlc
 Var hWfReqdoc
@@ -579,10 +578,6 @@ Function LaunchPage
   CreateFont $BodyFont "$(^Font)" 10 400
   CreateFont $ButtonFont "$(^Font)" 11 700
 
-  ; 侧栏与主区底色
-  ${NSD_CreateLabel} 0 0 260 680 " "
-  Pop $hSidebarBg
-  SetCtlColors $hSidebarBg 0x0F172A 0x0F172A
 
   ; 品牌区
   ${NSD_CreateLabel} 24 24 212 28 "数字程序员"
@@ -735,8 +730,7 @@ Function LaunchPage
   Call UpdateResumeState
   Call UpdateWorkflowEnabled
 
-  ; 两块整页底色必须压到最底层，否则会盖住输入框/按钮/下拉框等交互控件。
-  System::Call 'user32::SetWindowPos(i $hSidebarBg, i 1, i 0, i 0, i 0, i 0, i 0x0013)'
+  ; 背景图压到底层，交互控件保持在上层。
 
   ; 配置文件或身份不可用时，只开放仍然安全的选项
   ${If} $ConfigOk != "1"

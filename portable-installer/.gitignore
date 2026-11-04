@@ -1,3 +1,7 @@
 payload/
 build/*.exe
 build/*.log
+launcher/bin/
+launcher/obj/
+launcher/publish/
+build/launcher-publish/

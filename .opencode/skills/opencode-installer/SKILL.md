@@ -18,9 +18,10 @@ description: 打包 Windows 版 OpenCode 图形化安装包（portable-installer
 ## 前置检查
 
 1. NSIS 3.x 存在：优先 `C:\Program Files (x86)\NSIS\makensis.exe`，其次 `C:\Program Files\NSIS\`，最后 PATH。
-2. 源目录齐全：`D:\Tools\node-v22.23.2-win-x64`、`D:\Tools\Python312`、`D:\Tools\terminal-1.23.20211.0`。可用 `SRC_NODE`、`SRC_PY`、`SRC_TERMINAL` 覆盖。
-3. 编码检查：三个 `.nsi` 为 UTF-8 带 BOM 且 `Unicode true` 在位；`build.bat` / `sync_payload.bat` 为纯 CRLF。Windows checkout 可能因 Git 换行转换改写文件，必须先用下面的自检脚本确认，不通过就修正后再构建。
-4. 空闲磁盘至少 5 GB，完整重建要同时容纳源目录、新载荷和压缩中间文件。
+2. .NET 8 SDK 存在（WebView2 启动器构建）：`dotnet --info` 可用；目标机需安装 Microsoft Edge WebView2 Runtime。
+3. 源目录齐全：`D:\Tools\node-v22.23.2-win-x64`、`D:\Tools\Python312`、`D:\Tools\terminal-1.23.20211.0`。可用 `SRC_NODE`、`SRC_PY`、`SRC_TERMINAL` 覆盖。
+4. 编码检查：三个 `.nsi` 为 UTF-8 带 BOM 且 `Unicode true` 在位；`build.bat` / `sync_payload.bat` 为纯 CRLF。Windows checkout 可能因 Git 换行转换改写文件，必须先用下面的自检脚本确认，不通过就修正后再构建。
+5. 空闲磁盘至少 5 GB，完整重建要同时容纳源目录、新载荷和压缩中间文件。
 
 ### 编码自检
 
@@ -88,7 +89,9 @@ Get-ChildItem portable-installer\payload\OpenCode -Recurse -Force -File -Filter 
 # 5. 核对并更新依赖声明（见下节）
 #    声明与实装不一致时，先改 D:\Tools 源目录，再改 payload 副本
 
-# 6. 重新编译清空工具、启动器与主安装包
+# 6. 重新编译清空工具、WebView2 启动器与主安装包
+#    build.bat 会执行 dotnet publish 生成 OpenCode-launch.exe；
+#    目标机需要 Microsoft Edge WebView2 Runtime（Win10/11 通常已随 Edge 提供）
 cmd /c portable-installer\build\build.bat
 ```
 
@@ -116,7 +119,7 @@ foreach($n in @('opencode-ai','opencode-sm','npm','corepack','bun','@mermaid-js/
 - 先改源目录 `D:\Tools\node-v22.23.2-win-x64\package.json`，再同步到 `portable-installer\payload\OpenCode\runtime\package.json`；只改 payload 会在下次清空重建时被覆盖。
 - 改完再跑第 6 步编译，确保进包的是新声明。
 
-`build.bat` 先编 `OpenCode-Reset.exe`，再编 `OpenCode-launch.exe`，最后编内嵌载荷的 `OpenCode-Setup.exe`；任一步 `makensis` 返回非零立即 `exit /b 1`，不会留下看似成功的残缺包。
+`build.bat` 先编 `OpenCode-Reset.exe`，再用 `dotnet publish` 构建 WebView2 `OpenCode-launch.exe`，最后编内嵌载荷的 `OpenCode-Setup.exe`；任一步 `makensis` 返回非零立即 `exit /b 1`，不会留下看似成功的残缺包。
 
 ## 清空历史会话工具
 
