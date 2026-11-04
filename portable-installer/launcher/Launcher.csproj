@@ -12,6 +12,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>OpenCode-launch</AssemblyName>
+    <ApplicationIcon>..\build\icon.ico</ApplicationIcon>
     <RootNamespace>Launcher</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
