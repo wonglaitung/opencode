@@ -512,17 +512,17 @@ Function SyncWorkflowLabels
     Return
   ${EndIf}
   ${If} $WorkflowType == "task"
-    SetCtlColors $hWfTask 0xFFFFFF 0x2563EB
+    SetCtlColors $hWfTask 0x60A5FA 0x0F172A
   ${Else}
     SetCtlColors $hWfTask 0xCBD5E1 0x0F172A
   ${EndIf}
   ${If} $WorkflowType == "sdlc"
-    SetCtlColors $hWfSdlc 0xFFFFFF 0x2563EB
+    SetCtlColors $hWfSdlc 0x60A5FA 0x0F172A
   ${Else}
     SetCtlColors $hWfSdlc 0xCBD5E1 0x0F172A
   ${EndIf}
   ${If} $WorkflowType == "reqdoc"
-    SetCtlColors $hWfReqdoc 0xFFFFFF 0x2563EB
+    SetCtlColors $hWfReqdoc 0x60A5FA 0x0F172A
   ${Else}
     SetCtlColors $hWfReqdoc 0xCBD5E1 0x0F172A
   ${EndIf}
@@ -601,15 +601,15 @@ Function LaunchPage
   SendMessage $0 ${WM_SETFONT} $SectionFont 1
   SetCtlColors $0 0x64748B 0x0F172A
 
-  ${NSD_CreateLabel} 20 130 220 38 "  一般任务"
+  ${NSD_CreateLink} 20 130 220 24 "一般任务"
   Pop $hWfTask
   SendMessage $hWfTask ${WM_SETFONT} $SectionFont 1
   ${NSD_OnClick} $hWfTask SelectTaskWorkflow
-  ${NSD_CreateLabel} 20 174 220 38 "  SDLC 开发流程"
+  ${NSD_CreateLink} 20 174 220 24 "SDLC 开发流程"
   Pop $hWfSdlc
   SendMessage $hWfSdlc ${WM_SETFONT} $SectionFont 1
   ${NSD_OnClick} $hWfSdlc SelectSdlcWorkflow
-  ${NSD_CreateLabel} 20 218 220 38 "  REQDOC 需求书"
+  ${NSD_CreateLink} 20 218 220 24 "REQDOC 需求书"
   Pop $hWfReqdoc
   SendMessage $hWfReqdoc ${WM_SETFONT} $SectionFont 1
   ${NSD_OnClick} $hWfReqdoc SelectReqdocWorkflow
@@ -654,16 +654,13 @@ Function LaunchPage
   Pop $0
   ${NSD_OnClick} $0 DirBrowse
 
-  ${NSD_CreateLabel} 320 228 650 44 "打开 AI Assistant"
+  ${NSD_CreateButton} 320 228 650 44 "打开 AI Assistant"
   Pop $2
   SendMessage $2 ${WM_SETFONT} $ButtonFont 1
-  SetCtlColors $2 0xFFFFFF 0x2563EB
-  System::Call 'user32::SetWindowLong(i $2, i -16, i 0x50000101)'
   ${NSD_OnClick} $2 DoLaunch
-  ${NSD_CreateLabel} 980 236 80 28 "取消"
+  ${NSD_CreateButton} 980 236 80 28 "取消"
   Pop $3
   SendMessage $3 ${WM_SETFONT} $SubFont 1
-  SetCtlColors $3 0x64748B 0xF8FAFC
   ${NSD_OnClick} $3 DoCancel
 
   ; 工作流说明卡片
