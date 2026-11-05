@@ -70,10 +70,6 @@ public sealed class ScheduledTaskScheduler : IDisposable
         historyPath = Path.Combine(logDir, "scheduled-task-runs.json");
         eventsPath = Path.Combine(logDir, "scheduled-task-events.jsonl");
         textLogPath = Path.Combine(logDir, "scheduled-task.log");
-        // 兼容旧版本：把历史日志从 .config/opencode 根目录迁移到 scheduler/。
-        MoveLegacy(Path.Combine(configDir, "scheduled-task-runs.json"), historyPath);
-        MoveLegacy(Path.Combine(configDir, "scheduled-task-events.jsonl"), eventsPath);
-        MoveLegacy(Path.Combine(configDir, "scheduled-task.log"), textLogPath);
         this.start = start;
         this.changed = changed;
         tasks = Load();
@@ -314,18 +310,6 @@ public sealed class ScheduledTaskScheduler : IDisposable
         "failed" => "失败",
         _ => status
     };
-
-    private static void MoveLegacy(string oldPath, string newPath)
-    {
-        try
-        {
-            if (File.Exists(oldPath) && !File.Exists(newPath)) File.Move(oldPath, newPath);
-        }
-        catch
-        {
-            // 迁移失败不阻断启动；新日志仍写入新目录。
-        }
-    }
 
     private List<ScheduledRun> LoadRuns()
     {
