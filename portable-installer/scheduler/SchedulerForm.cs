@@ -199,7 +199,7 @@ internal sealed class SchedulerForm : Form
 
     private static string StatusText(ScheduledTask task)
     {
-        if (task.Running) return "运行中（权限确认请在终端处理）";
+        if (task.Running) return "运行中（后台执行）";
         if (!task.Enabled) return "已暂停";
         return task.LastStatus switch
         {

@@ -46,6 +46,7 @@ public sealed class ScheduledTaskScheduler : IDisposable
     };
 
     private readonly object gate = new();
+    private readonly object logLock = new();
     private readonly string path;
     private readonly string historyPath;
     private readonly string textLogPath;
@@ -227,6 +228,16 @@ public sealed class ScheduledTaskScheduler : IDisposable
             var process = start(task);
             running[task.Id] = process;
             process.EnableRaisingEvents = true;
+            process.OutputDataReceived += (_, eventArgs) =>
+            {
+                if (eventArgs.Data is not null) AppendOutput(task.Name, eventArgs.Data);
+            };
+            process.ErrorDataReceived += (_, eventArgs) =>
+            {
+                if (eventArgs.Data is not null) AppendOutput(task.Name, eventArgs.Data);
+            };
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
             process.Exited += (_, _) => OnExited(task.Id, process.ExitCode);
             if (process.HasExited) OnExited(task.Id, process.ExitCode);
             changed();
@@ -330,11 +341,29 @@ public sealed class ScheduledTaskScheduler : IDisposable
     {
         try
         {
-            File.AppendAllText(textLogPath, $"{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss} {message}\n");
+            lock (logLock)
+            {
+                File.AppendAllText(textLogPath, $"{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss} {message}\n");
+            }
         }
         catch
         {
             // 日志写入失败不能影响定时任务本身。
+        }
+    }
+
+    private void AppendOutput(string taskName, string line)
+    {
+        try
+        {
+            lock (logLock)
+            {
+                File.AppendAllText(textLogPath, $"{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss} [输出] {taskName} | {line}\n");
+            }
+        }
+        catch
+        {
+            // 输出日志失败不能影响任务。
         }
     }
 
