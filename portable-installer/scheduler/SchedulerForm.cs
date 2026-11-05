@@ -349,6 +349,13 @@ internal sealed class TaskEditorForm : Form
         AddRow(permissionTable, "允许操作", permissionChecks);
         AddRow(permissionTable, "", readScope);
         AddRow(permissionTable, "", skillScope);
+        var skillHelp = new LinkLabel { Text = "查看 Skill 使用说明 ›", AutoSize = true, Margin = new Padding(0, 2, 0, 4) };
+        skillHelp.LinkClicked += (_, _) =>
+        {
+            using var help = new SkillHelpForm(directory.Text.Trim());
+            help.ShowDialog(this);
+        };
+        AddRow(permissionTable, "", skillHelp);
 
         var root = new TableLayoutPanel
         {
