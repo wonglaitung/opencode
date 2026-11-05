@@ -19,8 +19,18 @@ public sealed class ScheduledTask
     public long? LastRunAt { get; set; }
     public string? LastStatus { get; set; }
     public string? LastError { get; set; }
+    public ScheduledTaskPermissions Permissions { get; set; } = new();
     [JsonIgnore]
     public bool Running { get; set; }
+}
+
+public sealed class ScheduledTaskPermissions
+{
+    public bool Read { get; set; } = true;
+    public bool Edit { get; set; } = true;
+    public bool Bash { get; set; } = true;
+    public bool Network { get; set; } = true;
+    public bool Skill { get; set; } = true;
 }
 
 public sealed class ScheduledRun
@@ -138,6 +148,7 @@ public sealed class ScheduledTaskScheduler : IDisposable
             var index = tasks.FindIndex(x => x.Id == task.Id);
             var existing = index >= 0 ? tasks[index] : null;
             if (existing?.Running == true) throw new InvalidOperationException("任务正在运行，不能修改");
+            task.Permissions ??= new();
             task.Running = existing?.Running ?? false;
             task.LastRunAt = existing?.LastRunAt ?? task.LastRunAt;
             task.LastStatus = existing?.LastStatus ?? task.LastStatus;
@@ -504,6 +515,14 @@ public sealed class ScheduledTaskScheduler : IDisposable
         LastRunAt = task.LastRunAt,
         LastStatus = task.LastStatus,
         LastError = task.LastError,
+        Permissions = new ScheduledTaskPermissions
+        {
+            Read = task.Permissions?.Read ?? true,
+            Edit = task.Permissions?.Edit ?? true,
+            Bash = task.Permissions?.Bash ?? true,
+            Network = task.Permissions?.Network ?? true,
+            Skill = task.Permissions?.Skill ?? true
+        },
         Running = task.Running
     };
 

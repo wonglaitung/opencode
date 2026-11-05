@@ -140,7 +140,7 @@ internal sealed class TrayContext : ApplicationContext
             RedirectStandardError = true,
             WorkingDirectory = task.Directory
         };
-        psi.Environment["OPENCODE_PERMISSION"] = ScheduledPermissions(task.Directory);
+        psi.Environment["OPENCODE_PERMISSION"] = ScheduledPermissions(task);
         psi.ArgumentList.Add("--pure");
         psi.ArgumentList.Add("run");
         psi.ArgumentList.Add("--format");
@@ -149,9 +149,16 @@ internal sealed class TrayContext : ApplicationContext
         return Process.Start(psi) ?? throw new InvalidOperationException("无法启动 OpenCode");
     }
 
-    private static string ScheduledPermissions(string directory)
+    private static string ScheduledPermissions(ScheduledTask task)
     {
-        return $"{{\"read\":{ReadRule(directory)},\"edit\":\"allow\",\"list\":\"allow\",\"glob\":\"allow\",\"grep\":\"allow\",\"bash\":\"allow\",\"webfetch\":\"allow\",\"websearch\":\"allow\",\"skill\":{ProjectSkillRule(directory)}}}";
+        var permissions = task.Permissions ?? new ScheduledTaskPermissions();
+        var read = permissions.Read ? ReadRule(task.Directory) : "\"deny\"";
+        var readTool = permissions.Read ? "\"allow\"" : "\"deny\"";
+        var edit = permissions.Edit ? "\"allow\"" : "\"deny\"";
+        var bash = permissions.Bash ? "\"allow\"" : "\"deny\"";
+        var network = permissions.Network ? "\"allow\"" : "\"deny\"";
+        var skill = permissions.Skill ? ProjectSkillRule(task.Directory) : "\"deny\"";
+        return $"{{\"read\":{read},\"edit\":{edit},\"list\":{readTool},\"glob\":{readTool},\"grep\":{readTool},\"bash\":{bash},\"webfetch\":{network},\"websearch\":{network},\"skill\":{skill}}}";
     }
 
     private static string ReadRule(string directory)

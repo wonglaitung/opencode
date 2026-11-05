@@ -291,6 +291,12 @@ internal sealed class TaskEditorForm : Form
     private readonly DateTimePicker time = new() { Dock = DockStyle.Fill, Format = DateTimePickerFormat.Time, ShowUpDown = true };
     private readonly FlowLayoutPanel weekdays = new() { Dock = DockStyle.Fill, Height = 32 };
     private readonly CheckBox enabled = new() { Text = "启用任务", Checked = true, AutoSize = true };
+    private readonly CheckBox allowRead = new() { Text = "读取项目文件", Checked = true, AutoSize = true };
+    private readonly CheckBox allowEdit = new() { Text = "修改项目文件", Checked = true, AutoSize = true };
+    private readonly CheckBox allowBash = new() { Text = "执行命令", Checked = true, AutoSize = true };
+    private readonly CheckBox allowNetwork = new() { Text = "访问网络", Checked = true, AutoSize = true };
+    private readonly CheckBox allowSkill = new() { Text = "加载项目 Skill", Checked = true, AutoSize = true };
+    private readonly FlowLayoutPanel permissions = new() { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true };
     private readonly Label error = new() { ForeColor = Color.Firebrick, AutoSize = true };
     private readonly ScheduledTask? existing;
     private readonly List<CheckBox> weekdayChecks = [];
@@ -303,8 +309,8 @@ internal sealed class TaskEditorForm : Form
         Text = existing is null ? "新建定时任务" : "编辑定时任务";
         StartPosition = FormStartPosition.CenterParent;
         Width = 560;
-        Height = 520;
-        MinimumSize = new Size(520, 480);
+        Height = 600;
+        MinimumSize = new Size(520, 520);
         try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
 
         schedule.Items.AddRange(["一次性", "每天", "每周"]);
@@ -331,6 +337,12 @@ internal sealed class TaskEditorForm : Form
             weekdays.Controls.Add(check);
         }
 
+        foreach (var check in new[] { allowRead, allowEdit, allowBash, allowNetwork, allowSkill })
+        {
+            check.Margin = new Padding(0, 4, 14, 0);
+            permissions.Controls.Add(check);
+        }
+
         var layout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -347,6 +359,7 @@ internal sealed class TaskEditorForm : Form
         AddRow(layout, "执行时间", once);
         AddRow(layout, "每天/每周时间", time);
         AddRow(layout, "星期", weekdays);
+        AddRow(layout, "权限", permissions);
         AddRow(layout, "", enabled);
         AddRow(layout, "", error);
 
@@ -371,6 +384,12 @@ internal sealed class TaskEditorForm : Form
             foreach (var day in existing.Weekdays)
                 if (day is >= 0 and < 7) weekdayChecks[day].Checked = true;
             enabled.Checked = existing.Enabled;
+            var existingPermissions = existing.Permissions ?? new ScheduledTaskPermissions();
+            allowRead.Checked = existingPermissions.Read;
+            allowEdit.Checked = existingPermissions.Edit;
+            allowBash.Checked = existingPermissions.Bash;
+            allowNetwork.Checked = existingPermissions.Network;
+            allowSkill.Checked = existingPermissions.Skill;
         }
         else
         {
@@ -422,7 +441,15 @@ internal sealed class TaskEditorForm : Form
             OnceAt = onceAt,
             Time = time.Value.ToString("HH:mm"),
             Weekdays = selectedWeekdays,
-            Enabled = enabled.Checked
+            Enabled = enabled.Checked,
+            Permissions = new ScheduledTaskPermissions
+            {
+                Read = allowRead.Checked,
+                Edit = allowEdit.Checked,
+                Bash = allowBash.Checked,
+                Network = allowNetwork.Checked,
+                Skill = allowSkill.Checked
+            }
         };
         DialogResult = DialogResult.OK;
         Close();
