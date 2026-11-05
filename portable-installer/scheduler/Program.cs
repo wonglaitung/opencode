@@ -136,7 +136,7 @@ internal sealed class TrayContext : ApplicationContext
         {
             UseShellExecute = true,
             WorkingDirectory = task.Directory,
-            Arguments = "--prompt " + Quote(task.Prompt)
+            Arguments = "--pure --prompt " + Quote(task.Prompt)
         }) ?? throw new InvalidOperationException("无法启动 OpenCode");
     }
 
