@@ -129,24 +129,14 @@ internal sealed class TrayContext : ApplicationContext
         if (!Directory.Exists(task.Directory)) throw new InvalidOperationException("项目目录不存在");
         var opencode = Path.Combine(Root, "runtime", "opencode.cmd");
         if (!File.Exists(opencode)) throw new InvalidOperationException("未找到运行环境，请重新运行安装包");
-        var args = "--prompt " + Quote(task.Prompt);
-        var openConsole = Path.Combine(Root, "terminal", "OpenConsole.exe");
-        if (File.Exists(openConsole))
-        {
-            var title = task.Name.Replace("\"", "").Replace("&", "＆").Replace("|", "丨").Replace("<", "＜").Replace(">", "＞");
-            var command = "cmd /c \"title 定时任务 - " + title + " && " + Quote(opencode) + " " + args + "\"";
-            return Process.Start(new ProcessStartInfo(openConsole)
-            {
-                UseShellExecute = true,
-                WorkingDirectory = task.Directory,
-                Arguments = command
-            }) ?? throw new InvalidOperationException("无法启动定时任务终端");
-        }
+        // 定时任务直接启动 opencode 的 TUI 进程，不经过 OpenConsole。
+        // OpenConsole 会很快退出，导致调度器误判任务已完成；直接跟踪 opencode.cmd 才能
+        // 拿到真实退出码，并让权限确认留在窗口中等待人工处理。
         return Process.Start(new ProcessStartInfo(opencode)
         {
             UseShellExecute = true,
             WorkingDirectory = task.Directory,
-            Arguments = args
+            Arguments = "--prompt " + Quote(task.Prompt)
         }) ?? throw new InvalidOperationException("无法启动 OpenCode");
     }
 
