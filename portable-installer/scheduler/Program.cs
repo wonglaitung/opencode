@@ -151,7 +151,35 @@ internal sealed class TrayContext : ApplicationContext
 
     private static string ScheduledPermissions(string directory)
     {
-        return $"{{\"read\":\"allow\",\"edit\":\"allow\",\"list\":\"allow\",\"glob\":\"allow\",\"grep\":\"allow\",\"bash\":\"allow\",\"webfetch\":\"allow\",\"websearch\":\"allow\",\"skill\":{ProjectSkillRule(directory)}}}";
+        return $"{{\"read\":{ReadRule(directory)},\"edit\":\"allow\",\"list\":\"allow\",\"glob\":\"allow\",\"grep\":\"allow\",\"bash\":\"allow\",\"webfetch\":\"allow\",\"websearch\":\"allow\",\"skill\":{ProjectSkillRule(directory)}}}";
+    }
+
+    private static string ReadRule(string directory)
+    {
+        var worktree = Worktree(directory);
+        var relative = Path.GetRelativePath(worktree, directory).Replace('\\', '/');
+        var absolute = Path.GetFullPath(directory).Replace('\\', '/');
+        var allow = relative == "."
+            ? new[] { "**" }
+            : new[] { relative, $"{relative}/**" };
+        var rules = new List<string> { "\"*\":\"deny\"" };
+        rules.AddRange(allow.Concat(new[] { absolute, $"{absolute}/**" })
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(x => $"{JsonSerializer.Serialize(x)}:\"allow\""));
+        return $"{{{string.Join(",", rules)}}}";
+    }
+
+    private static string Worktree(string directory)
+    {
+        var current = new DirectoryInfo(Path.GetFullPath(directory));
+        while (current is not null)
+        {
+            if (Directory.Exists(Path.Combine(current.FullName, ".git")) ||
+                File.Exists(Path.Combine(current.FullName, ".git")))
+                return current.FullName;
+            current = current.Parent;
+        }
+        return Path.GetFullPath(directory);
     }
 
     private static string ProjectSkillRule(string directory)
