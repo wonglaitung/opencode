@@ -23,7 +23,7 @@ internal sealed class TrayContext : ApplicationContext
 {
     private static readonly string Home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
     private static readonly string Root = Path.Combine(Home, "OpenCode");
-    private const string ScheduledPermissions = """{"read":"allow","edit":"allow","list":"allow","glob":"allow","grep":"allow","bash":"allow","webfetch":"allow","websearch":"allow"}""";
+    private const string ScheduledPermissions = """{"read":"allow","edit":"allow","list":"allow","glob":"allow","grep":"allow","bash":"allow","webfetch":"allow","websearch":"allow","skill":"allow"}""";
     private readonly ScheduledTaskScheduler scheduler;
     private readonly NotifyIcon tray;
     private SchedulerForm? manager;
