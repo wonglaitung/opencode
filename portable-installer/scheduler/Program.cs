@@ -141,6 +141,8 @@ internal sealed class TrayContext : ApplicationContext
         };
         psi.ArgumentList.Add("--pure");
         psi.ArgumentList.Add("run");
+        psi.ArgumentList.Add("--format");
+        psi.ArgumentList.Add("json");
         psi.ArgumentList.Add(task.Prompt);
         return Process.Start(psi) ?? throw new InvalidOperationException("无法启动 OpenCode");
     }

@@ -34,6 +34,8 @@ public sealed class ScheduledRun
     public string Status { get; set; } = "running";
     public int? ExitCode { get; set; }
     public string? Error { get; set; }
+    public string? SessionID { get; set; }
+    public int ToolCalls { get; set; }
 }
 
 public sealed class ScheduledTaskScheduler : IDisposable
@@ -49,6 +51,7 @@ public sealed class ScheduledTaskScheduler : IDisposable
     private readonly object logLock = new();
     private readonly string path;
     private readonly string historyPath;
+    private readonly string eventsPath;
     private readonly string textLogPath;
     private readonly Func<ScheduledTask, Process> start;
     private readonly Action changed;
@@ -63,6 +66,7 @@ public sealed class ScheduledTaskScheduler : IDisposable
         Directory.CreateDirectory(configDir);
         path = Path.Combine(configDir, "scheduled-tasks.json");
         historyPath = Path.Combine(configDir, "scheduled-task-runs.json");
+        eventsPath = Path.Combine(configDir, "scheduled-task-events.jsonl");
         textLogPath = Path.Combine(configDir, "scheduled-task.log");
         this.start = start;
         this.changed = changed;
@@ -103,7 +107,9 @@ public sealed class ScheduledTaskScheduler : IDisposable
                     FinishedAt = x.FinishedAt,
                     Status = x.Status,
                     ExitCode = x.ExitCode,
-                    Error = x.Error
+                    Error = x.Error,
+                    SessionID = x.SessionID,
+                    ToolCalls = x.ToolCalls
                 })
                 .ToList();
         }
@@ -230,11 +236,11 @@ public sealed class ScheduledTaskScheduler : IDisposable
             process.EnableRaisingEvents = true;
             process.OutputDataReceived += (_, eventArgs) =>
             {
-                if (eventArgs.Data is not null) AppendOutput(task.Name, eventArgs.Data);
+                if (eventArgs.Data is not null) HandleOutput(task.Id, task.Name, eventArgs.Data);
             };
             process.ErrorDataReceived += (_, eventArgs) =>
             {
-                if (eventArgs.Data is not null) AppendOutput(task.Name, eventArgs.Data);
+                if (eventArgs.Data is not null) AppendLog($"[错误输出] {task.Name} | {eventArgs.Data}");
             };
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
@@ -352,18 +358,67 @@ public sealed class ScheduledTaskScheduler : IDisposable
         }
     }
 
-    private void AppendOutput(string taskName, string line)
+    private void HandleOutput(string taskId, string taskName, string line)
     {
         try
         {
-            lock (logLock)
+            using var doc = JsonDocument.Parse(line);
+            var root = doc.RootElement;
+            var type = root.TryGetProperty("type", out var typeElement) ? typeElement.GetString() : null;
+            var sessionID = root.TryGetProperty("sessionID", out var sessionElement) ? sessionElement.GetString() : null;
+            ScheduledRun? run = null;
+            lock (gate)
             {
-                File.AppendAllText(textLogPath, $"{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss} [输出] {taskName} | {line}\n");
+                run = runIds.TryGetValue(taskId, out var runId) ? runs.FirstOrDefault(x => x.Id == runId) : null;
+                if (run is not null && sessionID is not null) run.SessionID = sessionID;
+                if (run is not null && type == "tool_use") run.ToolCalls++;
+            }
+            WriteEvent(taskId, taskName, line);
+            if (type == "tool_use" && root.TryGetProperty("part", out var part) && part.TryGetProperty("tool", out var tool))
+            {
+                var status = part.TryGetProperty("state", out var state) && state.TryGetProperty("status", out var statusElement)
+                    ? statusElement.GetString()
+                    : "unknown";
+                AppendLog($"[工具] {taskName} | {tool.GetString()} | {status}");
+            }
+            else if (type == "error")
+            {
+                AppendLog($"[事件] {taskName} | error | {line}");
+            }
+            else if (type == "text" && root.TryGetProperty("part", out var textPart) &&
+                     textPart.TryGetProperty("text", out var textElement))
+            {
+                var text = textElement.GetString();
+                if (!string.IsNullOrWhiteSpace(text)) AppendLog($"[文本] {taskName} | {text}");
             }
         }
         catch
         {
-            // 输出日志失败不能影响任务。
+            // 非 JSON 输出（启动日志等）也保留在文本日志中。
+            AppendLog($"[输出] {taskName} | {line}");
+        }
+    }
+
+    private void WriteEvent(string taskId, string taskName, string line)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(line);
+            var wrapped = JsonSerializer.Serialize(new
+            {
+                timestamp = DateTimeOffset.Now.ToUnixTimeMilliseconds(),
+                taskId,
+                taskName,
+                @event = doc.RootElement
+            }, JsonOptions);
+            lock (logLock)
+            {
+                File.AppendAllText(eventsPath, wrapped + "\n");
+            }
+        }
+        catch
+        {
+            // 非 JSON 输出不写入事件流；文本日志仍保留。
         }
     }
 

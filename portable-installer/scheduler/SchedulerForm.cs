@@ -251,7 +251,9 @@ internal sealed class RunLogForm : Form
         grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "结束", Width = 140 });
         grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "状态", Width = 100 });
         grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "退出码", Width = 75 });
-        grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "错误", Width = 260 });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "会话", Width = 170 });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "工具调用", Width = 75 });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "错误", Width = 220 });
         foreach (var run in scheduler.ListRuns(task.Id))
         {
             grid.Rows.Add(
@@ -259,6 +261,8 @@ internal sealed class RunLogForm : Form
                 run.FinishedAt is null ? "—" : FormatTime(run.FinishedAt.Value),
                 StatusText(run.Status),
                 run.ExitCode?.ToString() ?? "—",
+                run.SessionID ?? "—",
+                run.ToolCalls.ToString(),
                 run.Error ?? ""
             );
         }
