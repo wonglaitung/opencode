@@ -30,6 +30,7 @@ internal sealed class SchedulerForm : Form
         buttons.Controls.Add(Button("删除", (_, _) => DeleteSelected()));
         buttons.Controls.Add(Button("立即运行", (_, _) => RunSelected()));
         buttons.Controls.Add(Button("启用/暂停", (_, _) => ToggleSelected()));
+        buttons.Controls.Add(Button("查看日志", (_, _) => ShowLogs()));
         buttons.Controls.Add(Button("刷新", (_, _) => RefreshTasks()));
 
         grid = new DataGridView
@@ -165,6 +166,14 @@ internal sealed class SchedulerForm : Form
         }
     }
 
+    private void ShowLogs()
+    {
+        var task = SelectedTask();
+        if (task is null) return;
+        using var form = new RunLogForm(scheduler, task);
+        form.ShowDialog(this);
+    }
+
     private void ToggleSelected()
     {
         var task = SelectedTask();
@@ -213,6 +222,58 @@ internal sealed class SchedulerForm : Form
         5 => "周五",
         6 => "周六",
         _ => value.ToString()
+    };
+}
+
+internal sealed class RunLogForm : Form
+{
+    public RunLogForm(ScheduledTaskScheduler scheduler, ScheduledTask task)
+    {
+        Text = $"运行日志 - {task.Name}";
+        StartPosition = FormStartPosition.CenterParent;
+        Width = 820;
+        Height = 460;
+        MinimumSize = new Size(680, 360);
+        try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
+
+        var grid = new DataGridView
+        {
+            Dock = DockStyle.Fill,
+            ReadOnly = true,
+            AllowUserToAddRows = false,
+            AllowUserToDeleteRows = false,
+            AutoGenerateColumns = false,
+            RowHeadersVisible = false,
+            BackgroundColor = Color.White,
+            BorderStyle = BorderStyle.None
+        };
+        grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "开始", Width = 140 });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "结束", Width = 140 });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "状态", Width = 100 });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "退出码", Width = 75 });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "错误", Width = 260 });
+        foreach (var run in scheduler.ListRuns(task.Id))
+        {
+            grid.Rows.Add(
+                FormatTime(run.StartedAt),
+                run.FinishedAt is null ? "—" : FormatTime(run.FinishedAt.Value),
+                StatusText(run.Status),
+                run.ExitCode?.ToString() ?? "—",
+                run.Error ?? ""
+            );
+        }
+        Controls.Add(grid);
+    }
+
+    private static string FormatTime(long value) =>
+        DateTimeOffset.FromUnixTimeMilliseconds(value).LocalDateTime.ToString("MM-dd HH:mm:ss");
+
+    private static string StatusText(string status) => status switch
+    {
+        "completed" => "完成",
+        "failed" => "失败",
+        "running" => "运行中",
+        _ => status
     };
 }
 

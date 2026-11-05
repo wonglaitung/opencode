@@ -23,6 +23,19 @@ public sealed class ScheduledTask
     public bool Running { get; set; }
 }
 
+public sealed class ScheduledRun
+{
+    public string Id { get; set; } = "";
+    public string TaskId { get; set; } = "";
+    public string TaskName { get; set; } = "";
+    public string Directory { get; set; } = "";
+    public long StartedAt { get; set; }
+    public long? FinishedAt { get; set; }
+    public string Status { get; set; } = "running";
+    public int? ExitCode { get; set; }
+    public string? Error { get; set; }
+}
+
 public sealed class ScheduledTaskScheduler : IDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -34,19 +47,26 @@ public sealed class ScheduledTaskScheduler : IDisposable
 
     private readonly object gate = new();
     private readonly string path;
+    private readonly string historyPath;
+    private readonly string textLogPath;
     private readonly Func<ScheduledTask, Process> start;
     private readonly Action changed;
     private readonly System.Threading.Timer timer;
     private readonly Dictionary<string, Process> running = new();
+    private readonly Dictionary<string, string> runIds = new();
     private List<ScheduledTask> tasks;
+    private List<ScheduledRun> runs;
 
     public ScheduledTaskScheduler(string configDir, Func<ScheduledTask, Process> start, Action changed)
     {
         Directory.CreateDirectory(configDir);
         path = Path.Combine(configDir, "scheduled-tasks.json");
+        historyPath = Path.Combine(configDir, "scheduled-task-runs.json");
+        textLogPath = Path.Combine(configDir, "scheduled-task.log");
         this.start = start;
         this.changed = changed;
         tasks = Load();
+        runs = LoadRuns();
         var now = DateTimeOffset.Now;
         foreach (var task in tasks)
         {
@@ -62,6 +82,29 @@ public sealed class ScheduledTaskScheduler : IDisposable
         lock (gate)
         {
             return tasks.Select(Clone).ToList();
+        }
+    }
+
+    public List<ScheduledRun> ListRuns(string taskId)
+    {
+        lock (gate)
+        {
+            return runs
+                .Where(x => x.TaskId == taskId)
+                .OrderByDescending(x => x.StartedAt)
+                .Select(x => new ScheduledRun
+                {
+                    Id = x.Id,
+                    TaskId = x.TaskId,
+                    TaskName = x.TaskName,
+                    Directory = x.Directory,
+                    StartedAt = x.StartedAt,
+                    FinishedAt = x.FinishedAt,
+                    Status = x.Status,
+                    ExitCode = x.ExitCode,
+                    Error = x.Error
+                })
+                .ToList();
         }
     }
 
@@ -165,23 +208,32 @@ public sealed class ScheduledTaskScheduler : IDisposable
             task.Enabled = false;
             task.NextRunAt = null;
         }
+        var run = new ScheduledRun
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            TaskId = task.Id,
+            TaskName = task.Name,
+            Directory = task.Directory,
+            StartedAt = now.ToUnixTimeMilliseconds(),
+            Status = "running"
+        };
+        runs.Add(run);
+        runIds[task.Id] = run.Id;
+        Save();
+        SaveRuns();
+        AppendLog($"开始 | {task.Name} | {task.Directory}");
         try
         {
             var process = start(task);
             running[task.Id] = process;
             process.EnableRaisingEvents = true;
             process.Exited += (_, _) => OnExited(task.Id, process.ExitCode);
-            Save();
+            if (process.HasExited) OnExited(task.Id, process.ExitCode);
             changed();
         }
         catch (Exception ex)
         {
-            task.Running = false;
-            task.LastStatus = "failed";
-            task.LastError = ex.Message;
-            if (task.Schedule == "once") task.Enabled = false;
-            Save();
-            changed();
+            FinishRun(task, run, "failed", null, ex.Message);
         }
     }
 
@@ -194,17 +246,95 @@ public sealed class ScheduledTaskScheduler : IDisposable
                 var task = tasks.FirstOrDefault(x => x.Id == id);
                 if (task is null) return;
                 running.Remove(id);
-                task.Running = false;
-                task.LastStatus = exitCode == 0 ? "completed" : "failed";
-                task.LastError = exitCode == 0 ? null : $"进程退出码 {exitCode}";
-                if (task.Schedule == "once") task.Enabled = false;
-                Save();
-                changed();
+                var run = runIds.TryGetValue(id, out var runId)
+                    ? runs.FirstOrDefault(x => x.Id == runId)
+                    : null;
+                FinishRun(
+                    task,
+                    run,
+                    exitCode == 0 ? "completed" : "failed",
+                    exitCode,
+                    exitCode == 0 ? null : $"进程退出码 {exitCode}"
+                );
             }
         }
         catch
         {
             // 进程退出回调必须吞掉异常，避免 Timer/线程池崩溃。
+        }
+    }
+
+    private void FinishRun(ScheduledTask task, ScheduledRun? run, string status, int? exitCode, string? error)
+    {
+        task.Running = false;
+        task.LastStatus = status;
+        task.LastError = error;
+        if (task.Schedule == "once") task.Enabled = false;
+        if (run is not null)
+        {
+            run.Status = status;
+            run.ExitCode = exitCode;
+            run.Error = error;
+            run.FinishedAt = DateTimeOffset.Now.ToUnixTimeMilliseconds();
+        }
+        runIds.Remove(task.Id);
+        PruneRuns();
+        Save();
+        SaveRuns();
+        AppendLog($"{FinishLabel(status)} | {task.Name} | {error ?? $"退出码 {exitCode}"}");
+        changed();
+    }
+
+    private static string FinishLabel(string status) => status switch
+    {
+        "completed" => "完成",
+        "failed" => "失败",
+        _ => status
+    };
+
+    private List<ScheduledRun> LoadRuns()
+    {
+        try
+        {
+            if (!File.Exists(historyPath)) return [];
+            var json = File.ReadAllText(historyPath);
+            return JsonSerializer.Deserialize<List<ScheduledRun>>(json, JsonOptions) ?? [];
+        }
+        catch
+        {
+            var backup = historyPath + ".corrupt-" + DateTimeOffset.Now.ToUnixTimeSeconds();
+            try { File.Move(historyPath, backup); } catch { }
+            return [];
+        }
+    }
+
+    private void SaveRuns()
+    {
+        var json = JsonSerializer.Serialize(runs, JsonOptions);
+        var temp = historyPath + ".tmp";
+        File.WriteAllText(temp, json);
+        File.Move(temp, historyPath, true);
+    }
+
+    private void PruneRuns()
+    {
+        runs = runs
+            .GroupBy(x => x.TaskId)
+            .SelectMany(group => group.OrderByDescending(x => x.StartedAt).Take(20))
+            .OrderByDescending(x => x.StartedAt)
+            .Take(200)
+            .ToList();
+    }
+
+    private void AppendLog(string message)
+    {
+        try
+        {
+            File.AppendAllText(textLogPath, $"{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss} {message}\n");
+        }
+        catch
+        {
+            // 日志写入失败不能影响定时任务本身。
         }
     }
 
