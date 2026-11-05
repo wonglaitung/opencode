@@ -39,7 +39,6 @@ internal sealed class SkillHelpForm : Form
 
     private static string BuildHelpText(string? directory)
     {
-        var project = string.IsNullOrWhiteSpace(directory) ? @"<项目目录>" : directory;
         var skills = string.IsNullOrWhiteSpace(directory)
             ? @"<项目目录>\.opencode\skills"
             : Path.Combine(directory, ".opencode", "skills");
@@ -50,8 +49,6 @@ Skill 使用说明
 仅扫描任务项目目录本身，不扫描父目录、全局目录或插件来源。
 
 {{skills}}\<skill-name>\SKILL.md
-或
-{{Path.Combine(project, ".opencode", "skill")}}\<skill-name>\SKILL.md
 
 2. 最小 SKILL.md 示例
 ---
@@ -90,7 +87,7 @@ name 必须是唯一名称，并与调度器解析到的项目 Skill 名称一�
 [工具] 任务名 | skill | completed
 
 6. 当前限制
-- 仅加载任务项目目录下的 .opencode\skills 或 .opencode\skill
+- 仅加载任务项目目录下的 .opencode\skills
 - 全局、用户级和插件来源的 Skill 始终禁用
 - 任务目录不是项目根目录时，请把任务目录改为项目根目录
 - 未勾选「使用项目 Skill」时，所有 Skill 调用都会被拒绝

@@ -192,10 +192,9 @@ internal sealed class TrayContext : ApplicationContext
     private static string ProjectSkillRule(string directory)
     {
         var names = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var folder in new[] { "skill", "skills" })
+        var root = Path.Combine(directory, ".opencode", "skills");
+        if (Directory.Exists(root))
         {
-            var root = Path.Combine(directory, ".opencode", folder);
-            if (!Directory.Exists(root)) continue;
             foreach (var file in Directory.EnumerateFiles(root, "SKILL.md", SearchOption.AllDirectories))
             {
                 var name = ReadSkillName(file);

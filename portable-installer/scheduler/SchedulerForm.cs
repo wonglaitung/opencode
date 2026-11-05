@@ -488,8 +488,8 @@ internal sealed class TaskEditorForm : Form
             ? "读取工具限制：仅允许任务项目目录内的文件；项目外读取始终拒绝。注意：启用「执行命令」后，bash 不受此读取范围限制。"
             : $"读取工具限制：仅允许 {dir} 及其子目录内的文件；项目外读取始终拒绝。注意：启用「执行命令」后，bash 不受此读取范围限制。";
         skillScope.Text = string.IsNullOrWhiteSpace(dir)
-            ? "Skill 限制：仅加载项目内 .opencode\\skills 或 .opencode\\skill；全局、用户级和插件来源的 Skill 始终禁用。"
-            : $"Skill 限制：仅加载 {Path.Combine(dir, ".opencode")} 下的 skills 或 skill；全局、用户级和插件来源的 Skill 始终禁用。";
+            ? "Skill 限制：仅加载项目内 .opencode\\skills；全局、用户级和插件来源的 Skill 始终禁用。"
+            : $"Skill 限制：仅加载 {Path.Combine(dir, ".opencode", "skills")}；全局、用户级和插件来源的 Skill 始终禁用。";
     }
 
     private void Save()
