@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using OpenCodeLauncher;
 
 namespace OpenCodeScheduler;
@@ -23,7 +24,6 @@ internal sealed class TrayContext : ApplicationContext
 {
     private static readonly string Home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
     private static readonly string Root = Path.Combine(Home, "OpenCode");
-    private const string ScheduledPermissions = """{"read":"allow","edit":"allow","list":"allow","glob":"allow","grep":"allow","bash":"allow","webfetch":"allow","websearch":"allow","skill":"allow"}""";
     private readonly ScheduledTaskScheduler scheduler;
     private readonly NotifyIcon tray;
     private SchedulerForm? manager;
@@ -140,12 +140,52 @@ internal sealed class TrayContext : ApplicationContext
             RedirectStandardError = true,
             WorkingDirectory = task.Directory
         };
-        psi.Environment["OPENCODE_PERMISSION"] = ScheduledPermissions;
+        psi.Environment["OPENCODE_PERMISSION"] = ScheduledPermissions(task.Directory);
         psi.ArgumentList.Add("--pure");
         psi.ArgumentList.Add("run");
         psi.ArgumentList.Add("--format");
         psi.ArgumentList.Add("json");
         psi.ArgumentList.Add(task.Prompt);
         return Process.Start(psi) ?? throw new InvalidOperationException("无法启动 OpenCode");
+    }
+
+    private static string ScheduledPermissions(string directory)
+    {
+        return $"{{\"read\":\"allow\",\"edit\":\"allow\",\"list\":\"allow\",\"glob\":\"allow\",\"grep\":\"allow\",\"bash\":\"allow\",\"webfetch\":\"allow\",\"websearch\":\"allow\",\"skill\":{ProjectSkillRule(directory)}}}";
+    }
+
+    private static string ProjectSkillRule(string directory)
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var folder in new[] { "skill", "skills" })
+        {
+            var root = Path.Combine(directory, ".opencode", folder);
+            if (!Directory.Exists(root)) continue;
+            foreach (var file in Directory.EnumerateFiles(root, "SKILL.md", SearchOption.AllDirectories))
+            {
+                var name = ReadSkillName(file);
+                if (!string.IsNullOrWhiteSpace(name) && name != "*") names.Add(name);
+            }
+        }
+        if (names.Count == 0) return "\"deny\"";
+        var rules = string.Join(",", names.OrderBy(x => x, StringComparer.Ordinal).Select(x => $"{JsonSerializer.Serialize(x)}:\"allow\""));
+        return $"{{\"*\":\"deny\",{rules}}}";
+    }
+
+    private static string? ReadSkillName(string file)
+    {
+        using var reader = new StreamReader(file);
+        if (reader.ReadLine()?.Trim() != "---") return null;
+        while (reader.ReadLine() is { } line)
+        {
+            var value = line.Trim();
+            if (value == "---") return null;
+            if (!value.StartsWith("name:", StringComparison.Ordinal)) continue;
+            var name = value[5..].Trim();
+            if (name.Length >= 2 && ((name[0] == '"' && name[^1] == '"') || (name[0] == '\'' && name[^1] == '\'')))
+                name = name[1..^1];
+            return string.IsNullOrWhiteSpace(name) ? null : name;
+        }
+        return null;
     }
 }
