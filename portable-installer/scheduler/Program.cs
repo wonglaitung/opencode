@@ -23,6 +23,7 @@ internal sealed class TrayContext : ApplicationContext
 {
     private static readonly string Home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
     private static readonly string Root = Path.Combine(Home, "OpenCode");
+    private const string ScheduledPermissions = """{"read":"allow","edit":"allow","list":"allow","glob":"allow","grep":"allow","bash":"allow","webfetch":"allow","websearch":"allow"}""";
     private readonly ScheduledTaskScheduler scheduler;
     private readonly NotifyIcon tray;
     private SchedulerForm? manager;
@@ -139,6 +140,7 @@ internal sealed class TrayContext : ApplicationContext
             RedirectStandardError = true,
             WorkingDirectory = task.Directory
         };
+        psi.Environment["OPENCODE_PERMISSION"] = ScheduledPermissions;
         psi.ArgumentList.Add("--pure");
         psi.ArgumentList.Add("run");
         psi.ArgumentList.Add("--format");
