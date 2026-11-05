@@ -88,6 +88,7 @@ Section "Install"
   ; 5. 部署启动器与清空历史会话工具
   SetOutPath "$PROFILE\OpenCode"
   File "OpenCode-launch.exe"
+  File "OpenCode-Scheduler.exe"
   File "launcher-config.js"
   File "OpenCode-Reset.exe"
   File "icon.ico"
@@ -101,6 +102,7 @@ Section "Install"
   CreateDirectory "$SMPROGRAMS\数字程序员"
   CreateShortCut "$SMPROGRAMS\数字程序员\数字程序员.lnk" "$PROFILE\OpenCode\OpenCode-launch.exe" "" "$PROFILE\OpenCode\icon.ico" 0 SW_SHOWNORMAL
   CreateShortCut "$SMPROGRAMS\数字程序员\清空历史会话.lnk" "$PROFILE\OpenCode\OpenCode-Reset.exe" "" "$PROFILE\OpenCode\icon.ico" 0 SW_SHOWNORMAL
+  CreateShortCut "$SMPROGRAMS\数字程序员\定时任务.lnk" "$PROFILE\OpenCode\OpenCode-Scheduler.exe" "" "$PROFILE\OpenCode\icon.ico" 0 SW_SHOWNORMAL
   CreateShortCut "$DESKTOP\数字程序员.lnk" "$PROFILE\OpenCode\OpenCode-launch.exe" "" "$PROFILE\OpenCode\icon.ico" 0 SW_SHOWNORMAL
   System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, i 0, i 0)'
 

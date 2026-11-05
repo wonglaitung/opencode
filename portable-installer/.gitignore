@@ -5,3 +5,7 @@ launcher/bin/
 launcher/obj/
 launcher/publish/
 build/launcher-publish/
+scheduler/bin/
+scheduler/obj/
+scheduler/publish/
+build/scheduler-publish/

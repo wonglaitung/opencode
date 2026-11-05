@@ -33,6 +33,7 @@ button{cursor:pointer}
 .topbar b{color:#334155;font-weight:600}
 .hub-link{border:0;background:transparent;color:#2563eb;font-size:13px;font-weight:600;padding:4px 6px;border-radius:6px}
 .hub-link:hover{background:#eff6ff;text-decoration:underline}
+.top-actions{display:flex;align-items:center;gap:4px}
 .content{flex:1;overflow:auto;padding:28px 34px 24px;max-width:1040px;width:100%;margin:0 auto}
 h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
 .sub{margin:0 0 24px;color:var(--muted)}
@@ -113,7 +114,7 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
     <div class="side-footer">本地模型 · 工作流与插件</div>
   </aside>
   <main class="main">
-    <div class="topbar"><span></span><button class="hub-link" id="hub">灵枢SmartHub</button></div>
+    <div class="topbar"><span></span><span class="top-actions"><button class="hub-link" id="scheduler">定时任务</button><button class="hub-link" id="hub">灵枢SmartHub</button></span></div>
     <div class="content">
       <div class="notice" id="notice"></div>
       <h1>需要帮你做什么？</h1>
@@ -242,6 +243,7 @@ function clearError() {
   $("notice").textContent = "";
   $("notice").classList.remove("show");
 }
+$("scheduler").addEventListener("click", () => post("openScheduler"));
 $("hub").addEventListener("click", () => post("openHub"));
 $("lastProject").addEventListener("click", () => {
   if (!state.lastProject) return;

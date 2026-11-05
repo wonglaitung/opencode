@@ -33,7 +33,13 @@ if errorlevel 1 (echo [FAIL] WebView2 启动器构建失败 & exit /b 1)
 copy /Y "%BUILD%launcher-publish\OpenCode-launch.exe" "%BUILD%OpenCode-launch.exe" >nul
 if errorlevel 1 (echo [FAIL] 启动器复制失败 & exit /b 1)
 
-echo [3/3] 构建主安装包 OpenCode-Setup.exe ...
+echo [3/4] 构建托盘定时任务程序 OpenCode-Scheduler.exe ...
+dotnet publish "%BUILD%..\scheduler\Scheduler.csproj" -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o "%BUILD%scheduler-publish"
+if errorlevel 1 (echo [FAIL] 定时任务程序构建失败 & exit /b 1)
+copy /Y "%BUILD%scheduler-publish\OpenCode-Scheduler.exe" "%BUILD%OpenCode-Scheduler.exe" >nul
+if errorlevel 1 (echo [FAIL] 定时任务程序复制失败 & exit /b 1)
+
+echo [4/4] 构建主安装包 OpenCode-Setup.exe ...
 "%MAKENSIS%" "%BUILD%OpenCode-Setup.nsi"
 if errorlevel 1 (echo [FAIL] 主包构建失败 & exit /b 1)
 

@@ -133,6 +133,17 @@ internal sealed class LauncherForm : Form
                 case "openHub":
                     Process.Start(new ProcessStartInfo(SmartHubUrl) { UseShellExecute = true });
                     break;
+                case "openScheduler":
+                {
+                    var scheduler = Path.Combine(Root, "OpenCode-Scheduler.exe");
+                    if (!File.Exists(scheduler))
+                    {
+                        Post("error", "未找到定时任务程序，请重新运行安装包");
+                        break;
+                    }
+                    Process.Start(new ProcessStartInfo(scheduler) { UseShellExecute = true });
+                    break;
+                }
                 case "browse":
                     Post("browse", Browse(root.GetProperty("payload").GetProperty("dir").GetString() ?? ""));
                     break;
