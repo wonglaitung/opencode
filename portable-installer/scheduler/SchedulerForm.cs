@@ -285,18 +285,20 @@ internal sealed class TaskEditorForm : Form
 {
     private readonly TextBox name = new() { Dock = DockStyle.Fill };
     private readonly TextBox directory = new() { Dock = DockStyle.Fill };
-    private readonly TextBox prompt = new() { Dock = DockStyle.Fill, Multiline = true, Height = 100, ScrollBars = ScrollBars.Vertical };
+    private readonly TextBox prompt = new() { Dock = DockStyle.Fill, Multiline = true, Height = 120, ScrollBars = ScrollBars.Vertical };
     private readonly ComboBox schedule = new() { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly DateTimePicker once = new() { Dock = DockStyle.Fill, Format = DateTimePickerFormat.Custom, CustomFormat = "yyyy-MM-dd HH:mm" };
     private readonly DateTimePicker time = new() { Dock = DockStyle.Fill, Format = DateTimePickerFormat.Time, ShowUpDown = true };
-    private readonly FlowLayoutPanel weekdays = new() { Dock = DockStyle.Fill, Height = 32 };
+    private readonly FlowLayoutPanel weekdays = new() { Dock = DockStyle.Fill, AutoSize = true };
     private readonly CheckBox enabled = new() { Text = "启用任务", Checked = true, AutoSize = true };
-    private readonly CheckBox allowRead = new() { Text = "读取项目文件", Checked = true, AutoSize = true };
-    private readonly CheckBox allowEdit = new() { Text = "修改项目文件", Checked = true, AutoSize = true };
+    private readonly CheckBox allowRead = new() { Text = "读取文件（仅项目目录）", Checked = true, AutoSize = true };
+    private readonly CheckBox allowEdit = new() { Text = "修改文件", Checked = true, AutoSize = true };
     private readonly CheckBox allowBash = new() { Text = "执行命令", Checked = true, AutoSize = true };
     private readonly CheckBox allowNetwork = new() { Text = "访问网络", Checked = true, AutoSize = true };
-    private readonly CheckBox allowSkill = new() { Text = "加载项目 Skill", Checked = true, AutoSize = true };
-    private readonly FlowLayoutPanel permissions = new() { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true };
+    private readonly CheckBox allowSkill = new() { Text = "使用项目 Skill", Checked = true, AutoSize = true };
+    private readonly FlowLayoutPanel permissionChecks = new() { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true };
+    private readonly Label readScope = new() { AutoSize = true, ForeColor = SystemColors.GrayText, MaximumSize = new Size(500, 0) };
+    private readonly Label skillScope = new() { AutoSize = true, ForeColor = SystemColors.GrayText, MaximumSize = new Size(500, 0) };
     private readonly Label error = new() { ForeColor = Color.Firebrick, AutoSize = true };
     private readonly ScheduledTask? existing;
     private readonly List<CheckBox> weekdayChecks = [];
@@ -308,68 +310,75 @@ internal sealed class TaskEditorForm : Form
         this.existing = existing;
         Text = existing is null ? "新建定时任务" : "编辑定时任务";
         StartPosition = FormStartPosition.CenterParent;
-        Width = 560;
-        Height = 600;
-        MinimumSize = new Size(520, 520);
+        Width = 640;
+        Height = 720;
+        MinimumSize = new Size(560, 600);
         try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
 
         schedule.Items.AddRange(["一次性", "每天", "每周"]);
         schedule.SelectedIndex = 0;
         schedule.SelectedIndexChanged += (_, _) => UpdateVisibility();
+        directory.TextChanged += (_, _) => UpdatePermissionHints();
 
-        var dirRow = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, AutoSize = true };
-        dirRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        dirRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 88));
-        directory.Dock = DockStyle.Fill;
-        var browse = new Button { Text = "浏览", Dock = DockStyle.Fill };
-        browse.Click += (_, _) =>
+        foreach (var check in new[] { allowRead, allowEdit, allowBash, allowNetwork, allowSkill })
         {
-            using var dialog = new FolderBrowserDialog { Description = "选择项目目录", SelectedPath = Directory.Exists(directory.Text) ? directory.Text : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) };
-            if (dialog.ShowDialog(this) == DialogResult.OK) directory.Text = dialog.SelectedPath;
-        };
-        dirRow.Controls.Add(directory, 0, 0);
-        dirRow.Controls.Add(browse, 1, 0);
+            check.Margin = new Padding(0, 4, 18, 0);
+            permissionChecks.Controls.Add(check);
+        }
 
         for (var i = 0; i < 7; i++)
         {
-            var check = new CheckBox { Text = WeekdayName(i), AutoSize = true, Margin = new Padding(0, 4, 10, 0) };
+            var check = new CheckBox { Text = WeekdayName(i), AutoSize = true, Margin = new Padding(0, 4, 12, 0) };
             weekdayChecks.Add(check);
             weekdays.Controls.Add(check);
         }
 
-        foreach (var check in new[] { allowRead, allowEdit, allowBash, allowNetwork, allowSkill })
-        {
-            check.Margin = new Padding(0, 4, 14, 0);
-            permissions.Controls.Add(check);
-        }
+        var (basicBox, basic) = CreateSection("基本信息");
+        AddRow(basic, "任务名称", name);
+        AddRow(basic, "项目目录", BuildDirectoryRow());
+        AddRow(basic, "Prompt", prompt);
 
-        var layout = new TableLayoutPanel
+        var (scheduleBox, scheduleTable) = CreateSection("执行计划");
+        AddRow(scheduleTable, "触发方式", schedule);
+        AddRow(scheduleTable, "一次性时间", once);
+        AddRow(scheduleTable, "每天/每周时间", time);
+        AddRow(scheduleTable, "每周星期", weekdays);
+        AddRow(scheduleTable, "", enabled);
+
+        var (permissionBox, permissionTable) = CreateSection("权限");
+        AddRow(permissionTable, "允许操作", permissionChecks);
+        AddRow(permissionTable, "", readScope);
+        AddRow(permissionTable, "", skillScope);
+
+        var root = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            Padding = new Padding(14),
-            ColumnCount = 2,
-            AutoScroll = true
+            AutoScroll = true,
+            ColumnCount = 1,
+            RowCount = 4,
+            Padding = new Padding(12)
         };
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        AddRow(layout, "任务名称", name);
-        AddRow(layout, "项目目录", dirRow);
-        AddRow(layout, "Prompt", prompt);
-        AddRow(layout, "触发方式", schedule);
-        AddRow(layout, "执行时间", once);
-        AddRow(layout, "每天/每周时间", time);
-        AddRow(layout, "星期", weekdays);
-        AddRow(layout, "权限", permissions);
-        AddRow(layout, "", enabled);
-        AddRow(layout, "", error);
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        for (var i = 0; i < 3; i++) root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        root.Controls.Add(basicBox, 0, 0);
+        root.Controls.Add(scheduleBox, 0, 1);
+        root.Controls.Add(permissionBox, 0, 2);
+        root.Controls.Add(error, 0, 3);
 
-        var actions = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 48, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(10, 8, 10, 8) };
+        var actions = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Bottom,
+            Height = 52,
+            FlowDirection = FlowDirection.RightToLeft,
+            Padding = new Padding(10, 8, 10, 8)
+        };
         var save = new Button { Text = "保存", AutoSize = true, DialogResult = DialogResult.None };
         var cancel = new Button { Text = "取消", AutoSize = true, DialogResult = DialogResult.Cancel };
         save.Click += (_, _) => Save();
         actions.Controls.Add(save);
         actions.Controls.Add(cancel);
-        Controls.Add(layout);
+        Controls.Add(root);
         Controls.Add(actions);
 
         if (existing is not null)
@@ -384,12 +393,12 @@ internal sealed class TaskEditorForm : Form
             foreach (var day in existing.Weekdays)
                 if (day is >= 0 and < 7) weekdayChecks[day].Checked = true;
             enabled.Checked = existing.Enabled;
-            var existingPermissions = existing.Permissions ?? new ScheduledTaskPermissions();
-            allowRead.Checked = existingPermissions.Read;
-            allowEdit.Checked = existingPermissions.Edit;
-            allowBash.Checked = existingPermissions.Bash;
-            allowNetwork.Checked = existingPermissions.Network;
-            allowSkill.Checked = existingPermissions.Skill;
+            var permissions = existing.Permissions ?? new ScheduledTaskPermissions();
+            allowRead.Checked = permissions.Read;
+            allowEdit.Checked = permissions.Edit;
+            allowBash.Checked = permissions.Bash;
+            allowNetwork.Checked = permissions.Network;
+            allowSkill.Checked = permissions.Skill;
         }
         else
         {
@@ -399,6 +408,50 @@ internal sealed class TaskEditorForm : Form
             directory.Text = "";
         }
         UpdateVisibility();
+        UpdatePermissionHints();
+    }
+
+    private static (GroupBox Box, TableLayoutPanel Table) CreateSection(string title)
+    {
+        var table = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            ColumnCount = 2,
+            Padding = new Padding(10, 8, 10, 10)
+        };
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        var box = new GroupBox
+        {
+            Text = title,
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Padding = new Padding(8, 4, 8, 8)
+        };
+        box.Controls.Add(table);
+        return (box, table);
+    }
+
+    private Control BuildDirectoryRow()
+    {
+        var row = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, AutoSize = true };
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 88));
+        var browse = new Button { Text = "浏览", Dock = DockStyle.Fill };
+        browse.Click += (_, _) =>
+        {
+            using var dialog = new FolderBrowserDialog
+            {
+                Description = "选择项目目录",
+                SelectedPath = Directory.Exists(directory.Text) ? directory.Text : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
+            };
+            if (dialog.ShowDialog(this) == DialogResult.OK) directory.Text = dialog.SelectedPath;
+        };
+        row.Controls.Add(directory, 0, 0);
+        row.Controls.Add(browse, 1, 0);
+        return row;
     }
 
     private static void AddRow(TableLayoutPanel layout, string label, Control control)
@@ -419,6 +472,17 @@ internal sealed class TaskEditorForm : Form
         once.Visible = onceSelected;
         time.Visible = !onceSelected;
         weekdays.Visible = schedule.SelectedIndex == 2;
+    }
+
+    private void UpdatePermissionHints()
+    {
+        var dir = directory.Text.Trim();
+        readScope.Text = string.IsNullOrWhiteSpace(dir)
+            ? "读取工具限制：仅允许任务项目目录内的文件；项目外读取始终拒绝。注意：启用「执行命令」后，bash 不受此读取范围限制。"
+            : $"读取工具限制：仅允许 {dir} 及其子目录内的文件；项目外读取始终拒绝。注意：启用「执行命令」后，bash 不受此读取范围限制。";
+        skillScope.Text = string.IsNullOrWhiteSpace(dir)
+            ? "Skill 限制：仅加载项目内 .opencode\\skills 或 .opencode\\skill；全局、用户级和插件来源的 Skill 始终禁用。"
+            : $"Skill 限制：仅加载 {Path.Combine(dir, ".opencode")} 下的 skills 或 skill；全局、用户级和插件来源的 Skill 始终禁用。";
     }
 
     private void Save()
