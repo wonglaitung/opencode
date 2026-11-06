@@ -104,9 +104,14 @@ export function stageDurationMs(stage: StageRecord): number {
   return Math.max(0, last - first)
 }
 
-/** 会话总耗时：全部阶段转换的最早到最晚；进行中（未全部 approved）以当前时间为上界，
- *  即「自工作流启动至今」，已完成取转换跨度（6.1 时间戳即数据源）。 */
-export function workflowDurationMs(workflow: WorkflowState, now: number = Date.now()): number {
+/**
+ * 无操作超过该间隔视为离开（下班/过夜），避免把整晚时间计入工时。
+ * 累计活动间隔而不是直接取首末时间戳，才能排除离开期间。
+ */
+export const IDLE_GAP_MS = 5 * 60_000
+
+/** 旧状态回退：按阶段转换时间戳计算首末跨度（无 timing 字段的历史数据）。 */
+function transitionDurationMs(workflow: WorkflowState, now: number): number {
   const def = getDefinition(workflow.type)
   const times: number[] = []
   for (const name of def.stages) {
@@ -116,6 +121,27 @@ export function workflowDurationMs(workflow: WorkflowState, now: number = Date.n
   const first = Math.min(...times)
   const last = isComplete(workflow) ? Math.max(...times) : now
   return Math.max(0, last - first)
+}
+
+/** 记录一次活动；间隔超过 IDLE_GAP_MS 的部分不计入活跃时长。 */
+export function recordActivity(workflow: WorkflowState, at: number = Date.now()): void {
+  if (!workflow.timing) {
+    workflow.timing = { activeMs: transitionDurationMs(workflow, at), lastAt: at }
+    return
+  }
+  if (at <= workflow.timing.lastAt) return
+  workflow.timing.activeMs += Math.min(at - workflow.timing.lastAt, IDLE_GAP_MS)
+  workflow.timing.lastAt = at
+}
+
+/** 会话活跃耗时：有 timing 时累计活动时间；已完成不再追加当前时间。
+ *  旧状态无 timing 时回退为首末转换跨度。 */
+export function workflowDurationMs(workflow: WorkflowState, now: number = Date.now()): number {
+  if (workflow.timing) {
+    const extra = isComplete(workflow) ? 0 : Math.min(Math.max(0, now - workflow.timing.lastAt), IDLE_GAP_MS)
+    return Math.max(0, workflow.timing.activeMs + extra)
+  }
+  return transitionDurationMs(workflow, now)
 }
 
 export function isComplete(workflow: WorkflowState): boolean {

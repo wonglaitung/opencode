@@ -23,6 +23,7 @@ import { createReporter, type Usage } from "./report"
 import { createIdleReportHook, createToolReportHook, enqueueReportSafe } from "./report-trigger"
 import { STARTUP_DELAY_MS, deferredStartup } from "./startup"
 import { createIterationCounter } from "./tools/quality"
+import { recordActivity } from "./stats"
 import { finishTask } from "./task-lifecycle"
 import { createToolset } from "./tools/toolset"
 import { applyBaselineProposal, applyQuestionBaselineProposal } from "./tools/baseline-proposal"
@@ -82,6 +83,12 @@ async function syncSessionTitle(store: Store, client: PluginInput["client"], ses
   }
 }
 
+/** 记录工作流活跃时间；未启动工作流的会话不建行。 */
+function recordSessionActivity(store: Store, sessionID: string): void {
+  if (!store.get(sessionID)?.workflow) return
+  store.mutateWorkflow(sessionID, (workflow) => recordActivity(workflow))
+}
+
 const SessionMgmtPlugin: Plugin = async (input) => {
   // 用户级流程选择（3.1）：插件加载时读 identity.workflowType（缺省 sdlc），切换后需重启。
   const workflowType = resolveWorkflowType(readIdentity()?.workflowType)
@@ -136,7 +143,9 @@ const SessionMgmtPlugin: Plugin = async (input) => {
     },
 
     "tool.execute.after": async (hookInput, output) => {
-      if (hookInput.tool === "question" && !(await isSubagent(hookInput.sessionID))) {
+      const subagent = await isSubagent(hookInput.sessionID)
+      if (!subagent) recordSessionActivity(store, hookInput.sessionID)
+      if (hookInput.tool === "question" && !subagent) {
         applyQuestionBaselineProposal(
           store,
           hookInput.sessionID,
@@ -158,6 +167,7 @@ const SessionMgmtPlugin: Plugin = async (input) => {
       // task：与 sdlc/reqdoc 一致，由模型调用 workflow_start 启动；这里只建行（不启动），
       // 供本次消息的工时证据与汇报使用。整句完成声明的自动收口仍在此处理。
       if (workflowType === "task") store.ensure(hookInput.sessionID)
+      recordSessionActivity(store, hookInput.sessionID)
       finishTask(store, hookInput.sessionID, text)
       await syncSessionTitle(store, input.client, hookInput.sessionID)
       await enqueueReportSafe(reporter, hookInput.sessionID, "chat.message")

@@ -389,6 +389,14 @@ export interface QualityMetrics {
   linesByFile?: Record<string, number>
 }
 
+/** 活跃计时：只累计有操作的时间，长时间无操作会被截断（避免下班/过夜时间进入工时）。 */
+export interface WorkflowTiming {
+  /** 已累计的活跃毫秒数（不含当前未结算区间）。 */
+  activeMs: number
+  /** 最后一次记录活动的时间戳。 */
+  lastAt: number
+}
+
 /**
  * 会话工作流状态（3.2）：本会话属于哪种工作流 + 泛化阶段集。
  * type 决定取哪个 WorkflowDefinition（阶段键/清单/规则/门禁），随汇报上行。
@@ -421,6 +429,8 @@ export interface WorkflowState {
   taskReview?: TaskReviewReport
   /** 本次 code_review 任务最近一次只读 regex 扫描报告（可选）。 */
   taskScan?: TaskScanReport
+  /** 活跃计时（可选；旧状态缺省时按阶段转换时间戳回退）。 */
+  timing?: WorkflowTiming
   /**
    * reqdoc 功能点清单（重构核心：prd 前置功能点拆解，业务确认后写入）。
    * 可选字段：确认前缺省；sdlc 恒缺省。随汇报上行。

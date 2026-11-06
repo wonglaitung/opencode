@@ -6,7 +6,7 @@
 import { describe, expect, test } from "bun:test"
 import { createWorkflowState } from "sm-shared"
 import { Store } from "../src/db"
-import { sessionStats, workflowDurationMs } from "../src/stats"
+import { IDLE_GAP_MS, recordActivity, sessionStats, workflowDurationMs } from "../src/stats"
 
 const noUsage = { cost: null, tokensInput: null, tokensOutput: null }
 const NOW = 1_800_000_000_000
@@ -51,6 +51,42 @@ describe("workflowDurationMs：进行中取至今、完成取跨度", () => {
     wf.stages.design.transitions.push({ action: "enter", at: start + 1_000_000 })
     // design 进行中，未完成
     expect(workflowDurationMs(wf, NOW)).toBe(7_200_000)
+  })
+})
+
+
+describe("活跃计时：排除长时间离开", () => {
+  test("超过空档上限只累计上限，不把过夜时间算进去", () => {
+    const wf = createWorkflowState("task")
+    wf.stages.execute.transitions.push({ action: "enter", at: NOW })
+    wf.stages.execute.status = "in_progress"
+    recordActivity(wf, NOW)
+    const overnight = 12 * 3_600_000
+    recordActivity(wf, NOW + overnight)
+    expect(wf.timing?.activeMs).toBe(IDLE_GAP_MS)
+    expect(workflowDurationMs(wf, NOW + overnight)).toBe(IDLE_GAP_MS)
+  })
+
+  test("连续活动按实际间隔累计", () => {
+    const wf = createWorkflowState("task")
+    wf.stages.execute.transitions.push({ action: "enter", at: NOW })
+    wf.stages.execute.status = "in_progress"
+    recordActivity(wf, NOW)
+    recordActivity(wf, NOW + 60_000)
+    recordActivity(wf, NOW + 180_000)
+    expect(wf.timing?.activeMs).toBe(180_000)
+    expect(workflowDurationMs(wf, NOW + 180_000)).toBe(180_000)
+  })
+
+  test("完成后冻结活跃时长，不再追加离开期间", () => {
+    const wf = createWorkflowState("task")
+    wf.stages.execute.transitions.push({ action: "enter", at: NOW })
+    wf.stages.execute.status = "in_progress"
+    recordActivity(wf, NOW)
+    recordActivity(wf, NOW + 60_000)
+    wf.stages.execute.status = "approved"
+    wf.stages.execute.transitions.push({ action: "approve", at: NOW + 60_000 })
+    expect(workflowDurationMs(wf, NOW + 24 * 3_600_000)).toBe(60_000)
   })
 })
 
