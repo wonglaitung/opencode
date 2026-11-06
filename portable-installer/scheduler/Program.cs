@@ -6,17 +6,38 @@ namespace OpenCodeScheduler;
 
 internal static class Program
 {
+    private const string ShowEventName = @"Local\OpenCodeSchedulerShow";
+
     [STAThread]
     private static void Main()
     {
         using var mutex = new Mutex(true, "OpenCodeSchedulerPrototype", out var created);
         if (!created)
         {
-            MessageBox.Show("定时任务程序已经在运行。", "OpenCode 定时任务", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            for (var attempt = 0; attempt < 5; attempt++)
+            {
+                try
+                {
+                    using var show = EventWaitHandle.OpenExisting(ShowEventName);
+                    show.Set();
+                    return;
+                }
+                catch (WaitHandleCannotBeOpenedException)
+                {
+                    Thread.Sleep(100);
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    break;
+                }
+            }
+            MessageBox.Show("定时任务程序正在启动，请稍后重试。", "OpenCode 定时任务", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
+
+        using var showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName);
         ApplicationConfiguration.Initialize();
-        Application.Run(new TrayContext());
+        Application.Run(new TrayContext(showEvent));
     }
 }
 
@@ -26,9 +47,12 @@ internal sealed class TrayContext : ApplicationContext
     private static readonly string Root = Path.Combine(Home, "OpenCode");
     private readonly ScheduledTaskScheduler scheduler;
     private readonly NotifyIcon tray;
+    private readonly RegisteredWaitHandle showRegistration;
+    private SynchronizationContext? sync;
     private SchedulerForm? manager;
+    private bool exiting;
 
-    public TrayContext()
+    public TrayContext(EventWaitHandle showEvent)
     {
         scheduler = new ScheduledTaskScheduler(
             Path.Combine(Home, ".config", "opencode"),
@@ -43,6 +67,17 @@ internal sealed class TrayContext : ApplicationContext
             ContextMenuStrip = BuildMenu()
         };
         tray.DoubleClick += (_, _) => ShowManager();
+        showRegistration = ThreadPool.RegisterWaitForSingleObject(
+            showEvent,
+            (_, timedOut) =>
+            {
+                if (!timedOut) RequestShow();
+            },
+            null,
+            Timeout.Infinite,
+            false
+        );
+        Application.Idle += OnIdle;
     }
 
     private ContextMenuStrip BuildMenu()
@@ -57,8 +92,27 @@ internal sealed class TrayContext : ApplicationContext
         return menu;
     }
 
+    private void OnIdle(object? sender, EventArgs e)
+    {
+        if (exiting) return;
+        Application.Idle -= OnIdle;
+        sync = SynchronizationContext.Current ?? new WindowsFormsSynchronizationContext();
+        ShowManager();
+    }
+
+    private void RequestShow()
+    {
+        if (exiting) return;
+        if (sync is null)
+        {
+            return;
+        }
+        sync.Post(_ => ShowManager(), null);
+    }
+
     private void ShowManager()
     {
+        if (exiting) return;
         if (manager is null || manager.IsDisposed)
         {
             manager = new SchedulerForm(scheduler);
@@ -67,6 +121,7 @@ internal sealed class TrayContext : ApplicationContext
         manager.Show();
         manager.WindowState = FormWindowState.Normal;
         manager.Activate();
+        manager.BringToFront();
     }
 
     private void SetAll(bool enabled)
@@ -103,6 +158,9 @@ internal sealed class TrayContext : ApplicationContext
 
     protected override void ExitThreadCore()
     {
+        exiting = true;
+        Application.Idle -= OnIdle;
+        showRegistration.Unregister(null);
         manager?.CloseForExit();
         manager = null;
         scheduler.Dispose();
