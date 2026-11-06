@@ -1,12 +1,12 @@
 /**
  * 会话周期（durationMs）语义测试（6.1）。
- * 进行中（未全部 approved）会话取「自工作流启动至今」；已完成取转换跨度；
- * 提效率仅对完成会话计算（避免进行中误报高提效）。
+ * 活跃用时：busy 区间完整累计；非 busy 空档最多累计 5 分钟；已完成冻结。
+ * 旧状态无 timing 时回退为转换跨度；提效率仅对完成会话计算。
  */
 import { describe, expect, test } from "bun:test"
 import { createWorkflowState } from "sm-shared"
 import { Store } from "../src/db"
-import { IDLE_GAP_MS, recordActivity, sessionStats, workflowDurationMs } from "../src/stats"
+import { IDLE_GAP_MS, markBusy, markIdle, recordActivity, sessionStats, workflowDurationMs } from "../src/stats"
 
 const noUsage = { cost: null, tokensInput: null, tokensOutput: null }
 const NOW = 1_800_000_000_000
@@ -54,7 +54,6 @@ describe("workflowDurationMs：进行中取至今、完成取跨度", () => {
   })
 })
 
-
 describe("活跃计时：排除长时间离开", () => {
   test("超过空档上限只累计上限，不把过夜时间算进去", () => {
     const wf = createWorkflowState("task")
@@ -87,6 +86,32 @@ describe("活跃计时：排除长时间离开", () => {
     wf.stages.execute.status = "approved"
     wf.stages.execute.transitions.push({ action: "approve", at: NOW + 60_000 })
     expect(workflowDurationMs(wf, NOW + 24 * 3_600_000)).toBe(60_000)
+  })
+})
+
+describe("AI busy：运行很久也按完整时长计入", () => {
+  test("busy 期间无工具调用，30 分钟后仍计 30 分钟", () => {
+    const wf = createWorkflowState("task")
+    wf.stages.execute.transitions.push({ action: "enter", at: NOW })
+    wf.stages.execute.status = "in_progress"
+    recordActivity(wf, NOW)
+    markBusy(wf, NOW)
+    expect(workflowDurationMs(wf, NOW + 30 * 60_000)).toBe(30 * 60_000)
+  })
+
+  test("busy 中工具活动不会重复计数，idle 后结算并冻结", () => {
+    const wf = createWorkflowState("task")
+    wf.stages.execute.transitions.push({ action: "enter", at: NOW })
+    wf.stages.execute.status = "in_progress"
+    recordActivity(wf, NOW)
+    markBusy(wf, NOW)
+    recordActivity(wf, NOW + 10 * 60_000)
+    markIdle(wf, NOW + 30 * 60_000)
+    expect(wf.timing?.activeMs).toBe(30 * 60_000)
+    expect(workflowDurationMs(wf, NOW + 30 * 60_000)).toBe(30 * 60_000)
+    wf.stages.execute.status = "approved"
+    wf.stages.execute.transitions.push({ action: "approve", at: NOW + 30 * 60_000 })
+    expect(workflowDurationMs(wf, NOW + 24 * 3_600_000)).toBe(30 * 60_000)
   })
 })
 

@@ -13,6 +13,7 @@
  */
 import { join } from "node:path"
 import type { Plugin, PluginInput } from "@opencode-ai/plugin"
+import type { Event } from "@opencode-ai/sdk"
 import { readIdentity, resolveWorkflowType } from "sm-shared"
 import { Store, isPlaceholderTitle } from "./db"
 import { createCommitGate } from "./gate"
@@ -23,7 +24,7 @@ import { createReporter, type Usage } from "./report"
 import { createIdleReportHook, createToolReportHook, enqueueReportSafe } from "./report-trigger"
 import { STARTUP_DELAY_MS, deferredStartup } from "./startup"
 import { createIterationCounter } from "./tools/quality"
-import { recordActivity } from "./stats"
+import { markBusy, markIdle, recordActivity } from "./stats"
 import { finishTask } from "./task-lifecycle"
 import { createToolset } from "./tools/toolset"
 import { applyBaselineProposal, applyQuestionBaselineProposal } from "./tools/baseline-proposal"
@@ -83,20 +84,35 @@ async function syncSessionTitle(store: Store, client: PluginInput["client"], ses
   }
 }
 
-/** 记录工作流活跃时间；未启动工作流的会话不建行。 */
-function recordSessionActivity(store: Store, sessionID: string): void {
+/** 记录工作流活跃时间；未启动工作流的会话不建行。busySince 用于补记 workflow_start 前的 AI 运行。 */
+function recordSessionActivity(store: Store, sessionID: string, busySince?: number): void {
   if (!store.get(sessionID)?.workflow) return
-  store.mutateWorkflow(sessionID, (workflow) => recordActivity(workflow))
+  store.mutateWorkflow(sessionID, (workflow) => {
+    if (busySince !== undefined) markBusy(workflow, busySince)
+    recordActivity(workflow)
+  })
+}
+
+/** session.status：busy/retry 完整计时，idle 结算并暂停。 */
+function recordSessionStatus(store: Store, sessionID: string, busy: boolean, at: number): void {
+  if (!store.get(sessionID)?.workflow) return
+  store.mutateWorkflow(sessionID, (workflow) => {
+    if (busy) markBusy(workflow, at)
+    else markIdle(workflow, at)
+  })
 }
 
 const SessionMgmtPlugin: Plugin = async (input) => {
   // 用户级流程选择（3.1）：插件加载时读 identity.workflowType（缺省 sdlc），切换后需重启。
   const workflowType = resolveWorkflowType(readIdentity()?.workflowType)
   const store = Store.open(input.directory, () => workflowType)
+  store.resetBusyTiming()
   const usageProvider = createUsageProvider(input.client)
   const reporter = createReporter(store, () => resolveIdentity(), usageProvider)
   // 子代理会话识别器（2.4 统计纯净度）：对子代理跳过建记录/打标/汇报/规则注入
   const isSubagent = makeSubagentChecker(input.client)
+  // 会话启动时可能还没有 WorkflowState，先暂存 busy 起点，等 workflow_start 后补记。
+  const busySince = new Map<string, number>()
 
   // ---- open-ide 合并部分：config.json（插件根，上溯一层）+ 人工文件锁（SQLite 持久化） ----
   const entries = loadIdeConfig(join(import.meta.dir, ".."))
@@ -109,6 +125,20 @@ const SessionMgmtPlugin: Plugin = async (input) => {
   const iterationCounter = createIterationCounter(store, isSubagent)
   const toolReport = createToolReportHook(reporter, isSubagent)
   const idleReport = createIdleReportHook(reporter, isSubagent)
+  const statusTiming = async (hookInput: { event: Event }) => {
+    if (hookInput.event.type !== "session.status") return
+    const sessionID = hookInput.event.properties.sessionID
+    if (await isSubagent(sessionID)) return
+    const at = Date.now()
+    if (hookInput.event.properties.status.type === "idle") {
+      busySince.delete(sessionID)
+      recordSessionStatus(store, sessionID, false, at)
+      return
+    }
+    const since = busySince.get(sessionID) ?? at
+    busySince.set(sessionID, since)
+    recordSessionStatus(store, sessionID, true, since)
+  }
 
   // 启动后台任务延后执行（错开 TUI 首屏 / daemon 启动竞态，启动慢根因之一）：
   // 一次 session.list 完成 孤儿清理 + 标题回填（startup.ts），随后补推缓冲汇报。
@@ -144,7 +174,7 @@ const SessionMgmtPlugin: Plugin = async (input) => {
 
     "tool.execute.after": async (hookInput, output) => {
       const subagent = await isSubagent(hookInput.sessionID)
-      if (!subagent) recordSessionActivity(store, hookInput.sessionID)
+      if (!subagent) recordSessionActivity(store, hookInput.sessionID, busySince.get(hookInput.sessionID))
       if (hookInput.tool === "question" && !subagent) {
         applyQuestionBaselineProposal(
           store,
@@ -158,7 +188,10 @@ const SessionMgmtPlugin: Plugin = async (input) => {
       await toolReport(hookInput)
     },
 
-    event: idleReport,
+    event: async (hookInput) => {
+      await statusTiming(hookInput)
+      await idleReport(hookInput)
+    },
 
     "chat.message": async (hookInput, output) => {
       // 子代理会话不追踪：不建记录、不汇报（2.4 统计纯净度）
@@ -167,7 +200,7 @@ const SessionMgmtPlugin: Plugin = async (input) => {
       // task：与 sdlc/reqdoc 一致，由模型调用 workflow_start 启动；这里只建行（不启动），
       // 供本次消息的工时证据与汇报使用。整句完成声明的自动收口仍在此处理。
       if (workflowType === "task") store.ensure(hookInput.sessionID)
-      recordSessionActivity(store, hookInput.sessionID)
+      recordSessionActivity(store, hookInput.sessionID, busySince.get(hookInput.sessionID))
       finishTask(store, hookInput.sessionID, text)
       await syncSessionTitle(store, input.client, hookInput.sessionID)
       await enqueueReportSafe(reporter, hookInput.sessionID, "chat.message")
@@ -181,6 +214,10 @@ const SessionMgmtPlugin: Plugin = async (input) => {
     dispose: async () => {
       clearTimeout(startup)
       clearInterval(timer)
+      for (const sessionID of busySince.keys()) {
+        if (store.get(sessionID)?.workflow) store.mutateWorkflow(sessionID, (workflow) => markIdle(workflow))
+      }
+      busySince.clear()
       await reporter.flushOutbox({ exit: true })
       store.close()
     },

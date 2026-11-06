@@ -180,6 +180,16 @@ export class Store {
     return rows.map(rowFromRaw)
   }
 
+  /** 插件重启后清除上次进程遗留的 busy 标记；否则会把停机期间误算进 AI 运行时长。 */
+  resetBusyTiming(): void {
+    const stmt = this.db.query("UPDATE workflow_session SET workflow = ? WHERE session_id = ?")
+    for (const row of this.listAll()) {
+      if (!row.workflow?.timing?.busySince) continue
+      delete row.workflow.timing.busySince
+      stmt.run(JSON.stringify(row.workflow), row.session_id)
+    }
+  }
+
   /** 删除孤儿会话（上游已删除者，3.1）。返回删除条数。 */
   removeSessions(sessionIDs: string[]): number {
     if (sessionIDs.length === 0) return 0

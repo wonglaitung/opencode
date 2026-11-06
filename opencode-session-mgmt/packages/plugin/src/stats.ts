@@ -105,8 +105,8 @@ export function stageDurationMs(stage: StageRecord): number {
 }
 
 /**
- * 无操作超过该间隔视为离开（下班/过夜），避免把整晚时间计入工时。
- * 累计活动间隔而不是直接取首末时间戳，才能排除离开期间。
+ * 非 busy 空档超过该间隔视为用户离开（下班/过夜），不计入工时。
+ * AI busy 区间不受此限制：Agent 自动运行很久时仍按完整时长累计。
  */
 export const IDLE_GAP_MS = 5 * 60_000
 
@@ -123,23 +123,69 @@ function transitionDurationMs(workflow: WorkflowState, now: number): number {
   return Math.max(0, last - first)
 }
 
-/** 记录一次活动；间隔超过 IDLE_GAP_MS 的部分不计入活跃时长。 */
-export function recordActivity(workflow: WorkflowState, at: number = Date.now()): void {
-  if (!workflow.timing) {
-    workflow.timing = { activeMs: transitionDurationMs(workflow, at), lastAt: at }
-    return
-  }
-  if (at <= workflow.timing.lastAt) return
-  workflow.timing.activeMs += Math.min(at - workflow.timing.lastAt, IDLE_GAP_MS)
-  workflow.timing.lastAt = at
+function ensureTiming(workflow: WorkflowState, at: number) {
+  if (!workflow.timing) workflow.timing = { activeMs: transitionDurationMs(workflow, at), lastAt: at }
+  return workflow.timing
 }
 
-/** 会话活跃耗时：有 timing 时累计活动时间；已完成不再追加当前时间。
+/** 记录一次活动；busy 中完整累计，非 busy 只累计不超过 IDLE_GAP_MS 的空档。 */
+export function recordActivity(workflow: WorkflowState, at: number = Date.now()): void {
+  const timing = ensureTiming(workflow, at)
+  if (timing.busySince !== undefined) {
+    if (at <= timing.busySince) return
+    timing.activeMs += at - timing.busySince
+    timing.busySince = at
+    timing.lastAt = at
+    return
+  }
+  if (at <= timing.lastAt) return
+  timing.activeMs += Math.min(at - timing.lastAt, IDLE_GAP_MS)
+  timing.lastAt = at
+}
+
+/** 标记 AI 开始运行；busy 区间内的时间完整计入工时。 */
+export function markBusy(workflow: WorkflowState, at: number = Date.now()): void {
+  const timing = ensureTiming(workflow, at)
+  if (timing.busySince !== undefined) return
+  if (at > timing.lastAt) timing.activeMs += Math.min(at - timing.lastAt, IDLE_GAP_MS)
+  timing.lastAt = Math.max(timing.lastAt, at)
+  timing.busySince = timing.lastAt
+}
+
+/** 标记 AI 已停止；结算完整 busy 区间，之后只有用户活动才重新累计。 */
+export function markIdle(workflow: WorkflowState, at: number = Date.now()): void {
+  const timing = ensureTiming(workflow, at)
+  if (timing.busySince !== undefined) {
+    if (at > timing.busySince) timing.activeMs += at - timing.busySince
+    timing.busySince = undefined
+    timing.lastAt = at
+    return
+  }
+  if (at > timing.lastAt) timing.activeMs += Math.min(at - timing.lastAt, IDLE_GAP_MS)
+  timing.lastAt = at
+}
+
+function lastTransitionMs(workflow: WorkflowState): number {
+  const def = getDefinition(workflow.type)
+  let last = 0
+  for (const name of def.stages) {
+    for (const t of workflow.stages[name].transitions) last = Math.max(last, t.at)
+  }
+  return last
+}
+
+/** 会话活跃耗时：busy 中完整累计；非 busy 最多追加 IDLE_GAP_MS；已完成冻结。
  *  旧状态无 timing 时回退为首末转换跨度。 */
 export function workflowDurationMs(workflow: WorkflowState, now: number = Date.now()): number {
   if (workflow.timing) {
-    const extra = isComplete(workflow) ? 0 : Math.min(Math.max(0, now - workflow.timing.lastAt), IDLE_GAP_MS)
-    return Math.max(0, workflow.timing.activeMs + extra)
+    const timing = workflow.timing
+    const complete = isComplete(workflow)
+    const busyEnd = complete ? lastTransitionMs(workflow) : now
+    const busy = timing.busySince === undefined ? 0 : Math.max(0, busyEnd - timing.busySince)
+    const idle = timing.busySince === undefined && !complete
+      ? Math.min(Math.max(0, now - timing.lastAt), IDLE_GAP_MS)
+      : 0
+    return Math.max(0, timing.activeMs + busy + idle)
   }
   return transitionDurationMs(workflow, now)
 }

@@ -395,6 +395,8 @@ export interface WorkflowTiming {
   activeMs: number
   /** 最后一次记录活动的时间戳。 */
   lastAt: number
+  /** AI 正在运行时的起点；存在表示当前处于 busy 区间，整段都应计入。 */
+  busySince?: number
 }
 
 /**
