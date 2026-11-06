@@ -128,9 +128,30 @@ function ensureTiming(workflow: WorkflowState, at: number) {
   return workflow.timing
 }
 
-/** 记录一次活动；busy 中完整累计，非 busy 只累计不超过 IDLE_GAP_MS 的空档。 */
+/** 完成态只结算到最后一次阶段转换，避免完成后的 idle 延迟继续累加工时。 */
+function settleCompleted(workflow: WorkflowState): void {
+  const timing = workflow.timing
+  if (!timing) return
+  const end = lastTransitionMs(workflow)
+  if (timing.busySince !== undefined) {
+    if (end > timing.busySince) timing.activeMs += end - timing.busySince
+    timing.busySince = undefined
+    timing.lastAt = Math.max(timing.lastAt, end)
+    return
+  }
+  if (end > timing.lastAt) {
+    timing.activeMs += Math.min(end - timing.lastAt, IDLE_GAP_MS)
+    timing.lastAt = end
+  }
+}
+
+/** 记录一次活动；busy 中完整累计，非 busy 只累计不超过 IDLE_GAP_MS 的空档；完成后冻结。 */
 export function recordActivity(workflow: WorkflowState, at: number = Date.now()): void {
   const timing = ensureTiming(workflow, at)
+  if (isComplete(workflow)) {
+    settleCompleted(workflow)
+    return
+  }
   if (timing.busySince !== undefined) {
     if (at <= timing.busySince) return
     timing.activeMs += at - timing.busySince
@@ -146,6 +167,10 @@ export function recordActivity(workflow: WorkflowState, at: number = Date.now())
 /** 标记 AI 开始运行；busy 区间内的时间完整计入工时。 */
 export function markBusy(workflow: WorkflowState, at: number = Date.now()): void {
   const timing = ensureTiming(workflow, at)
+  if (isComplete(workflow)) {
+    settleCompleted(workflow)
+    return
+  }
   if (timing.busySince !== undefined) return
   if (at > timing.lastAt) timing.activeMs += Math.min(at - timing.lastAt, IDLE_GAP_MS)
   timing.lastAt = Math.max(timing.lastAt, at)
@@ -155,6 +180,10 @@ export function markBusy(workflow: WorkflowState, at: number = Date.now()): void
 /** 标记 AI 已停止；结算完整 busy 区间，之后只有用户活动才重新累计。 */
 export function markIdle(workflow: WorkflowState, at: number = Date.now()): void {
   const timing = ensureTiming(workflow, at)
+  if (isComplete(workflow)) {
+    settleCompleted(workflow)
+    return
+  }
   if (timing.busySince !== undefined) {
     if (at > timing.busySince) timing.activeMs += at - timing.busySince
     timing.busySince = undefined

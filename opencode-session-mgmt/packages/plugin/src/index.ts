@@ -125,19 +125,28 @@ const SessionMgmtPlugin: Plugin = async (input) => {
   const iterationCounter = createIterationCounter(store, isSubagent)
   const toolReport = createToolReportHook(reporter, isSubagent)
   const idleReport = createIdleReportHook(reporter, isSubagent)
-  const statusTiming = async (hookInput: { event: Event }) => {
-    if (hookInput.event.type !== "session.status") return
-    const sessionID = hookInput.event.properties.sessionID
-    if (await isSubagent(sessionID)) return
-    const at = Date.now()
-    if (hookInput.event.properties.status.type === "idle") {
-      busySince.delete(sessionID)
-      recordSessionStatus(store, sessionID, false, at)
-      return
-    }
-    const since = busySince.get(sessionID) ?? at
-    busySince.set(sessionID, since)
-    recordSessionStatus(store, sessionID, true, since)
+  // 上游 event hook 不 await 调用方；串行化 busy/idle，避免并发时 idle 先于 busy 落地。
+  let statusQueue = Promise.resolve()
+  const statusTiming = (hookInput: { event: Event }) => {
+    statusQueue = statusQueue
+      .then(async () => {
+        if (hookInput.event.type !== "session.status") return
+        const sessionID = hookInput.event.properties.sessionID
+        const at = Date.now()
+        if (await isSubagent(sessionID)) return
+        if (hookInput.event.properties.status.type === "idle") {
+          busySince.delete(sessionID)
+          recordSessionStatus(store, sessionID, false, at)
+          return
+        }
+        const since = busySince.get(sessionID) ?? at
+        busySince.set(sessionID, since)
+        recordSessionStatus(store, sessionID, true, since)
+      })
+      .catch((error) => {
+        console.warn(`[session-mgmt] 状态计时失败：${error instanceof Error ? error.message : String(error)}`)
+      })
+    return statusQueue
   }
 
   // 启动后台任务延后执行（错开 TUI 首屏 / daemon 启动竞态，启动慢根因之一）：
@@ -214,6 +223,7 @@ const SessionMgmtPlugin: Plugin = async (input) => {
     dispose: async () => {
       clearTimeout(startup)
       clearInterval(timer)
+      await statusQueue
       for (const sessionID of busySince.keys()) {
         if (store.get(sessionID)?.workflow) store.mutateWorkflow(sessionID, (workflow) => markIdle(workflow))
       }

@@ -99,6 +99,50 @@ describe("AI busy：运行很久也按完整时长计入", () => {
     expect(workflowDurationMs(wf, NOW + 30 * 60_000)).toBe(30 * 60_000)
   })
 
+  test("idle 后只保留 5 分钟空档，不再无限计时", () => {
+    const wf = createWorkflowState("task")
+    wf.stages.execute.transitions.push({ action: "enter", at: NOW })
+    wf.stages.execute.status = "in_progress"
+    recordActivity(wf, NOW)
+    markBusy(wf, NOW)
+    markIdle(wf, NOW + 30 * 60_000)
+    expect(workflowDurationMs(wf, NOW + 3_600_000)).toBe(35 * 60_000)
+    expect(workflowDurationMs(wf, NOW + 24 * 3_600_000)).toBe(35 * 60_000)
+  })
+
+  test("完成发生在 busy 中：完成后的 idle 延迟不再计入", () => {
+    const wf = createWorkflowState("task")
+    wf.stages.execute.transitions.push({ action: "enter", at: NOW })
+    wf.stages.execute.status = "in_progress"
+    recordActivity(wf, NOW)
+    markBusy(wf, NOW)
+    wf.stages.execute.status = "approved"
+    wf.stages.execute.transitions.push({ action: "approve", at: NOW + 30 * 60_000 })
+    expect(workflowDurationMs(wf, NOW + 30 * 60_000)).toBe(30 * 60_000)
+    markIdle(wf, NOW + 2 * 3_600_000)
+    expect(workflowDurationMs(wf, NOW + 24 * 3_600_000)).toBe(30 * 60_000)
+  })
+
+  test("完成后的活动或 busy 事件不会继续累加工时", () => {
+    const wf = createWorkflowState("task")
+    wf.stages.execute.transitions.push({ action: "enter", at: NOW })
+    wf.stages.execute.status = "approved"
+    wf.stages.execute.transitions.push({ action: "approve", at: NOW + 30 * 60_000 })
+    recordActivity(wf, NOW + 2 * 3_600_000)
+    markBusy(wf, NOW + 2 * 3_600_000)
+    markIdle(wf, NOW + 3 * 3_600_000)
+    expect(workflowDurationMs(wf, NOW + 24 * 3_600_000)).toBe(30 * 60_000)
+  })
+
+  test("busy 早于 workflow_start：启动后补记此前 AI 运行时间", () => {
+    const wf = createWorkflowState("task")
+    markBusy(wf, NOW)
+    wf.stages.execute.transitions.push({ action: "enter", at: NOW + 10 * 60_000 })
+    wf.stages.execute.status = "in_progress"
+    recordActivity(wf, NOW + 10 * 60_000)
+    expect(workflowDurationMs(wf, NOW + 10 * 60_000)).toBe(10 * 60_000)
+  })
+
   test("busy 中工具活动不会重复计数，idle 后结算并冻结", () => {
     const wf = createWorkflowState("task")
     wf.stages.execute.transitions.push({ action: "enter", at: NOW })
@@ -112,6 +156,19 @@ describe("AI busy：运行很久也按完整时长计入", () => {
     wf.stages.execute.status = "approved"
     wf.stages.execute.transitions.push({ action: "approve", at: NOW + 30 * 60_000 })
     expect(workflowDurationMs(wf, NOW + 24 * 3_600_000)).toBe(30 * 60_000)
+  })
+})
+
+
+describe("重启清理遗留 busy", () => {
+  test("resetBusyTiming 清掉 busySince，保留已结算工时", () => {
+    const store = Store.memory()
+    store.mutateWorkflow("s1", (wf) => {
+      wf.timing = { activeMs: 1_000, lastAt: 1_000, busySince: 500 }
+    })
+    store.resetBusyTiming()
+    expect(store.get("s1")!.workflow?.timing).toEqual({ activeMs: 1_000, lastAt: 1_000 })
+    store.close()
   })
 })
 
