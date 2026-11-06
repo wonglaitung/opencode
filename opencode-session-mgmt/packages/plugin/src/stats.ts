@@ -152,6 +152,7 @@ export function recordActivity(workflow: WorkflowState, at: number = Date.now())
     settleCompleted(workflow)
     return
   }
+  timing.idleAt = undefined
   if (timing.busySince !== undefined) {
     if (at <= timing.busySince) return
     timing.activeMs += at - timing.busySince
@@ -172,6 +173,7 @@ export function markBusy(workflow: WorkflowState, at: number = Date.now()): void
     return
   }
   if (timing.busySince !== undefined) return
+  timing.idleAt = undefined
   if (at > timing.lastAt) timing.activeMs += Math.min(at - timing.lastAt, IDLE_GAP_MS)
   timing.lastAt = Math.max(timing.lastAt, at)
   timing.busySince = timing.lastAt
@@ -188,10 +190,13 @@ export function markIdle(workflow: WorkflowState, at: number = Date.now()): void
     if (at > timing.busySince) timing.activeMs += at - timing.busySince
     timing.busySince = undefined
     timing.lastAt = at
+    timing.idleAt = at
     return
   }
+  if (timing.idleAt !== undefined) return
   if (at > timing.lastAt) timing.activeMs += Math.min(at - timing.lastAt, IDLE_GAP_MS)
   timing.lastAt = at
+  timing.idleAt = at
 }
 
 function lastTransitionMs(workflow: WorkflowState): number {

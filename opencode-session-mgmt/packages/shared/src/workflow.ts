@@ -397,6 +397,8 @@ export interface WorkflowTiming {
   lastAt: number
   /** AI 正在运行时的起点；存在表示当前处于 busy 区间，整段都应计入。 */
   busySince?: number
+  /** 已经进入 idle 的时间；重复 idle 事件不重复累计空档。 */
+  idleAt?: number
 }
 
 /**
