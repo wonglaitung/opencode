@@ -294,12 +294,11 @@ internal sealed class TaskEditorForm : Form
     private readonly CheckBox allowRead = new() { Text = "读取文件（仅项目目录）", Checked = true, AutoSize = true };
     private readonly CheckBox allowEdit = new() { Text = "修改文件", Checked = true, AutoSize = true };
     private readonly CheckBox allowBash = new() { Text = "执行命令", Checked = true, AutoSize = true };
-    private readonly CheckBox allowNetwork = new() { Text = "访问网络", Checked = true, AutoSize = true };
+    private readonly CheckBox allowNetwork = new() { Text = "访问网络（Web 工具）", Checked = true, AutoSize = true };
     private readonly CheckBox allowSkill = new() { Text = "使用项目 Skill", Checked = true, AutoSize = true };
-    private readonly FlowLayoutPanel permissionChecks = new() { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true };
-    private readonly Label readScope = new() { AutoSize = true, ForeColor = SystemColors.GrayText, MaximumSize = new Size(500, 0) };
-    private readonly Label skillScope = new() { AutoSize = true, ForeColor = SystemColors.GrayText, MaximumSize = new Size(500, 0) };
-    private readonly Label error = new() { ForeColor = Color.Firebrick, AutoSize = true };
+    private readonly Label readScope = new() { AutoSize = true, ForeColor = Color.FromArgb(71, 85, 105), MaximumSize = new Size(620, 0) };
+    private readonly Label skillScope = new() { AutoSize = true, ForeColor = Color.FromArgb(71, 85, 105), MaximumSize = new Size(620, 0) };
+    private readonly Label error = new() { ForeColor = Color.Firebrick, AutoSize = true, Anchor = AnchorStyles.Left };
     private readonly ScheduledTask? existing;
     private readonly List<CheckBox> weekdayChecks = [];
 
@@ -310,21 +309,17 @@ internal sealed class TaskEditorForm : Form
         this.existing = existing;
         Text = existing is null ? "新建定时任务" : "编辑定时任务";
         StartPosition = FormStartPosition.CenterParent;
-        Width = 640;
-        Height = 720;
-        MinimumSize = new Size(560, 600);
+        Width = 780;
+        Height = 800;
+        MinimumSize = new Size(700, 640);
+        Font = new Font("Microsoft YaHei UI", 9F);
+        BackColor = Color.FromArgb(245, 247, 250);
         try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
 
         schedule.Items.AddRange(["一次性", "每天", "每周"]);
         schedule.SelectedIndex = 0;
         schedule.SelectedIndexChanged += (_, _) => UpdateVisibility();
         directory.TextChanged += (_, _) => UpdatePermissionHints();
-
-        foreach (var check in new[] { allowRead, allowEdit, allowBash, allowNetwork, allowSkill })
-        {
-            check.Margin = new Padding(0, 4, 18, 0);
-            permissionChecks.Controls.Add(check);
-        }
 
         for (var i = 0; i < 7; i++)
         {
@@ -345,48 +340,38 @@ internal sealed class TaskEditorForm : Form
         AddRow(scheduleTable, "每周星期", weekdays);
         AddRow(scheduleTable, "", enabled);
 
-        var (permissionBox, permissionTable) = CreateSection("权限");
-        AddRow(permissionTable, "允许操作", permissionChecks);
+        var (permissionBox, permissionTable) = CreateSection("权限（任务级）");
+        AddRow(permissionTable, "", new Label
+        {
+            Text = "这些权限控制整个任务可用的工具，不是单个 Skill 的权限。项目外读取和全局 Skill 始终被拒绝。",
+            AutoSize = true,
+            ForeColor = Color.FromArgb(100, 116, 139),
+            MaximumSize = new Size(620, 0),
+            Margin = new Padding(0, 2, 0, 8)
+        });
+        AddRow(permissionTable, "允许操作", BuildPermissionGrid());
         AddRow(permissionTable, "", readScope);
         AddRow(permissionTable, "", skillScope);
-        var skillHelp = new LinkLabel { Text = "查看 Skill 使用说明 ›", AutoSize = true, Margin = new Padding(0, 2, 0, 4) };
-        skillHelp.LinkClicked += (_, _) =>
-        {
-            using var help = new SkillHelpForm(directory.Text.Trim());
-            help.ShowDialog(this);
-        };
-        AddRow(permissionTable, "", skillHelp);
 
+        var header = BuildHeader();
+        var footer = BuildFooter();
         var root = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             AutoScroll = true,
             ColumnCount = 1,
-            RowCount = 4,
-            Padding = new Padding(12)
+            RowCount = 3,
+            Padding = new Padding(16, 12, 16, 12)
         };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         for (var i = 0; i < 3; i++) root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.Controls.Add(basicBox, 0, 0);
         root.Controls.Add(scheduleBox, 0, 1);
         root.Controls.Add(permissionBox, 0, 2);
-        root.Controls.Add(error, 0, 3);
 
-        var actions = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Bottom,
-            Height = 52,
-            FlowDirection = FlowDirection.RightToLeft,
-            Padding = new Padding(10, 8, 10, 8)
-        };
-        var save = new Button { Text = "保存", AutoSize = true, DialogResult = DialogResult.None };
-        var cancel = new Button { Text = "取消", AutoSize = true, DialogResult = DialogResult.Cancel };
-        save.Click += (_, _) => Save();
-        actions.Controls.Add(save);
-        actions.Controls.Add(cancel);
         Controls.Add(root);
-        Controls.Add(actions);
+        Controls.Add(footer);
+        Controls.Add(header);
 
         if (existing is not null)
         {
@@ -418,6 +403,127 @@ internal sealed class TaskEditorForm : Form
         UpdatePermissionHints();
     }
 
+    private Control BuildHeader()
+    {
+        var title = new Label
+        {
+            Text = "定时任务配置",
+            Font = new Font("Microsoft YaHei UI", 15F, FontStyle.Bold),
+            ForeColor = Color.FromArgb(15, 23, 42),
+            AutoSize = true,
+            Margin = new Padding(0, 0, 0, 2)
+        };
+        var subtitle = new Label
+        {
+            Text = "配置后台执行的时间、项目范围和可用权限",
+            ForeColor = Color.FromArgb(100, 116, 139),
+            AutoSize = true
+        };
+        var text = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, AutoSize = true, Margin = new Padding(0) };
+        text.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        text.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        text.Controls.Add(title, 0, 0);
+        text.Controls.Add(subtitle, 0, 1);
+
+        var help = new Button
+        {
+            Text = "Skill 使用说明",
+            AutoSize = true,
+            Anchor = AnchorStyles.Right,
+            Padding = new Padding(14, 7, 14, 7),
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(37, 99, 235),
+            ForeColor = Color.White,
+            Cursor = Cursors.Hand,
+            Margin = new Padding(12, 4, 0, 4)
+        };
+        help.FlatAppearance.BorderSize = 0;
+        help.Click += (_, _) =>
+        {
+            using var dialog = new SkillHelpForm(directory.Text.Trim());
+            dialog.ShowDialog(this);
+        };
+
+        var header = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            Height = 72,
+            ColumnCount = 2,
+            RowCount = 1,
+            Padding = new Padding(16, 10, 16, 8),
+            BackColor = Color.White
+        };
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        header.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        header.Controls.Add(text, 0, 0);
+        header.Controls.Add(help, 1, 0);
+        return header;
+    }
+
+    private Control BuildFooter()
+    {
+        var save = new Button { Text = "保存", AutoSize = true, MinimumSize = new Size(88, 32), Padding = new Padding(12, 3, 12, 3) };
+        var cancel = new Button { Text = "取消", AutoSize = true, MinimumSize = new Size(88, 32), Padding = new Padding(12, 3, 12, 3), DialogResult = DialogResult.Cancel };
+        save.Click += (_, _) => Save();
+        var actions = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            FlowDirection = FlowDirection.RightToLeft,
+            WrapContents = false,
+            Margin = new Padding(0)
+        };
+        actions.Controls.Add(save);
+        actions.Controls.Add(cancel);
+
+        var footer = new TableLayoutPanel
+        {
+            Dock = DockStyle.Bottom,
+            Height = 68,
+            ColumnCount = 2,
+            RowCount = 1,
+            Padding = new Padding(16, 12, 16, 12),
+            BackColor = Color.White
+        };
+        footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        footer.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        footer.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        footer.Controls.Add(error, 0, 0);
+        footer.Controls.Add(actions, 1, 0);
+        AcceptButton = save;
+        CancelButton = cancel;
+        return footer;
+    }
+
+    private Control BuildPermissionGrid()
+    {
+        var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, AutoSize = true, Margin = new Padding(0) };
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        AddPermission(grid, allowRead, "允许 read / list / glob / grep；读取范围仅限项目目录。");
+        AddPermission(grid, allowEdit, "允许写入、修改和删除项目内文件。");
+        AddPermission(grid, allowBash, "允许 bash 和脚本；脚本联网也受此权限控制，启用后不受读取范围限制。");
+        AddPermission(grid, allowNetwork, "仅允许 WebFetch / WebSearch；curl、Invoke-WebRequest 等脚本联网由「执行命令」控制。");
+        AddPermission(grid, allowSkill, "只加载项目 .opencode\\skills 中的 Skill；全局和插件来源始终禁用。");
+        return grid;
+    }
+
+    private static void AddPermission(TableLayoutPanel grid, CheckBox check, string description)
+    {
+        var row = grid.RowCount++;
+        grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        check.Margin = new Padding(0, 5, 16, 5);
+        grid.Controls.Add(check, 0, row);
+        grid.Controls.Add(new Label
+        {
+            Text = description,
+            AutoSize = true,
+            ForeColor = Color.FromArgb(100, 116, 139),
+            Margin = new Padding(0, 7, 0, 5)
+        }, 1, row);
+    }
+
     private static (GroupBox Box, TableLayoutPanel Table) CreateSection(string title)
     {
         var table = new TableLayoutPanel
@@ -435,7 +541,9 @@ internal sealed class TaskEditorForm : Form
             Dock = DockStyle.Top,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            Padding = new Padding(8, 4, 8, 8)
+            Padding = new Padding(8, 4, 8, 8),
+            Margin = new Padding(0, 0, 0, 10),
+            BackColor = Color.White
         };
         box.Controls.Add(table);
         return (box, table);
@@ -443,8 +551,9 @@ internal sealed class TaskEditorForm : Form
 
     private Control BuildDirectoryRow()
     {
-        var row = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, AutoSize = true };
+        var row = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, AutoSize = true };
         row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        row.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 88));
         var browse = new Button { Text = "浏览", Dock = DockStyle.Fill };
         browse.Click += (_, _) =>
@@ -485,8 +594,8 @@ internal sealed class TaskEditorForm : Form
     {
         var dir = directory.Text.Trim();
         readScope.Text = string.IsNullOrWhiteSpace(dir)
-            ? "读取工具限制：仅允许任务项目目录内的文件；项目外读取始终拒绝。注意：启用「执行命令」后，bash 不受此读取范围限制。"
-            : $"读取工具限制：仅允许 {dir} 及其子目录内的文件；项目外读取始终拒绝。注意：启用「执行命令」后，bash 不受此读取范围限制。";
+            ? "读取工具限制：仅允许任务项目目录内的文件；项目外读取始终拒绝。启用「执行命令」后，bash 不受此读取范围限制。"
+            : $"读取工具限制：仅允许 {dir} 及其子目录内的文件；项目外读取始终拒绝。启用「执行命令」后，bash 不受此读取范围限制。";
         skillScope.Text = string.IsNullOrWhiteSpace(dir)
             ? "Skill 限制：仅加载项目内 .opencode\\skills；全局、用户级和插件来源的 Skill 始终禁用。"
             : $"Skill 限制：仅加载 {Path.Combine(dir, ".opencode", "skills")}；全局、用户级和插件来源的 Skill 始终禁用。";
