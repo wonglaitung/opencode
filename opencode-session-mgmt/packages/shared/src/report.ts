@@ -63,6 +63,11 @@ export interface WorkflowSummary {
   quality: QualitySummary
   /** 基线对比（6.3）：预估人工工时；未录入为 null（纯数字，无隐私剥离需求） */
   baseline: BaselineEstimate | null
+  /**
+   * 活跃耗时快照（毫秒）：由插件按完成态/忙碌区间/离开空档计算后上报。
+   * 旧版汇报缺省；收集端应回退到 transitions 口径。
+   */
+  durationMs?: number
   /** task 专属：一般任务分类；sdlc/reqdoc 不携带，task 未分类为 null */
   task?: TaskSummary | null
 }

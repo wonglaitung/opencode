@@ -399,6 +399,7 @@ flowchart LR
 | `workflow.quality.testCoverage` | number \| null | 是 | 增量测试覆盖率（0–100）；插件通道恒为 `null`，由 CI 通道写入。sdlc 专属，同 `reworkRate` |
 | `workflow.quality.lines` | `{business, test, config} \| null` | 是 | AI 净增行数三分类聚合；无 AI 代码编辑为 `null`。sdlc 专属：聚合侧仅对 `workflow.type` 为 sdlc 的汇报计入，reqdoc/task 汇报即使携带本字段也按 `null` 处理（7.1） |
 | `workflow.baseline` | `{estimatedHours, setAt} \| null` | 否 | 基线预估人工工时（AI 提效参照系，见 7.2）：项目经理在需求创建时给出，开发者在 TUI 对话中经 `workflow_baseline` 转述录入；`estimatedHours` 单位小时（>0），`setAt` 录入时间戳；未录入或旧版汇报缺省为 `null`，聚合时按无基线处理，**不得报错** |
+| `workflow.durationMs` | number | 否 | 插件计算的活跃耗时快照（毫秒）：排除 user idle/下班过夜空档，AI busy 区间完整计入，完成态冻结。旧版汇报缺省；收集端缺省时回退到 `stages.*.transitions` 的首末跨度 |
 | `cost` | number \| null | 是 | 会话费用（美元）；daemon 不可达时插件上报 `null`（语义为「未知」，**不得当 0 拒绝**） |
 | `tokensInput` / `tokensOutput` | number \| null | 是 | Token 数 |
 | `reportedAt` | number | 是 | 汇报时间（插件本机时钟，epoch ms） |

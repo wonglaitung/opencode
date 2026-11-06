@@ -7,6 +7,7 @@
 import { hashApiKey, summarizeWorkflow, type Identity, type SessionReport } from "sm-shared"
 import type { Store } from "./db"
 import type { WorkflowSessionRow } from "./db/schema"
+import { workflowDurationMs } from "./stats"
 
 /** 会话的 cost/tokens（经上游 SDK 取得，3.1：插件不直读上游库）。 */
 export interface Usage {
@@ -20,10 +21,12 @@ export type UsageProvider = (sessionID: string) => Promise<Usage>
 /** 组装一条汇报（apiKeyHash 为 api_key 的 SHA-256，由调用方先行计算，3.1、12）。 */
 export function buildReport(row: WorkflowSessionRow, apiKeyHash: string, usage: Usage): SessionReport | null {
   if (!row.workflow) return null
+  const workflow = summarizeWorkflow(row.workflow)
+  workflow.durationMs = workflowDurationMs(row.workflow)
   return {
     sessionID: row.session_id,
     apiKey: apiKeyHash,
-    workflow: summarizeWorkflow(row.workflow),
+    workflow,
     cost: usage.cost,
     tokensInput: usage.tokensInput,
     tokensOutput: usage.tokensOutput,

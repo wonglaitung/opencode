@@ -115,6 +115,23 @@ describe("flushOutbox 补推策略", () => {
   })
 })
 
+describe("活跃耗时汇报", () => {
+  const emptyUsage = { cost: null, tokensInput: null, tokensOutput: null }
+
+  test("buildReport 携带活跃 durationMs", () => {
+    const store = Store.memory()
+    try {
+      store.mutateWorkflow("s-duration", (wf) => {
+        wf.timing = { activeMs: 1234, lastAt: Date.now() }
+      })
+      const built = buildReport(store.get("s-duration")!, "hash", emptyUsage)!
+      expect(built.workflow.durationMs).toBeGreaterThanOrEqual(1234)
+    } finally {
+      store.close()
+    }
+  })
+})
+
 describe("行数汇报投影（3.2、12）", () => {
   const emptyUsage = { cost: null, tokensInput: null, tokensOutput: null }
 

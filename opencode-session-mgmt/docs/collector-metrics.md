@@ -26,6 +26,7 @@ flowchart TD
 | `workflow.stages.<阶段键>.transitions[]` | 阶段转换时间戳：`action ∈ {enter, revisit, approve}`、`at`（epoch ms）、可选 `note` |
 | `workflow.stages.review.comprehension.confirmed` | 返工副作用观测：理解确认被级联重置后 confirmed 会下降 |
 | `workflow.commit.status` | 完结口径：`allowed` 即全部阶段 approved（reqdoc 同样适用） |
+| `workflow.durationMs` | 会话总活跃耗时（毫秒，优先于 transitions 首末跨度；旧汇报缺省时回退） |
 | `reportedAt` | 本机时钟快照时间；`in_progress` 阶段耗时用它当右端点 |
 
 阶段键随工作流类型不同：
@@ -73,8 +74,9 @@ idle_gap        = nextStage.enter.at − prevStage.approve.at
 ## 边界与坑
 
 - `reportedAt` 是发送方本机时钟；跨机聚合应以服务端 ingest 时间为准做去抖，不要直接拿它当权威时间。
-- 快照里没有「人在等待 / AI 正在干活」的区分，`transitions` 只有阶段边界戳；更细粒度需要新增上报字段，
-  现有「只报流程摘要」的约定做不到。
+- 会话总耗时优先读 `workflow.durationMs`（插件已区分 AI busy 与用户离开）；阶段耗时仍由 `transitions` 推导，
+  阶段内部暂无 busy/idle 明细。
+- 旧版汇报没有 `workflow.durationMs` 时，会话总耗时回退到 `transitions` 首末跨度。
 - `reqdoc` 的 `review` 也有 `checklist` 与 `comprehension`，但清单键不同（`completeness` / `clarity` /
   `edgeCoverage` / `resolution`），聚合时不要复用 sdlc 的四个键。
 - `task` 没有 `review` 阶段；不要为 task 会话读取 checklist/comprehension，按无审查处理。
