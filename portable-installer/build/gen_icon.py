@@ -1,96 +1,82 @@
-"""Generate portable-installer/build/icon.ico from the robot design.
+"""Generate the SmartHub icon set.
 
-Full body is used for 48px and above; 16/24/32 use a simplified head-only
-version so the icon stays readable in Explorer and the taskbar.
+The mark is a white S built as one continuous rounded stroke, with a cyan
+hub node at the center. A dark squircle keeps the small sizes legible.
 """
+import io
 import struct
 from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-DARK = (30, 41, 59, 255)
-LIGHT = (248, 250, 252, 255)
-SCREEN = (11, 18, 32, 255)
-BLUE = (56, 189, 248, 255)
-WHITE = (255, 255, 255, 255)
-BOLT = (203, 213, 225, 255)
-HAND = (226, 232, 240, 255)
-
 S = 5
+DARK = (11, 18, 32, 255)
+WHITE = (248, 250, 252, 255)
+CYAN = (34, 211, 238, 255)
+SEGMENTS = [
+    ((146, 62), (146, 48), (130, 40), (108, 40)),
+    ((108, 40), (82, 40), (60, 52), (60, 74)),
+    ((60, 74), (60, 94), (78, 102), (104, 105)),
+    ((104, 105), (126, 108), (144, 116), (144, 136)),
+    ((144, 136), (144, 158), (124, 164), (100, 164)),
+    ((100, 164), (76, 164), (58, 156), (58, 142)),
+]
 
 
-def px(v):
-    return int(round(v * S))
+def px(value):
+    return int(round(value * S))
 
 
-def full_icon():
+def s_points(steps=80):
+    points = []
+    for p0, p1, p2, p3 in SEGMENTS:
+        for i in range(steps + 1):
+            t = i / steps
+            m = 1 - t
+            x = m**3 * p0[0] + 3 * m * m * t * p1[0] + 3 * m * t * t * p2[0] + t**3 * p3[0]
+            y = m**3 * p0[1] + 3 * m * m * t * p1[1] + 3 * m * t * t * p2[1] + t**3 * p3[1]
+            points.append((px(x), px(y)))
+    return points
+
+
+def draw_icon(stroke, outer, inner):
     im = Image.new("RGBA", (200 * S, 200 * S), (0, 0, 0, 0))
     d = ImageDraw.Draw(im)
-    lw = lambda v: max(1, px(v))
-
-    # antenna
-    d.line([(px(100), px(34)), (px(100), px(20))], fill=DARK, width=lw(5))
-    d.ellipse([px(95), px(12), px(105), px(22)], fill=BLUE, outline=DARK, width=lw(3))
-
-    # head + screen + eyes
-    d.rounded_rectangle([px(52), px(34), px(148), px(112)], radius=px(28), fill=LIGHT, outline=DARK, width=lw(6))
-    d.rounded_rectangle([px(66), px(48), px(134), px(98)], radius=px(18), fill=SCREEN)
-    for cx in (85, 115):
-        d.ellipse([px(cx - 9), px(64), px(cx + 9), px(82)], fill=BLUE)
-        d.ellipse([px(cx - 3.5), px(69.5), px(cx + 3.5), px(76.5)], fill=WHITE)
-    for cx in (44, 156):
-        d.ellipse([px(cx - 6), px(60), px(cx + 6), px(72)], fill=BOLT, outline=DARK, width=lw(3))
-
-    # neck + body
-    d.rounded_rectangle([px(88), px(112), px(112), px(126)], radius=px(4), fill=BOLT, outline=DARK, width=lw(4))
-    d.rounded_rectangle([px(58), px(124), px(142), px(182)], radius=px(22), fill=LIGHT, outline=DARK, width=lw(6))
-
-    # symmetric arms + hands
-    for start, ctrl, end, hx in (
-        ((60, 138), (42, 146), (38, 164), 36),
-        ((140, 138), (158, 146), (162, 164), 164),
-    ):
-        d.line([(px(start[0]), px(start[1])), (px(ctrl[0]), px(ctrl[1])), (px(end[0]), px(end[1]))], fill=DARK, width=lw(10), joint="curve")
-        d.ellipse([px(hx - 8), px(160), px(hx + 8), px(176)], fill=HAND, outline=DARK, width=lw(4))
-
-    # legs + feet
-    for x in (82, 118):
-        d.line([(px(x), px(182)), (px(x - 4 if x < 100 else x + 4), px(190))], fill=DARK, width=lw(12))
-    for x0 in (66, 108):
-        d.rounded_rectangle([px(x0), px(188), px(x0 + 26), px(198)], radius=px(5), fill=HAND, outline=DARK, width=lw(3))
-
-    return im
-
-
-def small_icon():
-    im = Image.new("RGBA", (200 * S, 200 * S), (0, 0, 0, 0))
-    d = ImageDraw.Draw(im)
-    lw = lambda v: max(1, px(v))
-    d.rounded_rectangle([px(20), px(20), px(180), px(180)], radius=px(42), fill=LIGHT, outline=DARK, width=lw(10))
-    d.rounded_rectangle([px(42), px(44), px(158), px(156)], radius=px(30), fill=SCREEN)
-    for cx in (78, 122):
-        d.ellipse([px(cx - 16), px(84), px(cx + 16), px(116)], fill=BLUE)
-        d.ellipse([px(cx - 6), px(94), px(cx + 6), px(106)], fill=WHITE)
+    d.rounded_rectangle([px(8), px(8), px(192), px(192)], radius=px(40), fill=DARK)
+    scale = 1.12
+    points = [
+        (px(104 + (x / S - 104) * scale), px(104 + (y / S - 104) * scale))
+        for x, y in s_points()
+    ]
+    width = px(stroke * scale)
+    d.line(points, fill=WHITE, width=width, joint="curve")
+    for x, y in (points[0], points[-1]):
+        d.ellipse([x - width // 2, y - width // 2, x + width // 2, y + width // 2], fill=WHITE)
+    for radius, color in ((outer * scale, DARK), (inner * scale, CYAN)):
+        d.polygon(
+            [(px(104), px(104 - radius)), (px(104 + radius), px(104)), (px(104), px(104 + radius)), (px(104 - radius), px(104))],
+            fill=color,
+        )
     return im
 
 
 def main():
-    full = full_icon()
-    small = small_icon()
+    full = draw_icon(22, 26, 14)
+    small = draw_icon(24, 27, 15)
+
     entries = []
     for size in (16, 24, 32, 48, 64, 128, 256):
-        src = small if size <= 32 else full
-        im = src.resize((size, size), Image.Resampling.LANCZOS)
-        entries.append((size, im))
+        source = small if size <= 32 else full
+        resized = source.resize((size, size), Image.Resampling.LANCZOS)
+        entries.append((size, resized))
 
     payload = []
     for size, im in entries:
-        buf = __import__("io").BytesIO()
+        buf = io.BytesIO()
         im.save(buf, format="PNG")
         payload.append((size, buf.getvalue()))
 
     offset = 6 + 16 * len(payload)
-    header = struct.pack("<HHH", 0, 1, len(payload))
     directory = []
     for size, data in payload:
         dim = 0 if size == 256 else size
@@ -98,8 +84,9 @@ def main():
         offset += len(data)
 
     out = Path(__file__).with_name("icon.ico")
-    out.write_bytes(header + b"".join(directory) + b"".join(data for _, data in payload))
-    print("OK", out, "sizes:", [s for s, _ in payload])
+    out.write_bytes(struct.pack("<HHH", 0, 1, len(payload)) + b"".join(directory) + b"".join(data for _, data in payload))
+    full.resize((512, 512), Image.Resampling.LANCZOS).save(Path(__file__).with_name("icon-preview.png"))
+    print("OK", out, "sizes:", [size for size, _ in payload])
 
 
 if __name__ == "__main__":
