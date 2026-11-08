@@ -43,26 +43,19 @@ def draw_icon(stroke, outer, inner):
     im = Image.new("RGBA", (200 * S, 200 * S), (0, 0, 0, 0))
     d = ImageDraw.Draw(im)
     d.rounded_rectangle([px(8), px(8), px(192), px(192)], radius=px(40), fill=DARK)
-    scale = 1.12
-    points = [
-        (px(104 + (x / S - 104) * scale), px(104 + (y / S - 104) * scale))
-        for x, y in s_points()
-    ]
-    width = px(stroke * scale)
+    points = s_points()
+    width = px(stroke)
     d.line(points, fill=WHITE, width=width, joint="curve")
     for x, y in (points[0], points[-1]):
         d.ellipse([x - width // 2, y - width // 2, x + width // 2, y + width // 2], fill=WHITE)
-    for radius, color in ((outer * scale, DARK), (inner * scale, CYAN)):
-        d.polygon(
-            [(px(104), px(104 - radius)), (px(104 + radius), px(104)), (px(104), px(104 + radius)), (px(104 - radius), px(104))],
-            fill=color,
-        )
+    d.ellipse([px(104 - outer), px(104 - outer), px(104 + outer), px(104 + outer)], fill=DARK)
+    d.ellipse([px(104 - inner), px(104 - inner), px(104 + inner), px(104 + inner)], fill=CYAN)
     return im
 
 
 def main():
-    full = draw_icon(22, 26, 14)
-    small = draw_icon(24, 27, 15)
+    full = draw_icon(22, 22, 12)
+    small = draw_icon(24, 23, 13)
 
     entries = []
     for size in (16, 24, 32, 48, 64, 128, 256):
