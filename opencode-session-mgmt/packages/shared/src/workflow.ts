@@ -159,18 +159,18 @@ export const WEBSEC_SEVERITY_LABELS: Record<WebsecSeverity, string> = {
 export const WEBSEC_FINDING_STATUS_KEYS = ["confirmed", "suspected"] as const
 export type WebsecFindingStatus = (typeof WEBSEC_FINDING_STATUS_KEYS)[number]
 
-/** 授权范围内的测试账号（只存角色与代号，不存口令/令牌）。 */
+/** 测试范围内的测试账号（只存角色与代号，不存口令/令牌）。 */
 export interface WebsecAccount {
   name: string
   role: string
   note?: string
 }
 
-/** 授权与范围（scope 阶段，工具 websec_scope 写入）。 */
+/** 测试范围与边界（scope 阶段，工具 websec_scope 写入）。 */
 export interface WebsecScope {
   target: string
   environment: string
-  authorization: string
+  authorization?: string
   accounts: WebsecAccount[]
   window?: string
   rateLimit?: string
@@ -535,7 +535,7 @@ export interface WorkflowState {
    */
   kb?: ReqdocKbState
   /**
-   * websec 专属状态（授权范围、证据索引、报告）。
+   * websec 专属状态（测试范围、证据索引、报告）。
    * 可选字段：首次 websec_scope 前缺省；其他工作流恒缺省。
    * 证据只存元数据与哈希，正文不上行。
    */
@@ -1009,7 +1009,7 @@ export const TASK = defineWorkflow({
 
 /**
  * 工作流四：websec（轻量级 WEB 安全测试）。
- * 指导开发者完成授权范围内的侦察、只读/低风险检查、取证定级与报告；
+ * 指导开发者完成负责或获准范围内的侦察、只读/低风险检查、取证定级与报告；
  * 默认只读，写/破坏性动作必须显式授权；无证据结论不得标 confirmed。
  * 详细说明见 docs/workflow-websec.md。
  */
@@ -1017,14 +1017,14 @@ export const WEBSEC = defineWorkflow({
   type: "websec",
   stages: ["scope", "surface", "checks", "verify", "report"],
   labels: {
-    scope: "授权与范围",
+    scope: "范围与边界",
     surface: "资产与接口",
     checks: "安全检查",
     verify: "验证与定级",
     report: "报告与修复",
   },
   stagePurpose: {
-    scope: "确认授权、目标、账号与停止条件",
+    scope: "确认测试范围、账号与停止条件",
     surface: "枚举页面、接口、参数与身份",
     checks: "按清单做只读/低风险检查",
     verify: "复现、取证、排除误报并定级",
@@ -1032,7 +1032,7 @@ export const WEBSEC = defineWorkflow({
   },
   reviewStage: "report",
   checklist: [
-    { key: "scopeAuthorized", label: "授权与范围已确认" },
+    { key: "scopeAuthorized", label: "测试范围与边界已确认" },
     { key: "surfaceCovered", label: "入口与接口已覆盖" },
     { key: "checksEvidenced", label: "每项结论有证据" },
     { key: "falsePositiveReviewed", label: "误报已复核" },
@@ -1041,7 +1041,7 @@ export const WEBSEC = defineWorkflow({
   hasCommitGate: false,
   requiresComprehension: false,
   standard: {
-    estimate: { id: "websec-r1", stage: "scope", audience: "开发者", when: "进入授权与范围阶段时" },
+    estimate: { id: "websec-r1", stage: "scope", audience: "开发者", when: "进入范围与边界阶段时" },
     finish: { id: "websec-r19", audience: "开发者", trigger: "报告阶段 review_submit 通过后" },
   },
   rules: [
@@ -1053,7 +1053,7 @@ export const WEBSEC = defineWorkflow({
     {
       id: "websec-r3",
       stage: "global",
-      text: "只测试已授权目标。默认只读（GET/HEAD/OPTIONS）；任何写操作、删除、批量提交、爆破、越权写、文件上传利用必须由开发者显式授权并逐次确认，未授权一律不做。",
+      text: "只测试你负责或获准自测的目标。默认只读（GET/HEAD/OPTIONS）；任何写操作、删除、批量提交、爆破、越权写、文件上传利用必须由开发者显式授权并逐次确认，未授权一律不做。",
     },
     {
       id: "websec-r4",
@@ -1073,7 +1073,7 @@ export const WEBSEC = defineWorkflow({
     {
       id: "websec-r7",
       stage: "scope",
-      text: "先确认并记录授权与范围：目标 URL/环境、书面授权依据、可用账号与角色、测试时间窗、限速、停止条件。调用 websec_scope 落库；未记录 scope 不得进入安全检查。",
+      text: "先确认并记录测试范围与边界：目标 URL/环境、可用账号与角色、测试时间窗、限速、停止条件。调用 websec_scope 落库；未记录 scope 不得进入安全检查。内部开发自测不需要工单/邮件/合同，只需确认目标属于你负责或获准自测的范围。",
     },
     {
       id: "websec-r8",
@@ -1113,7 +1113,7 @@ export const WEBSEC = defineWorkflow({
     {
       id: "websec-r15",
       stage: "report",
-      text: "报告必须包含：范围与授权、方法、发现清单（含证据引用/复现/影响/修复）、局限与未覆盖项、残余风险；敏感信息脱敏，不贴真实用户数据。",
+      text: "报告必须包含：范围与边界、方法、发现清单（含证据引用/复现/影响/修复）、局限与未覆盖项、残余风险；敏感信息脱敏，不贴真实用户数据。",
     },
     {
       id: "websec-r16",

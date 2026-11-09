@@ -143,7 +143,7 @@ task 额外携带可选分类字段（sdlc/reqdoc/websec 不携带）：
 
 | 字段 | 含义 |
 |------|------|
-| `checklist` | 审查清单，全部为 true 才可通过（sdlc = 代码理解四维度，reqdoc = PRD 四维度，websec = 授权/覆盖/证据/误报/修复五项；task 无审查阶段） |
+| `checklist` | 审查清单，全部为 true 才可通过（sdlc = 代码理解四维度，reqdoc = PRD 四维度，websec = 范围/覆盖/证据/误报/修复五项；task 无审查阶段） |
 | `comprehension.total` | 审查片段/要点总数（websec 恒 0，不要求片段确认） |
 | `comprehension.confirmed` | 已确认数 |
 

@@ -1,5 +1,5 @@
 /**
- * websec 工作流端到端护栏：授权范围门禁、证据引用校验、报告门禁与定稿。
+ * websec 工作流端到端护栏：范围门禁、证据引用校验、报告门禁与定稿。
  */
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import { mkdtempSync, rmSync } from "node:fs"
@@ -54,7 +54,7 @@ const allChecked = {
 }
 
 describe("websec 工作流", () => {
-  test("未记录授权范围不得进入安全检查；报告前必须有结构化报告", async () => {
+  test("未记录范围与边界不得进入安全检查；报告前必须有结构化报告", async () => {
     const { hooks, project } = await startWebsecPlugin()
     const sessionID = "w1"
     const c = ctx(sessionID)
@@ -84,7 +84,6 @@ describe("websec 工作流", () => {
           {
             target: "https://example.test",
             environment: "staging",
-            authorization: "TEST-123",
             accounts: [{ name: "u1", role: "user" }],
             stopConditions: ["触发告警"],
             developer_confirmed: false,
@@ -98,14 +97,13 @@ describe("websec 工作流", () => {
           {
             target: "https://example.test",
             environment: "staging",
-            authorization: "TEST-123",
             accounts: [{ name: "u1", role: "user" }],
             stopConditions: ["触发告警"],
             developer_confirmed: true,
           } as never,
           c,
         ),
-      ).resolves.toContain("授权与范围已记录")
+      ).resolves.toContain("测试范围与边界已记录")
 
       await hooks.tool!.workflow_advance!.execute(
         { stage: "checks", action: "enter", developer_confirmed: true } as never,

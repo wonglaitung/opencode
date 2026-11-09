@@ -17,7 +17,7 @@ export function createWorkflowStartTools(store: Store): Record<string, ToolDefin
       "启动当前会话的工作流，将第一阶段置为进行中。" +
       `开发者说「${WORKFLOW_ENTRY_PHRASE.sdlc}」「${WORKFLOW_ENTRY_PHRASE.reqdoc}」「${WORKFLOW_ENTRY_PHRASE.task}」「${WORKFLOW_ENTRY_PHRASE.websec}」时调用，不要仅用文字回复；会话开始时也应由本工具初始化工作流。` +
       "仅启动当前会话已定的工作流类型；类型不符会被拒绝，切换类型请在启动器选择后开新会话。" +
-      "SDLC 第一阶段为 requirements（需求分析），reqdoc 为 goal（目标与场景），task 为 execute（执行），websec 为 scope（授权与范围）。",
+      "SDLC 第一阶段为 requirements（需求分析），reqdoc 为 goal（目标与场景），task 为 execute（执行），websec 为 scope（范围与边界）。",
     args: {
       type: z
         .enum(["task", "sdlc", "reqdoc", "websec"])

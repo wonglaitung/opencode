@@ -1,5 +1,5 @@
 /**
- * websec 工作流专属工具（授权范围 / 证据索引 / 结构化报告）。
+ * websec 工作流专属工具（测试范围 / 证据索引 / 结构化报告）。
  *
  * 设计约束：
  * - 默认只读；本文件不发起任何网络请求，只落库开发者/Agent 已获得的结论。
@@ -36,7 +36,7 @@ function ensureWebsec(workflow: WorkflowState): WebsecState {
 function requireScope(workflow: WorkflowState): WebsecState {
   const state = ensureWebsec(workflow)
   if (!state.scope) {
-    throw new WorkflowOpError("尚未记录授权与范围：请先调用 websec_scope")
+    throw new WorkflowOpError("尚未记录测试范围与边界：请先调用 websec_scope")
   }
   return state
 }
@@ -76,26 +76,26 @@ const finding = z.object({
 export function createWebsecTools(store: Store): Record<string, ToolDefinition> {
   const websec_scope = tool({
     description:
-      "记录 WEB 安全测试的授权与范围（scope 阶段）。必须由开发者确认授权后调用；" +
-      "未记录 scope 不得进入安全检查。只存账号代号/角色，不存口令或令牌。",
+      "记录 WEB 安全测试的范围与边界（scope 阶段）。必须由开发者确认目标属于其负责或获准自测的范围后调用；" +
+      "未记录 scope 不得进入安全检查。内部开发自测不需要工单/邮件/合同。只存账号代号/角色，不存口令或令牌。",
     args: {
       target: z.string().min(1).describe("目标 URL 或环境标识"),
       environment: z.string().min(1).describe("环境，如 dev/staging/prod"),
-      authorization: z.string().min(1).describe("授权依据（工单/邮件/合同编号或说明）"),
+      authorization: z.string().min(1).optional().describe("可选：授权说明；内部开发自测可省略"),
       accounts: z.array(account).min(1).describe("可用测试账号（至少一个）"),
       window: z.string().optional().describe("允许测试的时间窗"),
       rateLimit: z.string().optional().describe("限速要求"),
       stopConditions: z.array(z.string().min(1)).min(1).describe("必须停止的条件（至少一条）"),
-      developer_confirmed: z.boolean().describe("必须为 true，表示开发者已明确确认授权与范围"),
+      developer_confirmed: z.boolean().describe("必须为 true，表示开发者已明确确认测试范围与边界"),
     },
     async execute(args, context) {
       if (args.developer_confirmed !== true) {
-        throw new WorkflowOpError("记录授权与范围需开发者明确确认：developer_confirmed 必须为 true")
+        throw new WorkflowOpError("记录测试范围与边界需开发者明确确认：developer_confirmed 必须为 true")
       }
       const saved = store.mutateWorkflow(context.sessionID, (workflow) => {
         const state = requireWebsec(workflow)
         if (state.stages.scope?.status === "not_started") {
-          throw new WorkflowOpError("请先调用 workflow_start 启动工作流，再记录授权与范围")
+          throw new WorkflowOpError("请先调用 workflow_start 启动工作流，再记录测试范围与边界")
         }
         const base = ensureWebsec(workflow)
         workflow.websec = {
@@ -114,8 +114,8 @@ export function createWebsecTools(store: Store): Record<string, ToolDefinition> 
       })
       const scope = saved.websec?.scope
       return (
-        `✅ 授权与范围已记录：${scope?.target}（${scope?.environment}）\n` +
-        `授权依据：${scope?.authorization}\n` +
+        `✅ 测试范围与边界已记录：${scope?.target}（${scope?.environment}）\n` +
+        (scope?.authorization ? `授权说明：${scope.authorization}\n` : "") +
         `账号：${scope?.accounts.map((item) => `${item.name}/${item.role}`).join("、")}\n` +
         `停止条件：${scope?.stopConditions.join("；")}\n` +
         `下一步：进入「资产与接口」阶段枚举入口。`
