@@ -46,7 +46,7 @@
 1. 创建 `%USERPROFILE%\OpenCode`，复制 `runtime\` 与 `python\`，补 `python\python3.exe` 别名。
 2. 弹窗分两页填写：
    - **第 1 页**：模型服务地址 `baseURL`、`API 密钥`（密码框掩码）、默认模型名称 `model`（默认 `athlon-coder`）、收集服务地址 `collector_url`
-   - **第 2 页**：上下文长度上限 `limit.context`、输出长度上限 `limit.output`、工作流类型（下拉 `sdlc` / `reqdoc`）、终端类型（下拉「原生终端」/「专用终端(OpenConsole)」）
+   - **第 2 页**：上下文长度上限 `limit.context`、输出长度上限 `limit.output`、工作流类型（下拉 `task` / `sdlc` / `reqdoc` / `websec`）、终端类型（下拉「原生终端」/「专用终端(OpenConsole)」）
 3. 写入三处配置 + 一个终端模式文件（路径在安装时展开为实际绝对路径）：模型名称取第 1 页「默认模型名称」输入框的值，并作为 `opencode.jsonc` 中唯一（即默认）模型写入。
     - `opencode.jsonc` → `%USERPROFILE%\.config\opencode\`
       ```jsonc
@@ -120,10 +120,10 @@
 - 目录输入框和「浏览」按钮（WinForms FolderBrowserDialog）；侧栏选择工作流按钮，主区选择终端；插件集中在独立卡片中，底部按钮「打开 Digital Programmer」。
 - 工作流说明区为卡片式布局：左侧三行短提示，右侧独立帮助区「查看使用说明」，按当前工作流弹出详细步骤。一般任务的详细说明包含代码审核用法（启动后说明审核范围；审核只读、不跑 build/test/lint，报告逐条列出发现与建议，提交后才能完成）。
 - 界面按 `GUI.png` 统一为深色侧栏 + 浅色主区：侧栏放工作流列表与插件开关，主区放项目目录卡片、启动按钮、工作流说明卡片和底部运行选项；主按钮使用蓝色卡片式操作区。
-- 启动时按当前工作流向 opencode 注入 `--prompt` 启动短语（一般任务 / SDLC / REQDOC）。新会话会自动发送；勾选「继续上次会话」时直接恢复原会话，不注入启动短语。
+- 启动时按当前工作流向 opencode 注入 `--prompt` 启动短语（一般任务 / SDLC / REQDOC / WEB 安全测试）。新会话会自动发送；勾选「继续上次会话」时直接恢复原会话，不注入启动短语。
 - 打开前读取当前配置回填：工作流取 `identity.json` 的 `workflowType`（缺省 `sdlc`），终端取 `terminal_mode.ini` 首行（缺省 `native`），插件状态取 `opencode.jsonc` 的 `plugin` 数组。
 - 点「打开 Digital Programmer」时才写配置：工作流写回 `identity.json`，终端写回 `terminal_mode.ini`，插件只替换 `opencode.jsonc` 的 `plugin` 数组，其余字段原样保留。写前留 `.bak`，失败弹窗并取消启动。
-- 工作流用侧栏按钮选择，终端用 HTML 下拉框选择。终端「原生」由 WebView2 host 启动 `opencode.cmd`，使用系统控制台；「专用」启动 `OpenConsole.exe cmd /c "title 数字程序员 && opencode.cmd"`，使用打包的 Windows Terminal，退出即关。默认启动新会话；只有勾选「继续上次会话」且项目目录、工作流都与上次启动一致时，才追加 `-c` 续接上次对话。工作流变化时复选框自动置灰并新建会话，避免旧会话沿用旧工作流。
+- 工作流用侧栏按钮选择（一般任务 / SDLC / REQDOC / WEB 安全自测），终端用 HTML 下拉框选择。终端「原生」由 WebView2 host 启动 `opencode.cmd`，使用系统控制台；「专用」启动 `OpenConsole.exe cmd /c "title 数字程序员 && opencode.cmd"`，使用打包的 Windows Terminal，退出即关。默认启动新会话；只有勾选「继续上次会话」且项目目录、工作流都与上次启动一致时，才追加 `-c` 续接上次对话。工作流变化时复选框自动置灰并新建会话，避免旧会话沿用旧工作流。
 - 关闭「会话管理」插件时工作流菜单置灰；插件开关是机器级设置，对所有项目生效。配置文件缺失或无法解析时，插件开关置灰并提示重装；`identity.json` 缺失时工作流不可选。
 - 启动时把 WebView2 host 的 `WorkingDirectory` 设为所选目录 → **该目录即项目根 `ctx.directory`**，reqdoc 扫描/导出/技能全部基于此。
 - 所选目录须为业务已取得的 doc_process 项目（含 `.claude/skills`、`工作要求.txt`、`raw/`、`00~07` 骨架）；安装包不负责分发这些项目文件。
@@ -192,7 +192,7 @@ cmd /c portable-installer\build\build.bat
   - `dedicated` 模式：opencode 在打包的 Windows Terminal 窗口中运行，退出即关；
   - `terminal_mode.ini` 为 ASCII 编码（`native` 或 `dedicated`），人可阅读、可改。
   - 启动器回填当前工作流、终端和插件状态；改完点「打开 Digital Programmer」后按选择写入，点「取消」或关闭窗口不写入。
-  - 切换三个工作流时短提示不裁切；点「查看使用说明」显示对应详细步骤；一般任务说明包含代码审核示例；关闭说明后启动/取消/继续上次会话均正常，且帮助操作不改写任何配置文件。
+  - 切换四个工作流时短提示不裁切；点「查看使用说明」显示对应详细步骤；一般任务说明包含代码审核示例；WEB 安全自测说明包含普通/越权两种模式与证据目录；关闭说明后启动/取消/继续上次会话均正常，且帮助操作不改写任何配置文件。
   - 新会话启动后自动发送当前工作流的启动短语；勾选「继续上次会话」时直接恢复原会话，不注入启动短语。
   - 插件开关全局生效；关掉「会话管理」后工作流菜单置灰，重新勾选并打开可恢复，`identity.json` 的 `workflowType` 不会被改动。
   - **路径验证**：检查 `%USERPROFILE%\.config\opencode\opencode.jsonc` 中的 plugin 路径为实际绝对路径（如 `C:/Users/xxx/OpenCode/runtime/...`），不含 `%USERPROFILE%` 字面量。

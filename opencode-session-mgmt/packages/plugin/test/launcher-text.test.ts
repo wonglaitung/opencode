@@ -5,22 +5,27 @@ import { join } from "node:path"
 const buildDir = join(import.meta.dir, "../../../../portable-installer/build")
 const nsi = readFileSync(join(buildDir, "OpenCode-launch.nsi"), "utf8")
 const config = readFileSync(join(buildDir, "launcher-config.js"), "utf8")
+const webview = readFileSync(join(buildDir, "../launcher/index.html"), "utf8")
+const program = readFileSync(join(buildDir, "../launcher/Program.cs"), "utf8")
 
 describe("OpenCode-launch 工作流选项与提示", () => {
   test("一般任务排在菜单第一项", () => {
     const task = nsi.indexOf('"一般任务"')
     const sdlc = nsi.indexOf('"SDLC 开发流程"')
     const reqdoc = nsi.indexOf('"REQDOC 需求书"')
+    const websec = nsi.indexOf('"WEB 安全自测"')
     expect(task).toBeGreaterThan(-1)
     expect(sdlc).toBeGreaterThan(task)
     expect(reqdoc).toBeGreaterThan(sdlc)
+    expect(websec).toBeGreaterThan(reqdoc)
   })
 
-  test("三个工作流都有短提示、入口与帮助链接", () => {
+  test("四个工作流都有短提示、入口与帮助链接", () => {
     for (const text of [
       "新会话自动发送「启动一般任务」",
       "新会话自动发送「启动 SDLC 工作流」",
       "新会话自动发送「启动 REQDOC 工作流」",
+      "新会话自动发送「启动 WEB 安全测试工作流」",
       "查看使用说明",
     ]) {
       expect(nsi).toContain(text)
@@ -43,6 +48,7 @@ describe("OpenCode-launch 工作流选项与提示", () => {
     expect(nsi).toContain('NSD_CreateLink} 770 316 190 20 "查看使用说明 ›"')
     expect(nsi).toContain("Function SyncWorkflowLabels")
     expect(nsi).toContain("Function SelectTaskWorkflow")
+    expect(nsi).toContain("Function SelectWebsecWorkflow")
     expect(nsi).toContain("Function SetHelpText")
     expect(nsi).toContain("Function ShowUsageHelp")
     expect(nsi).toContain("代码审核也选「一般任务」")
@@ -68,12 +74,29 @@ describe("OpenCode-launch 工作流选项与提示", () => {
     expect(nsi).toContain('--prompt=启动一般任务')
     expect(nsi).toContain('--prompt=启动SDLC工作流')
     expect(nsi).toContain('--prompt=启动REQDOC工作流')
+    expect(nsi).toContain('--prompt=启动WEB安全测试工作流')
     expect(nsi).toContain('$ResumeFlag$PromptFlag')
     expect(nsi).toContain('$ResumeFlag != " -c"')
   })
 
-  test("launcher-config 读写 task", () => {
+  test("launcher-config 读写 task/websec", () => {
     expect(config).toContain('parsed.workflowType === "task"')
+    expect(config).toContain('parsed.workflowType === "websec"')
     expect(config).toContain('args.workflow !== "task"')
+    expect(config).toContain('args.workflow !== "websec"')
+  })
+
+  test("WebView 启动器内置 WEB 安全自测使用说明", () => {
+    expect(webview).toContain('label: "WEB 安全自测"')
+    expect(webview).toContain("applyWorkflowDefaults")
+    expect(webview).toContain('state.plugins = state.plugins.filter(key => key !== "edge")')
+    expect(webview).toContain("启动 WEB 安全测试工作流")
+    expect(webview).toContain("普通测试")
+    expect(webview).toContain("越权测试")
+    expect(webview).toContain("websec-evidence")
+    expect(webview).toContain(".gitignore")
+    expect(program).toContain('"websec" => "启动 WEB 安全测试工作流"')
+    expect(nsi).toContain("WEB 安全自测使用会话管理内置的 Edge 桥接")
+    expect(nsi).toContain("${NSD_Uncheck} $hEdge")
   })
 })

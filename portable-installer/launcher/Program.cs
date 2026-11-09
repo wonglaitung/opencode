@@ -271,6 +271,7 @@ internal sealed class LauncherForm : Form
         {
             "task" => "启动一般任务",
             "reqdoc" => "启动REQDOC工作流",
+            "websec" => "启动 WEB 安全测试工作流",
             _ => "启动SDLC工作流"
         };
         var common = new List<string>();

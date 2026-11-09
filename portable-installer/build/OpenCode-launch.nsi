@@ -33,6 +33,7 @@ Var hWorkflow
 Var hWfTask
 Var hWfSdlc
 Var hWfReqdoc
+Var hWfWebsec
 Var hTerminal
 Var hSm
 Var hEdge
@@ -149,6 +150,7 @@ Function .onInit
 
   ; 归一化, 防止空值或异常值把界面带偏
   ${If} $WorkflowType == "task"
+  ${ElseIf} $WorkflowType == "websec"
   ${ElseIf} $WorkflowType == "reqdoc"
   ${Else}
     StrCpy $WorkflowType "sdlc"
@@ -161,6 +163,10 @@ Function .onInit
   ${EndIf}
   ${If} $PluginEdge != "0"
     StrCpy $PluginEdge "1"
+  ${EndIf}
+  ; WEB 安全自测使用会话管理内置的 Edge 桥接，自动关闭独立 Edge 调试插件。
+  ${If} $WorkflowType == "websec"
+    StrCpy $PluginEdge "0"
   ${EndIf}
   ${If} $PluginServer != "0"
     StrCpy $PluginServer "1"
@@ -192,6 +198,8 @@ Function SetWorkflowHint
     StrCpy $HintText "适合文档、排查、整理、代码审核等轻量任务。$\r$\n新会话自动发送「启动一般任务」；继续上次会话直接恢复。完成后说「本次任务已完成」。$\r$\n代码审核也选这里：启动后说明审核范围；AI 只读审查。"
   ${ElseIf} $WorkflowType == "reqdoc"
     StrCpy $HintText "适合业务写需求书：口述或投放材料，AI 追问补全后生成 PRD。$\r$\n新会话自动发送「启动 REQDOC 工作流」；继续上次会话直接恢复。定稿前逐条确认要点。$\r$\n目标阶段会问预估工时；点「查看使用说明」看详细步骤。"
+  ${ElseIf} $WorkflowType == "websec"
+    StrCpy $HintText "适合开发人员安全自测：只读检查接口越权、配置与敏感数据。$\r$\n新会话自动发送「启动 WEB 安全测试工作流」；拉起 Edge 后先选普通测试/越权测试。$\r$\n证据正文默认保存在项目 websec-evidence/；点「查看使用说明」看详细步骤。"
   ${Else}
     StrCpy $HintText "适合完整开发：需求 → 设计 → 编码 → 测试 → 审查。$\r$\n新会话自动发送「启动 SDLC 工作流」；继续上次会话直接恢复。每阶段需你确认。$\r$\n会问预估工时；点「查看使用说明」看详细步骤。"
   ${EndIf}
@@ -202,6 +210,8 @@ Function SetHelpText
     StrCpy $HelpText "一般任务$\r$\n$\r$\n适合：写文档、排查问题、整理资料、配置环境、代码审核等轻量工作。$\r$\n$\r$\n1. 新会话自动发送「启动一般任务」；勾选「继续上次会话」时直接恢复原会话，不再发送启动短语。$\r$\n2. 启动后描述任务；AI 会归类任务类型。一般分类只影响统计，代码审核例外。$\r$\n3. 会问预估工时，请回「预估 2 小时」；完成后说「本次任务已完成」。$\r$\n4. 不需要逐阶段确认；普通任务不拦截提交，代码审核任务只读、不可提交。$\r$\n$\r$\n代码审核也选「一般任务」：$\r$\n- 新会话自动发送「启动一般任务」后，说明审核范围，例如「帮我审核这次 diff」$\r$\n  「审核 src/auth.ts 的登录改动」或「审核这个 commit：<commit>」。$\r$\n- AI 只读：不改代码、不提交、不跑 build/test/lint。$\r$\n- AI 先用只读 git 检查范围，必要时做规则扫描。$\r$\n- 按六维输出报告，逐条列出发现与修复建议；结论为 approved 或 changes_requested。$\r$\n- 报告提交后才能完成审核任务；changes_requested 不代表自动修改代码。$\r$\n- 非 Git 项目请直接指定文件；扫描是辅助，可能误报。$\r$\n- 超过 20 文件/500 行会提示拆分审核。$\r$\n$\r$\n默认新会话；勾选「继续上次会话」可回到上次进度。"
   ${ElseIf} $WorkflowType == "reqdoc"
     StrCpy $HelpText "REQDOC 需求书$\r$\n$\r$\n适合：业务人员通过口述或投放材料，由 AI 追问补全并生成 PRD。$\r$\n$\r$\n1. 新会话自动发送「启动 REQDOC 工作流」；勾选「继续上次会话」时直接恢复原会话，不再发送启动短语。$\r$\n2. 系统创建 00~07 资料目录，按目标 → 规则 → 边界 → PRD → 审查推进。$\r$\n3. 目标阶段会问预估工时，请回「预估 2 小时」。$\r$\n4. 材料可投放到对应目录，AI 扫描后追问缺失信息。$\r$\n5. PRD 由系统按模板生成，不要手工编辑产物。$\r$\n6. 定稿前业务需逐条确认要点；只改某一章时使用定点修订。$\r$\n7. 默认新会话；勾选「继续上次会话」可回到上次进度。$\r$\n$\r$\n提示：必填槽位未确认或有未收口项时，进入 PRD/定稿会被拦截。"
+  ${ElseIf} $WorkflowType == "websec"
+    StrCpy $HelpText "WEB 安全自测$\r$\n$\r$\n适合：开发人员对自己负责的系统做上线前安全自测，不替代专业渗透测试。$\r$\n$\r$\n1. 新会话自动发送「启动 WEB 安全测试工作流」；勾选「继续上次会话」时直接恢复原会话，不再发送启动短语。$\r$\n2. 先记录范围：目标、环境、测试账号、停止条件。内部自测不需要工单/邮件/合同。$\r$\n3. 拉起 Edge 后先选择模式：$\r$\n   - 普通测试：登录后正常操作，完成说「完成」。$\r$\n   - 越权测试：普通账号操作 → 说「普通账号完成」→ 清除登录态 → 高权账号重新登录并走同样流程 → 说「高权账号完成」。$\r$\n4. 普通测试需要 1 个账号；越权测试需要至少 2 个不同角色账号（普通 + 高权）。$\r$\n5. 证据正文默认保存在项目 websec-evidence/<sessionID>/，目录内 .gitignore 忽略正文；可用 websec_scope(evidence_dir=...) 改到项目内其它目录。$\r$\n6. 默认只读（GET/HEAD/OPTIONS）；写、删除、爆破、上传利用需逐次明确授权。$\r$\n7. 报告通过后执行 /new 开始下一次测试；修复后复测也建议新会话。$\r$\n$\r$\n提示：websec 使用「会话管理」插件内置的 Edge 桥接，不需要额外启用「Edge 调试」插件。没有 Edge 时退回人工浏览/curl。"
   ${Else}
     StrCpy $HelpText "SDLC 开发流程$\r$\n$\r$\n适合：从需求到设计、编码、测试、审查的完整开发。$\r$\n$\r$\n1. 新会话自动发送「启动 SDLC 工作流」；勾选「继续上次会话」时直接恢复原会话，不再发送启动短语。$\r$\n2. 按 需求 → 设计 → 编码 → 测试 → 审查 推进。$\r$\n3. 每阶段完成时需你明确确认，AI 不会自行确认。$\r$\n4. 需求阶段会问预估工时，请回「预估 2 小时」。$\r$\n5. 提交代码前必须完成全部阶段，提交门禁会检查。$\r$\n6. 需要人工改文件时，AI 会先锁定文件；改完确认后解锁。$\r$\n7. 默认新会话；勾选「继续上次会话」可回到上次进度。$\r$\n$\r$\n提示：阶段未确认不会自动推进；切换工作流会新建会话。"
   ${EndIf}
@@ -344,8 +354,15 @@ Function OnWorkflowChange
     StrCpy $WorkflowType "task"
   ${ElseIf} $0 == 2
     StrCpy $WorkflowType "reqdoc"
+  ${ElseIf} $0 == 3
+    StrCpy $WorkflowType "websec"
   ${Else}
     StrCpy $WorkflowType "sdlc"
+  ${EndIf}
+  ; 选中 WEB 安全自测时自动取消 Edge 调试插件；切回其它工作流不自动恢复。
+  ${If} $WorkflowType == "websec"
+    ${NSD_Uncheck} $hEdge
+    StrCpy $PluginEdge "0"
   ${EndIf}
   Call RefreshWorkflowHint
   Call UpdateResumeState
@@ -372,6 +389,8 @@ Function DoLaunch
     StrCpy $WorkflowType "task"
   ${ElseIf} $0 == 2
     StrCpy $WorkflowType "reqdoc"
+  ${ElseIf} $0 == 3
+    StrCpy $WorkflowType "websec"
   ${Else}
     StrCpy $WorkflowType "sdlc"
   ${EndIf}
@@ -422,6 +441,8 @@ Function DoLaunch
       StrCpy $PromptFlag ' --prompt=启动SDLC工作流'
     ${ElseIf} $WorkflowType == "reqdoc"
       StrCpy $PromptFlag ' --prompt=启动REQDOC工作流'
+    ${ElseIf} $WorkflowType == "websec"
+      StrCpy $PromptFlag ' --prompt=启动WEB安全测试工作流'
     ${EndIf}
   ${EndIf}
 
@@ -529,6 +550,11 @@ Function SyncWorkflowLabels
   ${Else}
     SetCtlColors $hWfReqdoc 0xCBD5E1 0x0F172A
   ${EndIf}
+  ${If} $WorkflowType == "websec"
+    SetCtlColors $hWfWebsec 0x60A5FA 0x0F172A
+  ${Else}
+    SetCtlColors $hWfWebsec 0xCBD5E1 0x0F172A
+  ${EndIf}
 FunctionEnd
 
 Function UpdateWorkflowEnabled
@@ -540,10 +566,12 @@ Function UpdateWorkflowEnabled
     EnableWindow $hWfTask 1
     EnableWindow $hWfSdlc 1
     EnableWindow $hWfReqdoc 1
+    EnableWindow $hWfWebsec 1
   ${Else}
     EnableWindow $hWfTask 0
     EnableWindow $hWfSdlc 0
     EnableWindow $hWfReqdoc 0
+    EnableWindow $hWfWebsec 0
   ${EndIf}
 FunctionEnd
 
@@ -559,6 +587,11 @@ FunctionEnd
 
 Function SelectReqdocWorkflow
   ${NSD_CB_SetSelectionIndex} $hWorkflow 2
+  Call OnWorkflowChange
+FunctionEnd
+
+Function SelectWebsecWorkflow
+  ${NSD_CB_SetSelectionIndex} $hWorkflow 3
   Call OnWorkflowChange
 FunctionEnd
 
@@ -609,6 +642,10 @@ Function LaunchPage
   Pop $hWfReqdoc
   SendMessage $hWfReqdoc ${WM_SETFONT} $SectionFont 1
   ${NSD_OnClick} $hWfReqdoc SelectReqdocWorkflow
+  ${NSD_CreateButton} 20 262 220 24 "WEB 安全自测"
+  Pop $hWfWebsec
+  SendMessage $hWfWebsec ${WM_SETFONT} $SectionFont 1
+  ${NSD_OnClick} $hWfWebsec SelectWebsecWorkflow
 
   ; 隐藏的原生下拉框：保留既有配置/续接判断逻辑，不参与视觉。
   ${NSD_CreateDropList} -100 -100 1 1 ""
@@ -616,10 +653,13 @@ Function LaunchPage
   ${NSD_CB_AddString} $hWorkflow "一般任务"
   ${NSD_CB_AddString} $hWorkflow "SDLC 开发流程"
   ${NSD_CB_AddString} $hWorkflow "REQDOC 需求书"
+  ${NSD_CB_AddString} $hWorkflow "WEB 安全自测"
   ${If} $WorkflowType == "task"
     ${NSD_CB_SetSelectionIndex} $hWorkflow 0
   ${ElseIf} $WorkflowType == "reqdoc"
     ${NSD_CB_SetSelectionIndex} $hWorkflow 2
+  ${ElseIf} $WorkflowType == "websec"
+    ${NSD_CB_SetSelectionIndex} $hWorkflow 3
   ${Else}
     ${NSD_CB_SetSelectionIndex} $hWorkflow 1
   ${EndIf}
