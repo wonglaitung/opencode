@@ -56,7 +56,7 @@ fi
 
 echo "==> 补齐 workspace 包到 node_modules"
 # 在 hoisted 模式下，外部依赖已扁平安装至根 node_modules/；
-#   但 workspace 包（sm-shared / sm-plugin / opencode-sm）
+#   但 workspace 包（sm-shared / sm-plugin / opencode-sm）与 file: 依赖 edge-debug-core
 #   可能因 EINVAL 未被链接。手动以真实文件拷贝替代，确保打包后可跨机器使用。
 for ws_pkg in shared plugin cli; do
   pkg_dir="packages/${ws_pkg}"
@@ -74,6 +74,16 @@ for ws_pkg in shared plugin cli; do
   cp -rL "$pkg_dir" "node_modules/${pkg_name}"
   echo "  ✓ ${pkg_name} → node_modules/${pkg_name}"
 done
+
+echo "==> 复制 edge-debug-core（真实文件，file: 依赖在 hoisted 下是符号链接）"
+core_dir="../edge-debug-core"
+if [ -d "$core_dir" ]; then
+  rm -rf node_modules/edge-debug-core packages/plugin/node_modules/edge-debug-core
+  mkdir -p node_modules/edge-debug-core
+  cp "$core_dir/package.json" node_modules/edge-debug-core/
+  cp -r "$core_dir/src" node_modules/edge-debug-core/
+  echo "  ✓ edge-debug-core → node_modules/edge-debug-core"
+fi
 
 echo "==> 验证无符号链接"
 symlinks=$(find node_modules -type l 2>/dev/null || true)
@@ -98,6 +108,22 @@ cp .npmrc "$bundle_dir/"
 # -rL 解引用符号链接:包内若出现软链(packages 下有人 ln -s 共享文件),以真实文件进包,
 # 避免解压后链接目标缺失断链(与下方 workspace 包处理一致)。
 cp -rL packages "$bundle_dir/"
+
+# 共享核心：复制到 bundle 根，并把 plugin 包的 file: 依赖改为包内相对路径。
+if [ -d "$core_dir" ]; then
+  mkdir -p "$bundle_dir/edge-debug-core"
+  cp "$core_dir/package.json" "$bundle_dir/edge-debug-core/"
+  cp -r "$core_dir/src" "$bundle_dir/edge-debug-core/"
+  BUNDLE_PLUGIN_PKG="$bundle_dir/packages/plugin/package.json" bun -e '
+    const fs = require("node:fs");
+    const p = process.env.BUNDLE_PLUGIN_PKG;
+    const j = JSON.parse(fs.readFileSync(p, "utf8"));
+    if (j.dependencies && j.dependencies["edge-debug-core"]) {
+      j.dependencies["edge-debug-core"] = "file:../../edge-debug-core";
+    }
+    fs.writeFileSync(p, JSON.stringify(j, null, 2) + "\n");
+  '
+fi
 
 # 模板送达（渲染铁律在客户端的落地保障）：docs/（含 docs/reqdoc-prd-template.md 与源
 # docs/模版.docx）随包分发到 bundle 根。插件 prd 阶段按 <bundle>/packages/plugin/src

@@ -172,6 +172,7 @@ const SessionMgmtPlugin: Plugin = async (input) => {
       workflowType,
       ideEntries: entries,
       lockRegistry: registry,
+      projectDir: input.directory,
     }),
 
     // 人工文件锁拦截先行，提交门禁随后；任一 throw 即阻断本次工具调用。

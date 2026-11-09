@@ -159,6 +159,20 @@ export const WEBSEC_SEVERITY_LABELS: Record<WebsecSeverity, string> = {
 export const WEBSEC_FINDING_STATUS_KEYS = ["confirmed", "suspected"] as const
 export type WebsecFindingStatus = (typeof WEBSEC_FINDING_STATUS_KEYS)[number]
 
+/** 开发自测模式：normal=普通单账号；authz=双角色越权。 */
+export type WebsecTestMode = "normal" | "authz"
+
+/** 证据阶段：single=普通；baseline=普通账号；privileged=高权账号。 */
+export type WebsecPhase = "single" | "baseline" | "privileged"
+
+/** Edge 会话状态（start/finish 由 websec_edge_capture 维护）。 */
+export interface WebsecEdgeState {
+  started: boolean
+  finished: boolean
+  startedAt?: number
+  finishedAt?: number
+}
+
 /** 测试范围内的测试账号（只存角色与代号，不存口令/令牌）。 */
 export interface WebsecAccount {
   name: string
@@ -184,10 +198,18 @@ export interface WebsecEvidence {
   url: string
   method: string
   identity?: string
+  /** 证据所属阶段（普通/基线/高权）。 */
+  phase?: WebsecPhase
   capturedAt?: number
   hash: string
   localPath?: string
   note?: string
+  /** 响应元数据，供越权对比与报告引用。 */
+  status?: number
+  mimeType?: string
+  resourceType?: string
+  /** 是否拿到了响应正文（false=仅元数据，不能作为 confirmed 的唯一证据）。 */
+  bodyPresent?: boolean
 }
 
 export interface WebsecFinding {
@@ -200,6 +222,10 @@ export interface WebsecFinding {
   identity?: string
   status: WebsecFindingStatus
   evidenceRef: string
+  /** 越权测试：baseline 证据 id（普通账号）。 */
+  baselineEvidenceRef?: string
+  /** 越权测试：privileged 证据 id（高权账号）。 */
+  privilegedEvidenceRef?: string
   reproduction: string
   impact: string
   remediation: string
@@ -208,6 +234,7 @@ export interface WebsecFinding {
 /** 报告阶段的结构化交付物（仅存本机 WorkflowState，不进汇报投影）。 */
 export interface WebsecReport {
   status: "submitted"
+  testMode?: WebsecTestMode
   method: string
   findings: WebsecFinding[]
   limitations: string[]
@@ -217,6 +244,8 @@ export interface WebsecReport {
 
 export interface WebsecState {
   scope?: WebsecScope
+  testMode?: WebsecTestMode
+  edge?: WebsecEdgeState
   evidence: WebsecEvidence[]
   report?: WebsecReport
 }
@@ -1129,6 +1158,26 @@ export const WEBSEC = defineWorkflow({
       id: "websec-r18",
       stage: "report",
       text: "报告通过后提醒开发者执行 /new 开始下一个测试，保持统计隔离；修复后复测请开新会话，不要在本会话追加第二轮测试。",
+    },
+    {
+      id: "websec-r20",
+      stage: "global",
+      text: "若环境提供 websec_edge_capture，启动 Edge 前必须先问用户：这次是普通测试，还是越权测试？不要跳过选择直接 start。没有该工具时退回人工浏览/curl。",
+    },
+    {
+      id: "websec-r21",
+      stage: "global",
+      text: "普通测试：start(mode=normal) 打开目标，请用户登录并操作；用户说完成后 capture(phase=single) 采集证据，再 finish；finish 前不要生成报告。",
+    },
+    {
+      id: "websec-r22",
+      stage: "global",
+      text: "越权测试：start(mode=authz) 后，先用普通/低权账号操作并 capture(phase=baseline)；调用 switch_identity 清除登录态，请用户用高权账号重新登录并走同样流程，再 capture(phase=privileged)；最后 finish，并用 websec_authz_compare 对比两组证据。",
+    },
+    {
+      id: "websec-r23",
+      stage: "global",
+      text: "越权测试至少需要两个账号/角色；切换身份后必须重新登录，不得沿用上一个账号的 Cookie。用户说完成前不要出报告；越权 confirmed 必须同时引用 baseline 与 privileged 证据，普通测试 confirmed 必须有正文证据。",
     },
   ],
 })

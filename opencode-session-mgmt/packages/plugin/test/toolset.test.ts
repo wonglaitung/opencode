@@ -7,7 +7,7 @@ import { createToolset } from "../src/tools/toolset"
 function setup(workflowType: WorkflowType) {
   const store = Store.memory(() => workflowType)
   const lockRegistry = createLockRegistry(process.cwd(), store)
-  const tools = createToolset({ store, workflowType, ideEntries: [], lockRegistry })
+  const tools = createToolset({ store, workflowType, ideEntries: [], lockRegistry, projectDir: process.cwd() })
   return { store, tools }
 }
 

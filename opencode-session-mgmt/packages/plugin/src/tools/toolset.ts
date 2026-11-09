@@ -17,6 +17,7 @@ import { createTaskCheckTool } from "./task-check"
 import { createTaskClassifyTool } from "./task-classify"
 import { createTaskReviewTool } from "./task-review"
 import { createTaskScanTool } from "./task-scan"
+import { createWebsecEdgeTools } from "./websec-edge"
 import { createWebsecTools } from "./websec"
 import { createWorkflowStartTools } from "./workflow-start"
 import { createWorkflowTools } from "./workflow"
@@ -26,6 +27,7 @@ type Input = {
   workflowType: WorkflowType
   ideEntries: IdeEntry[]
   lockRegistry: LockRegistry
+  projectDir: string
 }
 
 export function createToolset(input: Input): Record<string, ToolDefinition> {
@@ -46,6 +48,7 @@ export function createToolset(input: Input): Record<string, ToolDefinition> {
     ...(def.reviewStage === null ? {} : createReviewTools(input.store, def.type)),
     ...(def.type === "reqdoc" ? reqdocTools(input.store) : {}),
     ...(def.type === "websec" ? createWebsecTools(input.store) : {}),
+    ...(def.type === "websec" ? createWebsecEdgeTools(input.store, input.projectDir) : {}),
     open_ide: createOpenIdeTool(input.ideEntries, input.lockRegistry),
     ...createLockTools(input.lockRegistry),
   }

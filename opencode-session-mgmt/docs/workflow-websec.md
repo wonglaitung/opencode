@@ -42,11 +42,17 @@ websec 不是自动化扫描器，也不替代专业渗透测试。它把“人�
 | `websec_scope` | `scope` | 记录范围与边界；必须 `developer_confirmed=true`；未记录 scope 不得进入 `checks` |
 | `websec_evidence` | `checks` / `verify` | 登记证据索引：URL、方法、身份、时间、哈希、本地路径；只存元数据，不存正文 |
 | `websec_report` | `report` | 提交结构化报告；每条 finding 必须引用已登记 `evidenceRef`；`verdict=passed` 时不得有 findings |
+| `websec_edge_capture` | `surface` / `checks` | 可选：`start(mode)` 打开 Edge；普通测试 `capture(single)`，越权测试 `capture(baseline/privileged)` + `switch_identity`；`finish` 确认完成，`stop` 关闭；只回摘要 |
+| `websec_authz_compare` | `checks` | 越权测试专用：按 method + URL 对比 baseline/privileged 的状态码、正文有无、哈希差异；不返回正文 |
 
-Edge/CDP 是可选外部能力：若当前环境启用 `opencode-edge-debug` 等插件，可用其 start/evaluate/network logs 工具接管已登录会话；websec 不绑定具体浏览器实现，也不采集正文上送。
+Edge/CDP 是可选外部能力：若当前环境启用 `websec_edge_capture`，它会复用 `edge-debug-core` 接管已登录会话；websec 不绑定具体浏览器实现，也不采集正文上送。没有该工具时退回人工浏览/curl。
+
+报告门禁：Edge 启动后必须先 `finish` 才能提交报告；越权 `confirmed` 必须同时引用 baseline/privileged 证据，普通测试 `confirmed` 必须有正文证据。
 
 ## 4. 规则要点
 
+- 启动 Edge 前先问「普通测试还是越权测试」；普通测试单阶段，越权测试 baseline/privileged 两阶段。
+- 越权测试切换身份后必须重新登录，不能沿用上一个账号的 Cookie。
 - 只测试你负责或获准自测的目标；默认只读（GET/HEAD/OPTIONS）。
 - 写操作、删除、批量提交、爆破、越权写、上传利用须开发者显式授权并逐次确认。
 - 越权至少需要两个身份对照；只有一个身份时只能标 `suspected`。
@@ -59,7 +65,8 @@ Edge/CDP 是可选外部能力：若当前环境启用 `opencode-edge-debug` 等
 `WorkflowState.websec` 只存：
 
 - `scope`：目标、环境、账号代号/角色、时间窗、限速、停止条件；
-- `evidence[]`：证据 id、URL、方法、身份、采集时间、哈希、本地路径、备注；
+- `testMode` / `edge`：普通/越权模式与 start/finish 状态；
+- `evidence[]`：证据 id、URL、方法、身份、阶段（single/baseline/privileged）、采集时间、哈希、本地路径、备注、状态码/正文有无；
 - `report`：方法、findings、局限性、结论、提交时间。
 
 不存请求/响应正文、Cookie、令牌、真实用户数据。汇报投影（`WorkflowSummary`）不包含 `websec` 字段，收集端无需数据库迁移。
@@ -82,7 +89,7 @@ Edge/CDP 是可选外部能力：若当前环境启用 `opencode-edge-debug` 等
 1. 执行 `opencode-sm init`，工作流类型选择 `websec`，重启 OpenCode，并开新会话。
 2. 准备四类信息：
    - 目标 URL 与环境（dev / staging / prod）；
-   - 测试账号与角色（至少一个；越权检查建议两个角色）；
+   - 测试账号与角色（普通测试至少一个；越权测试必须两个：普通 + 高权）；
    - 时间窗与限速；
    - 停止条件（如触发告警、需要写操作、遇到真实用户数据）。
 3. 证据正文建议自行落本地文件；系统只存 URL、方法、身份、时间、哈希和本地路径。
@@ -95,6 +102,15 @@ Edge/CDP 是可选外部能力：若当前环境启用 `opencode-edge-debug` 等
 
 > 启动 WEB 安全测试工作流，目标是 `https://staging.example.com`，账号 `u1/普通用户`，停止条件：触发告警或需要写操作。
 
+若环境启用了 `websec_edge_capture`，Agent 会先问：
+
+> 这次是普通测试，还是越权测试？
+
+- **普通测试**：启动 Edge，你登录后正常操作；完成后说「完成」，Agent 采集证据并生成报告。
+- **越权测试**：你先用普通/低权账号操作，说「普通账号完成」；Agent 清除登录态后，你用高权账号重新登录并走同样流程，说「高权账号完成」；Agent 对比两组证据后生成报告。
+
+websec 模式会保留同源 2xx 页面/接口、3xx 和 4xx/5xx，缓冲 500 条；脚本只留元数据，正文落本地。
+
 | 阶段 | 用户要做什么 | Agent 会做什么 |
 |------|--------------|----------------|
 | 范围与边界 | 提供目标、账号、停止条件，并明确说「确认范围」 | 记录 scope；没有 scope 不允许进入检查 |
@@ -105,7 +121,10 @@ Edge/CDP 是可选外部能力：若当前环境启用 `opencode-edge-debug` 等
 
 ### 7.3 常用对话
 
+- 选模式：`普通测试` / `越权测试`
 - 推进阶段：`确认以上范围，进入资产与接口阶段。`
+- 普通测试完成：`完成`
+- 越权测试：`普通账号完成` / `高权账号完成`
 - 允许一次低风险写操作：`允许对 /api/profile 执行一次 POST 测试，其它写操作不允许。`
 - 标记证据不足：`这条没有两个身份对照，只能标 suspected，不要标 confirmed。`
 - 定稿：`报告没问题，五项清单都确认，提交审查。`
@@ -128,3 +147,6 @@ Edge/CDP 是可选外部能力：若当前环境启用 `opencode-edge-debug` 等
 - 工作流类型是 daemon/identity 级，切换需重新 `init` 并重启，不能会话内切换。
 - 证据正文需由开发者/Agent 落本地文件；本工作流只维护索引。
 - 不内置漏洞库、Payload 库或自动化利用能力；结论质量取决于测试者的判断与证据。
+- 越权测试需要至少两个不同角色的账号；切换身份后必须重新登录，不能沿用上一个账号的 Cookie。baseline 日志未采集完时不能切换身份。
+- `switch_identity` 会清 Cookie/storage/cache 并刷新，但仍共用同一个浏览器 profile；高安全场景建议使用独立 profile/无痕窗口。
+- Edge 采集为可选能力：需要安装 Edge 并启用 `edge-debug-core`；websec 模式保留同源 2xx Document/XHR/Fetch、3xx、4xx/5xx（缓冲 500），脚本仅元数据，静态资源丢弃；仍受单标签页、响应体按需读取等限制。

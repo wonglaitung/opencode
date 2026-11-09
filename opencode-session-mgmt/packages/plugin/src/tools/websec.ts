@@ -56,6 +56,11 @@ const evidence = z.object({
   hash: z.string().min(8).describe("请求/响应正文的 SHA-256 或等价哈希（必填）"),
   localPath: z.string().optional().describe("证据正文的本地文件路径（可选）"),
   note: z.string().optional().describe("说明（可选）"),
+  phase: z.enum(["single", "baseline", "privileged"]).optional().describe("证据阶段（普通/基线/高权）"),
+  status: z.number().int().optional().describe("响应状态码（可选）"),
+  mimeType: z.string().optional().describe("响应 MIME（可选）"),
+  resourceType: z.string().optional().describe("CDP 资源类型（可选）"),
+  bodyPresent: z.boolean().optional().describe("是否拿到了正文；false 表示仅元数据"),
 })
 
 const finding = z.object({
@@ -68,6 +73,8 @@ const finding = z.object({
   identity: z.string().optional().describe("复现所用身份（可选）"),
   status: z.enum(WEBSEC_FINDING_STATUS_KEYS).describe("confirmed=已复现；suspected=待验证"),
   evidenceRef: z.string().min(1).describe("必须引用已登记的 websec_evidence id"),
+  baselineEvidenceRef: z.string().optional().describe("越权测试：baseline 证据 id（普通账号）"),
+  privilegedEvidenceRef: z.string().optional().describe("越权测试：privileged 证据 id（高权账号）"),
   reproduction: z.string().min(1).describe("复现步骤（baseline 与 proof）"),
   impact: z.string().min(1).describe("影响与利用前提"),
   remediation: z.string().min(1).describe("可执行的修复建议"),
@@ -147,6 +154,11 @@ export function createWebsecTools(store: Store): Record<string, ToolDefinition> 
           hash: args.hash,
           localPath: args.localPath,
           note: args.note,
+          phase: args.phase,
+          status: args.status,
+          mimeType: args.mimeType,
+          resourceType: args.resourceType,
+          bodyPresent: args.bodyPresent,
         }
         list.push(item)
         workflow.websec = { ...base, evidence: list }
@@ -170,17 +182,48 @@ export function createWebsecTools(store: Store): Record<string, ToolDefinition> 
       const saved = store.mutateWorkflow(context.sessionID, (workflow) => {
         const state = requireWebsec(workflow)
         const base = requireScope(state)
+        if (base.edge?.started && !base.edge.finished) {
+          throw new WorkflowOpError("Edge 会话尚未完成：请先调用 websec_edge_capture(finish) 再生成报告")
+        }
         if (state.stages.verify?.status !== "approved") {
           throw new WorkflowOpError("提交报告前须先完成「验证与定级」阶段")
         }
         if (state.stages.report?.status === "not_started") {
           throw new WorkflowOpError("请先用 workflow_advance 进入「报告与修复」阶段，再提交报告")
         }
-        const evidenceIds = new Set(base.evidence.map((item) => item.id))
+        const byId = new Map(base.evidence.map((item) => [item.id, item]))
         const findings: WebsecFinding[] = args.findings.map((item, index) => {
           const id = item.id ?? `f-${index + 1}`
-          if (!evidenceIds.has(item.evidenceRef)) {
+          const primary = byId.get(item.evidenceRef)
+          if (!primary) {
             throw new WorkflowOpError(`发现 ${id} 引用了不存在的证据 ${item.evidenceRef}；请先调用 websec_evidence 登记`)
+          }
+          if (base.testMode === "authz" && item.status === "confirmed") {
+            if (!item.baselineEvidenceRef || !item.privilegedEvidenceRef) {
+              throw new WorkflowOpError(
+                `发现 ${id} 是越权 confirmed，必须同时提供 baselineEvidenceRef 与 privilegedEvidenceRef`,
+              )
+            }
+            const baseline = byId.get(item.baselineEvidenceRef)
+            const privileged = byId.get(item.privilegedEvidenceRef)
+            if (!baseline || baseline.phase !== "baseline") {
+              throw new WorkflowOpError(`发现 ${id} 的 baselineEvidenceRef 不存在或不是 baseline 阶段证据`)
+            }
+            if (!privileged || privileged.phase !== "privileged") {
+              throw new WorkflowOpError(`发现 ${id} 的 privilegedEvidenceRef 不存在或不是 privileged 阶段证据`)
+            }
+            if (!baseline.bodyPresent && !privileged.bodyPresent) {
+              throw new WorkflowOpError(`发现 ${id} 的越权证据缺少正文：confirmed 至少需要一条带正文的证据`)
+            }
+          }
+          if (base.testMode === "normal" && item.status === "confirmed" && !primary.bodyPresent) {
+            throw new WorkflowOpError(`发现 ${id} 的证据只有元数据（bodyPresent=false），不能标 confirmed`)
+          }
+          if (item.baselineEvidenceRef && !byId.has(item.baselineEvidenceRef)) {
+            throw new WorkflowOpError(`发现 ${id} 的 baselineEvidenceRef 不存在：${item.baselineEvidenceRef}`)
+          }
+          if (item.privilegedEvidenceRef && !byId.has(item.privilegedEvidenceRef)) {
+            throw new WorkflowOpError(`发现 ${id} 的 privilegedEvidenceRef 不存在：${item.privilegedEvidenceRef}`)
           }
           return {
             id,
@@ -192,6 +235,8 @@ export function createWebsecTools(store: Store): Record<string, ToolDefinition> 
             identity: item.identity,
             status: item.status,
             evidenceRef: item.evidenceRef,
+            baselineEvidenceRef: item.baselineEvidenceRef,
+            privilegedEvidenceRef: item.privilegedEvidenceRef,
             reproduction: item.reproduction,
             impact: item.impact,
             remediation: item.remediation,
@@ -205,6 +250,7 @@ export function createWebsecTools(store: Store): Record<string, ToolDefinition> 
         }
         const report: WebsecReport = {
           status: "submitted",
+          testMode: base.testMode,
           method: args.method,
           findings,
           limitations: args.limitations ?? [],

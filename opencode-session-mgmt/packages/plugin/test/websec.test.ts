@@ -59,6 +59,7 @@ describe("websec 工作流", () => {
     const sessionID = "w1"
     const c = ctx(sessionID)
     try {
+      expect(hooks.tool!.websec_edge_capture).toBeDefined()
       await hooks.tool!.workflow_start!.execute({} as never, c)
       await hooks.tool!.workflow_advance!.execute(
         { stage: "scope", action: "approve", developer_confirmed: true } as never,

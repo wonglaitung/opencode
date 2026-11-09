@@ -13,7 +13,8 @@
     "exceljs": "^4.4.0",
     "jszip": "^3.10.1",
     "pdfjs-dist": "^6.2.108",
-    "sm-shared": "workspace:*"
+    "sm-shared": "workspace:*",
+    "edge-debug-core": "file:../../../edge-debug-core"
   },
   "devDependencies": {
     "@opencode-ai/plugin": "^1.19.4",
