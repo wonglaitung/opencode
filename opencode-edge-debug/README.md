@@ -26,6 +26,24 @@ OpenCode 按需 Edge 浏览器调试插件：用自然语言让 Agent 启动带�
 > 查一下网络请求，有没有失败的 API 调用；把那个 500 的请求头和响应体拿出来
 > 关闭 Edge
 
+## 代码结构
+
+- `src/index.ts`：插件入口与 8 个工具定义（只保留 default export）。
+- `../edge-debug-core/src/`：共享 Edge/CDP 核心（启动/关闭、日志、页面求值、请求详情），
+  本插件与 `opencode-session-mgmt` 的 websec 桥接共用。
+
+## 采集策略
+
+默认调试模式仍只保留 4xx/5xx 与疑似 API（工具只展示最近 50 条）。通过 `edge-debug-core` 的
+`NetworkCapturePolicy` 可切换为 websec 模式：
+
+- 内部缓冲 500 条
+- 保留同源 2xx `Document` / `XHR` / `Fetch`、3xx、4xx/5xx
+- 脚本/样式/图片/字体只留元数据，不拉正文
+- 可按 origin 白名单限制采集范围
+
+`opencode-session-mgmt` 的 `websec_edge_capture` 会自动启用该策略。
+
 ## 前置条件
 
 - 已安装 Microsoft Edge（linux 需 `microsoft-edge` / `microsoft-edge-stable` / `microsoft-edge-dev` 在 PATH 中）。

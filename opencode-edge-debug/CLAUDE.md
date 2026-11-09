@@ -32,12 +32,17 @@ OpenCode 按需 Edge 浏览器调试插件：自然语言启动/关闭带调试�
 
 ```
 src/
-├── index.ts        # 插件入口：仅 default export 插件函数；组装 controller，返回 { tool, dispose }
-├── errors.ts       # EdgeDebugError：可预期失败，中文消息含修复路径
-├── cdp.ts          # 极简 CDP 客户端 + HTTP 助手（probeVersion/getPageTargetWsUrl/waitForCdp）
-├── browser.ts      # Edge 进程管理：三平台二进制定位、spawn（专用 profile、detached）、进程树清理
-├── logs.ts         # 纯函数层：环形缓冲、网络降噪过滤、console 参数序列化、求值结果/响应体格式化、截断
-└── controller.ts   # createEdgeDebugController：launch→attach→listen→close 幂等编排；evaluateOnPage/fetchResponseBody 独立导出供零 mock 契约测试
+└── index.ts        # 插件入口：仅 default export 插件函数；组装 controller，返回 { tool, dispose }
+test/
+└── core-import.test.ts # 消费方护栏：edge-debug-core 可解析、核心 API 可用
+
+../edge-debug-core/
+├── src/index.ts    # 公共入口
+├── src/errors.ts   # EdgeDebugError：可预期失败，中文消息含修复路径
+├── src/cdp.ts      # 极简 CDP 客户端 + HTTP 助手（probeVersion/getPageTargetWsUrl/waitForCdp）
+├── src/browser.ts  # Edge 进程管理：三平台二进制定位、spawn（专用 profile、detached）、进程树清理
+├── src/logs.ts     # 纯函数层：环形缓冲、网络降噪过滤、console 参数序列化、求值结果/响应体格式化、截断
+└── src/controller.ts # createEdgeDebugController / getEdgeDebugController：launch→attach→listen→close 幂等编排；结构化响应详情
 test/
 ├── logs.test.ts    # 纯函数全覆盖
 ├── cdp.test.ts     # Bun.serve 假 CDP 服务，真实 WebSocket 验证

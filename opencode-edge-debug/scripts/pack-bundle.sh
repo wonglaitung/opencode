@@ -10,7 +10,7 @@
 #   4. 打包为 dist/opencode-edge-debug-bundle-<version>.tgz。
 #
 # 与 opencode-session-mgmt 的 pack:bundle 对齐，但本工程是单插件：
-# 无 workspace 包、无 CLI、无收集服务，故省略「补齐 workspace 包」步骤。
+# 无 workspace 包、无 CLI、无收集服务；额外把 file: 依赖 edge-debug-core 复制为真实文件。
 #
 # 用法：
 #   bash scripts/pack-bundle.sh
@@ -51,6 +51,12 @@ rm -rf node_modules
 echo "==> bun install（hoisted 模式）"
 bun install
 
+echo "==> 复制 edge-debug-core（真实文件，避免 file: 依赖符号链接入包）"
+rm -rf node_modules/edge-debug-core
+mkdir -p node_modules/edge-debug-core
+cp ../edge-debug-core/package.json node_modules/edge-debug-core/
+cp -r ../edge-debug-core/src node_modules/edge-debug-core/
+
 echo "==> 验证无符号链接"
 symlinks=$(find node_modules -type l 2>/dev/null || true)
 if [ -n "$symlinks" ]; then
@@ -75,6 +81,20 @@ cp -r src "$bundle_dir/"
 cp -r test "$bundle_dir/"
 cp README.md "$bundle_dir/"
 cp CLAUDE.md "$bundle_dir/"
+
+# 共享核心：复制到 bundle 根，并把包内 file: 依赖改为包内相对路径，
+# 保证解压后即使重新 bun install 也能找到 edge-debug-core。
+mkdir -p "$bundle_dir/edge-debug-core"
+cp ../edge-debug-core/package.json "$bundle_dir/edge-debug-core/"
+cp -r ../edge-debug-core/src "$bundle_dir/edge-debug-core/"
+BUNDLE_PKG="$bundle_dir/package.json" bun -e '
+  const fs = require("node:fs");
+  const p = process.env.BUNDLE_PKG;
+  const j = JSON.parse(fs.readFileSync(p, "utf8"));
+  j.dependencies = j.dependencies || {};
+  j.dependencies["edge-debug-core"] = "file:./edge-debug-core";
+  fs.writeFileSync(p, JSON.stringify(j, null, 2) + "\n");
+'
 
 # 拷贝 node_modules（hoisted 模式，真实文件）
 cp -r node_modules "$bundle_dir/"

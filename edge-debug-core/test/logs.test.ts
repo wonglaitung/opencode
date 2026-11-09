@@ -15,8 +15,10 @@ import {
   formatResponseBody,
   nowTime,
   requireNetworkEntry,
+  shouldCaptureBody,
   shouldKeepResponse,
   toNetworkSummary,
+  WEBSEC_CAPTURE_POLICY,
   truncateText,
   type NetworkEntry,
 } from "../src/logs"
@@ -71,6 +73,58 @@ describe("shouldKeepResponse", () => {
     expect(shouldKeepResponse({ status: 200, url: "http://a/app.css", mimeType: "text/css" })).toBe(false)
     expect(shouldKeepResponse({ status: 200, url: "http://a/logo.png", mimeType: "image/png" })).toBe(false)
     expect(shouldKeepResponse({ status: 304, url: "http://a/font.woff2", mimeType: "font/woff2" })).toBe(false)
+  })
+})
+
+describe("websec 采集策略", () => {
+  const policy = { ...WEBSEC_CAPTURE_POLICY, origins: ["http://a"] }
+
+  test("保留同源 2xx HTML Document 与 XHR/Fetch", () => {
+    expect(
+      shouldKeepResponse({ status: 200, url: "http://a/page", mimeType: "text/html", resourceType: "Document" }, policy),
+    ).toBe(true)
+    expect(
+      shouldKeepResponse({ status: 200, url: "http://a/api/x", mimeType: "text/plain", resourceType: "XHR" }, policy),
+    ).toBe(true)
+    expect(
+      shouldKeepResponse({ status: 200, url: "http://a/data", mimeType: "text/plain", resourceType: "Fetch" }, policy),
+    ).toBe(true)
+  })
+
+  test("保留 3xx 跳转与 4xx/5xx 错误", () => {
+    expect(
+      shouldKeepResponse({ status: 302, url: "http://a/login", mimeType: "text/html", resourceType: "Document" }, policy),
+    ).toBe(true)
+    expect(
+      shouldKeepResponse({ status: 403, url: "http://a/admin", mimeType: "text/html", resourceType: "Document" }, policy),
+    ).toBe(true)
+    expect(
+      shouldKeepResponse({ status: 500, url: "http://other/x", mimeType: "text/html", resourceType: "Document" }, policy),
+    ).toBe(true)
+  })
+
+  test("丢弃跨源 2xx 与静态资源", () => {
+    expect(
+      shouldKeepResponse({ status: 200, url: "http://other/page", mimeType: "text/html", resourceType: "Document" }, policy),
+    ).toBe(false)
+    expect(
+      shouldKeepResponse({ status: 200, url: "http://a/logo.png", mimeType: "image/png", resourceType: "Image" }, policy),
+    ).toBe(false)
+    expect(
+      shouldKeepResponse({ status: 304, url: "http://a/font.woff2", mimeType: "font/woff2", resourceType: "Font" }, policy),
+    ).toBe(false)
+  })
+
+  test("脚本保留元数据但不拉正文", () => {
+    const script = { status: 200, url: "http://a/app.js", mimeType: "application/javascript", resourceType: "Script" }
+    expect(shouldKeepResponse(script, policy)).toBe(true)
+    expect(shouldCaptureBody(script, policy)).toBe(false)
+    expect(
+      shouldCaptureBody({ url: "http://a/page", mimeType: "text/html", resourceType: "Document" }, policy),
+    ).toBe(true)
+    expect(
+      shouldCaptureBody({ url: "http://a/api/x", mimeType: "application/json", resourceType: "XHR" }, policy),
+    ).toBe(true)
   })
 })
 

@@ -4,14 +4,13 @@
  * 上游 legacy loader 会遍历模块全部导出,其他命名导出会导致加载失败。
  */
 import { tool, type Plugin } from "@opencode-ai/plugin"
-import { createEdgeDebugController } from "./controller"
-import { toNetworkSummary } from "./logs"
+import { MAX_LOGS, getEdgeDebugController, toNetworkSummary } from "edge-debug-core"
 
 const z = tool.schema
 
 const EdgeDebugPlugin: Plugin = async (input) => {
   // directory:当前会话所在项目目录,专用浏览器 profile 落在此目录下
-  const controller = createEdgeDebugController(input.directory)
+  const controller = getEdgeDebugController(input.directory)
 
   const startEdgeBrowser = tool({
     description:
@@ -43,7 +42,7 @@ const EdgeDebugPlugin: Plugin = async (input) => {
       if (!controller.isRunning()) {
         return "Edge 调试未启动。请先调用 start_edge_browser 启动浏览器并建立监听。"
       }
-      const logs = controller.consoleLogs()
+      const logs = controller.consoleLogs().slice(-MAX_LOGS)
       if (logs.length === 0) return "暂无 console 日志。"
       return JSON.stringify(logs, null, 2)
     },
@@ -57,7 +56,7 @@ const EdgeDebugPlugin: Plugin = async (input) => {
       if (!controller.isRunning()) {
         return "Edge 调试未启动。请先调用 start_edge_browser 启动浏览器并建立监听。"
       }
-      const logs = controller.networkLogs().map(toNetworkSummary)
+      const logs = controller.networkLogs().map(toNetworkSummary).slice(-MAX_LOGS)
       if (logs.length === 0) return "暂无符合条件的网络请求(仅记录 4xx/5xx 错误与疑似 API 请求)。"
       return JSON.stringify(logs, null, 2)
     },

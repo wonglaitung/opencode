@@ -8,6 +8,9 @@ import { EdgeDebugError } from "./errors"
 /** 每类日志最多保留的条数,超出则丢弃最旧(设计文档 3.3)。 */
 export const MAX_LOGS = 50
 
+/** 内部环形缓冲容量；Edge 工具仍只展示最近 MAX_LOGS 条，websec 取证可读取更多。 */
+export const LOG_BUFFER_CAPACITY = 500
+
 /** 求值结果、页面正文、响应体、请求体等文本输出的字符上限,超出截断(设计文档 3.5)。 */
 export const MAX_TEXT_CHARS = 20_000
 
@@ -28,6 +31,8 @@ export interface NetworkEntry {
   url: string
   status: number
   mimeType: string
+  /** CDP ResourceType（Document/XHR/Fetch/Script/Image 等）。 */
+  resourceType?: string
   /** 请求体(POST payload,来自 requestWillBeSent 事件;流式/二进制等场景可能缺省)。 */
   postData?: string
   requestHeaders?: HeadersLike
@@ -42,6 +47,7 @@ export interface NetworkEntrySummary {
   url: string
   status: number
   mimeType: string
+  resourceType?: string
 }
 
 /** CDP Runtime.RemoteObject 的最小子集(仅本插件用到的字段)。 */
@@ -81,16 +87,112 @@ export function nowTime(date: Date = new Date()): string {
   return date.toTimeString().slice(0, 8)
 }
 
+/** 网络采集模式：debug=默认降噪；websec=安全测试取证。 */
+export type NetworkCaptureMode = "debug" | "websec"
+
+export interface NetworkCapturePolicy {
+  mode?: NetworkCaptureMode
+  /** 同源白名单；websec 模式用于限制采集范围（不阻止请求本身）。 */
+  origins?: string[]
+  /** websec: 保留 Script 元数据（不拉正文）。 */
+  keepScripts?: boolean
+  /** websec: 额外保留的 MIME 前缀。 */
+  mimePrefixes?: string[]
+}
+
+/** websec 安全取证：同源 2xx Document/XHR/Fetch、3xx、4xx/5xx；脚本仅元数据。 */
+export const WEBSEC_CAPTURE_POLICY: NetworkCapturePolicy = {
+  mode: "websec",
+  keepScripts: true,
+  mimePrefixes: [
+    "text/html",
+    "application/json",
+    "application/xml",
+    "text/xml",
+    "text/plain",
+    "application/javascript",
+    "text/javascript",
+  ],
+}
+
+function originOf(url: string): string | null {
+  try {
+    return new URL(url).origin
+  } catch {
+    return null
+  }
+}
+
+function resourceTypeOf(input: { resourceType?: string }): string {
+  return (input.resourceType ?? "").toLowerCase()
+}
+
 /**
  * 网络降噪:判断一条响应是否值得记录(设计文档 3.3)。
- * 规则:状态码 >= 400 一律保留;否则仅保留疑似 API 的请求
- * (URL 含 /api/ 或 MIME 为 json);静态资源(css/png/字体等)丢弃。
+ * debug: 状态码 >= 400 一律保留；否则仅保留 /api/ 或 JSON。
+ * websec: 保留同源 2xx Document/XHR/Fetch、3xx、4xx/5xx；脚本仅元数据；静态资源丢弃。
  */
-export function shouldKeepResponse(input: { status: number; url: string; mimeType: string }): boolean {
+export function shouldKeepResponse(
+  input: { status: number; url: string; mimeType: string; resourceType?: string },
+  policy: NetworkCapturePolicy = {},
+): boolean {
+  if (policy.mode === "websec") return shouldKeepWebsec(input, policy)
   if (input.status >= 400) return true
   if (input.url.includes("/api/")) return true
   if (input.mimeType.includes("json")) return true
   return false
+}
+
+function shouldKeepWebsec(
+  input: { status: number; url: string; mimeType: string; resourceType?: string },
+  policy: NetworkCapturePolicy,
+): boolean {
+  // 错误始终保留：鉴权失败、CORS、调试端点等线索。
+  if (input.status >= 400) return true
+  const origin = originOf(input.url)
+  if (policy.origins?.length && (!origin || !policy.origins.includes(origin))) return false
+  const type = resourceTypeOf(input)
+  const mime = input.mimeType.toLowerCase()
+  if (input.status >= 300) {
+    return type === "document" || type === "xhr" || type === "fetch" || mime.includes("json") || input.url.includes("/api/")
+  }
+  if (input.status >= 200) {
+    if (type === "document" || type === "xhr" || type === "fetch") return true
+    if (type === "script") return policy.keepScripts === true
+    if (policy.mimePrefixes?.some((prefix) => mime.includes(prefix.toLowerCase()))) return true
+    return input.url.includes("/api/") || mime.includes("json")
+  }
+  return false
+}
+
+/**
+ * 是否值得拉取响应体作为证据。
+ * websec 模式只拉文本类 Document/XHR/Fetch；脚本/样式/图片/字体/媒体仅留元数据。
+ */
+export function shouldCaptureBody(
+  entry: Pick<NetworkEntry, "mimeType" | "url" | "resourceType">,
+  policy: NetworkCapturePolicy = {},
+): boolean {
+  const type = resourceTypeOf(entry)
+  if (type === "script" || type === "stylesheet" || type === "image" || type === "font" || type === "media") {
+    return false
+  }
+  if (policy.mode !== "websec") return true
+  const mime = entry.mimeType.toLowerCase()
+  if (type === "document" || type === "xhr" || type === "fetch") {
+    return (
+      mime === "" ||
+      mime.includes("text/") ||
+      mime.includes("json") ||
+      mime.includes("xml") ||
+      mime.includes("javascript")
+    )
+  }
+  return (
+    (policy.mimePrefixes ?? []).some((prefix) => mime.includes(prefix.toLowerCase())) ||
+    mime.includes("json") ||
+    entry.url.includes("/api/")
+  )
 }
 
 /**
@@ -125,7 +227,7 @@ export function truncateText(text: string, max: number = MAX_TEXT_CHARS): string
 
 /** 网络日志条目 → 列表精简条目(headers/postData 仅入详情,为 Agent 降噪)。 */
 export function toNetworkSummary(entry: NetworkEntry): NetworkEntrySummary {
-  return {
+  const summary: NetworkEntrySummary = {
     time: entry.time,
     requestId: entry.requestId,
     method: entry.method,
@@ -133,6 +235,8 @@ export function toNetworkSummary(entry: NetworkEntry): NetworkEntrySummary {
     status: entry.status,
     mimeType: entry.mimeType,
   }
+  if (entry.resourceType) summary.resourceType = entry.resourceType
+  return summary
 }
 
 /** Runtime.evaluate 返回中 exceptionDetails 的最小子集。 */

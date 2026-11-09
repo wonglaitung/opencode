@@ -18,5 +18,8 @@
     "@opencode-ai/sdk": "^1.19.4",
     "@types/bun": "^1.3.0",
     "typescript": "^5.7.0"
+  },
+  "dependencies": {
+    "edge-debug-core": "file:../edge-debug-core"
   }
 }
