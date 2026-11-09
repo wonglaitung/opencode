@@ -26,7 +26,7 @@ deploy/          # 部署示例：团队预置 opencode.json
 npm i -g opencode-sm                          # 1. 装独立 CLI（发布后；开发期用 bun link）
 # 2. opencode 配置启用插件（opencode.json，可用 deploy/opencode.json.example）
 #    { "plugin": ["./opencode-session-mgmt/packages/plugin"] }
-opencode-sm init                              # 3. 两问：api_key / 收集服务地址（+ 可选主要工作流 task/sdlc/reqdoc）
+opencode-sm init                              # 3. 两问：api_key / 收集服务地址（+ 可选主要工作流 task/sdlc/reqdoc/websec）
 ```
 
 此后照常使用 `opencode`（TUI）：工作流规则随 system prompt 自动注入，

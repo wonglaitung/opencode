@@ -3,10 +3,11 @@
  * 插件、CLI、收集服务三方共用的契约——任何字段变更必须三包同步。
  *
  * 多流程就绪：阶段键/清单/规则/门禁均从 WorkflowDefinition 注册表驱动，而非硬编码。
- * task / sdlc / reqdoc 均已注册（设计文档 session-management.md 3.2 注册表；task 见 workflow-task.md，sdlc/reqdoc 见各自文档）。
+ * task / sdlc / reqdoc / websec 均已注册（设计文档 session-management.md 3.2 注册表；task 见 workflow-task.md，
+ * sdlc/reqdoc/websec 见各自文档）。
  */
 
-export type WorkflowType = "task" | "sdlc" | "reqdoc"
+export type WorkflowType = "task" | "sdlc" | "reqdoc" | "websec"
 
 /** 一般任务分类码（task 专属统计维度；不存任务原文）。 */
 export const TASK_CATEGORY_KEYS = [
@@ -131,6 +132,93 @@ export interface TaskReviewReport {
   verdict: "approved" | "changes_requested"
   scan?: TaskScanSummary
   submittedAt: number
+}
+
+/** websec 检查类别（仅统计/展示，不做自动判定）。 */
+export const WEBSEC_CATEGORY_KEYS = ["authn", "authz", "input", "config", "logic", "other"] as const
+export type WebsecCategory = (typeof WEBSEC_CATEGORY_KEYS)[number]
+export const WEBSEC_CATEGORY_LABELS: Record<WebsecCategory, string> = {
+  authn: "身份认证",
+  authz: "授权越权",
+  input: "输入处理",
+  config: "配置与传输",
+  logic: "业务逻辑",
+  other: "其他",
+}
+
+export const WEBSEC_SEVERITY_KEYS = ["critical", "high", "medium", "low", "info"] as const
+export type WebsecSeverity = (typeof WEBSEC_SEVERITY_KEYS)[number]
+export const WEBSEC_SEVERITY_LABELS: Record<WebsecSeverity, string> = {
+  critical: "严重",
+  high: "高危",
+  medium: "中危",
+  low: "低危",
+  info: "提示",
+}
+
+export const WEBSEC_FINDING_STATUS_KEYS = ["confirmed", "suspected"] as const
+export type WebsecFindingStatus = (typeof WEBSEC_FINDING_STATUS_KEYS)[number]
+
+/** 授权范围内的测试账号（只存角色与代号，不存口令/令牌）。 */
+export interface WebsecAccount {
+  name: string
+  role: string
+  note?: string
+}
+
+/** 授权与范围（scope 阶段，工具 websec_scope 写入）。 */
+export interface WebsecScope {
+  target: string
+  environment: string
+  authorization: string
+  accounts: WebsecAccount[]
+  window?: string
+  rateLimit?: string
+  stopConditions: string[]
+  confirmedAt: number
+}
+
+/** 本地证据索引：只存元数据与哈希，正文落本地文件，不上行。 */
+export interface WebsecEvidence {
+  id: string
+  url: string
+  method: string
+  identity?: string
+  capturedAt?: number
+  hash: string
+  localPath?: string
+  note?: string
+}
+
+export interface WebsecFinding {
+  id: string
+  title: string
+  category: WebsecCategory
+  severity: WebsecSeverity
+  endpoint: string
+  method?: string
+  identity?: string
+  status: WebsecFindingStatus
+  evidenceRef: string
+  reproduction: string
+  impact: string
+  remediation: string
+}
+
+/** 报告阶段的结构化交付物（仅存本机 WorkflowState，不进汇报投影）。 */
+export interface WebsecReport {
+  status: "submitted"
+  method: string
+  findings: WebsecFinding[]
+  limitations: string[]
+  verdict: "passed" | "issues_found"
+  submittedAt: number
+}
+
+export interface WebsecState {
+  scope?: WebsecScope
+  evidence: WebsecEvidence[]
+  report?: WebsecReport
 }
 
 export function taskCategoryLabel(category: string | null | undefined): string {
@@ -446,6 +534,12 @@ export interface WorkflowState {
    * 可选字段：首次 ingest 前缺省；sdlc 恒缺省。
    */
   kb?: ReqdocKbState
+  /**
+   * websec 专属状态（授权范围、证据索引、报告）。
+   * 可选字段：首次 websec_scope 前缺省；其他工作流恒缺省。
+   * 证据只存元数据与哈希，正文不上行。
+   */
+  websec?: WebsecState
 }
 
 /**
@@ -598,13 +692,19 @@ export interface WorkflowDefinition {
   checklist: ChecklistItem[]
   /** sdlc=true；reqdoc 定稿无 git 门禁 → false */
   hasCommitGate: boolean
+  /**
+   * 审查阶段是否需要理解确认片段（默认 true，与 sdlc/reqdoc 既有行为一致）。
+   * websec 的报告由结构化 websec_report 承担，不涉及代码片段确认 → false。
+   * false 时 review_submit 不再因「有代码改动但无理解记录」阻塞。
+   */
+  requiresComprehension?: boolean
   /** 标准提示规格：必填，defineWorkflow 据此校验或补齐预估与 /new 规则 */
   standard: StandardPrompts
   /** 该类型注入的规则项（7.4），注入时经 rulesForStage 取 global + 当前阶段 */
   rules: RuleItem[]
 }
 
-/** 全工作流统一的预估工时话术（sdlc/reqdoc/task 共用，避免三处文案漂移）。 */
+/** 全工作流统一的预估工时话术（所有工作流共用，避免多处文案漂移）。 */
 export const ESTIMATE_FORMAT_HINT = "按「预估 xx 小时」的数字格式回答，可直接回我「预估 xx 小时」。"
 
 /** 全工作流统一的预估工时简短提示（状态条用）。 */
@@ -615,6 +715,7 @@ export const WORKFLOW_ENTRY_PHRASE: Record<WorkflowType, string> = {
   task: "启动一般任务",
   sdlc: "启动 SDLC 工作流",
   reqdoc: "启动 REQDOC 工作流",
+  websec: "启动 WEB 安全测试工作流",
 }
 
 /** 各工作流的起步提示（会话尚未开始时展示给用户）。 */
@@ -622,6 +723,7 @@ export const WORKFLOW_ENTRY_HINT: Record<WorkflowType, string> = {
   task: "输入「启动一般任务」，或直接描述任务开始",
   sdlc: "输入「启动 SDLC 工作流」，或直接描述需求开始",
   reqdoc: "输入「启动 REQDOC 工作流」，或直接说明需求开始",
+  websec: "输入「启动 WEB 安全测试工作流」，或直接说明测试目标开始",
 }
 
 function estimatePromptRule(audience: string, when: string): string {
@@ -905,11 +1007,138 @@ export const TASK = defineWorkflow({
   ],
 })
 
+/**
+ * 工作流四：websec（轻量级 WEB 安全测试）。
+ * 指导开发者完成授权范围内的侦察、只读/低风险检查、取证定级与报告；
+ * 默认只读，写/破坏性动作必须显式授权；无证据结论不得标 confirmed。
+ * 详细说明见 docs/workflow-websec.md。
+ */
+export const WEBSEC = defineWorkflow({
+  type: "websec",
+  stages: ["scope", "surface", "checks", "verify", "report"],
+  labels: {
+    scope: "授权与范围",
+    surface: "资产与接口",
+    checks: "安全检查",
+    verify: "验证与定级",
+    report: "报告与修复",
+  },
+  stagePurpose: {
+    scope: "确认授权、目标、账号与停止条件",
+    surface: "枚举页面、接口、参数与身份",
+    checks: "按清单做只读/低风险检查",
+    verify: "复现、取证、排除误报并定级",
+    report: "输出可修复的报告并确认",
+  },
+  reviewStage: "report",
+  checklist: [
+    { key: "scopeAuthorized", label: "授权与范围已确认" },
+    { key: "surfaceCovered", label: "入口与接口已覆盖" },
+    { key: "checksEvidenced", label: "每项结论有证据" },
+    { key: "falsePositiveReviewed", label: "误报已复核" },
+    { key: "remediationActionable", label: "修复建议可执行" },
+  ],
+  hasCommitGate: false,
+  requiresComprehension: false,
+  standard: {
+    estimate: { id: "websec-r1", stage: "scope", audience: "开发者", when: "进入授权与范围阶段时" },
+    finish: { id: "websec-r19", audience: "开发者", trigger: "报告阶段 review_submit 通过后" },
+  },
+  rules: [
+    {
+      id: "websec-r2",
+      stage: "global",
+      text: "会话开始时调用 workflow_start 初始化工作流（开发者说「启动 WEB 安全测试工作流」时也调用它，不要仅用文字回复）；状态条显示已有进行中阶段时不要重复调用。",
+    },
+    {
+      id: "websec-r3",
+      stage: "global",
+      text: "只测试已授权目标。默认只读（GET/HEAD/OPTIONS）；任何写操作、删除、批量提交、爆破、越权写、文件上传利用必须由开发者显式授权并逐次确认，未授权一律不做。",
+    },
+    {
+      id: "websec-r4",
+      stage: "global",
+      text: "证据优先：没有请求/响应、身份、时间与复现步骤的结论只能标 suspected，不得标 confirmed；禁止把猜测写成漏洞。",
+    },
+    {
+      id: "websec-r5",
+      stage: "global",
+      text: stageVisibilityRule("开发者"),
+    },
+    {
+      id: "websec-r6",
+      stage: "global",
+      text: "发现越界、影响真实数据、触发告警或可能影响可用性时立即停止并回报开发者；不要继续探测。",
+    },
+    {
+      id: "websec-r7",
+      stage: "scope",
+      text: "先确认并记录授权与范围：目标 URL/环境、书面授权依据、可用账号与角色、测试时间窗、限速、停止条件。调用 websec_scope 落库；未记录 scope 不得进入安全检查。",
+    },
+    {
+      id: "websec-r8",
+      stage: "surface",
+      text: "枚举页面、接口、参数与身份：优先用 Edge/CDP 接管已登录会话或人工浏览；记录每个入口的来源（static/runtime/manual）与身份标签；不越界爬取，排除 logout/delete/export 等破坏性链接。",
+    },
+    {
+      id: "websec-r9",
+      stage: "surface",
+      text: "把入口整理为可检查清单（method/path/参数位置/身份/触发方式），作为 checks 的输入；覆盖不到的模块写入 limitations。",
+    },
+    {
+      id: "websec-r10",
+      stage: "checks",
+      text: "按清单做只读/低风险检查：鉴权（未授权访问、IDOR 读、角色矩阵）、输入（反射、报错、校验、上传类型）、配置（安全头、Cookie 属性、CORS、TLS、调试端点）、业务逻辑（轻量）。禁止爆破与破坏性 payload。",
+    },
+    {
+      id: "websec-r11",
+      stage: "checks",
+      text: "越权至少需要两个身份对照；只有一个身份时只能标 suspected，并说明缺少对照身份。每个结论先用 websec_evidence 登记证据，再写 finding。",
+    },
+    {
+      id: "websec-r12",
+      stage: "checks",
+      text: "限速并遵守 scope 的停止条件；触发异常、告警或性能影响时立即停止，并把情况写入报告的 limitations。",
+    },
+    {
+      id: "websec-r13",
+      stage: "verify",
+      text: "验证每个候选：baseline 与 proof 成对复现，记录请求/响应、身份、时间；排除误报；无法复现的降级为 suspected 或从报告中移除。",
+    },
+    {
+      id: "websec-r14",
+      stage: "verify",
+      text: "按 critical/high/medium/low/info 定级，写清影响与利用前提；不夸大、不堆砌；定级依据写进 finding。",
+    },
+    {
+      id: "websec-r15",
+      stage: "report",
+      text: "报告必须包含：范围与授权、方法、发现清单（含证据引用/复现/影响/修复）、局限与未覆盖项、残余风险；敏感信息脱敏，不贴真实用户数据。",
+    },
+    {
+      id: "websec-r16",
+      stage: "report",
+      text: "调用 websec_report 提交结构化报告；每条 finding 的 evidenceRef 必须指向已登记的 websec_evidence。无发现时 verdict=passed，并列出已检查项与局限。",
+    },
+    {
+      id: "websec-r17",
+      stage: "report",
+      text: "review_submit 通过前，审查清单五项必须为 true，且前序阶段（scope/surface/checks/verify）全部 approved；报告阶段不可用 workflow_advance 自行 approve。",
+    },
+    {
+      id: "websec-r18",
+      stage: "report",
+      text: "报告通过后提醒开发者执行 /new 开始下一个测试，保持统计隔离；修复后复测请开新会话，不要在本会话追加第二轮测试。",
+    },
+  ],
+})
+
 /** 已注册的工作流定义注册表（3.2）。 */
 export const WORKFLOW_DEFINITIONS: Record<WorkflowType, WorkflowDefinition> = {
   task: TASK,
   sdlc: SDLC,
   reqdoc: REQDOC,
+  websec: WEBSEC,
 }
 
 /** 按类型取定义；未知类型抛错（类型安全，消费方应已经 resolveWorkflowType 归一）。 */
@@ -922,6 +1151,7 @@ export function resolveWorkflowType(v: unknown): WorkflowType {
   if (v === "task") return "task"
   if (v === "sdlc") return "sdlc"
   if (v === "reqdoc") return "reqdoc"
+  if (v === "websec") return "websec"
   console.warn(`未知工作流类型 ${JSON.stringify(v)}，回退为 "sdlc"`)
   return "sdlc"
 }

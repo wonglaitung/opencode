@@ -2,11 +2,13 @@
 
 | | |
 |---|---|
-| 版本 | v1.5 |
-| 日期 | 2026-10-30 |
+| 版本 | v1.6 |
+| 日期 | 2026-11-09 |
 | 读者 | 后端收集服务开发团队、网关集成团队 |
 | 状态 | 生效 |
 
+> **v1.6（2026-11-09）**：新增 `websec` 轻量级 WEB 安全测试工作流——五阶段 `scope/surface/checks/verify/report`，`workflow_type`/`workflowType` 取值扩展为 `task | sdlc | reqdoc | websec`；报告与证据正文只存插件本地，不上报，收集端无需数据库迁移。
+>
 > **v1.5（2026-10-30）**：task 分类新增 `code_review`（代码审核）。审核报告（scope/六维/findings，无 checks）与 regex 扫描结果只存插件本地，不上报；收集端只按任务分类统计，无需数据库迁移。
 >
 > **v1.4（2026-10-24）**：task 工作流新增可选字段 `workflow.task`（`{category, source} | null`），用于记录一般任务分类；sdlc/reqdoc 不携带该字段，旧收集器可原样存储并忽略，无数据库迁移。
@@ -179,7 +181,7 @@ flowchart LR
 
 ### 5.1 `POST /api/report` — 插件汇报会话摘要
 
-请求体为完整 `SessionReport`。下列分别为 **sdlc / reqdoc / task** 三种工作流的完整汇报；阶段键、审查清单与是否包含 `review` 阶段随 `workflow.type` 的定义不同（`session-management.md` 3.2）：
+请求体为完整 `SessionReport`。下列以 **sdlc / reqdoc / task** 为例（websec 结构相同，仅阶段键与审查阶段键不同）；阶段键、审查清单与是否包含 `review` 阶段随 `workflow.type` 的定义不同（`session-management.md` 3.2）：
 
 ```json
 {
@@ -375,7 +377,7 @@ flowchart LR
 }
 ```
 
-> task 没有 `review` 阶段，因此不携带 `checklist`/`comprehension`；`quality.firstPassRate` 恒为 `null`，`quality.lines` 为 sdlc 专属，task 恒为 `null`。`workflow.task` 仅 task 携带；未分类为 `null`，旧插件缺省该字段也按未分类处理。
+> task 没有 `review` 阶段，因此不携带 `checklist`/`comprehension`；`quality.firstPassRate` 恒为 `null`，`quality.lines` 为 sdlc 专属，task 恒为 `null`。`workflow.task` 仅 task 携带；未分类为 `null`，旧插件缺省该字段也按未分类处理。websec 的 `report` 阶段携带 `checklist`，但 `comprehension` 恒为 0（不要求代码片段确认）。
 
 字段语义：
 
@@ -383,21 +385,21 @@ flowchart LR
 |------|------|------|------|
 | `sessionID` | string | 是 | 上游会话 ID，聚合库主键 |
 | `apiKey` | string | 是 | `api_key` 的 SHA-256（hex）哈希；身份标识，网络不传明文密钥（见 2.3） |
-| `workflow.type` | `"task" \| "sdlc" \| "reqdoc"` | 否 | 工作流类型（task 一般任务 / sdlc 开发 / reqdoc 需求书）。缺省按 sdlc 处理（旧插件兼容） |
-| `workflow.task` | `{category, source} \| null` | 否 | task 专属：一般任务分类。`category ∈ {documentation, testing, debugging, coding, code_review, research, environment, other}`；`source ∈ {model, heuristic}`；task 未分类为 `null`；sdlc/reqdoc 不携带。旧收集器可忽略，无需迁移 |
-| `workflow.stages.*.status` | `"not_started" \| "in_progress" \| "approved"` | 是 | 阶段状态。键随 `workflow.type` 的定义：sdlc 为 `requirements`/`design`/`implementation`/`testing`/`review`，reqdoc 为 `goal`/`rules`/`edge`/`prd`/`review`，task 为单阶段 `execute` |
+| `workflow.type` | `"task" \| "sdlc" \| "reqdoc" \| "websec"` | 否 | 工作流类型（task 一般任务 / sdlc 开发 / reqdoc 需求书 / websec 安全测试）。缺省按 sdlc 处理（旧插件兼容） |
+| `workflow.task` | `{category, source} \| null` | 否 | task 专属：一般任务分类。`category ∈ {documentation, testing, debugging, coding, code_review, research, environment, other}`；`source ∈ {model, heuristic}`；task 未分类为 `null`；sdlc/reqdoc/websec 不携带。旧收集器可忽略，无需迁移 |
+| `workflow.stages.*.status` | `"not_started" \| "in_progress" \| "approved"` | 是 | 阶段状态。键随 `workflow.type` 的定义：sdlc 为 `requirements`/`design`/`implementation`/`testing`/`review`，reqdoc 为 `goal`/`rules`/`edge`/`prd`/`review`，websec 为 `scope`/`surface`/`checks`/`verify`/`report`，task 为单阶段 `execute` |
 | `workflow.stages.*.revision` | number | 是 | 阶段回退次数（需求质量信号） |
 | `workflow.stages.*.transitions` | array | 是 | 阶段转换时间戳序列（耗时统计的数据源），`action ∈ {"enter","revisit","approve"}`，`note` 可选 |
-| `workflow.stages.review.checklist` | 四项 boolean | 是 | 审查清单，键随工作流类型：sdlc 为 `businessIntent`/`logicExplainable`/`behaviorVerifiable`/`designRationale`；reqdoc 为 `completeness`/`clarity`/`edgeCoverage`/`resolution`（两类型的审查阶段键均为 `review`）。task 无 review 阶段，不携带本字段 |
-| `workflow.stages.review.comprehension` | `{total, confirmed}` | 是 | 理解确认总数与已确认数（sdlc 为代码片段、reqdoc 为 PRD 要点；不携带正文） |
-| `workflow.commit.status` | `"blocked" \| "allowed"` | 是 | 提交门禁状态。reqdoc 无 git 门禁，但该字段同样随阶段完成度更新——全部阶段 approved 后为 `"allowed"`，作为 task/sdlc/reqdoc 通用的完结口径（7.2 `completed`） |
+| `workflow.stages.review.checklist` | 四项 boolean | 是 | 审查清单，键随工作流类型：sdlc 为 `businessIntent`/`logicExplainable`/`behaviorVerifiable`/`designRationale`；reqdoc 为 `completeness`/`clarity`/`edgeCoverage`/`resolution`（审查阶段键为 `review`）；websec 为 `scopeAuthorized`/`surfaceCovered`/`checksEvidenced`/`falsePositiveReviewed`/`remediationActionable`（审查阶段键为 `report`）。task 无审查阶段，不携带本字段 |
+| `workflow.stages.review.comprehension` | `{total, confirmed}` | 是 | 理解确认总数与已确认数（sdlc 为代码片段、reqdoc 为 PRD 要点；websec 不要求片段确认，恒为 `{total:0, confirmed:0}`；不携带正文） |
+| `workflow.commit.status` | `"blocked" \| "allowed"` | 是 | 提交门禁状态。reqdoc/websec 无 git 门禁，但该字段同样随阶段完成度更新——全部阶段 approved 后为 `"allowed"`，作为 task/sdlc/reqdoc/websec 通用的完结口径（7.2 `completed`） |
 | `workflow.commit.blocked_by` | string[] | 是 | 未完成阶段列表 |
 | `workflow.commit.force` | `{reason, at, used}` | 否 | 强制提交授权留痕（逃生口，见 `session-management.md` 3.4）；随汇报上行使「绕过审查」在统计中可见 |
-| `workflow.quality.firstPassRate` | number \| null | 是 | 一次通过率（0–100 百分比），通用指标：sdlc 分母为代码片段、reqdoc 分母为 PRD 要点；task 无审查阶段恒为 `null`；纯讨论会话为 `null` |
+| `workflow.quality.firstPassRate` | number \| null | 是 | 一次通过率（0–100 百分比），通用指标：sdlc 分母为代码片段、reqdoc 分母为 PRD 要点；task 无审查阶段、websec 无片段确认，均恒为 `null`；纯讨论会话为 `null` |
 | `workflow.quality.iterationCount` | number \| null | 是 | 单文件被 AI 编辑的最高次数，通用指标（reqdoc 同样计入 PRD 文件编辑循环）；无编辑为 `null` |
-| `workflow.quality.reworkRate` | number \| null | 是 | 返工率（0–1 分数）；插件通道恒为 `null`，由 CI 通道写入。sdlc 专属：reqdoc/task 不经 git 提交、无 CI 回写，聚合时恒按 `null` 处理（7.1） |
-| `workflow.quality.testCoverage` | number \| null | 是 | 增量测试覆盖率（0–100）；插件通道恒为 `null`，由 CI 通道写入。sdlc 专属，同 `reworkRate` |
-| `workflow.quality.lines` | `{business, test, config} \| null` | 是 | AI 净增行数三分类聚合；无 AI 代码编辑为 `null`。sdlc 专属：聚合侧仅对 `workflow.type` 为 sdlc 的汇报计入，reqdoc/task 汇报即使携带本字段也按 `null` 处理（7.1） |
+| `workflow.quality.reworkRate` | number \| null | 是 | 返工率（0–1 分数）；插件通道恒为 `null`，由 CI 通道写入。sdlc 专属：reqdoc/task/websec 不经 git 提交、无 CI 回写，聚合时恒按 `null` 处理（7.1） |
+| `workflow.quality.testCoverage` | number \| null | 是 | 增量测试覆盖率（0–100）；插件通道恒为 `null`，由 CI 通道写入。sdlc 专属，同 `reworkRate`（reqdoc/task/websec 恒 `null`） |
+| `workflow.quality.lines` | `{business, test, config} \| null` | 是 | AI 净增行数三分类聚合；无 AI 代码编辑为 `null`。sdlc 专属：聚合侧仅对 `workflow.type` 为 sdlc 的汇报计入，reqdoc/task/websec 汇报即使携带本字段也按 `null` 处理（7.1） |
 | `workflow.baseline` | `{estimatedHours, setAt} \| null` | 否 | 基线预估人工工时（AI 提效参照系，见 7.2）：项目经理在需求创建时给出，开发者在 TUI 对话中经 `workflow_baseline` 转述录入；`estimatedHours` 单位小时（>0），`setAt` 录入时间戳；未录入或旧版汇报缺省为 `null`，聚合时按无基线处理，**不得报错** |
 | `workflow.durationMs` | number | 否 | 插件计算的活跃耗时快照（毫秒）：排除 user idle/下班过夜空档，AI busy 区间完整计入，完成态冻结。旧版汇报缺省；收集端缺省时回退到 `stages.*.transitions` 的首末跨度 |
 | `cost` | number \| null | 是 | 会话费用（美元）；daemon 不可达时插件上报 `null`（语义为「未知」，**不得当 0 拒绝**） |
@@ -445,7 +447,7 @@ flowchart LR
 | `group` | 组名（URL 编码） | scope=group 时必填 | 如 `前端组` |
 | `org` | 组织名（URL 编码） | scope=org 时必填 | 如 `Engineering` |
 | `period` | `\d+d`（如 `7d`、`30d`） | 否 | 统计窗口；缺省或非法时不做时间过滤 |
-| `workflowType` | `task` \| `sdlc` \| `reqdoc` | 否 | 按工作流类型过滤；缺省不过滤（全部）。分区管道见 `session-management.md` 6.4 |
+| `workflowType` | `task` \| `sdlc` \| `reqdoc` \| `websec` | 否 | 按工作流类型过滤；缺省不过滤（全部）。分区管道见 `session-management.md` 6.4 |
 
 **响应**（200）：`ScopeStats` JSON：
 
@@ -550,7 +552,7 @@ CREATE INDEX idx_reports_type ON reports(workflow_type);
 | 步骤 | 规则 |
 |------|------|
 | 范围 | `scope=group` → `group_name = <group>`；`scope=org` → `org_name = <org>` |
-| workflow_type 过滤 | 指定 `workflowType` 时：`workflow_type = <type>`（旧汇报 `workflow_type` 为 NULL 视为 sdlc）；缺省不过滤。**分区口径**：`firstPassRate`/`iterationCount` 为通用指标，task/sdlc/reqdoc 均计算；**sdlc 专属指标（lines 行数三分类/rework 返工率/coverage 覆盖率）仅当 `workflow.type==="sdlc"` 时计算，否则为 null；task 的 duration/efficiency 仍按通用口径计算**（分区管道，见 `session-management.md` 6.4） |
+| workflow_type 过滤 | 指定 `workflowType` 时：`workflow_type = <type>`（旧汇报 `workflow_type` 为 NULL 视为 sdlc）；缺省不过滤。**分区口径**：`firstPassRate`/`iterationCount` 为通用指标，task/sdlc/reqdoc/websec 均计算；**sdlc 专属指标（lines 行数三分类/rework 返工率/coverage 覆盖率）仅当 `workflow.type==="sdlc"` 时计算，否则为 null；task 的 duration/efficiency 仍按通用口径计算**（分区管道，见 `session-management.md` 6.4） |
 | period 过滤 | 指定 `period=Nd` 时：`since = now − N×86400000`，仅保留 `reported_at IS NULL OR reported_at >= since`；缺省则全部 |
 | members | 范围内**去重 `apiKey`（哈希）** 数（哈希为 NULL 计为 1 个，参与统计） |
 | sessions | 范围内汇报行数 |
@@ -559,7 +561,7 @@ CREATE INDEX idx_reports_type ON reports(workflow_type);
 
 | 字段 | 计算 |
 |------|------|
-| `completed` | `workflow.commit.status === "allowed"` 且 sdlc/task 已录 baseline 的行数；reqdoc 无 git 门禁，`allowed` 即完成 |
+| `completed` | `workflow.commit.status === "allowed"` 且 sdlc/task 已录 baseline 的行数；reqdoc/websec 无 git 门禁，`allowed` 即完成 |
 | `completionRate` | `completed / sessions`（sessions=0 时为 0） |
 | `totalCost` | `Σ (cost ?? 0)`（`NULL` 按 0 计入总费用） |
 | `avgFirstPassRate` | 非 NULL `firstPassRate` 的均值（0–100 百分比） |
@@ -580,7 +582,7 @@ CREATE INDEX idx_reports_type ON reports(workflow_type);
 | 字段 | 计算 |
 |------|------|
 | 分段 | `mid = since + period/2`；`reported_at < mid` 为「早半段」，否则「近半段」 |
-| `requirementRevision` | 早半段与近半段各自 `workflow.stages.requirements.revision` 的均值（缺省按 0；sdlc 专属语义，reqdoc/task 无 `requirements` 阶段，按 0 计入） |
+| `requirementRevision` | 早半段与近半段各自 `workflow.stages.requirements.revision` 的均值（缺省按 0；sdlc 专属语义，reqdoc/task/websec 无 `requirements` 阶段，按 0 计入） |
 | `reworkRate` | 早半段与近半段各自 `rework_rate` 的均值（仅 sdlc 会话参与，见 7.1 分区口径） |
 | `efficiency` | 早半段与近半段各自单会话提效率的均值（口径同 `avgEfficiency`；无基线/耗时 ≤ 0 的会话不参与），即「研发提效曲线」的数据基础 |
 | `direction` | `to > from` → `"up"`；`to < from` → `"down"`；相等 → `"flat"` |

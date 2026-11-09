@@ -68,7 +68,7 @@ export interface WorkflowSummary {
    * 旧版汇报缺省；收集端应回退到 transitions 口径。
    */
   durationMs?: number
-  /** task 专属：一般任务分类；sdlc/reqdoc 不携带，task 未分类为 null */
+  /** task 专属：一般任务分类；sdlc/reqdoc/websec 不携带，task 未分类为 null */
   task?: TaskSummary | null
 }
 

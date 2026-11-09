@@ -357,6 +357,10 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
             )
           }
         }
+        // websec 报告门禁：没有结构化报告不得定稿（防止只勾清单不交付）。
+        if (def.type === "websec" && !workflow.websec?.report) {
+          throw new WorkflowOpError("报告定稿前必须调用 websec_report 提交结构化报告")
+        }
         // 知识库定稿门禁（2c）：旧打分卡/探针/渲染门禁已删除，kbGate 是唯一依据。
         if (def.type === "reqdoc") {
           const kb = workflow.kb
@@ -446,8 +450,9 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
         }
         const total = review.comprehension.length
         const hadCodeEdits = (workflow.quality.iterationCount ?? 0) > 0
-        // 有 AI 代码编辑就必须登记理解确认片段；纯讨论会话（无代码）可无片段通过
-        if (hadCodeEdits && total === 0) {
+        // 有 AI 代码编辑就必须登记理解确认片段；纯讨论会话（无代码）可无片段通过。
+        // websec（requiresComprehension=false）用结构化报告替代片段确认，写报告文件不算代码改动。
+        if (hadCodeEdits && total === 0 && def.requiresComprehension !== false) {
           throw new WorkflowOpError("本会话存在 AI 代码编辑，但未登记任何理解确认片段，请先登记要点")
         }
         // 评审闭环：所有片段必须定论（accepted/manual），不允许 pending/rejected 悬空
@@ -543,7 +548,9 @@ export function createReviewTools(store: Store): Record<string, ToolDefinition> 
         `。\n提交门禁：${saved.commit.status}` +
         (saved.commit.blocked_by.length ? `（未完成：${saved.commit.blocked_by.join("、")}）` : "") +
         (saved.commit.status === "allowed"
-          ? `\n⚑ 工作流已完成，请提醒开发者执行 /new 开始下一个需求（保持统计隔离）。`
+          ? def.type === "websec"
+            ? `\n⚑ 工作流已完成，请提醒开发者执行 /new 开始下一个测试（修复后复测请开新会话，保持统计隔离）。`
+            : `\n⚑ 工作流已完成，请提醒开发者执行 /new 开始下一个需求（保持统计隔离）。`
           : "") +
         lockedNote + lazyNote + recallNote + changeNote
       )

@@ -98,10 +98,11 @@ not_started → in_progress → approved
 | `task` | execute | 无 |
 | `sdlc` | requirements / design / implementation / testing / review | businessIntent / logicExplainable / behaviorVerifiable / designRationale |
 | `reqdoc` | goal / rules / edge / prd / review | completeness / clarity / edgeCoverage / resolution |
+| `websec` | scope / surface / checks / verify / report | scopeAuthorized / surfaceCovered / checksEvidenced / falsePositiveReviewed / remediationActionable |
 
 阶段键不同，但 `workflow.stages` 的 JSON 结构完全一致。
 
-task 额外携带可选分类字段（sdlc/reqdoc 不携带）：
+task 额外携带可选分类字段（sdlc/reqdoc/websec 不携带）：
 
 ```json
 "workflow": {
@@ -118,9 +119,9 @@ task 额外携带可选分类字段（sdlc/reqdoc 不携带）：
 
 ---
 
-## 四、review 阶段特有字段
+## 四、审查阶段特有字段
 
-只有 `review` 阶段包含 `checklist` 和 `comprehension`：
+只有审查阶段包含 `checklist` 和 `comprehension`（sdlc/reqdoc 的审查阶段键为 `review`，websec 为 `report`）：
 
 ```json
 "review": {
@@ -142,8 +143,8 @@ task 额外携带可选分类字段（sdlc/reqdoc 不携带）：
 
 | 字段 | 含义 |
 |------|------|
-| `checklist` | 四项审查清单，全部为 true 才可通过（sdlc = 代码理解四维度，reqdoc = PRD 四维度；task 无 review 阶段） |
-| `comprehension.total` | 审查片段/要点总数 |
+| `checklist` | 审查清单，全部为 true 才可通过（sdlc = 代码理解四维度，reqdoc = PRD 四维度，websec = 授权/覆盖/证据/误报/修复五项；task 无审查阶段） |
+| `comprehension.total` | 审查片段/要点总数（websec 恒 0，不要求片段确认） |
 | `comprehension.confirmed` | 已确认数 |
 
 ---
@@ -156,12 +157,12 @@ task 额外携带可选分类字段（sdlc/reqdoc 不携带）：
 | `tokensInput` / `tokensOutput` | 随对话轮次递增 |
 | `quality.firstPassRate` | 代码编辑/PRD 渲染后更新（0-100） |
 | `quality.iterationCount` | 文件被 AI 编辑次数的最大值 |
-| `quality.lines` | AI 净增行数三分类聚合（sdlc 专属，reqdoc/task 恒 null） |
+| `quality.lines` | AI 净增行数三分类聚合（sdlc 专属，reqdoc/task/websec 恒 null） |
 | `quality.reworkRate` / `testCoverage` | 插件恒 null，CI 回写 |
 | `commit.blocked_by` | 随阶段完成逐步缩短，全部 approved 后为空 |
 | `commit.force` | 强制提交授权时出现（逃生口留痕） |
 | `baseline` | 需求/目标阶段或一般任务开始时录入后出现，后续不变 |
-| `task` | task 专属；模型调用 `task_classify` 后出现，可覆盖；未分类为 null，sdlc/reqdoc 不携带 |
+| `task` | task 专属；模型调用 `task_classify` 后出现，可覆盖；未分类为 null，sdlc/reqdoc/websec 不携带 |
 
 ---
 

@@ -65,7 +65,7 @@ task 面向**写文档、分析错误、整理材料**等非开发工作：只�
 - 多次审核 = 多次 `/new`，每次独立估算/计时/报告。
 - 普通 coding/debugging 等分类完全不受影响：不提示、不强制审核，也不能调用 `task_review` / `task_scan` / `task_check`（工具会拒绝并提示另开 `code_review` 任务）。
 
-## 5. 预估话术（三工作流一致）
+## 5. 预估话术（各工作流一致）
 
 sdlc / reqdoc / task 共用同一句提示：
 

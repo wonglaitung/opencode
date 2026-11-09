@@ -8,6 +8,8 @@ import {
   REQDOC_SCORE_DIMS,
   SDLC,
   TASK,
+  WEBSEC,
+  WEBSEC_CATEGORY_KEYS,
   TASK_CATEGORY_KEYS,
   TASK_CATEGORY_LABELS,
   WORKFLOW_DEFINITIONS,
@@ -207,6 +209,7 @@ describe("WorkflowDefinition 注册表（3.2）", () => {
     expect(resolveWorkflowType("task")).toBe("task")
     expect(resolveWorkflowType("sdlc")).toBe("sdlc")
     expect(resolveWorkflowType("reqdoc")).toBe("reqdoc")
+    expect(resolveWorkflowType("websec")).toBe("websec")
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
     expect(resolveWorkflowType(undefined)).toBe("sdlc")
     expect(resolveWorkflowType(42)).toBe("sdlc")
@@ -215,10 +218,28 @@ describe("WorkflowDefinition 注册表（3.2）", () => {
   })
 
   test("WORKFLOW_DEFINITIONS 注册表与 getDefinition", () => {
-    expect(Object.keys(WORKFLOW_DEFINITIONS)).toEqual(["task", "sdlc", "reqdoc"])
+    expect(Object.keys(WORKFLOW_DEFINITIONS)).toEqual(["task", "sdlc", "reqdoc", "websec"])
     expect(getDefinition("task")).toBe(TASK)
     expect(getDefinition("sdlc")).toBe(SDLC)
     expect(getDefinition("reqdoc")).toBe(REQDOC)
+    expect(getDefinition("websec")).toBe(WEBSEC)
+  })
+
+  test("WEBSEC 定义：五阶段、report 审查、无提交门禁、不要求片段确认", () => {
+    expect(WEBSEC.stages).toEqual(["scope", "surface", "checks", "verify", "report"])
+    expect(WEBSEC.reviewStage).toBe("report")
+    expect(WEBSEC.hasCommitGate).toBe(false)
+    expect(WEBSEC.requiresComprehension).toBe(false)
+    expect(WEBSEC.checklist.map((item) => item.key)).toEqual([
+      "scopeAuthorized",
+      "surfaceCovered",
+      "checksEvidenced",
+      "falsePositiveReviewed",
+      "remediationActionable",
+    ])
+    expect(WEBSEC.rules.find((rule) => rule.id === "websec-r1")?.stage).toBe("scope")
+    expect(WEBSEC.rules.find((rule) => rule.id === "websec-r19")?.text).toContain("/new")
+    expect(WEBSEC_CATEGORY_KEYS).toEqual(["authn", "authz", "input", "config", "logic", "other"])
   })
 
   test("rulesForStage / currentInProgressStage：阶段化注入取 global + 当前阶段", () => {
@@ -449,16 +470,18 @@ describe("TASK 一般任务工作流", () => {
     ).toThrow()
   })
 
-  test("入口短语与起步提示覆盖三个工作流", () => {
+  test("入口短语与起步提示覆盖四个工作流", () => {
     expect(WORKFLOW_ENTRY_PHRASE).toEqual({
       task: "启动一般任务",
       sdlc: "启动 SDLC 工作流",
       reqdoc: "启动 REQDOC 工作流",
+      websec: "启动 WEB 安全测试工作流",
     })
     expect(WORKFLOW_ENTRY_HINT.task).toContain(WORKFLOW_ENTRY_PHRASE.task)
     expect(WORKFLOW_ENTRY_HINT.task).toContain("直接描述任务")
     expect(WORKFLOW_ENTRY_HINT.sdlc).toContain(WORKFLOW_ENTRY_PHRASE.sdlc)
     expect(WORKFLOW_ENTRY_HINT.reqdoc).toContain(WORKFLOW_ENTRY_PHRASE.reqdoc)
+    expect(WORKFLOW_ENTRY_HINT.websec).toContain(WORKFLOW_ENTRY_PHRASE.websec)
   })
 
   test("分类枚举稳定且展示名唯一", () => {

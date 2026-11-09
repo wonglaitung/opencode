@@ -171,9 +171,9 @@ graph LR
 4. 组/组织级的使用统计与质量分析
 
 
-### 2.2 文档族导览（四个文件怎么分工）
+### 2.2 文档族导览（五个文件怎么分工）
 
-本设计文档族按「**通用机制 / 三个工作流**」拆分为四个文件，避免通用实现与多条工作流纠缠难读：
+本设计文档族按「**通用机制 / 四个工作流**」拆分为五个文件，避免通用实现与多条工作流纠缠难读：
 
 | 文件 | 内容 | 读者 |
 |------|------|------|
@@ -181,6 +181,7 @@ graph LR
 | **`workflow-task.md`** | 工作流三：task 一般任务（单阶段 execute、只记预估/实际工时、完成提示与自动收口、统一预估话术、统计边界） | 需要记录一般任务工时的人 |
 | **`workflow-sdlc.md`** | 工作流一：sdlc 软件开发定义（2 章）、12 条规则全文（3 章）、场景一~四（4 章）、审查清单（5 章）、提交门禁（6 章）、统计口径（7 章）、评测场景（8 章） | 开发者 |
 | **`workflow-reqdoc.md`** | 工作流二：reqdoc 需求书定义（2 章）、需求资料目录契约（3 章）、24 条规则全文（4 章）、打分卡（5 章）、追问探针（6 章）、渲染结构校验（7 章）、专属工具（8 章）、场景五（9 章）、评测（10 章） | 需求分析师 |
+| **`workflow-websec.md`** | 工作流四：websec 轻量级 WEB 安全测试——授权与范围、资产接口枚举、只读/低风险检查、取证定级、结构化报告；默认只读、证据驱动、报告不上行 | 开发者 / 安全测试人员 |
 
 **阅读建议**：先读本文档 1~3 章理解通用机制，再按角色读对应工作流文件；各工作流文件里出现的「见 session-management.md X.Y」即回指本文档的通用机制。跨文件引用带文件名前缀、不带前缀的章号指当前文件。
 
@@ -247,7 +248,7 @@ flowchart LR
 |------|----------------|
 | WorkflowState 每轮注入 system prompt | 插件 `experimental.chat.system.transform`，从插件 DB 读最新状态追加 |
 | 会话 tags、status、workflow 扩展属性 | 存插件自有 SQLite，以核心 sessionID 为主键关联，不动 SessionTable |
-| api_key 身份 + workflowType | 开发者 `opencode-sm init` 填写（api_key / 收集服务地址 / 可选工作流类型），存全局 `identity.json`，api_key 本机明文、上送前转 SHA-256 哈希；组/部门/组织由收集服务据哈希解析；workflowType 决定新会话走哪套工作流（task / sdlc / reqdoc，见 3.1） |
+| api_key 身份 + workflowType | 开发者 `opencode-sm init` 填写（api_key / 收集服务地址 / 可选工作流类型），存全局 `identity.json`，api_key 本机明文、上送前转 SHA-256 哈希；组/部门/组织由收集服务据哈希解析；workflowType 决定新会话走哪套工作流（task / sdlc / reqdoc / websec，见 3.1） |
 | 阶段推进 / 审查 / 理解确认 | 插件注册工具（`workflow_advance`、`comprehension_confirm`、`review_submit`），Agent 在 TUI 对话中调用，校验逻辑在工具 handler 内——天然服务端强制 |
 | 重复编辑模式检测与提交门禁 | `tool.execute.after` 计数每文件代码编辑（统计用）+ 内存短记忆检测连续重复/高频编辑模式；`tool.execute.before` 对未过审查的 `git commit` 抛错阻断；system prompt 注入 stuck 警告 |
 | QualityMetrics 采集 | 会话内指标（firstPassRate/iterationCount/linesByFile）由插件记录于本机插件库；合并后指标（reworkRate/testCoverage）由 CI 按 sessionID 回写 org 收集服务 |
@@ -275,7 +276,7 @@ flowchart LR
 
 | 存储 | 位置 | 内容 |
 |------|------|------|
-| 全局身份配置 | `~/.config/opencode/session-mgmt/identity.json` | `opencode-sm init` 写入：`{apiKey, collector_url, workflowType}`（apiKey 明文本机存储、上送前转 SHA-256 哈希；workflowType 可选，取值 task / sdlc / reqdoc，缺省 sdlc），每机器一份 |
+| 全局身份配置 | `~/.config/opencode/session-mgmt/identity.json` | `opencode-sm init` 写入：`{apiKey, collector_url, workflowType}`（apiKey 明文本机存储、上送前转 SHA-256 哈希；workflowType 可选，取值 task / sdlc / reqdoc / websec，缺省 sdlc），每机器一份 |
 | 插件库 | `<project>/.opencode/session-mgmt.db`（插件自动建表，迁移自管） | 每会话的工作流数据 `workflow_session` |
 | 组织聚合库 | org 收集服务侧（每 org 一个） | 各机器汇报的会话摘要，组/组织结构由此自然形成 |
 
@@ -304,7 +305,7 @@ erDiagram
     IdentityConfig {
         string apiKey "init 两问 - api_key（明文本机，发送前 SHA-256）"
         string collector_url "init 两问 - 收集服务地址"
-        string workflowType "init 可选 - 工作流类型 task/sdlc/reqdoc（缺省 sdlc）"
+        string workflowType "init 可选 - 工作流类型 task/sdlc/reqdoc/websec（缺省 sdlc）"
     }
 
     ReportsTable {
@@ -495,7 +496,7 @@ classDiagram
 插件把「工作流的定义」与「通用机制」解耦。定义（阶段键、阶段中文名、审查清单、提交门禁有无、注入的规则项）收敛为 `WorkflowDefinition`，按 `WorkflowType` 注册：
 
 ```typescript
-export type WorkflowType = "task" | "sdlc" | "reqdoc"  // 当前注册 task / sdlc / reqdoc
+export type WorkflowType = "task" | "sdlc" | "reqdoc" | "websec"  // 当前注册 task / sdlc / reqdoc / websec
 
 export interface ChecklistItem { key: string; label: string; auto?: boolean }
 
@@ -526,6 +527,7 @@ export function defineWorkflow(def: WorkflowDefinition): WorkflowDefinition
 export const WORKFLOW_DEFINITIONS: Record<WorkflowType, WorkflowDefinition>
 export const SDLC: WorkflowDefinition     // sdlc 定义（五阶段 + 四清单 + 门禁 + 规则）
 export const REQDOC: WorkflowDefinition   // reqdoc 定义（见 workflow-reqdoc.md 2 章、4 章）
+export const WEBSEC: WorkflowDefinition   // websec 定义（见 workflow-websec.md）
 export function getDefinition(type: WorkflowType): WorkflowDefinition
 export function rulesForStage(def: WorkflowDefinition, stage: string | null): RuleItem[]
   // 阶段化注入取规则：stage 为 null 时只给 global；否则给 global + 该阶段（7.4）
@@ -536,7 +538,7 @@ export function resolveWorkflowType(v: unknown): WorkflowType   // 未知值回�
 
 新增工作流必须经 `defineWorkflow` 构造并声明 `standard`（漏填过不了 typecheck）；工厂会校验同名规则是否带统一预估话术与 `/new`，缺失则自动补一条，因此新工作流不会静默漏掉「会话开始问预估、结束提示 /new」；绕过工厂手写定义时由 `packages/shared/test/shared.test.ts` 遍历 `WORKFLOW_DEFINITIONS` 的断言兜底。
 
-`WorkflowState` 含 `type` 字段标明本会话属于哪种工作流；`stages` 为泛化的 `Record<string, StageRecord>`，审查阶段经 `reviewRecord()` 定位（`getDefinition(s.type).reviewStage`）。系统不设 `STAGE_ORDER`/`STAGE_LABELS`/`StageName` 常量——消费方一律通过 `getDefinition(workflow.type)` 取阶段键/中文名/清单。task 可选 `task: {category, source, setAt}` 记录一般任务分类；汇报投影只带 `category/source`，未分类为 `null`。`ComprehensionRecord` 是通用机制（sdlc 编码段与 reqdoc PRD 要点共用，reqdoc 语义见 workflow-reqdoc.md 2 章）。`metricKind`、`workflow_set_type` 工具未实现（不做会话内类型切换，避免死代码）；`workflow_start` 跨类型启动直接拒绝。
+`WorkflowState` 含 `type` 字段标明本会话属于哪种工作流；`stages` 为泛化的 `Record<string, StageRecord>`，审查阶段经 `reviewRecord()` 定位（`getDefinition(s.type).reviewStage`）。系统不设 `STAGE_ORDER`/`STAGE_LABELS`/`StageName` 常量——消费方一律通过 `getDefinition(workflow.type)` 取阶段键/中文名/清单。task 可选 `task: {category, source, setAt}` 记录一般任务分类；汇报投影只带 `category/source`，未分类为 `null`。websec 可选 `websec` 记录 scope/evidence/report，仅存本机、不进入汇报投影。`ComprehensionRecord` 是通用机制（sdlc 编码段与 reqdoc PRD 要点共用，reqdoc 语义见 workflow-reqdoc.md 2 章）。`metricKind`、`workflow_set_type` 工具未实现（不做会话内类型切换，避免死代码）；`workflow_start` 跨类型启动直接拒绝。
 
 **sdlc 定义**（五阶段 `["requirements","design","implementation","testing","review"]`、审查阶段 `review`、四清单项 businessIntent/logicExplainable/behaviorVerifiable/designRationale、`hasCommitGate=true`）已移至 **workflow-sdlc.md 2 章**，规则全文见 **workflow-sdlc.md 3 章**。
 
@@ -711,7 +713,7 @@ stateDiagram-v2
 }
 ```
 
-这些时间戳就是统计分析的数据来源。task / sdlc / reqdoc 的各阶段适用同一套转换规则与时间戳口径；task 只有 execute 一个阶段。
+这些时间戳就是统计分析的数据来源。task / sdlc / reqdoc / websec 的各阶段适用同一套转换规则与时间戳口径；task 只有 execute 一个阶段。
 
 **会话周期（durationMs）口径**：按“活跃用时”累计，而不是直接取首末墙钟时间。插件在 `chat.message` 和 `tool.execute.after` 记录用户/工具活动时间戳，并监听 `session.status`：AI `busy/retry` 区间完整计入（Agent 长时间自动运行不会被截断），`idle` 时结算并暂停；非 busy 空档超过 5 分钟（`IDLE_GAP_MS`）的部分不计入，避免下班或过夜时间污染工时。已完成会话冻结累计活跃时长；旧状态没有活跃计时字段时，回退为原「全部转换时间戳最早到最晚」口径。**AI 提效率仅对已完成会话计算**——进行中会话的周期是实时值，与整任务预估无参照意义，避免误报高提效。
 
@@ -1754,11 +1756,11 @@ AI 使用: 对话 47轮 | $0.36 | 85K tokens
 
 ### 9.5 多流程统计分区（type 感知）
 
-不同工作流（sdlc / reqdoc）的指标不同，但**报告形状保持单一**，不建 union/meta-schema：
+不同工作流（sdlc / reqdoc / websec）的指标不同，但**报告形状保持单一**，不建 union/meta-schema：
 
-- **报告**：`QualitySummary` 单一形状——sdlc 填足（含行数三分类、rework、coverage），reqdoc 填通用字段（firstPassRate/iterationCount/baseline），code 专属字段（行数三分类、rework、coverage）为 `null` → 收集/展示侧自动作为 N/A。
-- **聚合**：collector 的 `reports` 表落 `workflow_type` 列（+ 索引，见 3.1），写入侧从 `report.workflow.type` 取；查询侧 `GET /api/stats` 与 CLI `opencode-sm stats --workflow <type>` 按类型过滤——**task / sdlc / reqdoc 的指标绝不混算**。
-- **本机统计**：会话级/项目级（`stats.ts`）同样按 `workflow.type` 分区——sdlc 专属指标（行数三分类、返工、覆盖率）仅 sdlc 会话计算；reqdoc 会话这些字段为 null；task 只展示预估/实际/提效，不展示审查与代码质量指标。
+- **报告**：`QualitySummary` 单一形状——sdlc 填足（含行数三分类、rework、coverage），reqdoc 填通用字段（firstPassRate/iterationCount/baseline），websec 填阶段/清单/baseline（firstPassRate 与代码专属字段为 `null`），code 专属字段（行数三分类、rework、coverage）为 `null` → 收集/展示侧自动作为 N/A。
+- **聚合**：collector 的 `reports` 表落 `workflow_type` 列（+ 索引，见 3.1），写入侧从 `report.workflow.type` 取；查询侧 `GET /api/stats` 与 CLI `opencode-sm stats --workflow <type>` 按类型过滤——**task / sdlc / reqdoc / websec 的指标绝不混算**。
+- **本机统计**：会话级/项目级（`stats.ts`）同样按 `workflow.type` 分区——sdlc 专属指标（行数三分类、返工、覆盖率）仅 sdlc 会话计算；reqdoc/websec 会话这些字段为 null；task 只展示预估/实际/提效，不展示审查与代码质量指标。
 - **不预建** union/meta-schema（reqdoc 专属指标未定，定义即臆测）；扩展时新增可选字段（如 `docStats`）即可，分区管道已就位。
 
 ---

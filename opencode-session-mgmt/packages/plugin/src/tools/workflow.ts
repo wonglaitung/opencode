@@ -82,6 +82,23 @@ export function createWorkflowTools(store: Store): Record<string, ToolDefinition
       const saved = store.mutateWorkflow(context.sessionID, (workflow) => {
         assertStage(workflow, args.stage)
         const def = getDefinition(workflow.type)
+        // websec：未记录授权与范围不得进入安全检查（scope 是安全底线，不可跳过）。
+        if (def.type === "websec" && args.action === "enter") {
+          if (args.stage === "checks" && !workflow.websec?.scope) {
+            throw new WorkflowOpError(
+              "进入「安全检查」前必须先调用 websec_scope 记录授权与范围（目标、授权依据、账号、停止条件）。",
+            )
+          }
+          const idx = def.stages.indexOf(args.stage)
+          for (let i = 0; i < idx; i++) {
+            const key = def.stages[i]!
+            if (workflow.stages[key].status === "not_started") {
+              throw new WorkflowOpError(
+                `进入「${def.labels[args.stage] ?? args.stage}」前须先完成「${def.labels[key] ?? key}」`,
+              )
+            }
+          }
+        }
         // task：自动收口后模型可能再调一次 approve；幂等跳过，避免「已完成」报错。
         if (
           def.type === "task" &&

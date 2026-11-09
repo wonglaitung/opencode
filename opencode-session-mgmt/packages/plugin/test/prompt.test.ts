@@ -769,9 +769,10 @@ describe("task 一般任务状态条与入口提示", () => {
     expect(text).toContain("预估 xx 小时")
   })
 
-  test("未开始：三工作流都给出各自入口提示", () => {
+  test("未开始：四个工作流都给出各自入口提示", () => {
     expect(buildSystemFragment(createWorkflowState("sdlc"))).toContain("启动 SDLC 工作流")
     expect(buildSystemFragment(createWorkflowState("reqdoc"))).toContain("启动 REQDOC 工作流")
     expect(buildSystemFragment(createWorkflowState("task"))).toContain("启动一般任务")
+    expect(buildSystemFragment(createWorkflowState("websec"))).toContain("启动 WEB 安全测试工作流")
   })
 })

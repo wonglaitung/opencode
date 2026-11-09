@@ -109,10 +109,17 @@ export function buildSystemFragment(
         )
       }
     }
-    parts.push(
-      "⚑ 开始下一个需求：提醒开发者执行 /new 保持统计隔离（勿在本会话复用，否则统计混入已完成需求）。",
-      "修改本需求：调用 workflow_revisit 回退到对应阶段。",
-    )
+    if (def.type === "websec") {
+      parts.push(
+        "⚑ 开始下一个测试：提醒开发者执行 /new 保持统计隔离；修复后复测请开新会话，不要在本会话追加第二轮测试。",
+        "补充或修改本次报告：调用 workflow_revisit 回退到对应阶段。",
+      )
+    } else {
+      parts.push(
+        "⚑ 开始下一个需求：提醒开发者执行 /new 保持统计隔离（勿在本会话复用，否则统计混入已完成需求）。",
+        "修改本需求：调用 workflow_revisit 回退到对应阶段。",
+      )
+    }
     if (def.type === "reqdoc") {
       // 需求迭代（加功能）是本工作流最常被误选成「/new 开新需求」的路径——选错等于让业务把整份需求重述一遍。
       parts.push(
