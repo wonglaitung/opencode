@@ -29,6 +29,7 @@ import {
   type ReqdocFeature,
   type RenderStructure,
   type WorkflowState,
+  type WorkflowType,
 } from "sm-shared"
 import { assembleDir, assembleInto } from "./reqdoc-kb-tools"
 import type { Store } from "../db"
@@ -47,19 +48,24 @@ import { projectRoot, resolveWithinWorktree } from "../fs-safe"
 const z = tool.schema
 
 /**
- * review_submit 的具名布尔参数（3.2 def 驱动）：汇总所有已注册类型中非 auto 的审查清单项。
- * 本轮仅 sdlc → businessIntent/logicExplainable/behaviorVerifiable（LLM 契约逐字节不变）；
- * auto 项（如 designRationale）由插件置真，不占用具名参数。reqdoc 加入时其非 auto 清单项自动并入。
+ * review_submit 的具名布尔参数（3.2 def 驱动）：只暴露当前工作流类型的非 auto 清单项。
+ * 未传类型时回退为「汇总所有已注册类型」，仅供未绑定类型的测试/旧调用方保持兼容；
+ * 生产路径由 toolset 传入 def.type，避免 websec 会话看到 sdlc/reqdoc 的无关布尔参数。
  */
-const reviewChecklistArgs: Record<string, ReturnType<typeof z.boolean>> = {}
-for (const def of Object.values(WORKFLOW_DEFINITIONS)) {
-  for (const item of def.checklist) {
-    if (item.auto) continue
-    if (!(item.key in reviewChecklistArgs)) reviewChecklistArgs[item.key] = z.boolean().describe(item.label)
+function reviewChecklistArgsFor(type?: WorkflowType): Record<string, ReturnType<typeof z.boolean>> {
+  const args: Record<string, ReturnType<typeof z.boolean>> = {}
+  const defs = type ? [getDefinition(type)] : Object.values(WORKFLOW_DEFINITIONS)
+  for (const def of defs) {
+    for (const item of def.checklist) {
+      if (item.auto) continue
+      if (!(item.key in args)) args[item.key] = z.boolean().describe(item.label)
+    }
   }
+  return args
 }
 
-export function createReviewTools(store: Store): Record<string, ToolDefinition> {
+export function createReviewTools(store: Store, type?: WorkflowType): Record<string, ToolDefinition> {
+  const reviewChecklistArgs = reviewChecklistArgsFor(type)
   const comprehension_add = tool({
     description:
       "审查阶段：登记一个 AI 生成的代码片段（sdlc）或 PRD 要点（reqdoc）及其自然语言解释。" +

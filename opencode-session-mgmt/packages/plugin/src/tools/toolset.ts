@@ -43,7 +43,7 @@ export function createToolset(input: Input): Record<string, ToolDefinition> {
     ...(def.type === "task" ? createTaskReviewTool(input.store) : {}),
     ...(def.type === "task" ? createTaskScanTool(input.store) : {}),
     ...(def.type === "task" ? createTaskCheckTool(input.store) : {}),
-    ...(def.reviewStage === null ? {} : createReviewTools(input.store)),
+    ...(def.reviewStage === null ? {} : createReviewTools(input.store, def.type)),
     ...(def.type === "reqdoc" ? reqdocTools(input.store) : {}),
     ...(def.type === "websec" ? createWebsecTools(input.store) : {}),
     open_ide: createOpenIdeTool(input.ideEntries, input.lockRegistry),

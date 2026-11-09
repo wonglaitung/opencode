@@ -691,3 +691,19 @@ describe("P3.10 溯源写回（2c：路径由知识库推导）", () => {
     store.close()
   })
 })
+
+describe("review_submit 参数裁剪", () => {
+  test("按当前工作流类型只暴露对应清单项", () => {
+    const store = Store.memory()
+    const websecKeys = Object.keys(createReviewTools(store, "websec").review_submit!.args)
+    expect(websecKeys).toContain("scopeAuthorized")
+    expect(websecKeys).toContain("remediationActionable")
+    expect(websecKeys).not.toContain("businessIntent")
+    expect(websecKeys).not.toContain("completeness")
+
+    const sdlcKeys = Object.keys(createReviewTools(store, "sdlc").review_submit!.args)
+    expect(sdlcKeys).toContain("businessIntent")
+    expect(sdlcKeys).not.toContain("scopeAuthorized")
+    store.close()
+  })
+})
