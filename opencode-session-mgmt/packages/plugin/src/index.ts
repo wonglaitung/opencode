@@ -27,6 +27,7 @@ import { createIterationCounter } from "./tools/quality"
 import { markBusy, markIdle, recordActivity } from "./stats"
 import { finishTask } from "./task-lifecycle"
 import { createToolset } from "./tools/toolset"
+import { disposeWebsecEdge } from "./tools/websec-edge"
 import { applyBaselineProposal, applyQuestionBaselineProposal } from "./tools/baseline-proposal"
 import { makeSubagentChecker } from "./subagent"
 import { loadIdeConfig } from "./open-ide/config"
@@ -229,6 +230,7 @@ const SessionMgmtPlugin: Plugin = async (input) => {
         if (store.get(sessionID)?.workflow) store.mutateWorkflow(sessionID, (workflow) => markIdle(workflow))
       }
       busySince.clear()
+      await disposeWebsecEdge(input.directory)
       await reporter.flushOutbox({ exit: true })
       store.close()
     },

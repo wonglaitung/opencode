@@ -39,7 +39,7 @@ websec 不是自动化扫描器，也不替代专业渗透测试。它把“人�
 
 | 工具 | 阶段 | 作用 |
 |------|------|------|
-| `websec_scope` | `scope` | 记录范围与边界；必须 `developer_confirmed=true`；未记录 scope 不得进入 `checks` |
+| `websec_scope` | `scope` | 记录范围与边界；可选 `evidence_dir` 指定项目内证据目录（默认 `websec-evidence`）；必须 `developer_confirmed=true` |
 | `websec_evidence` | `checks` / `verify` | 登记证据索引：URL、方法、身份、时间、哈希、本地路径；只存元数据，不存正文 |
 | `websec_report` | `report` | 提交结构化报告；每条 finding 必须引用已登记 `evidenceRef`；`verdict=passed` 时不得有 findings |
 | `websec_edge_capture` | `surface` / `checks` | 可选：`start(mode)` 打开 Edge；普通测试 `capture(single)`，越权测试 `capture(baseline/privileged)` + `switch_identity`；`finish` 确认完成，`stop` 关闭；只回摘要 |
@@ -64,7 +64,7 @@ Edge/CDP 是可选外部能力：若当前环境启用 `websec_edge_capture`，�
 
 `WorkflowState.websec` 只存：
 
-- `scope`：目标、环境、账号代号/角色、时间窗、限速、停止条件；
+- `scope`：目标、环境、账号代号/角色、时间窗、限速、停止条件、证据目录（`evidenceDir`）；
 - `testMode` / `edge`：普通/越权模式与 start/finish 状态；
 - `evidence[]`：证据 id、URL、方法、身份、阶段（single/baseline/privileged）、采集时间、哈希、本地路径、备注、状态码/正文有无；
 - `report`：方法、findings、局限性、结论、提交时间。
@@ -92,7 +92,7 @@ Edge/CDP 是可选外部能力：若当前环境启用 `websec_edge_capture`，�
    - 测试账号与角色（普通测试至少一个；越权测试必须两个：普通 + 高权）；
    - 时间窗与限速；
    - 停止条件（如触发告警、需要写操作、遇到真实用户数据）。
-3. 证据正文建议自行落本地文件；系统只存 URL、方法、身份、时间、哈希和本地路径。
+3. 证据正文默认落在项目根 `websec-evidence/<sessionID>/`，目录内自动生成 `.gitignore`；可用 `websec_scope(evidence_dir="...")` 改到项目内其它目录。系统只存 URL、方法、身份、时间、哈希和本地路径。
 
 内部开发自测不需要工单、邮件或合同；只要确认目标属于你负责或获准自测的范围即可。
 
@@ -145,7 +145,7 @@ websec 模式会保留同源 2xx 页面/接口、3xx 和 4xx/5xx，缓冲 500 �
 ## 8. 已知限制
 
 - 工作流类型是 daemon/identity 级，切换需重新 `init` 并重启，不能会话内切换。
-- 证据正文需由开发者/Agent 落本地文件；本工作流只维护索引。
+- 证据正文默认落 `<项目>/websec-evidence/<sessionID>/`，目录内 `.gitignore` 忽略正文；文件权限 0600（Windows 忽略）。
 - 不内置漏洞库、Payload 库或自动化利用能力；结论质量取决于测试者的判断与证据。
 - 越权测试需要至少两个不同角色的账号；切换身份后必须重新登录，不能沿用上一个账号的 Cookie。baseline 日志未采集完时不能切换身份。
 - `switch_identity` 会清 Cookie/storage/cache 并刷新，但仍共用同一个浏览器 profile；高安全场景建议使用独立 profile/无痕窗口。

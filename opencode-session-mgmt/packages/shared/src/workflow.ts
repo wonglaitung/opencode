@@ -189,6 +189,8 @@ export interface WebsecScope {
   window?: string
   rateLimit?: string
   stopConditions: string[]
+  /** 证据正文根目录（项目内相对路径）；缺省 websec-evidence。 */
+  evidenceDir?: string
   confirmedAt: number
 }
 

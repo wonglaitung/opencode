@@ -10,8 +10,9 @@
 import { tool, type ToolDefinition } from "@opencode-ai/plugin"
 import { createHash } from "node:crypto"
 import { mkdir, writeFile } from "node:fs/promises"
-import { join } from "node:path"
+import { isAbsolute, join, relative, resolve } from "node:path"
 import {
+  disposeEdgeDebugController,
   getEdgeDebugController,
   shouldCaptureBody,
   WEBSEC_CAPTURE_POLICY,
@@ -84,6 +85,29 @@ function modeLabel(mode: "normal" | "authz"): string {
   return mode === "authz" ? "越权测试" : "普通测试"
 }
 
+/** 解析项目内证据根目录；拒绝绝对路径与越界。 */
+function resolveEvidenceRoot(projectDir: string, configured: string | undefined): string {
+  const root = resolve(projectDir)
+  const rel = configured ?? "websec-evidence"
+  if (isAbsolute(rel) || rel.split(/[\\/]+/).some((part) => part === "." || part === "..")) {
+    throw new WorkflowOpError("evidence_dir 必须是项目内相对路径")
+  }
+  const resolved = resolve(root, rel)
+  const check = relative(root, resolved)
+  if (check.startsWith("..") || isAbsolute(check) || check === "") {
+    throw new WorkflowOpError("evidence_dir 不能跳出项目目录")
+  }
+  return resolved
+}
+
+async function ensureEvidenceGitignore(root: string): Promise<void> {
+  try {
+    await writeFile(join(root, ".gitignore"), "*\n!.gitignore\n", { encoding: "utf8", flag: "wx" })
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error
+  }
+}
+
 function phaseLabel(phase: WebsecPhase): string {
   if (phase === "baseline") return "baseline（普通账号）"
   if (phase === "privileged") return "privileged（高权账号）"
@@ -99,6 +123,15 @@ function endpointKey(ev: WebsecEvidence): string {
     return `${ev.method.toUpperCase()} ${u.origin}${path}`
   } catch {
     return `${ev.method.toUpperCase()} ${ev.url}`
+  }
+}
+
+/** 插件卸载时兜底关闭 websec 启动的 Edge（共享 controller）。 */
+export async function disposeWebsecEdge(projectDir: string): Promise<boolean> {
+  try {
+    return await disposeEdgeDebugController(projectDir)
+  } catch {
+    return false
   }
 }
 
@@ -292,8 +325,10 @@ export function createWebsecEdgeTools(
         return `没有新的可采集条目（当前已有 ${existing.size} 条证据）。`
       }
 
-      const evidenceDir = join(projectDir, ".opencode", "websec-evidence", safeName(context.sessionID))
+      const evidenceRoot = resolveEvidenceRoot(projectDir, workflow.websec.scope?.evidenceDir)
+      const evidenceDir = join(evidenceRoot, safeName(context.sessionID))
       await mkdir(evidenceDir, { recursive: true })
+      await ensureEvidenceGitignore(evidenceRoot)
 
       const captured: WebsecEvidence[] = []
       const lines: string[] = []
@@ -338,7 +373,7 @@ export function createWebsecEdgeTools(
           evidenceDir,
           `${Date.now()}-${safeName(entry.requestId)}.${detail?.base64Encoded ? "b64" : "txt"}`,
         )
-        await writeFile(file, raw, "utf8")
+        await writeFile(file, raw, { encoding: "utf8", mode: 0o600 })
         const note =
           [args.note, bodyNote, detail?.base64Encoded ? "base64" : undefined]
             .filter(Boolean)

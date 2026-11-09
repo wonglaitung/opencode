@@ -106,7 +106,7 @@ function setup() {
 
 describe("websec_edge_capture", () => {
   test("普通测试：start 必须选模式，capture 为 single，finish 后才能报告", async () => {
-    const { store, tools, setLogs, setDetail } = setup()
+    const { projectDir, store, tools, setLogs, setDetail } = setup()
     try {
       await expect(
         tools.websec_edge_capture!.execute({ action: "start" } as never, ctx),
@@ -134,11 +134,32 @@ describe("websec_edge_capture", () => {
       expect(ev.status).toBe(200)
       expect(ev.hash).toBe(createHash("sha256").update(body, "utf8").digest("hex"))
       expect(ev.localPath && existsSync(ev.localPath)).toBe(true)
+      expect(ev.localPath!.startsWith(join(projectDir, "websec-evidence", "s1"))).toBe(true)
+      expect(existsSync(join(projectDir, "websec-evidence", ".gitignore"))).toBe(true)
       expect(readFileSync(ev.localPath!, "utf8")).toBe(body)
 
       const finished = String(await tools.websec_edge_capture!.execute({ action: "finish" } as never, ctx))
       expect(finished).toContain("采集完成")
       expect(store.get("s1")!.workflow!.websec?.edge?.finished).toBe(true)
+    } finally {
+      store.close()
+    }
+  })
+
+  test("evidence_dir 可配置到项目内其它目录", async () => {
+    const { projectDir, store, tools, setLogs, setDetail } = setup()
+    try {
+      store.mutateWorkflow("s1", (wf) => {
+        wf.websec!.scope!.evidenceDir = "artifacts/websec"
+      })
+      await tools.websec_edge_capture!.execute({ action: "start", mode: "normal" } as never, ctx)
+      const entry = makeEntry("n2", "http://127.0.0.1:18086/api/users/2")
+      setLogs([entry])
+      setDetail(entry, '{"id":2}')
+      await tools.websec_edge_capture!.execute({ action: "capture" } as never, ctx)
+      const ev = store.get("s1")!.workflow!.websec!.evidence[0]!
+      expect(ev.localPath!.startsWith(join(projectDir, "artifacts", "websec", "s1"))).toBe(true)
+      expect(existsSync(join(projectDir, "artifacts", "websec", ".gitignore"))).toBe(true)
     } finally {
       store.close()
     }

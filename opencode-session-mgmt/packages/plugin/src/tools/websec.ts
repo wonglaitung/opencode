@@ -33,6 +33,21 @@ function ensureWebsec(workflow: WorkflowState): WebsecState {
   return workflow.websec ?? { evidence: [] }
 }
 
+/** 规范化项目内证据目录；拒绝绝对路径、.. 与空路径。 */
+function normalizeEvidenceDir(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined
+  const trimmed = value.trim().replace(/\\/g, "/")
+  if (!trimmed) throw new WorkflowOpError("evidence_dir 不能为空")
+  if (trimmed.startsWith("/") || trimmed.startsWith("//") || /^[a-zA-Z]:\//.test(trimmed)) {
+    throw new WorkflowOpError("evidence_dir 必须是项目内相对路径，不能是绝对路径")
+  }
+  const parts = trimmed.split("/").filter((part) => part !== "")
+  if (parts.length === 0 || parts.some((part) => part === "." || part === "..")) {
+    throw new WorkflowOpError("evidence_dir 不能包含 . 或 ..，且不能为空")
+  }
+  return parts.join("/")
+}
+
 function requireScope(workflow: WorkflowState): WebsecState {
   const state = ensureWebsec(workflow)
   if (!state.scope) {
@@ -93,6 +108,7 @@ export function createWebsecTools(store: Store): Record<string, ToolDefinition> 
       window: z.string().optional().describe("允许测试的时间窗"),
       rateLimit: z.string().optional().describe("限速要求"),
       stopConditions: z.array(z.string().min(1)).min(1).describe("必须停止的条件（至少一条）"),
+      evidence_dir: z.string().optional().describe("证据正文目录（项目内相对路径，默认 websec-evidence）"),
       developer_confirmed: z.boolean().describe("必须为 true，表示开发者已明确确认测试范围与边界"),
     },
     async execute(args, context) {
@@ -115,6 +131,7 @@ export function createWebsecTools(store: Store): Record<string, ToolDefinition> 
             window: args.window,
             rateLimit: args.rateLimit,
             stopConditions: args.stopConditions,
+            evidenceDir: normalizeEvidenceDir(args.evidence_dir),
             confirmedAt: Date.now(),
           },
         }
@@ -125,6 +142,7 @@ export function createWebsecTools(store: Store): Record<string, ToolDefinition> 
         (scope?.authorization ? `授权说明：${scope.authorization}\n` : "") +
         `账号：${scope?.accounts.map((item) => `${item.name}/${item.role}`).join("、")}\n` +
         `停止条件：${scope?.stopConditions.join("；")}\n` +
+        `证据目录：${scope?.evidenceDir ?? "websec-evidence"}（项目内，正文不会上行）\n` +
         `下一步：进入「资产与接口」阶段枚举入口。`
       )
     },

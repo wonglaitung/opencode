@@ -91,6 +91,14 @@ export function getEdgeDebugController(directory: string): EdgeDebugController {
   sharedControllers.set(key, controller)
   return controller
 }
+/** 关闭并移除共享 controller；未创建过则返回 false。 */
+export async function disposeEdgeDebugController(directory: string): Promise<boolean> {
+  const key = resolve(directory)
+  const controller = sharedControllers.get(key)
+  if (!controller) return false
+  sharedControllers.delete(key)
+  return controller.stop()
+}
 
 export function createEdgeDebugController(directory: string): EdgeDebugController {
   let child: ChildProcess | null = null
@@ -237,7 +245,11 @@ export function createEdgeDebugController(directory: string): EdgeDebugControlle
       child = launchEdge(binary, { port: DEBUG_PORT, url, userDataDir })
       try {
         await waitForCdp(DEBUG_PORT)
-        await attach(DEBUG_PORT)
+        const client = await attach(DEBUG_PORT)
+        // 首次启动时页面可能在 Network.enable 之前就开始加载；attach 后再导航一次，
+        // 保证 websec 能拿到 Document/API 的完整请求日志。
+        await client.call("Page.enable")
+        await client.call("Page.navigate", { url })
       } catch (error) {
         killProcessTree(child)
         child = null

@@ -100,6 +100,20 @@ describe("websec 工作流", () => {
             environment: "staging",
             accounts: [{ name: "u1", role: "user" }],
             stopConditions: ["触发告警"],
+            evidence_dir: "../outside",
+            developer_confirmed: true,
+          } as never,
+          c,
+        ),
+      ).rejects.toThrow(/evidence_dir/)
+
+      await expect(
+        hooks.tool!.websec_scope!.execute(
+          {
+            target: "https://example.test",
+            environment: "staging",
+            accounts: [{ name: "u1", role: "user" }],
+            stopConditions: ["触发告警"],
             developer_confirmed: true,
           } as never,
           c,
