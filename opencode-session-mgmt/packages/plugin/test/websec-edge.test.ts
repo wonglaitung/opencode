@@ -116,6 +116,7 @@ describe("websec_edge_capture", () => {
         await tools.websec_edge_capture!.execute({ action: "start", mode: "normal" } as never, ctx),
       )
       expect(started).toContain("普通测试")
+      expect(started).toContain("本次录入已完成")
       expect(store.get("s1")!.workflow!.websec?.testMode).toBe("normal")
       expect(store.get("s1")!.workflow!.websec?.edge?.started).toBe(true)
 
@@ -182,6 +183,7 @@ describe("websec_edge_capture", () => {
         await tools.websec_edge_capture!.execute({ action: "start", mode: "authz" } as never, ctx),
       )
       expect(started).toContain("越权测试")
+      expect(started).toContain("本次录入已完成")
       expect(store.get("s1")!.workflow!.websec?.testMode).toBe("authz")
 
       await expect(
@@ -204,9 +206,11 @@ describe("websec_edge_capture", () => {
         ),
       ).resolves.toContain("baseline")
 
-      await expect(
-        tools.websec_edge_capture!.execute({ action: "switch_identity" } as never, ctx),
-      ).resolves.toContain("高权账号")
+      const switched = String(
+        await tools.websec_edge_capture!.execute({ action: "switch_identity" } as never, ctx),
+      )
+      expect(switched).toContain("高权账号")
+      expect(switched).toContain("本次录入已完成")
       expect(getCleared()).toBe(1)
       expect(getClearedNetworkLogs()).toBe(1)
 

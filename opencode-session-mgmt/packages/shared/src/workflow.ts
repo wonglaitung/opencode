@@ -1169,22 +1169,27 @@ export const WEBSEC = defineWorkflow({
     {
       id: "websec-r21",
       stage: "global",
-      text: "普通测试：start(mode=normal) 打开目标，请用户登录并操作；用户说完成后 capture(phase=single) 采集证据，再 finish；finish 前不要生成报告。",
+      text: "普通测试：start(mode=normal) 打开目标，请用户登录并操作；用户说「本次录入已完成」后 capture(phase=single) 采集证据，再 finish；finish 前不要生成报告。",
     },
     {
       id: "websec-r22",
       stage: "global",
-      text: "越权测试：start(mode=authz) 后，先用普通/低权账号操作并 capture(phase=baseline)；调用 switch_identity 清除登录态，请用户用高权账号重新登录并走同样流程，再 capture(phase=privileged)；最后 finish，并用 websec_authz_compare 对比两组证据。",
+      text: "越权测试：start(mode=authz) 后，先用普通/低权账号操作，用户说「本次录入已完成」后 capture(phase=baseline)；调用 switch_identity 清除登录态，请用户用高权账号重新登录并走同样流程，用户再次说「本次录入已完成」后 capture(phase=privileged)；最后 finish，并用 websec_authz_compare 对比两组证据。",
     },
     {
       id: "websec-r23",
       stage: "global",
-      text: "越权测试至少需要两个账号/角色；切换身份后必须重新登录，不得沿用上一个账号的 Cookie。用户说完成前不要出报告；越权 confirmed 必须同时引用 baseline 与 privileged 证据，普通测试 confirmed 必须有正文证据。",
+      text: "越权测试至少需要两个账号/角色；切换身份后必须重新登录，不得沿用上一个账号的 Cookie。用户说「本次录入已完成」前不要出报告；越权 confirmed 必须同时引用 baseline 与 privileged 证据，普通测试 confirmed 必须有正文证据。",
     },
     {
       id: "websec-r24",
       stage: "global",
       text: "完成前必须录入预估工时：若尚未录入，先问开发者「预估 xx 小时」并调用 workflow_baseline(developer_confirmed=true)；未录入时 review_submit 会被拦截。",
+    },
+    {
+      id: "websec-r25",
+      stage: "global",
+      text: "完成口令统一为「本次录入已完成」；用户只说「完成」时先问「本次录入是否已完成？」，不要直接 capture 或 finish。",
     },
   ],
 })

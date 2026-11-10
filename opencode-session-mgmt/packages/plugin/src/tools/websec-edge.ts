@@ -143,8 +143,8 @@ export function createWebsecEdgeTools(
   const websec_edge_capture = tool({
     description:
       "通过 Edge/CDP 进行模式化安全自测。开始前先问用户：普通测试还是越权测试，然后 start(mode)。" +
-      "normal：用户操作后 capture；authz：普通账号 capture(baseline) → switch_identity → 高权账号 capture(privileged)。" +
-      "用户说完成后调用 finish，再生成报告。正文落本地，只返回摘要。需先记录 websec_scope。",
+      "normal：用户说「本次录入已完成」后 capture；authz：普通账号 capture(baseline) → switch_identity → 高权账号 capture(privileged)。" +
+      "用户说「本次录入已完成」后调用 finish，再生成报告。正文落本地，只返回摘要。需先记录 websec_scope。",
     args: {
       action: z
         .enum(["start", "capture", "switch_identity", "finish", "stop"])
@@ -216,8 +216,8 @@ export function createWebsecEdgeTools(
         })
         return `${message}\n本次模式：${modeLabel(saved.websec!.testMode!)}。${
           args.mode === "authz"
-            ? "请先用普通账号登录并操作，完成后说「普通账号完成」。"
-            : "请登录并操作，完成后说「完成」。"
+            ? "请先用普通账号登录并操作，完成后说「本次录入已完成」。"
+            : "请登录并操作，完成后说「本次录入已完成」。"
         }`
       }
 
@@ -249,7 +249,7 @@ export function createWebsecEdgeTools(
         }
         controller.clearNetworkLogs()
         const message = await controller.clearSession()
-        return `${message}\n请用高权账号登录并走与普通账号相同的流程，完成后说「高权账号完成」。`
+        return `${message}\n请用高权账号登录并走与普通账号相同的流程，完成后说「本次录入已完成」。`
       }
 
       if (args.action === "finish") {
