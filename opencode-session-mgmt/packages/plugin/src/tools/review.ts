@@ -43,6 +43,7 @@ const SECTION_CHANGES_RE = /^##\s*第二章\s*文档变更过程\s*$/
 const SERVICE_SECTION_RE = /^##\s/
 const CHANGE_ROW_RE = /^\|\s*1\.\d+\s*\|[^|]*\|[^|]*\|[^|]*\|[^|]*\|$/
 import { WorkflowOpError, applyTransition, recomputeCommit } from "../workflow-ops"
+import { coverageGaps, regressionGaps } from "./websec-state"
 import { projectRoot, resolveWithinWorktree } from "../fs-safe"
 
 const z = tool.schema
@@ -480,7 +481,13 @@ export function createReviewTools(store: Store, type?: WorkflowType): Record<str
         // 清单逐项写入：非 auto 取具名参数，auto 项（如 designRationale）置真（3.2 def 驱动）
         const failed: string[] = []
         for (const item of def.checklist) {
-          const value = item.auto ? true : (args as Record<string, boolean>)[item.key]
+          const value = item.auto
+            ? item.key === "coverageComplete"
+              ? coverageGaps(workflow.websec).length === 0
+              : item.key === "regressionComplete"
+                ? regressionGaps(workflow.websec).length === 0
+                : true
+            : (args as Record<string, boolean>)[item.key]
           review.checklist[item.key] = value === true
           if (value !== true) failed.push(item.key)
         }

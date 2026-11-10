@@ -24,6 +24,7 @@ import {
 import type { WebsecEvidence, WebsecPhase, WorkflowState } from "sm-shared"
 import type { Store } from "../db"
 import { WorkflowOpError } from "../workflow-ops"
+import { safeResponseHeaderRecord } from "./websec-headers"
 import {
   ensureEvidenceGitignore,
   evidenceSessionDir,
@@ -488,6 +489,7 @@ export function createWebsecEdgeTools(
           status: entry.status,
           mimeType: entry.mimeType,
           resourceType: entry.resourceType,
+          responseHeaders: safeResponseHeaderRecord(entry.responseHeaders),
           bodyPresent,
         })
         lines.push(`- [${entry.status}] ${entry.method} ${entry.url} → edge-${phase}-${entry.requestId}`)

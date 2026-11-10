@@ -20,6 +20,7 @@ import {
 } from "sm-shared"
 import type { Store } from "../db"
 import { WorkflowOpError, assertWorkflowNotComplete } from "../workflow-ops"
+import { coverageGaps, coverageSummary, regressionGaps, regressionSummary } from "./websec-state"
 import {
   ensureEvidenceGitignore,
   evidenceSessionDir,
@@ -102,8 +103,19 @@ function renderReportMarkdown(report: WebsecReport, state: WebsecState): string 
     `- 模式：${report.testMode ?? "未记录"}\n` +
     `- 结论：${report.verdict}\n` +
     `- 方法：${report.method}\n` +
-    `- 提交时间：${new Date(report.submittedAt).toISOString()}\n\n` +
+    `- 提交时间：${new Date(report.submittedAt).toISOString()}\n` +
+    `- 覆盖矩阵：${coverageSummary(state)}\n` +
+    `- 历史回归：${regressionSummary(state)}\n\n` +
     `## 发现\n\n${findings}\n` +
+    (report.regression?.length
+      ? `## 历史 finding 回归\n\n${report.regression
+          .map(
+            (item) =>
+              `- ${item.sourceFindingID} ${item.title}（${item.endpoint}）：${item.status}` +
+              `${item.evidenceRef ? `，证据 ${item.evidenceRef}` : ""}${item.note ? `，${item.note}` : ""}`,
+          )
+          .join("\n")}\n\n`
+      : "") +
     `## 局限与未覆盖项\n\n${report.limitations.length > 0 ? report.limitations.map((item) => `- ${item}`).join("\n") : "无"}\n\n` +
     `## 证据索引\n\n${evidence}\n`
   )
@@ -129,6 +141,7 @@ const evidence = z.object({
   mimeType: z.string().optional().describe("响应 MIME（可选）"),
   resourceType: z.string().optional().describe("CDP 资源类型（可选）"),
   bodyPresent: z.boolean().optional().describe("是否拿到了正文；false 表示仅元数据"),
+  response_headers: z.record(z.string(), z.string()).optional().describe("允许列表内的响应头（CORS/安全头等），不要传 Cookie/令牌"),
 })
 
 const finding = z.object({
@@ -235,6 +248,7 @@ export function createWebsecTools(store: Store, projectDir: string): Record<stri
           status: args.status,
           mimeType: args.mimeType,
           resourceType: args.resourceType,
+          responseHeaders: args.response_headers,
           bodyPresent: args.bodyPresent,
         }
         list.push(item)
@@ -278,6 +292,20 @@ export function createWebsecTools(store: Store, projectDir: string): Record<stri
           throw new WorkflowOpError("请先用 workflow_advance 进入「报告与修复」阶段，再提交报告")
         }
         assertWorkflowNotComplete(state, "重复提交报告")
+        const gaps = coverageGaps(base)
+        if (gaps.length > 0) {
+          throw new WorkflowOpError(
+            `覆盖矩阵未收口（${gaps.length} 项）：${gaps.slice(0, 8).join("；")}` +
+              `${gaps.length > 8 ? " 等" : ""}。请先补齐 websec_coverage。`,
+          )
+        }
+        const historical = regressionGaps(base)
+        if (historical.length > 0) {
+          throw new WorkflowOpError(
+            `历史 finding 未完成回归（${historical.length} 项）：${historical.slice(0, 8).join("；")}` +
+              `${historical.length > 8 ? " 等" : ""}。请用 websec_regression(action=record) 收口。`,
+          )
+        }
         const byId = new Map(base.evidence.map((item) => [item.id, item]))
         const findings: WebsecFinding[] = args.findings.map((item, index) => {
           const id = item.id ?? `f-${index + 1}`
@@ -313,10 +341,12 @@ export function createWebsecTools(store: Store, projectDir: string): Record<stri
             item.status === "confirmed" &&
             !base.edgeFallback &&
             primary.source !== "edge" &&
-            primary.source !== "anonymous-probe"
+            primary.source !== "anonymous-probe" &&
+            primary.source !== "http-check" &&
+            primary.source !== "write-probe"
           ) {
             throw new WorkflowOpError(
-              `发现 ${id} 的 confirmed 证据必须来自 Edge 走查或匿名只读探测；manual/curl 证据只能标 suspected 或走 fallback`,
+              `发现 ${id} 的 confirmed 证据必须来自 Edge 走查、匿名探测、只读配置检查或显式写探测；manual/curl 证据只能标 suspected 或走 fallback`,
             )
           }
           if (base.testMode === "normal" && item.status === "confirmed" && !primary.bodyPresent) {
@@ -364,6 +394,7 @@ export function createWebsecTools(store: Store, projectDir: string): Record<stri
           findings,
           limitations,
           verdict: args.verdict,
+          regression: base.regression,
           submittedAt: Date.now(),
           reportDir,
           markdownPath: join(reportDir, "report.md"),

@@ -390,7 +390,7 @@ flowchart LR
 | `workflow.stages.*.status` | `"not_started" \| "in_progress" \| "approved"` | 是 | 阶段状态。键随 `workflow.type` 的定义：sdlc 为 `requirements`/`design`/`implementation`/`testing`/`review`，reqdoc 为 `goal`/`rules`/`edge`/`prd`/`review`，websec 为 `scope`/`surface`/`checks`/`verify`/`report`，task 为单阶段 `execute` |
 | `workflow.stages.*.revision` | number | 是 | 阶段回退次数（需求质量信号） |
 | `workflow.stages.*.transitions` | array | 是 | 阶段转换时间戳序列（耗时统计的数据源），`action ∈ {"enter","revisit","approve"}`，`note` 可选 |
-| `workflow.stages.review.checklist` | 四项 boolean | 是 | 审查清单，键随工作流类型：sdlc 为 `businessIntent`/`logicExplainable`/`behaviorVerifiable`/`designRationale`；reqdoc 为 `completeness`/`clarity`/`edgeCoverage`/`resolution`（审查阶段键为 `review`）；websec 为 `scopeAuthorized`/`surfaceCovered`/`checksEvidenced`/`falsePositiveReviewed`/`remediationActionable`（审查阶段键为 `report`）。task 无审查阶段，不携带本字段 |
+| `workflow.stages.review.checklist` | 四项 boolean | 是 | 审查清单，键随工作流类型：sdlc 为 `businessIntent`/`logicExplainable`/`behaviorVerifiable`/`designRationale`；reqdoc 为 `completeness`/`clarity`/`edgeCoverage`/`resolution`（审查阶段键为 `review`）；websec 为 `scopeAuthorized`/`surfaceCovered`/`checksEvidenced`/`coverageComplete`/`regressionComplete`/`falsePositiveReviewed`/`remediationActionable`（审查阶段键为 `report`）。task 无审查阶段，不携带本字段 |
 | `workflow.stages.review.comprehension` | `{total, confirmed}` | 是 | 理解确认总数与已确认数（sdlc 为代码片段、reqdoc 为 PRD 要点；websec 不要求片段确认，恒为 `{total:0, confirmed:0}`；不携带正文） |
 | `workflow.commit.status` | `"blocked" \| "allowed"` | 是 | 提交门禁状态。reqdoc/websec 无 git 门禁，但该字段同样随阶段完成度更新——全部阶段 approved 后为 `"allowed"`，作为 task/sdlc/reqdoc/websec 通用的完结口径（7.2 `completed`） |
 | `workflow.commit.blocked_by` | string[] | 是 | 未完成阶段列表 |

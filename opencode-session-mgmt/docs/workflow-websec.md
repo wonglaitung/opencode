@@ -1,7 +1,7 @@
 # 工作流四：websec（轻量级 WEB 安全测试）
 
 > 面向开发者的安全自测工作流：先确认范围与边界，再由用户在 Edge 中走一遍页面/操作流程，Agent 基于捕获内容做只读/低风险检查、取证定级并输出可修复报告。内部开发自测不需要工单、邮件或合同，只需确认目标属于你负责或获准自测的范围。
-> 默认只读；写/破坏性动作必须显式授权并逐次确认。无证据结论不得标 confirmed。
+> 默认只读；写/破坏性动作必须显式授权并逐次确认。无证据结论不得标 confirmed。除 Edge 走查外，还要求入口 × 检查类别的覆盖矩阵、历史 finding 回归，并允许在授权后用只读 HTTP 配置检查和单次写探测补充证据。
 
 ## 1. 定位与边界
 
@@ -25,13 +25,17 @@ websec 不是自动化扫描器，也不替代专业渗透测试。它把“人�
 | `verify` | 验证与定级 | 复现、取证、排除误报并定级 |
 | `report` | 报告与修复 | 输出结构化报告并经开发者确认 |
 
-审查阶段为 `report`，清单五项：
+审查阶段为 `report`，清单七项：
 
 - `scopeAuthorized`：测试范围与边界已确认；
 - `surfaceCovered`：入口与接口已覆盖；
 - `checksEvidenced`：每项结论有证据；
+- `coverageComplete`：入口 × 检查类别覆盖矩阵已收口（自动项）；
+- `regressionComplete`：历史 finding 已逐条回归（自动项）；
 - `falsePositiveReviewed`：误报已复核；
 - `remediationActionable`：修复建议可执行。
+
+覆盖矩阵的必检类别为 `authn`、`authz`、`input`、`cors`、`headers`、`options`、`export`、`debug`、`logic`；不适用时也必须显式标 `not_applicable` 并写理由。
 
 `hasCommitGate=false`，不参与 git 提交门禁。`requiresComprehension=false`：报告由结构化 `websec_report` 承担，不要求代码片段理解确认。
 
@@ -40,7 +44,12 @@ websec 不是自动化扫描器，也不替代专业渗透测试。它把“人�
 | 工具 | 阶段 | 作用 |
 |------|------|------|
 | `websec_scope` | `scope` | 记录范围与边界；可选 `evidence_dir` 指定项目内证据目录（默认 `websec-evidence`）；必须 `developer_confirmed=true` |
-| `websec_evidence` | `checks` / `verify` | 登记补充证据索引：URL、方法、身份、时间、哈希、本地路径；只存元数据，不存正文；`source=manual` |
+| `websec_evidence` | `checks` / `verify` | 登记补充证据索引：URL、方法、身份、时间、哈希、本地路径、允许列表响应头；只存元数据，不存正文；`source=manual` |
+| `websec_surface` | `surface` | 登记/补全入口清单；`sync_edge=true` 同步 Edge/匿名/HTTP 证据，`entries` 补充源码路由或人工入口；自动生成必检类别覆盖记录 |
+| `websec_coverage` | `surface` / `checks` | 写入入口 × 类别覆盖结果；`tested`/`finding` 必须引用已登记证据，`not_applicable` 必须写理由 |
+| `websec_regression` | `checks` / `verify` | `load` 扫描历史 `report.json` 生成回归清单；`record` 登记 `still_present`/`fixed`/`not_applicable`，未收口阻止报告 |
+| `websec_config_check` | `checks` | 只读配置检查：同源无 Cookie GET + OPTIONS，采集 CORS/安全头/方法；需开发者授权；自动登记 `cors`/`headers`/`options` 覆盖 |
+| `websec_write_probe` | `checks` | 显式授权后的单次 POST/PUT/PATCH，无 DELETE、无批量；URL 必须已登记；记录授权说明与证据 |
 | `websec_report` | `report` | 提交结构化报告并写入项目内 `report.md` / `report.json`；每条 finding 必须引用已登记 `evidenceRef`；`verdict=passed` 时不得有 findings |
 | `websec_edge_capture` | `surface` / `checks` | 必选：`start(mode)` 打开 Edge，用户走查后 `capture`；普通测试 `single`，越权测试 `baseline/privileged` + `switch_identity`；`finish` 确认完成，`stop` 关闭；只回摘要；`fallback` 仅限 Edge 启动失败且用户确认 |
 | `websec_anonymous_probe` | `checks` | 对 Edge 已捕获的 GET/HEAD 端点做无 Cookie 匿名只读探测；需开发者授权；不发写操作；不要求用户退出登录重走页面 |
@@ -57,18 +66,22 @@ Edge/CDP 是默认必经能力：`websec_edge_capture` 复用 `edge-debug-core` 
 | `websec_edge_capture(start)` | 已有 scope；模式已确认；越权需两个角色 | 打开 Edge；下一步 `enter surface`，用户开始走查 |
 | `workflow_advance(enter surface)` | scope + 模式 + Edge 已启动或 fallback | 自动确认 scope；`surface` 进行中 |
 | `websec_edge_capture(capture)` | Edge 已启动；用户说「本次录入已完成」 | 采集页面/接口证据；下一步 `finish` |
-| `websec_edge_capture(finish)` | 普通测试有 single 证据；越权有 baseline/privileged | 采集完成；询问是否匿名探测；下一步 `approve surface` |
+| `websec_edge_capture(finish)` | 普通测试有 single 证据；越权有 baseline/privileged | 采集完成；询问是否匿名探测；下一步 `websec_surface(sync_edge=true)` 固化入口 |
 | `websec_anonymous_probe` | 已 capture；开发者授权；有已捕获 GET/HEAD | 无 Cookie 只读探测；不要求用户重走页面 |
+| `websec_surface` | 已有 scope；有 Edge 证据或手工入口 | 生成入口清单和必检类别；下一步 `websec_coverage` |
+| `websec_config_check` | 已有入口清单；开发者确认只读 | 同源 GET/OPTIONS 配置检查；自动收口 CORS/安全头/OPTIONS |
+| `websec_write_probe` | 开发者逐次授权；URL 已登记；测试数据可丢弃 | 单次写探测；记录授权与证据；下一步人工确认数据影响 |
+| `websec_regression(load)` | 存在历史 `websec-evidence/*/report.json` | 加载历史 finding；下一步逐条 `record` |
 | `workflow_advance(approve surface)` | 有 Edge 证据或 fallback | `surface` 完成；下一步 `enter checks` |
 | `workflow_advance(enter checks)` | Edge/fallback + surface 证据 | 自动确认 surface；`checks` 进行中 |
-| `workflow_advance(approve checks)` | 已检查采集内容 | 下一步 `enter verify` |
+| `workflow_advance(approve checks)` | 已检查采集内容且覆盖矩阵无未收口项 | 下一步 `enter verify` |
 | `workflow_advance(enter/approve verify)` | checks 完成 | 复现/定级；下一步 `enter report` |
-| `websec_report` | verify 完成；report 进行中；Edge 已 finish 或 fallback | 写入 `report.md` / `report.json`；下一步 `review_submit` |
+| `websec_report` | verify 完成；report 进行中；Edge 已 finish 或 fallback；覆盖/回归已收口 | 写入 `report.md` / `report.json`；下一步 `review_submit` |
 | `review_submit` | 前序阶段全部完成 + 报告 + 基线工时 | 定稿完成，返回报告绝对路径 |
 | `fallback` | `start` 已失败且存在 `edgeError`；开发者确认 | 允许 manual 证据；报告限制写明原因 |
 | `workflow_revisit` | 任意阶段 | 回退该阶段，级联回退下游 |
 
-报告门禁：必须先启动 Edge、用户走查并 `finish` 才能提交报告；`confirmed` 必须引用 `source=edge` 或 `source=anonymous-probe` 证据（fallback 除外）；越权 `confirmed` 必须同时引用 baseline/privileged 证据，普通测试 `confirmed` 必须有正文证据。
+报告门禁：必须先启动 Edge、用户走查并 `finish` 才能提交报告；`confirmed` 必须引用 `source=edge`、`anonymous-probe`、`http-check` 或 `write-probe` 证据（fallback 除外）；越权 `confirmed` 必须同时引用 baseline/privileged 证据，普通测试 `confirmed` 必须有正文证据。存在 `websec.surface` 时，覆盖矩阵未收口不能提交报告；存在 `websec.regression` 时，历史 finding 未逐条回归不能提交报告。
 
 所有测试产物必须落在项目内 `<项目>/websec-evidence/<sessionID>/`；`websec_report` 同时写入 `report.md` 和 `report.json`。工作流完成时最终回复必须原样告知这两个文件的绝对路径。
 
@@ -81,12 +94,14 @@ Edge/CDP 是默认必经能力：`websec_edge_capture` 复用 `edge-debug-core` 
 - 必须先问「普通测试还是越权测试」并启动 Edge；用户在 Edge 中走完流程后，普通测试做一轮采集（single），越权测试做 baseline/privileged 两轮采集。这里的 single/baseline/privileged 是采集阶段，不是工作流五阶段。
 - 越权测试切换身份后必须重新登录，不能沿用上一个账号的 Cookie。
 - 只测试你负责或获准自测的目标；默认只读（GET/HEAD/OPTIONS）。
-- 写操作、删除、批量提交、爆破、越权写、上传利用须开发者显式授权并逐次确认。
+- 写操作、删除、批量提交、爆破、越权写、上传利用须开发者显式授权并逐次确认；写探测只允许用 `websec_write_probe` 执行一次 POST/PUT/PATCH，禁止 DELETE。
 - 越权至少需要两个身份对照；只有一个身份时只能标 `suspected`。
 - 没有请求/响应、身份、时间与复现步骤的结论不得标 `confirmed`。
 - 发现越界、真实数据影响、告警或可用性风险时立即停止并回报。
 - 报告敏感信息脱敏；证据正文留在本地，不上行。
 - capture 后询问是否授权匿名只读探测；未授权时在 limitations 写明。
+- 每个入口的 9 个必检类别都要收口；不适用也要标 `not_applicable` 并写理由。
+- 开始 checks 前加载历史 finding 并逐条回归；修复后复测也走新会话，历史回归在 checks/verify 收口。
 
 ## 5. 数据与隐私
 
@@ -94,8 +109,12 @@ Edge/CDP 是默认必经能力：`websec_edge_capture` 复用 `edge-debug-core` 
 
 - `scope`：目标、环境、账号代号/角色、时间窗、限速、停止条件、证据目录（`evidenceDir`）；
 - `testMode` / `edge` / `edgeError` / `edgeFallback`：普通/越权模式、Edge start/finish 状态、启动失败原因与显式降级；
-- `evidence[]`：证据 id、URL、方法、身份、阶段（single/baseline/privileged/anonymous）、来源（edge/anonymous-probe/manual）、采集时间、哈希、本地路径、备注、状态码/正文有无；
-- `report`：方法、findings、局限性、结论、提交时间，以及项目内 `reportDir` / `markdownPath` / `jsonPath`。
+- `surface[]`：入口 id、method、path、来源（edge/source/manual 等）、身份、参数、是否需要认证；
+- `coverage[]`：入口 × 类别的状态（not_checked/tested/finding/not_applicable）、证据引用与理由；
+- `regression[]`：历史 finding 来源、标题、端点、严重度、复测状态、证据引用与理由；
+- `writeAuthorization`：写探测的授权说明与确认时间；
+- `evidence[]`：证据 id、URL、方法、身份、阶段（single/baseline/privileged/anonymous）、来源（edge/anonymous-probe/http-check/write-probe/manual）、采集时间、哈希、本地路径、备注、状态码/正文有无、允许列表内的响应头（CORS/安全头等，不含 Cookie 原值）；
+- `report`：方法、findings、历史回归、局限性、结论、提交时间，以及项目内 `reportDir` / `markdownPath` / `jsonPath`。
 
 不存请求/响应正文、Cookie、令牌、真实用户数据。汇报投影（`WorkflowSummary`）不包含 `websec` 字段，收集端无需数据库迁移。
 
@@ -158,7 +177,7 @@ websec 模式会保留同源 2xx 页面/接口、3xx 和 4xx/5xx，缓冲 500 �
 - 越权测试：每个阶段结束都说 `本次录入已完成`；也可说 `切换到高权账号阶段`
 - 允许一次低风险写操作：`允许对 /api/profile 执行一次 POST 测试，其它写操作不允许。`
 - 标记证据不足：`这条没有两个身份对照，只能标 suspected，不要标 confirmed。`
-- 定稿：`报告没问题，五项清单都确认，提交审查。`
+- 定稿：`报告没问题，七项清单都确认，提交审查。`
 
 ### 7.4 完成之后
 

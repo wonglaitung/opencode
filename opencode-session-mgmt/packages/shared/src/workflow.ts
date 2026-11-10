@@ -159,6 +159,99 @@ export const WEBSEC_SEVERITY_LABELS: Record<WebsecSeverity, string> = {
 export const WEBSEC_FINDING_STATUS_KEYS = ["confirmed", "suspected"] as const
 export type WebsecFindingStatus = (typeof WEBSEC_FINDING_STATUS_KEYS)[number]
 
+/** 覆盖矩阵的检查类别：比 finding 类别更细，用于证明“每个入口都看过这些面”。 */
+export const WEBSEC_CHECK_CATEGORY_KEYS = [
+  "authn",
+  "authz",
+  "input",
+  "cors",
+  "headers",
+  "options",
+  "export",
+  "debug",
+  "logic",
+  "other",
+] as const
+export type WebsecCheckCategory = (typeof WEBSEC_CHECK_CATEGORY_KEYS)[number]
+export const WEBSEC_CHECK_CATEGORY_LABELS: Record<WebsecCheckCategory, string> = {
+  authn: "身份认证",
+  authz: "授权/IDOR",
+  input: "输入处理",
+  cors: "跨域 CORS",
+  headers: "安全响应头",
+  options: "OPTIONS/方法",
+  export: "导出/下载",
+  debug: "调试/开发端点",
+  logic: "业务逻辑",
+  other: "其他",
+}
+
+/** 默认必须覆盖的类别；不适用时也必须显式标 not_applicable 并写理由。 */
+export const WEBSEC_REQUIRED_CHECK_CATEGORY_KEYS = [
+  "authn",
+  "authz",
+  "input",
+  "cors",
+  "headers",
+  "options",
+  "export",
+  "debug",
+  "logic",
+] as const
+
+export const WEBSEC_CHECK_STATUS_KEYS = ["not_checked", "tested", "finding", "not_applicable"] as const
+export type WebsecCheckStatus = (typeof WEBSEC_CHECK_STATUS_KEYS)[number]
+
+export const WEBSEC_SURFACE_SOURCE_KEYS = ["edge", "anonymous-probe", "http-check", "write-probe", "source", "manual"] as const
+export type WebsecSurfaceSource = (typeof WEBSEC_SURFACE_SOURCE_KEYS)[number]
+
+/** 资产/接口清单：Edge 走查、源码路由、人工补充三方合并。 */
+export interface WebsecSurfaceEntry {
+  id: string
+  method: string
+  endpoint: string
+  source: WebsecSurfaceSource
+  identity?: string
+  params?: string[]
+  requiresAuth?: "yes" | "no" | "unknown"
+  note?: string
+  addedAt: number
+}
+
+/** 单个入口 × 单个检查类别的覆盖记录。 */
+export interface WebsecCoverageEntry {
+  id: string
+  surfaceRef: string
+  category: WebsecCheckCategory
+  status: WebsecCheckStatus
+  evidenceRefs: string[]
+  note?: string
+  checkedAt: number
+}
+
+export const WEBSEC_REGRESSION_STATUS_KEYS = ["not_retested", "still_present", "fixed", "not_applicable"] as const
+export type WebsecRegressionStatus = (typeof WEBSEC_REGRESSION_STATUS_KEYS)[number]
+
+/** 历史 finding 的回归记录；新测试必须逐条复测或显式说明不适用。 */
+export interface WebsecRegressionEntry {
+  id: string
+  sourceSessionID: string
+  sourceFindingID: string
+  title: string
+  endpoint: string
+  severity: WebsecSeverity
+  status: WebsecRegressionStatus
+  evidenceRef?: string
+  note?: string
+  checkedAt?: number
+}
+
+/** 显式授权的写操作记录（仅存说明与时间，不存 Cookie/令牌）。 */
+export interface WebsecWriteAuthorization {
+  note: string
+  confirmedAt: number
+}
+
 /** 开发自测模式：normal=普通单账号；authz=双角色越权。 */
 export type WebsecTestMode = "normal" | "authz"
 
@@ -204,8 +297,8 @@ export interface WebsecEvidence {
   identity?: string
   /** 证据所属阶段（普通/基线/高权）。 */
   phase?: WebsecPhase
-  /** 证据来源：edge=浏览器走查；anonymous-probe=无 Cookie 只读探测；manual=手工补充。 */
-  source?: "edge" | "anonymous-probe" | "manual"
+  /** 证据来源：edge=浏览器走查；anonymous-probe=无 Cookie 只读探测；http-check=只读配置探测；write-probe=显式授权写探测；manual=手工补充。 */
+  source?: "edge" | "anonymous-probe" | "http-check" | "write-probe" | "manual"
   capturedAt?: number
   hash: string
   localPath?: string
@@ -214,6 +307,8 @@ export interface WebsecEvidence {
   status?: number
   mimeType?: string
   resourceType?: string
+  /** 允许列表内的响应头（CORS/安全头/Cookie 属性等），不存请求 Cookie/令牌。 */
+  responseHeaders?: Record<string, string>
   /** 是否拿到了响应正文（false=仅元数据，不能作为 confirmed 的唯一证据）。 */
   bodyPresent?: boolean
 }
@@ -246,6 +341,8 @@ export interface WebsecReport {
   limitations: string[]
   verdict: "passed" | "issues_found"
   submittedAt: number
+  /** 本次报告对历史 finding 的回归结果。 */
+  regression?: WebsecRegressionEntry[]
   /** 项目内报告目录与文件路径（绝对路径）。 */
   reportDir?: string
   markdownPath?: string
@@ -264,6 +361,14 @@ export interface WebsecState {
   edge?: WebsecEdgeState
   edgeError?: string
   edgeFallback?: WebsecEdgeFallback
+  /** 资产/接口清单（Edge + 源码 + 人工）。 */
+  surface?: WebsecSurfaceEntry[]
+  /** 入口 × 类别的覆盖矩阵。 */
+  coverage?: WebsecCoverageEntry[]
+  /** 历史 finding 回归清单。 */
+  regression?: WebsecRegressionEntry[]
+  /** 显式写操作授权记录。 */
+  writeAuthorization?: WebsecWriteAuthorization
   evidence: WebsecEvidence[]
   report?: WebsecReport
 }
@@ -1091,6 +1196,8 @@ export const WEBSEC = defineWorkflow({
     { key: "scopeAuthorized", label: "测试范围与边界已确认" },
     { key: "surfaceCovered", label: "入口与接口已覆盖" },
     { key: "checksEvidenced", label: "每项结论有证据" },
+    { key: "coverageComplete", label: "入口 × 检查类别覆盖矩阵已收口", auto: true },
+    { key: "regressionComplete", label: "历史 finding 已复测收口", auto: true },
     { key: "falsePositiveReviewed", label: "误报已复核" },
     { key: "remediationActionable", label: "修复建议可执行" },
   ],
@@ -1134,17 +1241,17 @@ export const WEBSEC = defineWorkflow({
     {
       id: "websec-r8",
       stage: "surface",
-      text: "资产与接口阶段必须先打开 Edge：询问普通/越权模式并调用 websec_edge_capture(start)，请用户在 Edge 中登录并完整走一遍页面/操作流程；用户说「本次录入已完成」后 capture。capture 前禁止用 curl、源码或静态分析替代用户走查；所有测试产物必须落在项目内的 websec-evidence/<sessionID>/。记录每个入口的来源（runtime/manual）与身份标签；不越界爬取，排除 logout/delete/export 等破坏性链接。",
+      text: "资产与接口阶段必须先打开 Edge：询问普通/越权模式并调用 websec_edge_capture(start)，请用户在 Edge 中登录并完整走一遍页面/操作流程；用户说「本次录入已完成」后 capture。capture 前禁止用 curl、源码或静态分析替代用户走查；Edge 走查完成后可补充源码路由和只读 HTTP 结果。所有测试产物必须落在项目内的 websec-evidence/<sessionID>/。记录每个入口的来源（edge/source/manual）与身份标签；不越界爬取，排除 logout/delete/export 等破坏性链接。",
     },
     {
       id: "websec-r9",
       stage: "surface",
-      text: "把入口整理为可检查清单（method/path/参数位置/身份/触发方式），作为 checks 的输入；覆盖不到的模块写入 limitations。",
+      text: "把入口整理为可检查清单（method/path/参数位置/身份/触发方式），用 websec_surface 登记：Edge 证据用 sync_edge=true，源码路由或人工补充传 entries；新增入口会自动生成必检类别。再用 websec_coverage 逐项标记 tested/finding/not_applicable（not_applicable 必须写理由）。覆盖不到的模块同时写入 limitations。",
     },
     {
       id: "websec-r10",
       stage: "checks",
-      text: "按清单做只读/低风险检查：鉴权（未授权访问、IDOR 读、角色矩阵）、输入（反射、报错、校验、上传类型）、配置（安全头、Cookie 属性、CORS、TLS、调试端点）、业务逻辑（轻量）。禁止爆破与破坏性 payload。",
+      text: "按覆盖矩阵做只读/低风险检查：鉴权（未授权访问、IDOR 读、角色矩阵）、输入（反射、报错、校验、上传类型）、配置（安全头、Cookie 属性、CORS、TLS、调试端点）、业务逻辑（轻量）。每个入口的每个必检类别都必须收口；禁止爆破与破坏性 payload。",
     },
     {
       id: "websec-r11",
@@ -1174,12 +1281,12 @@ export const WEBSEC = defineWorkflow({
     {
       id: "websec-r16",
       stage: "report",
-      text: "调用 websec_report 提交结构化报告；每条 finding 的 evidenceRef 必须指向已登记的 websec_evidence，confirmed 必须引用 Edge 证据（fallback 除外）。报告同时写入项目内 report.md 和 report.json；完成后必须明确告知开发者两个文件的绝对路径。无发现时 verdict=passed，并列出已检查项与局限。",
+      text: "调用 websec_report 提交结构化报告；每条 finding 的 evidenceRef 必须指向已登记的 websec_evidence，confirmed 必须引用 Edge、匿名探测、只读配置检查或显式写探测证据（fallback 除外）。报告同时写入项目内 report.md 和 report.json；完成后必须明确告知开发者两个文件的绝对路径。无发现时 verdict=passed，并列出已检查项与局限。",
     },
     {
       id: "websec-r17",
       stage: "report",
-      text: "review_submit 通过前，审查清单五项必须为 true，且前序阶段（scope/surface/checks/verify）全部 approved；报告阶段不可用 workflow_advance 自行 approve。",
+      text: "review_submit 通过前，审查清单七项必须为 true（coverageComplete/regressionComplete 为自动项），且前序阶段（scope/surface/checks/verify）全部 approved；报告阶段不可用 workflow_advance 自行 approve。",
     },
     {
       id: "websec-r18",
@@ -1189,12 +1296,12 @@ export const WEBSEC = defineWorkflow({
     {
       id: "websec-r20",
       stage: "global",
-      text: "本工作流要求 Edge 用户走查：scope 完成后必须询问普通测试还是越权测试，并调用 websec_edge_capture(start, mode=...) 打开 Edge；用户走完流程并说「本次录入已完成」后 capture。禁止用 curl、源码或静态分析替代用户走查。只有 Edge 启动失败且用户明确同意时才调用 fallback，并在报告 limitations 中记录原因。所有测试产物必须写入项目内 websec-evidence/<sessionID>/。",
+      text: "本工作流要求 Edge 用户走查：scope 完成后必须询问普通测试还是越权测试，并调用 websec_edge_capture(start, mode=...) 打开 Edge；用户走完流程并说「本次录入已完成」后 capture。禁止用 curl、源码或静态分析替代用户走查；Edge 完成后可补充源码路由和只读 HTTP 配置检查。只有 Edge 启动失败且用户明确同意时才调用 fallback，并在报告 limitations 中记录原因。所有测试产物必须写入项目内 websec-evidence/<sessionID>/。",
     },
     {
       id: "websec-r21",
       stage: "global",
-      text: "普通测试：start(mode=normal) 打开目标，请用户在 Edge 中登录并走完页面/操作流程；在用户说「本次录入已完成」前不要做静态检查或 curl；随后 capture(phase=single) 采集证据，再 finish。",
+      text: "普通测试：start(mode=normal) 打开目标，请用户在 Edge 中登录并走完页面/操作流程；在用户说「本次录入已完成」前不要做静态检查或 curl；随后 capture(phase=single) 采集证据，再 finish；之后用 websec_surface(sync_edge=true) 固化入口清单。",
     },
     {
       id: "websec-r22",
@@ -1225,6 +1332,21 @@ export const WEBSEC = defineWorkflow({
       id: "websec-r27",
       stage: "global",
       text: "capture 完成后询问开发者是否授权做匿名只读探测；同意后调用 websec_anonymous_probe(developer_confirmed=true)，只对已捕获的 GET/HEAD 端点发无 Cookie 请求，不发写操作。匿名探测不要求用户退出登录重走完整页面；未授权时在报告 limitations 写明未覆盖。匿名 2xx/3xx 说明可能存在未授权访问，需结合正文确认。",
+    },
+    {
+      id: "websec-r28",
+      stage: "global",
+      text: "开始 checks 前调用 websec_regression(action=load) 加载历史报告中的 finding；每条必须用 websec_regression(action=record) 标 still_present/fixed/not_applicable，still_present/fixed 必须引用本轮证据，not_applicable 必须写理由。未收口时报告会被拦截。",
+    },
+    {
+      id: "websec-r29",
+      stage: "checks",
+      text: "配置检查优先调用 websec_config_check(developer_confirmed=true)：只对 scope 同源且已登记入口发无 Cookie GET 与 OPTIONS，采集 CORS、安全头和方法允许情况，并自动把 cors/headers/options 写入覆盖矩阵。发现 CORS 通配、缺安全头、危险方法时改为 finding 并补证据。",
+    },
+    {
+      id: "websec-r30",
+      stage: "checks",
+      text: "写探测只能使用 websec_write_probe，且必须在开发者逐次明确授权后调用：单次 POST/PUT/PATCH，禁止 DELETE、批量、爆破或真实用户数据；url 必须已登记；执行后按授权说明清理测试数据。未授权写操作一律不做。",
     },
   ],
 })

@@ -225,7 +225,7 @@ describe("WorkflowDefinition 注册表（3.2）", () => {
     expect(getDefinition("websec")).toBe(WEBSEC)
   })
 
-  test("WEBSEC 定义：五阶段、report 审查、无提交门禁、不要求片段确认", () => {
+  test("WEBSEC 定义：五阶段、report 审查、无提交门禁、不要求片段确认、覆盖与回归清单", () => {
     expect(WEBSEC.stages).toEqual(["scope", "surface", "checks", "verify", "report"])
     expect(WEBSEC.reviewStage).toBe("report")
     expect(WEBSEC.hasCommitGate).toBe(false)
@@ -234,8 +234,14 @@ describe("WorkflowDefinition 注册表（3.2）", () => {
       "scopeAuthorized",
       "surfaceCovered",
       "checksEvidenced",
+      "coverageComplete",
+      "regressionComplete",
       "falsePositiveReviewed",
       "remediationActionable",
+    ])
+    expect(WEBSEC.checklist.filter((item) => item.auto).map((item) => item.key)).toEqual([
+      "coverageComplete",
+      "regressionComplete",
     ])
     expect(WEBSEC.rules.find((rule) => rule.id === "websec-r1")?.stage).toBe("scope")
     expect(WEBSEC.rules.find((rule) => rule.id === "websec-r19")?.text).toContain("/new")

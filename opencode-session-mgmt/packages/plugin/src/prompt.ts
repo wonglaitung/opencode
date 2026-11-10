@@ -26,6 +26,7 @@ import type { Store } from "./db"
 import { isComplete, workflowDurationMs } from "./stats"
 import { loadWorkflowConventions } from "./conventions"
 import { getStuckFiles } from "./tools/quality"
+import { coverageSummary, regressionSummary } from "./tools/websec-state"
 
 /** 独立 code_review 子任务的注入规则（仅 TASK 的 code_review 分类）。 */
 const TASK_CODE_REVIEW_GUIDANCE = [
@@ -381,6 +382,9 @@ export function buildStateBar(workflow: WorkflowState, stage: string | null): st
         `范围：${workflow.websec.scope.target}（${workflow.websec.scope.environment}） · ` +
           `账号：${workflow.websec.scope.accounts.map((item) => `${item.name}/${item.role}`).join("、")}`,
       )
+    }
+    if (workflow.websec.surface?.length || workflow.websec.regression?.length) {
+      lines.push(`覆盖：${coverageSummary(workflow.websec)} · 回归：${regressionSummary(workflow.websec)}`)
     }
   }
   // 知识库覆盖（重构 2c）：槽位覆盖率 + 开放项全部由服务端派生，不再展示打分卡/探针/渲染校验

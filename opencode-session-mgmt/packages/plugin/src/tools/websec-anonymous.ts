@@ -7,6 +7,7 @@ import { createHash } from "node:crypto"
 import type { WebsecEvidence, WorkflowState } from "sm-shared"
 import type { Store } from "../db"
 import { WorkflowOpError } from "../workflow-ops"
+import { safeResponseHeaders } from "./websec-headers"
 import { ensureEvidenceGitignore, evidenceSessionDir, resolveEvidenceRoot, safeName, writeEvidenceFile } from "./websec-paths"
 
 const z = tool.schema
@@ -112,6 +113,7 @@ export function createWebsecAnonymousTool(
           note: "无 Cookie 匿名只读探测",
           status: response.status,
           mimeType: response.headers.get("content-type") ?? undefined,
+          responseHeaders: safeResponseHeaders(response.headers),
           bodyPresent: target.method !== "HEAD" && body.length > 0,
         }
         captured.push(evidence)

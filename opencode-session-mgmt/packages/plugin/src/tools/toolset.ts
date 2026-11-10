@@ -19,6 +19,8 @@ import { createTaskReviewTool } from "./task-review"
 import { createTaskScanTool } from "./task-scan"
 import { createWebsecAnonymousTool } from "./websec-anonymous"
 import { createWebsecEdgeTools } from "./websec-edge"
+import { createWebsecHttpTools } from "./websec-http"
+import { createWebsecSurfaceTools } from "./websec-surface"
 import { createWebsecTools } from "./websec"
 import { createWorkflowStartTools } from "./workflow-start"
 import { createWorkflowTools } from "./workflow"
@@ -51,6 +53,8 @@ export function createToolset(input: Input): Record<string, ToolDefinition> {
     ...(def.type === "websec" ? createWebsecTools(input.store, input.projectDir) : {}),
     ...(def.type === "websec" ? createWebsecEdgeTools(input.store, input.projectDir) : {}),
     ...(def.type === "websec" ? createWebsecAnonymousTool(input.store, input.projectDir) : {}),
+    ...(def.type === "websec" ? createWebsecSurfaceTools(input.store, input.projectDir) : {}),
+    ...(def.type === "websec" ? createWebsecHttpTools(input.store, input.projectDir) : {}),
     open_ide: createOpenIdeTool(input.ideEntries, input.lockRegistry),
     ...createLockTools(input.lockRegistry),
   }
