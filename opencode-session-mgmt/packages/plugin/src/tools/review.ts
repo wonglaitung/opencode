@@ -367,6 +367,12 @@ export function createReviewTools(store: Store, type?: WorkflowType): Record<str
         if (def.type === "websec" && !workflow.websec?.report) {
           throw new WorkflowOpError("报告定稿前必须调用 websec_report 提交结构化报告")
         }
+        // websec 与 task 的基线门禁对齐：没有预估工时不得完成（否则提效率永远 N/A）。
+        if (def.type === "websec" && !workflow.baseline) {
+          throw new WorkflowOpError(
+            "WEB 安全测试完成前必须录入预估工时：请先询问开发者，并按其数字表述调用 workflow_baseline(developer_confirmed=true)。",
+          )
+        }
         // 知识库定稿门禁（2c）：旧打分卡/探针/渲染门禁已删除，kbGate 是唯一依据。
         if (def.type === "reqdoc") {
           const kb = workflow.kb

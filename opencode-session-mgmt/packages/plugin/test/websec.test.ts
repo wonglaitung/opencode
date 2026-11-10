@@ -22,6 +22,13 @@ function fakeClient(): PluginInput["client"] {
   } as unknown as PluginInput["client"]
 }
 
+function current(sessionID: string, messageID: string, text: string) {
+  return {
+    message: { id: messageID, sessionID, role: "user", time: { created: Date.now() } },
+    parts: [{ id: messageID, sessionID, messageID, type: "text", text }],
+  } as never
+}
+
 const prevHome = process.env.HOME
 let home = ""
 
@@ -201,6 +208,18 @@ describe("websec 工作流", () => {
           c,
         ),
       ).resolves.toContain("WEB 安全测试报告已提交")
+
+      await expect(
+        hooks.tool!.review_submit!.execute({ ...allChecked } as never, c),
+      ).rejects.toThrow(/预估工时/)
+
+      await hooks["chat.message"]!(
+        { sessionID, messageID: "m-est" },
+        current(sessionID, "m-est", "这是安全测试，预估 2 小时"),
+      )
+      await expect(
+        hooks.tool!.workflow_baseline!.execute({ estimated_hours: 2, developer_confirmed: true } as never, c),
+      ).resolves.toContain("已记录")
 
       await expect(
         hooks.tool!.review_submit!.execute({ ...allChecked } as never, c),
