@@ -119,6 +119,7 @@ describe("websec_edge_capture", () => {
       expect(started).toContain("本次录入已完成")
       expect(store.get("s1")!.workflow!.websec?.testMode).toBe("normal")
       expect(store.get("s1")!.workflow!.websec?.edge?.started).toBe(true)
+      expect(store.get("s1")!.workflow!.websec?.edge?.phase).toBe("single")
 
       const entry = makeEntry("n1", "http://127.0.0.1:18086/api/users/1")
       const body = '{"id":1,"name":"alice"}'
@@ -185,6 +186,7 @@ describe("websec_edge_capture", () => {
       expect(started).toContain("越权测试")
       expect(started).toContain("本次录入已完成")
       expect(store.get("s1")!.workflow!.websec?.testMode).toBe("authz")
+      expect(store.get("s1")!.workflow!.websec?.edge?.phase).toBe("baseline")
 
       await expect(
         tools.websec_edge_capture!.execute({ action: "capture", identity: "u1" } as never, ctx),
@@ -211,6 +213,7 @@ describe("websec_edge_capture", () => {
       )
       expect(switched).toContain("高权账号")
       expect(switched).toContain("本次录入已完成")
+      expect(store.get("s1")!.workflow!.websec?.edge?.phase).toBe("privileged")
       expect(getCleared()).toBe(1)
       expect(getClearedNetworkLogs()).toBe(1)
 

@@ -209,12 +209,14 @@ export function createWebsecEdgeTools(
             edge: {
               started: true,
               finished: base.edge?.finished ?? false,
+              phase: base.edge?.phase ?? (args.mode === "authz" ? "baseline" : "single"),
               startedAt: base.edge?.startedAt ?? Date.now(),
               finishedAt: base.edge?.finishedAt,
             },
           }
         })
-        return `${message}\n本次模式：${modeLabel(saved.websec!.testMode!)}。${
+        const phaseText = args.mode === "authz" ? "普通账号（baseline）" : "普通测试（single）"
+        return `${message}\n本次模式：${modeLabel(saved.websec!.testMode!)}。当前阶段：${phaseText}。${
           args.mode === "authz"
             ? "请先用普通账号登录并操作，完成后说「本次录入已完成」。"
             : "请登录并操作，完成后说「本次录入已完成」。"
@@ -249,7 +251,21 @@ export function createWebsecEdgeTools(
         }
         controller.clearNetworkLogs()
         const message = await controller.clearSession()
-        return `${message}\n请用高权账号登录并走与普通账号相同的流程，完成后说「本次录入已完成」。`
+        store.mutateWorkflow(context.sessionID, (wf) => {
+          requireWebsec(wf)
+          const base = wf.websec ?? { evidence: [] }
+          wf.websec = {
+            ...base,
+            edge: {
+              started: base.edge?.started ?? true,
+              finished: base.edge?.finished ?? false,
+              phase: "privileged",
+              startedAt: base.edge?.startedAt,
+              finishedAt: base.edge?.finishedAt,
+            },
+          }
+        })
+        return `${message}\n当前阶段：高权账号（privileged）。请用高权账号登录并走与普通账号相同的流程，完成后说「本次录入已完成」。`
       }
 
       if (args.action === "finish") {
@@ -272,7 +288,13 @@ export function createWebsecEdgeTools(
           const base = wf.websec ?? { evidence: [] }
           wf.websec = {
             ...base,
-            edge: { started: true, finished: true, startedAt: base.edge?.startedAt, finishedAt: Date.now() },
+            edge: {
+              started: true,
+              finished: true,
+              phase: base.edge?.phase,
+              startedAt: base.edge?.startedAt,
+              finishedAt: Date.now(),
+            },
           }
         })
         const counts = {
@@ -403,6 +425,13 @@ export function createWebsecEdgeTools(
         const ids = new Set(base.evidence.map((item) => item.id))
         wf.websec = {
           ...base,
+          edge: {
+            started: base.edge?.started ?? true,
+            finished: base.edge?.finished ?? false,
+            phase,
+            startedAt: base.edge?.startedAt,
+            finishedAt: base.edge?.finishedAt,
+          },
           evidence: [...base.evidence, ...captured.filter((item) => !ids.has(item.id))],
         }
       })

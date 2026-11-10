@@ -769,6 +769,21 @@ describe("task 一般任务状态条与入口提示", () => {
     expect(text).toContain("预估 xx 小时")
   })
 
+  test("websec 状态条提示当前账号阶段", () => {
+    const s = createWorkflowState("websec")
+    applyTransition(s, "scope", "enter", 1)
+    s.websec = {
+      testMode: "authz",
+      edge: { started: true, finished: false, phase: "baseline" },
+      evidence: [],
+    }
+    expect(buildSystemFragment(s)).toContain("Edge：越权测试 · 当前阶段：普通账号（baseline）")
+    s.websec.edge = { started: true, finished: false, phase: "privileged" }
+    expect(buildSystemFragment(s)).toContain("Edge：越权测试 · 当前阶段：高权账号（privileged）")
+    s.websec.edge = { started: true, finished: true, phase: "privileged" }
+    expect(buildSystemFragment(s)).toContain("Edge：越权测试 · 当前阶段：已完成")
+  })
+
   test("未开始：四个工作流都给出各自入口提示", () => {
     expect(buildSystemFragment(createWorkflowState("sdlc"))).toContain("启动 SDLC 工作流")
     expect(buildSystemFragment(createWorkflowState("reqdoc"))).toContain("启动 REQDOC 工作流")

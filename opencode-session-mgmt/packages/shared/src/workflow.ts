@@ -169,6 +169,8 @@ export type WebsecPhase = "single" | "baseline" | "privileged"
 export interface WebsecEdgeState {
   started: boolean
   finished: boolean
+  /** 当前采集阶段（single/baseline/privileged），用于提示用户当前账号阶段。 */
+  phase?: WebsecPhase
   startedAt?: number
   finishedAt?: number
 }
@@ -1190,6 +1192,11 @@ export const WEBSEC = defineWorkflow({
       id: "websec-r25",
       stage: "global",
       text: "完成口令统一为「本次录入已完成」；用户只说「完成」时先问「本次录入是否已完成？」，不要直接 capture 或 finish。",
+    },
+    {
+      id: "websec-r26",
+      stage: "global",
+      text: "越权测试中，每次开始或切换阶段时明确告诉用户当前是「普通账号（baseline）」还是「高权账号（privileged）」，不要让用户猜。",
     },
   ],
 })

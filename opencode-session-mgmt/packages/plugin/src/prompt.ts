@@ -352,6 +352,22 @@ export function buildStateBar(workflow: WorkflowState, stage: string | null): st
     }
   }
   if (workflow.baseline) lines.push(`基线：已录入 ${workflow.baseline.estimatedHours} 小时`)
+  if (workflow.type === "websec" && workflow.websec?.testMode) {
+    const mode = workflow.websec.testMode === "authz" ? "越权测试" : "普通测试"
+    const edge = workflow.websec.edge
+    const phase = edge?.finished
+      ? "已完成"
+      : edge?.phase === "baseline"
+        ? "普通账号（baseline）"
+        : edge?.phase === "privileged"
+          ? "高权账号（privileged）"
+          : edge?.phase === "single"
+            ? "普通测试（single）"
+            : edge?.started
+              ? "已启动"
+              : "未启动"
+    lines.push(`Edge：${mode} · 当前阶段：${phase}`)
+  }
   // 知识库覆盖（重构 2c）：槽位覆盖率 + 开放项全部由服务端派生，不再展示打分卡/探针/渲染校验
   if (workflow.kb) {
     const kb = workflow.kb
