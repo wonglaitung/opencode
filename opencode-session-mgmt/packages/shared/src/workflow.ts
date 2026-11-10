@@ -162,8 +162,8 @@ export type WebsecFindingStatus = (typeof WEBSEC_FINDING_STATUS_KEYS)[number]
 /** 开发自测模式：normal=普通单账号；authz=双角色越权。 */
 export type WebsecTestMode = "normal" | "authz"
 
-/** 证据阶段：single=普通；baseline=普通账号；privileged=高权账号。 */
-export type WebsecPhase = "single" | "baseline" | "privileged"
+/** 证据阶段：single=普通；baseline=普通账号；privileged=高权账号；anonymous=匿名探测。 */
+export type WebsecPhase = "single" | "baseline" | "privileged" | "anonymous"
 
 /** Edge 会话状态（start/finish 由 websec_edge_capture 维护）。 */
 export interface WebsecEdgeState {
@@ -204,6 +204,8 @@ export interface WebsecEvidence {
   identity?: string
   /** 证据所属阶段（普通/基线/高权）。 */
   phase?: WebsecPhase
+  /** 证据来源：edge=浏览器走查；anonymous-probe=无 Cookie 只读探测；manual=手工补充。 */
+  source?: "edge" | "anonymous-probe" | "manual"
   capturedAt?: number
   hash: string
   localPath?: string
@@ -244,12 +246,24 @@ export interface WebsecReport {
   limitations: string[]
   verdict: "passed" | "issues_found"
   submittedAt: number
+  /** 项目内报告目录与文件路径（绝对路径）。 */
+  reportDir?: string
+  markdownPath?: string
+  jsonPath?: string
+}
+
+/** Edge 不可用时，经开发者明确确认的降级记录。 */
+export interface WebsecEdgeFallback {
+  reason: string
+  confirmedAt: number
 }
 
 export interface WebsecState {
   scope?: WebsecScope
   testMode?: WebsecTestMode
   edge?: WebsecEdgeState
+  edgeError?: string
+  edgeFallback?: WebsecEdgeFallback
   evidence: WebsecEvidence[]
   report?: WebsecReport
 }
@@ -721,6 +735,8 @@ export interface WorkflowDefinition {
   stagePurpose?: Record<string, string>
   /** 哪个阶段是审查阶段（可无）；审查清单/理解确认仅在该阶段存在时使用 */
   reviewStage: string | null
+  /** 阶段回执的下一步提示（键为当前阶段）；未配置则不追加。 */
+  stageNextAction?: Record<string, string>
   /** 审查清单项（仅 reviewStage 存在时用） */
   checklist: ChecklistItem[]
   /** sdlc=true；reqdoc 定稿无 git 门禁 → false */
@@ -1064,6 +1080,13 @@ export const WEBSEC = defineWorkflow({
     report: "输出可修复的报告并确认",
   },
   reviewStage: "report",
+  stageNextAction: {
+    scope: "确认范围后询问普通/越权模式，并调用 websec_edge_capture(start, mode=...) 打开 Edge。",
+    surface: "让用户在 Edge 中走查；用户说「本次录入已完成」后 capture → finish → approve surface → enter checks。",
+    checks: "分析已采集页面和接口；完成后 approve checks → enter verify。",
+    verify: "复现/定级；完成后 approve verify → enter report → websec_report。",
+    report: "websec_report 写报告；然后 review_submit 定稿。",
+  },
   checklist: [
     { key: "scopeAuthorized", label: "测试范围与边界已确认" },
     { key: "surfaceCovered", label: "入口与接口已覆盖" },
@@ -1111,7 +1134,7 @@ export const WEBSEC = defineWorkflow({
     {
       id: "websec-r8",
       stage: "surface",
-      text: "枚举页面、接口、参数与身份：优先用 Edge/CDP 接管已登录会话或人工浏览；记录每个入口的来源（static/runtime/manual）与身份标签；不越界爬取，排除 logout/delete/export 等破坏性链接。",
+      text: "资产与接口阶段必须先打开 Edge：询问普通/越权模式并调用 websec_edge_capture(start)，请用户在 Edge 中登录并完整走一遍页面/操作流程；用户说「本次录入已完成」后 capture。capture 前禁止用 curl、源码或静态分析替代用户走查；所有测试产物必须落在项目内的 websec-evidence/<sessionID>/。记录每个入口的来源（runtime/manual）与身份标签；不越界爬取，排除 logout/delete/export 等破坏性链接。",
     },
     {
       id: "websec-r9",
@@ -1151,7 +1174,7 @@ export const WEBSEC = defineWorkflow({
     {
       id: "websec-r16",
       stage: "report",
-      text: "调用 websec_report 提交结构化报告；每条 finding 的 evidenceRef 必须指向已登记的 websec_evidence。无发现时 verdict=passed，并列出已检查项与局限。",
+      text: "调用 websec_report 提交结构化报告；每条 finding 的 evidenceRef 必须指向已登记的 websec_evidence，confirmed 必须引用 Edge 证据（fallback 除外）。报告同时写入项目内 report.md 和 report.json；完成后必须明确告知开发者两个文件的绝对路径。无发现时 verdict=passed，并列出已检查项与局限。",
     },
     {
       id: "websec-r17",
@@ -1166,17 +1189,17 @@ export const WEBSEC = defineWorkflow({
     {
       id: "websec-r20",
       stage: "global",
-      text: "若环境提供 websec_edge_capture，启动 Edge 前必须先问用户：这次是普通测试，还是越权测试？不要跳过选择直接 start。没有该工具时退回人工浏览/curl。",
+      text: "本工作流要求 Edge 用户走查：scope 完成后必须询问普通测试还是越权测试，并调用 websec_edge_capture(start, mode=...) 打开 Edge；用户走完流程并说「本次录入已完成」后 capture。禁止用 curl、源码或静态分析替代用户走查。只有 Edge 启动失败且用户明确同意时才调用 fallback，并在报告 limitations 中记录原因。所有测试产物必须写入项目内 websec-evidence/<sessionID>/。",
     },
     {
       id: "websec-r21",
       stage: "global",
-      text: "普通测试：start(mode=normal) 打开目标，请用户登录并操作；用户说「本次录入已完成」后 capture(phase=single) 采集证据，再 finish；finish 前不要生成报告。",
+      text: "普通测试：start(mode=normal) 打开目标，请用户在 Edge 中登录并走完页面/操作流程；在用户说「本次录入已完成」前不要做静态检查或 curl；随后 capture(phase=single) 采集证据，再 finish。",
     },
     {
       id: "websec-r22",
       stage: "global",
-      text: "越权测试：start(mode=authz) 后，先用普通/低权账号操作，用户说「本次录入已完成」后 capture(phase=baseline)；调用 switch_identity 清除登录态，请用户用高权账号重新登录并走同样流程，用户再次说「本次录入已完成」后 capture(phase=privileged)；最后 finish，并用 websec_authz_compare 对比两组证据。",
+      text: "越权测试：start(mode=authz) 后，先用普通/低权账号在 Edge 中走完流程，用户说「本次录入已完成」后 capture(phase=baseline)；调用 switch_identity 清除登录态，请用户用高权账号重新登录并走同样流程，用户再次说「本次录入已完成」后 capture(phase=privileged)；最后 finish，并用 websec_authz_compare 对比两组证据。",
     },
     {
       id: "websec-r23",
@@ -1197,6 +1220,11 @@ export const WEBSEC = defineWorkflow({
       id: "websec-r26",
       stage: "global",
       text: "越权测试中，每次开始或切换阶段时明确告诉用户当前是「普通账号（baseline）」还是「高权账号（privileged）」，不要让用户猜。",
+    },
+    {
+      id: "websec-r27",
+      stage: "global",
+      text: "capture 完成后询问开发者是否授权做匿名只读探测；同意后调用 websec_anonymous_probe(developer_confirmed=true)，只对已捕获的 GET/HEAD 端点发无 Cookie 请求，不发写操作。匿名探测不要求用户退出登录重走完整页面；未授权时在报告 limitations 写明未覆盖。匿名 2xx/3xx 说明可能存在未授权访问，需结合正文确认。",
     },
   ],
 })

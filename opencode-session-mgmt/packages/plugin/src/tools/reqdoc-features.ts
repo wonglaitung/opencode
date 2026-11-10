@@ -19,7 +19,7 @@ import {
   type ReqdocFeature,
 } from "sm-shared"
 import type { Store } from "../db"
-import { WorkflowOpError } from "../workflow-ops"
+import { WorkflowOpError, assertWorkflowNotComplete } from "../workflow-ops"
 import { sanitizeDirName } from "./reqdoc-dirs"
 import { readKb } from "./reqdoc-kb-tools"
 import { templateUnavailableNotice } from "sm-shared"
@@ -55,6 +55,7 @@ export function createReqdocFeatureTools(store: Store): Record<string, ToolDefin
         if (def.type !== "reqdoc") {
           throw new WorkflowOpError(`reqdoc_confirm_features 仅用于 reqdoc 工作流（当前为 ${def.type}）`)
         }
+        assertWorkflowNotComplete(workflow, "修改功能点清单")
         const records: ReqdocFeature[] = args.features.map((f, i) => ({
           no: i + 1,
           name: f.name,

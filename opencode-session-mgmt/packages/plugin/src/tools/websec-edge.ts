@@ -9,8 +9,8 @@
  */
 import { tool, type ToolDefinition } from "@opencode-ai/plugin"
 import { createHash } from "node:crypto"
-import { mkdir, writeFile } from "node:fs/promises"
-import { isAbsolute, join, relative, resolve } from "node:path"
+import { mkdir } from "node:fs/promises"
+import { join } from "node:path"
 import {
   disposeEdgeDebugController,
   getEdgeDebugController,
@@ -19,10 +19,18 @@ import {
   type EdgeDebugController,
   type NetworkCapturePolicy,
   type NetworkDetail,
+  type PageNavigation,
 } from "edge-debug-core"
 import type { WebsecEvidence, WebsecPhase, WorkflowState } from "sm-shared"
 import type { Store } from "../db"
 import { WorkflowOpError } from "../workflow-ops"
+import {
+  ensureEvidenceGitignore,
+  evidenceSessionDir,
+  resolveEvidenceRoot,
+  safeName,
+  writeEvidenceFile,
+} from "./websec-paths"
 
 const z = tool.schema
 
@@ -31,6 +39,7 @@ type EdgeLike = Pick<
   | "start"
   | "stop"
   | "networkLogs"
+  | "pageNavigations"
   | "responseDetailData"
   | "setCapturePolicy"
   | "clearSession"
@@ -60,10 +69,6 @@ function requireStarted(workflow: WorkflowState): void {
   }
 }
 
-function safeName(value: string): string {
-  return value.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 80) || "evidence"
-}
-
 function sha256(text: string): string {
   return createHash("sha256").update(text, "utf8").digest("hex")
 }
@@ -85,32 +90,10 @@ function modeLabel(mode: "normal" | "authz"): string {
   return mode === "authz" ? "越权测试" : "普通测试"
 }
 
-/** 解析项目内证据根目录；拒绝绝对路径与越界。 */
-function resolveEvidenceRoot(projectDir: string, configured: string | undefined): string {
-  const root = resolve(projectDir)
-  const rel = configured ?? "websec-evidence"
-  if (isAbsolute(rel) || rel.split(/[\\/]+/).some((part) => part === "." || part === "..")) {
-    throw new WorkflowOpError("evidence_dir 必须是项目内相对路径")
-  }
-  const resolved = resolve(root, rel)
-  const check = relative(root, resolved)
-  if (check.startsWith("..") || isAbsolute(check) || check === "") {
-    throw new WorkflowOpError("evidence_dir 不能跳出项目目录")
-  }
-  return resolved
-}
-
-async function ensureEvidenceGitignore(root: string): Promise<void> {
-  try {
-    await writeFile(join(root, ".gitignore"), "*\n!.gitignore\n", { encoding: "utf8", flag: "wx" })
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error
-  }
-}
-
 function phaseLabel(phase: WebsecPhase): string {
   if (phase === "baseline") return "baseline（普通账号）"
   if (phase === "privileged") return "privileged（高权账号）"
+  if (phase === "anonymous") return "anonymous（匿名探测）"
   return "single（普通测试）"
 }
 
@@ -142,14 +125,17 @@ export function createWebsecEdgeTools(
 ): Record<string, ToolDefinition> {
   const websec_edge_capture = tool({
     description:
-      "通过 Edge/CDP 进行模式化安全自测。开始前先问用户：普通测试还是越权测试，然后 start(mode)。" +
-      "normal：用户说「本次录入已完成」后 capture；authz：普通账号 capture(baseline) → switch_identity → 高权账号 capture(privileged)。" +
-      "用户说「本次录入已完成」后调用 finish，再生成报告。正文落本地，只返回摘要。需先记录 websec_scope。",
+      "通过 Edge/CDP 进行模式化安全自测。必须先记录 websec_scope，再询问普通测试还是越权测试并 start(mode)。" +
+      "start 后让用户在 Edge 中登录并走完页面/操作流程；用户说「本次录入已完成」后 capture，再由 Agent 检查已采集内容。" +
+      "normal：capture(single)；authz：普通账号 capture(baseline) → switch_identity → 高权账号 capture(privileged)。" +
+      "用户说「本次录入已完成」后调用 finish，再生成报告。正文落项目目录，只返回摘要。",
     args: {
       action: z
-        .enum(["start", "capture", "switch_identity", "finish", "stop"])
-        .describe("start=启动；capture=采集；switch_identity=清登录态；finish=确认完成；stop=关闭"),
-      mode: z.enum(["normal", "authz"]).optional().describe("start 必填：normal=普通测试；authz=越权测试"),
+        .enum(["start", "capture", "switch_identity", "finish", "stop", "fallback"])
+        .describe("start=启动；capture=采集；switch_identity=清登录态；finish=确认完成；stop=关闭；fallback=Edge 不可用时的显式降级"),
+      mode: z.enum(["normal", "authz"]).optional().describe("start/fallback 必填：normal=普通测试；authz=越权测试"),
+      reason: z.string().min(1).optional().describe("fallback 必填：Edge 不可用原因，须由开发者确认"),
+      developer_confirmed: z.boolean().optional().describe("fallback 必须为 true，表示开发者明确同意改用人工/curl"),
       url: z.string().url().optional().describe("start 的目标地址；缺省使用 scope 中记录的 target"),
       phase: z
         .enum(["single", "baseline", "privileged"])
@@ -176,12 +162,54 @@ export function createWebsecEdgeTools(
 
       requireScope(workflow)
 
+      if (args.action === "fallback") {
+        if (!args.mode) {
+          throw new WorkflowOpError("fallback 前必须先确认：这次是普通测试，还是越权测试？")
+        }
+        if (!args.reason?.trim()) {
+          throw new WorkflowOpError("fallback 必须说明 Edge 不可用的原因，且理由须来自开发者")
+        }
+        if (args.developer_confirmed !== true) {
+          throw new WorkflowOpError("fallback 需要开发者明确确认：developer_confirmed 必须为 true")
+        }
+        if (workflow.websec?.edge?.started) {
+          throw new WorkflowOpError("Edge 会话已启动，不能改用 fallback；请继续完成 Edge 流程或开新会话")
+        }
+        if (!workflow.websec?.edgeError) {
+          throw new WorkflowOpError("只有 websec_edge_capture(start) 失败后才能 fallback；请先尝试启动 Edge")
+        }
+        if (workflow.websec?.edgeFallback) {
+          throw new WorkflowOpError("本次会话已记录 fallback，不能重复切换")
+        }
+        const saved = store.mutateWorkflow(context.sessionID, (wf) => {
+          requireWebsec(wf)
+          const base = wf.websec ?? { evidence: [] }
+          wf.websec = {
+            ...base,
+            testMode: args.mode,
+            edgeFallback: { reason: args.reason!.trim(), confirmedAt: Date.now() },
+          }
+        })
+        const evidenceRoot = resolveEvidenceRoot(projectDir, saved.websec?.scope?.evidenceDir)
+        const evidenceDir = evidenceSessionDir(projectDir, saved.websec?.scope?.evidenceDir, context.sessionID)
+        await mkdir(evidenceDir, { recursive: true })
+        await ensureEvidenceGitignore(evidenceRoot)
+        return (
+          `⚠ 已记录人工/curl fallback（${modeLabel(args.mode)}）。\n` +
+          `原因：${args.reason.trim()}\n` +
+          `本次报告必须写入 limitations。所有测试产物必须落在项目目录：${evidenceDir}`
+        )
+      }
+
       if (args.action === "start") {
         if (!args.mode) {
           throw new WorkflowOpError("启动 Edge 前必须先问用户：这次是普通测试，还是越权测试？")
         }
         if (workflow.websec?.edge?.finished) {
           throw new WorkflowOpError("本次 Edge 会话已完成：请直接生成报告；如需新一轮请开新会话")
+        }
+        if (workflow.websec?.edgeFallback) {
+          throw new WorkflowOpError("本次会话已选择人工/curl fallback，不能启动 Edge；请开新会话")
         }
         const currentMode = workflow.websec?.testMode
         if (currentMode && currentMode !== args.mode) {
@@ -199,13 +227,27 @@ export function createWebsecEdgeTools(
         const url = args.url ?? workflow.websec?.scope?.target
         if (!url) throw new WorkflowOpError("缺少目标地址：请在 scope 中记录 target 或传 url")
         controller.setCapturePolicy(policy)
-        const message = await controller.start(url)
+        let message: string
+        try {
+          message = await controller.start(url)
+        } catch (error) {
+          store.mutateWorkflow(context.sessionID, (wf) => {
+            requireWebsec(wf)
+            const base = wf.websec ?? { evidence: [] }
+            wf.websec = {
+              ...base,
+              edgeError: error instanceof Error ? error.message : String(error),
+            }
+          })
+          throw error
+        }
         const saved = store.mutateWorkflow(context.sessionID, (wf) => {
           requireWebsec(wf)
           const base = wf.websec ?? { evidence: [] }
           wf.websec = {
             ...base,
             testMode: args.mode,
+            edgeError: undefined,
             edge: {
               started: true,
               finished: base.edge?.finished ?? false,
@@ -215,19 +257,30 @@ export function createWebsecEdgeTools(
             },
           }
         })
+        const evidenceRoot = resolveEvidenceRoot(projectDir, saved.websec?.scope?.evidenceDir)
+        const evidenceDir = evidenceSessionDir(projectDir, saved.websec?.scope?.evidenceDir, context.sessionID)
+        await mkdir(evidenceDir, { recursive: true })
+        await ensureEvidenceGitignore(evidenceRoot)
         const phaseText = args.mode === "authz" ? "普通账号（baseline）" : "普通测试（single）"
-        return `${message}\n本次模式：${modeLabel(saved.websec!.testMode!)}。当前阶段：${phaseText}。${
-          args.mode === "authz"
-            ? "请先用普通账号登录并操作，完成后说「本次录入已完成」。"
-            : "请登录并操作，完成后说「本次录入已完成」。"
-        }`
+        return (
+          `${message}\n本次模式：${modeLabel(saved.websec!.testMode!)}。当前阶段：${phaseText}。` +
+          `${args.mode === "authz" ? "请先用普通账号在 Edge 中登录并走完流程" : "请在 Edge 中登录并走完页面/操作流程"}` +
+          `，完成后说「本次录入已完成」。\n` +
+          `所有测试产物必须写入项目目录：${evidenceDir}\n` +
+          `在你完成走查前，我不会先用 curl 或源码静态检查替代。\n` +
+          `下一步：调用 workflow_advance(enter surface)，让用户在 Edge 中走查；完成后说「本次录入已完成」。`
+        )
       }
 
       if (!workflow.websec?.testMode) {
         throw new WorkflowOpError("尚未选择测试模式：请先 start(mode=normal|authz)")
       }
       if (args.action === "finish" && workflow.websec.edge?.finished) {
-        return "✅ 采集已完成，请直接生成报告并提交 review_submit。"
+        return (
+          "✅ 采集已完成。\n" +
+          "匿名覆盖：请询问开发者是否授权对已捕获的 GET/HEAD 端点做无 Cookie 匿名只读探测；" +
+          "授权后调用 websec_anonymous_probe(developer_confirmed=true)，不授权则在报告 limitations 写明未覆盖。"
+        )
       }
       requireStarted(workflow)
       controller.setCapturePolicy(policy)
@@ -306,9 +359,17 @@ export function createWebsecEdgeTools(
           saved.websec!.testMode === "authz"
             ? `baseline ${counts.baseline} 条 / privileged ${counts.privileged} 条`
             : `single ${counts.single} 条`
-        return `✅ 采集完成（${detail}）。下一步：${
-          saved.websec!.testMode === "authz" ? "调用 websec_authz_compare 对比两组证据，" : ""
-        }生成报告并提交 review_submit。`
+        const anonymousCovered = saved.websec!.evidence.some((item) => item.source === "anonymous-probe")
+        return (
+          `✅ 采集完成（${detail}）。下一步：${
+            saved.websec!.testMode === "authz" ? "调用 websec_authz_compare 对比两组证据，" : ""
+          }生成报告并提交 review_submit。\n` +
+          (anonymousCovered
+            ? "匿名只读探测：已完成。"
+            : "匿名覆盖：请询问开发者是否授权对已捕获的 GET/HEAD 端点做无 Cookie 匿名只读探测；" +
+              "授权后调用 websec_anonymous_probe(developer_confirmed=true)，不授权则在报告 limitations 写明未覆盖。") +
+          "\n下一步：approve surface → enter checks。"
+        )
       }
 
       // capture
@@ -330,9 +391,26 @@ export function createWebsecEdgeTools(
       }
 
       const logs = controller.networkLogs()
-      if (logs.length === 0) {
-        return "当前没有可采集的网络条目：请确认已 start，并让用户在页面中登录/操作后再 capture。"
+      const navigation = controller.pageNavigations()
+      if (logs.length === 0 && navigation.length === 0) {
+        return "当前没有可采集的页面或网络条目：请确认已 start，并让用户在页面中登录/操作后再 capture。"
       }
+
+      const evidenceRoot = resolveEvidenceRoot(projectDir, workflow.websec.scope?.evidenceDir)
+      const evidenceDir = join(evidenceRoot, safeName(context.sessionID))
+      await mkdir(evidenceDir, { recursive: true })
+      await ensureEvidenceGitignore(evidenceRoot)
+      const pages: PageNavigation[] =
+        navigation.length > 0
+          ? navigation
+          : logs
+              .filter((entry) => entry.resourceType?.toLowerCase() === "document")
+              .map((entry) => ({ time: entry.time, url: entry.url }))
+      const journeyPath = join(evidenceDir, "journey.json")
+      await writeEvidenceFile(
+        journeyPath,
+        JSON.stringify({ sessionID: context.sessionID, capturedAt: Date.now(), pages }, null, 2),
+      )
 
       const existing = new Set((workflow.websec.evidence ?? []).map((item) => item.id))
       const limit = args.limit ?? 20
@@ -344,13 +422,8 @@ export function createWebsecEdgeTools(
         .slice(0, limit)
 
       if (candidates.length === 0) {
-        return `没有新的可采集条目（当前已有 ${existing.size} 条证据）。`
+        return `没有新的可采集条目（当前已有 ${existing.size} 条证据）。用户走查记录：${journeyPath}`
       }
-
-      const evidenceRoot = resolveEvidenceRoot(projectDir, workflow.websec.scope?.evidenceDir)
-      const evidenceDir = join(evidenceRoot, safeName(context.sessionID))
-      await mkdir(evidenceDir, { recursive: true })
-      await ensureEvidenceGitignore(evidenceRoot)
 
       const captured: WebsecEvidence[] = []
       const lines: string[] = []
@@ -395,7 +468,7 @@ export function createWebsecEdgeTools(
           evidenceDir,
           `${Date.now()}-${safeName(entry.requestId)}.${detail?.base64Encoded ? "b64" : "txt"}`,
         )
-        await writeFile(file, raw, { encoding: "utf8", mode: 0o600 })
+        await writeEvidenceFile(file, raw)
         const note =
           [args.note, bodyNote, detail?.base64Encoded ? "base64" : undefined]
             .filter(Boolean)
@@ -407,6 +480,7 @@ export function createWebsecEdgeTools(
           method: entry.method,
           identity: args.identity,
           phase,
+          source: "edge",
           capturedAt: Date.now(),
           hash,
           localPath: file,
@@ -441,7 +515,10 @@ export function createWebsecEdgeTools(
         `✅ 已采集 ${captured.length} 条 ${phaseLabel(phase)} 证据（本地共 ${total} 条）` +
         (bodyFailed > 0 ? `；${bodyFailed} 条响应体获取失败，已记录元数据` : "") +
         (bodySkipped > 0 ? `；${bodySkipped} 条仅记录元数据（脚本/静态资源）` : "") +
-        `\n${lines.join("\n")}\n正文目录：${evidenceDir}\n提示：对话中只展示摘要，正文保留在本地。`
+        `\n${lines.join("\n")}\n正文目录：${evidenceDir}\n` +
+        `用户走查记录：${journeyPath}\n` +
+        `下一步：调用 websec_edge_capture(finish)，然后 approve surface → enter checks。\n` +
+        `提示：对话中只展示摘要，正文保留在本地。`
       )
     },
   })

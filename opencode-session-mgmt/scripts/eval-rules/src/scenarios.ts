@@ -90,6 +90,7 @@ function finish(s: WorkflowState): WorkflowState {
 const newSdlc = () => createWorkflowState("sdlc")
 const newReqdoc = () => createWorkflowState("reqdoc")
 const newTask = () => createWorkflowState("task")
+const newWebsec = () => createWorkflowState("websec")
 
 /**
  * 槽位版夹具（重构 2c）：给 reqdoc state 挂上完整知识库，使其通过 kbGate。
@@ -1280,6 +1281,139 @@ export const SCENARIOS: Scenario[] = [
       keyword: "哪几个",
       note: "业务未给优先级时，AI 必须主动问「哪几个是必须先做好」（reqdoc-r13）",
     },
+  },
+  // ---- websec ----
+  {
+    name: "w1 普通测试后启动 Edge",
+    workflowType: "websec",
+    state: (() => {
+      const s = newWebsec()
+      enter(s, "scope")
+      s.websec = {
+        evidence: [],
+        scope: {
+          target: "http://127.0.0.1:18086",
+          environment: "dev",
+          accounts: [{ name: "u1", role: "普通用户" }],
+          stopConditions: ["异常即停"],
+          confirmedAt: 1000,
+        },
+      }
+      return finish(s)
+    })(),
+    userTurn: "普通测试",
+    judge: { kind: "tool", expectTool: "websec_edge_capture", args: { action: "start", mode: "normal" } },
+    note: "websec-r20：普通测试必须 start Edge，不用 curl 替代",
+  },
+  {
+    name: "w2 Edge 采集完成后询问匿名探测",
+    workflowType: "websec",
+    state: (() => {
+      const s = newWebsec()
+      approve(s, "scope")
+      enter(s, "surface")
+      s.websec = {
+        testMode: "normal",
+        edge: { started: true, finished: true },
+        scope: {
+          target: "http://127.0.0.1:18086",
+          environment: "dev",
+          accounts: [{ name: "u1", role: "普通用户" }],
+          stopConditions: ["异常即停"],
+          confirmedAt: 1000,
+        },
+        evidence: [
+          {
+            id: "edge-single-1",
+            url: "http://127.0.0.1:18086/api/settings",
+            method: "GET",
+            source: "edge",
+            phase: "single",
+            hash: "a".repeat(64),
+            bodyPresent: true,
+          },
+        ],
+      }
+      return finish(s)
+    })(),
+    userTurn: "本次录入已完成",
+    judge: { kind: "text", type: "keyword", keyword: "匿名" },
+    note: "websec-r27：capture/finish 后必须询问是否授权匿名只读探测",
+  },
+  {
+    name: "w3 报告阶段调用 websec_report",
+    workflowType: "websec",
+    state: (() => {
+      const s = newWebsec()
+      approve(s, "scope")
+      approve(s, "surface")
+      approve(s, "checks")
+      approve(s, "verify")
+      enter(s, "report")
+      s.websec = {
+        testMode: "normal",
+        edge: { started: true, finished: true },
+        scope: {
+          target: "http://127.0.0.1:18086",
+          environment: "dev",
+          accounts: [{ name: "u1", role: "普通用户" }],
+          stopConditions: ["异常即停"],
+          confirmedAt: 1000,
+        },
+        evidence: [
+          {
+            id: "edge-single-1",
+            url: "http://127.0.0.1:18086/api/settings",
+            method: "GET",
+            source: "edge",
+            phase: "single",
+            hash: "a".repeat(64),
+            bodyPresent: true,
+          },
+        ],
+      }
+      return finish(s)
+    })(),
+    userTurn: "生成并提交报告，未发现其他问题",
+    judge: { kind: "tool", expectTool: "websec_report" },
+    note: "websec 报告阶段必须调用结构化报告工具",
+  },
+  {
+    name: "w4 完成后给出报告路径",
+    workflowType: "websec",
+    state: (() => {
+      const s = newWebsec()
+      approveAll(s)
+      s.websec = {
+        testMode: "normal",
+        edge: { started: true, finished: true },
+        scope: {
+          target: "http://127.0.0.1:18086",
+          environment: "dev",
+          accounts: [{ name: "u1", role: "普通用户" }],
+          stopConditions: ["异常即停"],
+          confirmedAt: 1000,
+        },
+        evidence: [],
+        report: {
+          status: "submitted",
+          testMode: "normal",
+          method: "Edge 用户走查",
+          findings: [],
+          limitations: [],
+          verdict: "passed",
+          submittedAt: 1000,
+          reportDir: "C:/project/websec-evidence/s1",
+          markdownPath: "C:/project/websec-evidence/s1/report.md",
+          jsonPath: "C:/project/websec-evidence/s1/report.json",
+        },
+      }
+      s.baseline = { estimatedHours: 1, setAt: 1000 }
+      return finish(s)
+    })(),
+    userTurn: "好的，完成了",
+    judge: { kind: "text", type: "keyword", keyword: "report.md" },
+    note: "websec-r18：完成态必须告知 report.md 位置",
   },
   // ---- task ----
   {

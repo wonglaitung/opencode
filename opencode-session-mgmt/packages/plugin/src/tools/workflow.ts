@@ -50,6 +50,27 @@ function assertStage(workflow: WorkflowState, stage: string): void {
   }
 }
 
+function assertWebsecSurfaceApprovable(workflow: WorkflowState): void {
+  if (workflow.type !== "websec") return
+  if (workflow.websec?.edgeFallback) return
+  if (!workflow.websec?.evidence.some((item) => item.source === "edge")) {
+    throw new WorkflowOpError(
+      "完成「资产与接口」前必须先让用户在 Edge 中走查并调用 websec_edge_capture(capture) 采集证据；" +
+        "只有 fallback 会话才允许没有 Edge 证据。",
+    )
+  }
+}
+
+function stageNextActionHint(workflow: WorkflowState): string {
+  const def = getDefinition(workflow.type)
+  if (!def.stageNextAction) return ""
+  const entries = Object.entries(workflow.stages)
+  const current = entries.find(([, value]) => value.status === "in_progress")?.[0]
+  if (current && def.stageNextAction[current]) return `\n下一步：${def.stageNextAction[current]}`
+  const next = entries.find(([, value]) => value.status === "not_started")?.[0]
+  if (!next) return ""
+  return `\n下一步：进入「${def.labels[next] ?? next}」(${next})。`
+}
 export function createWorkflowTools(store: Store): Record<string, ToolDefinition> {
   const workflow_advance = tool({
     description:
@@ -84,9 +105,27 @@ export function createWorkflowTools(store: Store): Record<string, ToolDefinition
         const def = getDefinition(workflow.type)
         // websec：未记录测试范围与边界不得进入安全检查（scope 是安全底线，不可跳过）。
         if (def.type === "websec" && args.action === "enter") {
+          if (args.stage === "surface") {
+            if (!workflow.websec?.scope) {
+              throw new WorkflowOpError(
+                "进入「资产与接口」前必须先调用 websec_scope 记录测试范围与边界（目标、账号、停止条件）。",
+              )
+            }
+            if (!workflow.websec.testMode || (!workflow.websec.edge?.started && !workflow.websec.edgeFallback)) {
+              throw new WorkflowOpError(
+                "进入「资产与接口」前必须先选择普通/越权测试并调用 websec_edge_capture(start, mode=...) 打开 Edge；" +
+                  "只有 Edge 启动失败且开发者明确同意时才允许 websec_edge_capture(fallback)。",
+              )
+            }
+          }
           if (args.stage === "checks" && !workflow.websec?.scope) {
             throw new WorkflowOpError(
               "进入「安全检查」前必须先调用 websec_scope 记录测试范围与边界（目标、账号、停止条件）。",
+            )
+          }
+          if (args.stage === "checks" && !workflow.websec?.edge?.started && !workflow.websec?.edgeFallback) {
+            throw new WorkflowOpError(
+              "进入「安全检查」前必须先启动 Edge 并由用户在 Edge 中走完流程；只有 Edge 启动失败且开发者确认时才允许 fallback。",
             )
           }
           const idx = def.stages.indexOf(args.stage)
@@ -98,6 +137,9 @@ export function createWorkflowTools(store: Store): Record<string, ToolDefinition
               )
             }
           }
+        }
+        if (def.type === "websec" && args.action === "approve" && args.stage === "surface") {
+          assertWebsecSurfaceApprovable(workflow)
         }
         // task：自动收口后模型可能再调一次 approve；幂等跳过，避免「已完成」报错。
         if (
@@ -186,6 +228,7 @@ export function createWorkflowTools(store: Store): Record<string, ToolDefinition
             )
           }
           for (const pred of autoApprove) {
+            if (def.type === "websec" && pred === "surface") assertWebsecSurfaceApprovable(workflow)
             applyTransition(workflow, pred, "approve", Date.now(), "进入下一阶段自动确认上一阶段")
           }
           autoApprovedLabels = autoApprove.map((n) => def.labels[n] ?? n)
@@ -212,7 +255,8 @@ export function createWorkflowTools(store: Store): Record<string, ToolDefinition
         `\n提交状态：${saved.commit.status}` +
         (saved.commit.blocked_by.length ? `（未完成：${saved.commit.blocked_by.join("、")}）` : "") +
         prereqLines +
-        taskCompletionHint
+        taskCompletionHint +
+        stageNextActionHint(saved)
       )
     },
   })

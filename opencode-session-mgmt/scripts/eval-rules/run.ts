@@ -54,7 +54,10 @@ const dry = process.argv.includes("--dry")
  */
 const EXECUTE = process.env.EVAL_EXECUTE === "1"
 const workflowRaw = argValue("--workflow")
-const workflow = workflowRaw === "task" || workflowRaw === "sdlc" || workflowRaw === "reqdoc" ? workflowRaw : undefined
+const workflow =
+  workflowRaw === "task" || workflowRaw === "sdlc" || workflowRaw === "reqdoc" || workflowRaw === "websec"
+    ? workflowRaw
+    : undefined
 
 async function renderSystem(state: Parameters<typeof renderNew>[0], lockedFiles: readonly string[] = []): Promise<string> {
   return variant === "baseline" ? renderBaseline(state, lockedFiles) : renderNew(state, lockedFiles)
@@ -203,7 +206,9 @@ for (const sc of scenarios) {
     if (captureOutput) outputs.push(out.artifact ?? out.text)
     const r = judgeScenario(sc.judge, out)
     if (r.pass) pass++
-    lastDetail = r.detail
+    lastDetail = r.pass
+      ? r.detail
+      : `${r.detail}${out.toolCalls.length > 0 ? `；工具:${out.toolCalls.map((c) => c.name).join("、")}` : "；工具:无"}`
     if (r.score) {
       scores.push(r.score)
       scoreRuns++

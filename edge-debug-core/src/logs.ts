@@ -39,6 +39,13 @@ export interface NetworkEntry {
   responseHeaders?: HeadersLike
 }
 
+/** 主页面导航记录（含 SPA 路由切换），供安全测试还原用户走查路径。 */
+export interface PageNavigation {
+  time: string
+  url: string
+  title?: string
+}
+
 /** 网络日志列表的精简条目(headers/postData 不入列表,详情走 get_browser_response_detail)。 */
 export interface NetworkEntrySummary {
   time: string

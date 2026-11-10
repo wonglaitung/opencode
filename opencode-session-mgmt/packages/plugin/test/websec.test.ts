@@ -7,6 +7,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { PluginInput } from "@opencode-ai/plugin"
 import { identityPath, writeIdentity } from "sm-shared"
+import { Store } from "../src/db"
 import SessionMgmtPlugin from "../src/index"
 import { resetSubagentCache } from "../src/subagent"
 
@@ -68,21 +69,9 @@ describe("websec 工作流", () => {
     try {
       expect(hooks.tool!.websec_edge_capture).toBeDefined()
       await hooks.tool!.workflow_start!.execute({} as never, c)
-      await hooks.tool!.workflow_advance!.execute(
-        { stage: "scope", action: "approve", developer_confirmed: true } as never,
-        c,
-      )
-      await hooks.tool!.workflow_advance!.execute(
-        { stage: "surface", action: "enter", developer_confirmed: true } as never,
-        c,
-      )
-      await hooks.tool!.workflow_advance!.execute(
-        { stage: "surface", action: "approve", developer_confirmed: true } as never,
-        c,
-      )
       await expect(
         hooks.tool!.workflow_advance!.execute(
-          { stage: "checks", action: "enter", developer_confirmed: true } as never,
+          { stage: "surface", action: "enter", developer_confirmed: true } as never,
           c,
         ),
       ).rejects.toThrow(/websec_scope/)
@@ -127,6 +116,41 @@ describe("websec 工作流", () => {
         ),
       ).resolves.toContain("测试范围与边界已记录")
 
+      await expect(
+        hooks.tool!.workflow_advance!.execute(
+          { stage: "surface", action: "enter", developer_confirmed: true } as never,
+          c,
+        ),
+      ).rejects.toThrow(/websec_edge_capture/)
+
+      await expect(
+        hooks.tool!.websec_edge_capture!.execute(
+          { action: "fallback", mode: "normal", reason: "测试环境无 Edge", developer_confirmed: true } as never,
+          c,
+        ),
+      ).rejects.toThrow(/start.*失败/)
+
+      const db = Store.open(project, () => "websec")
+      db.mutateWorkflow(sessionID, (wf) => {
+        wf.websec = { ...wf.websec!, edgeError: "模拟启动失败" }
+      })
+      db.close()
+
+      await expect(
+        hooks.tool!.websec_edge_capture!.execute(
+          { action: "fallback", mode: "normal", reason: "测试环境无 Edge", developer_confirmed: true } as never,
+          c,
+        ),
+      ).resolves.toContain("fallback")
+
+      await hooks.tool!.workflow_advance!.execute(
+        { stage: "surface", action: "enter", developer_confirmed: true } as never,
+        c,
+      )
+      await hooks.tool!.workflow_advance!.execute(
+        { stage: "surface", action: "approve", developer_confirmed: true } as never,
+        c,
+      )
       await hooks.tool!.workflow_advance!.execute(
         { stage: "checks", action: "enter", developer_confirmed: true } as never,
         c,
@@ -159,6 +183,7 @@ describe("websec 工作流", () => {
           method: "GET",
           identity: "u1",
           hash: "a".repeat(64),
+          bodyPresent: true,
         } as never,
         c,
       )
@@ -221,9 +246,9 @@ describe("websec 工作流", () => {
         hooks.tool!.workflow_baseline!.execute({ estimated_hours: 2, developer_confirmed: true } as never, c),
       ).resolves.toContain("已记录")
 
-      await expect(
-        hooks.tool!.review_submit!.execute({ ...allChecked } as never, c),
-      ).resolves.toBeTruthy()
+      const final = await hooks.tool!.review_submit!.execute({ ...allChecked } as never, c)
+      expect(String(final)).toContain("report.md")
+      expect(String(final)).toContain("report.json")
     } finally {
       await hooks.dispose!()
       rmSync(project, { recursive: true, force: true })

@@ -45,7 +45,7 @@ import {
   type ReqdocSlot,
 } from "sm-shared"
 import type { Store } from "../db"
-import { WorkflowOpError } from "../workflow-ops"
+import { WorkflowOpError, assertWorkflowNotComplete } from "../workflow-ops"
 import { loadReqdocTemplate } from "../template"
 import { projectRoot, resolveWithinWorktree } from "../fs-safe"
 import { materialEvidence } from "./reqdoc-scan"
@@ -220,6 +220,7 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
       const root = projectRoot(context)
       const saved = store.mutateWorkflow(context.sessionID, (workflow) => {
         requireReqdoc(workflow, "reqdoc_ingest")
+        assertWorkflowNotComplete(workflow, "修改需求槽位")
         const kb = readKb(workflow)
         // 功能点：给了就以它为准（首次或追加）。**纯追加校验**：地址按序号索引，
         // 已有槽位落在功能点地址域后再插入/删除/改名会让地址漂移 → 已确认内容错位、
@@ -403,6 +404,7 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
       const root = projectRoot(context)
       const saved = store.mutateWorkflow(context.sessionID, (workflow) => {
         requireReqdoc(workflow, "reqdoc_answer")
+        assertWorkflowNotComplete(workflow, "修改需求槽位")
         const kb = readKb(workflow)
         if (args.source === "缺省" && !args.reason) {
           throw new WorkflowOpError(`槽位 ${args.address} 标为 [缺省] 但未给 reason`)
@@ -530,6 +532,7 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
       const root = projectRoot(context)
       const saved = store.mutateWorkflow(context.sessionID, (workflow) => {
         requireReqdoc(workflow, "reqdoc_start_scoped_edit")
+        assertWorkflowNotComplete(workflow, "开始定点修改")
         const kb = readKb(workflow)
         // 对抗 H3：重复锁定会静默重置快照基准、差异丢失先前改动——active 期间一律拒绝。
         if (kb.editScope?.active) {
@@ -621,6 +624,7 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
       const abs = resolveWithinWorktree(root, relFile)
       const saved = store.mutateWorkflow(context.sessionID, (workflow) => {
         requireReqdoc(workflow, "reqdoc_adopt_baseline")
+        assertWorkflowNotComplete(workflow, "沿用需求基线")
         const kb = readKb(workflow)
         if (!existsSync(abs)) {
           throw new WorkflowOpError(`基线文件不存在：${args.file}（工作区根 ${root}）`)
@@ -730,6 +734,7 @@ export function createReqdocKbTools(store: Store): Record<string, ToolDefinition
       const workflow = store.get(context.sessionID)?.workflow
       if (!workflow) throw new WorkflowOpError("未找到工作流状态")
       requireReqdoc(workflow, "reqdoc_assemble")
+      assertWorkflowNotComplete(workflow, "重新组装 PRD")
       const kb = readKb(workflow)
       const result = assembleInto(kb)
       if (!result) {

@@ -110,6 +110,13 @@ export function buildSystemFragment(
       }
     }
     if (def.type === "websec") {
+      if (workflow.websec?.report?.markdownPath && workflow.websec.report.jsonPath) {
+        parts.push(
+          "本次报告位置（最终回复必须原样告知开发者）：",
+          `- ${workflow.websec.report.markdownPath}`,
+          `- ${workflow.websec.report.jsonPath}`,
+        )
+      }
       parts.push(
         "⚑ 开始下一个测试：提醒开发者执行 /new 保持统计隔离；修复后复测请开新会话，不要在本会话追加第二轮测试。",
         "补充或修改本次报告：调用 workflow_revisit 回退到对应阶段。",
@@ -355,18 +362,26 @@ export function buildStateBar(workflow: WorkflowState, stage: string | null): st
   if (workflow.type === "websec" && workflow.websec?.testMode) {
     const mode = workflow.websec.testMode === "authz" ? "越权测试" : "普通测试"
     const edge = workflow.websec.edge
-    const phase = edge?.finished
-      ? "已完成"
-      : edge?.phase === "baseline"
-        ? "普通账号（baseline）"
-        : edge?.phase === "privileged"
-          ? "高权账号（privileged）"
-          : edge?.phase === "single"
-            ? "普通测试（single）"
-            : edge?.started
-              ? "已启动"
-              : "未启动"
+    const phase = workflow.websec.edgeFallback
+      ? `人工/curl fallback（${workflow.websec.edgeFallback.reason}）`
+      : edge?.finished
+        ? "已完成"
+        : edge?.phase === "baseline"
+          ? "普通账号（baseline）"
+          : edge?.phase === "privileged"
+            ? "高权账号（privileged）"
+            : edge?.phase === "single"
+              ? "普通测试（single）"
+              : edge?.started
+                ? "已启动"
+                : "未启动"
     lines.push(`Edge：${mode} · 当前阶段：${phase}`)
+    if (workflow.websec.scope) {
+      lines.push(
+        `范围：${workflow.websec.scope.target}（${workflow.websec.scope.environment}） · ` +
+          `账号：${workflow.websec.scope.accounts.map((item) => `${item.name}/${item.role}`).join("、")}`,
+      )
+    }
   }
   // 知识库覆盖（重构 2c）：槽位覆盖率 + 开放项全部由服务端派生，不再展示打分卡/探针/渲染校验
   if (workflow.kb) {

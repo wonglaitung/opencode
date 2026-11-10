@@ -35,6 +35,9 @@ import { createTaskClassifyTool } from "../../../packages/plugin/src/tools/task-
 import { createTaskReviewTool } from "../../../packages/plugin/src/tools/task-review"
 import { createTaskScanTool } from "../../../packages/plugin/src/tools/task-scan"
 import { createTaskCheckTool } from "../../../packages/plugin/src/tools/task-check"
+import { createWebsecTools } from "../../../packages/plugin/src/tools/websec"
+import { createWebsecEdgeTools } from "../../../packages/plugin/src/tools/websec-edge"
+import { createWebsecAnonymousTool } from "../../../packages/plugin/src/tools/websec-anonymous"
 import { createOpenIdeTool } from "../../../packages/plugin/src/open-ide/open-ide-tool"
 import { createLockTools } from "../../../packages/plugin/src/open-ide/tools/lock-tools"
 import { extractBaselineHours } from "../../../packages/plugin/src/tools/baseline-proposal"
@@ -120,7 +123,7 @@ type ToolLike = { execute: (args: unknown, ctx: unknown) => Promise<unknown> }
  * 这类假失败会被当成「规则没效果」，把排查引向完全错误的方向。
  * 故 `exec-selfcheck` 会在每次执行模式评测前核对覆盖率，缺一个就中止。
  */
-export function buildRegistry(store: Store): Record<string, ToolLike | undefined> {
+export function buildRegistry(store: Store, projectDir: string = process.cwd()): Record<string, ToolLike | undefined> {
   const locks = memLocks()
   return {
     ...createReqdocKbTools(store),
@@ -132,6 +135,25 @@ export function buildRegistry(store: Store): Record<string, ToolLike | undefined
     ...createTaskScanTool(store),
     ...createTaskCheckTool(store),
     ...createReviewTools(store),
+    ...createWebsecTools(store, projectDir),
+    ...createWebsecEdgeTools(store, projectDir, () => ({
+      isRunning: () => true,
+      start: async () => "Edge 已启动",
+      stop: async () => true,
+      networkLogs: () => [],
+      pageNavigations: () => [],
+      responseDetailData: async () => {
+        throw new Error("评测环境没有 Edge 响应详情")
+      },
+      setCapturePolicy: () => {},
+      clearSession: async () => "已清除登录态",
+      clearNetworkLogs: () => {},
+    })),
+    ...createWebsecAnonymousTool(
+      store,
+      projectDir,
+      (async () => new Response("{}", { status: 401, headers: { "content-type": "application/json" } })) as unknown as typeof fetch,
+    ),
     ...createReqdocInitTool(),
     ...createReqdocImportTool(),
     ...createReqdocExportTool(),
@@ -164,6 +186,8 @@ function seed(store: Store, sessionID: string, state: WorkflowState): void {
     w.kb = state.kb
     w.baseline = state.baseline
     w.task = state.task
+    w.websec = state.websec
+    w.baselineProposedByDev = state.baselineProposedByDev
   })
 }
 
@@ -234,7 +258,7 @@ export async function executeTurns(
     // 场景要测「有锁时会提示解锁」就必须真的有锁，否则判据不可满足（s22 曾稳定 0/3）。
     for (const f of opts.lockedFiles ?? []) store.lockFile(sessionID, f)
     const ctx = { worktree: root, sessionID } as never
-    const registry = buildRegistry(store)
+    const registry = buildRegistry(store, root)
     const prior: PriorMessage[] = []
     const allCalls: ToolCall[] = []
     const allTexts: string[] = []

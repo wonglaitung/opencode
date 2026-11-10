@@ -7,6 +7,19 @@ import { getDefinition, reviewRecord, type TransitionAction, type WorkflowState 
 
 export class WorkflowOpError extends Error {}
 
+/**
+ * 完成态写入保护：所有会改写最终产物或工作流事实源的入口统一先过这里。
+ * 工作流全部 approved 后，直接改产物会绕过 stage 状态机（enter 已拒绝 approved，
+ * 但这些工具不经过 applyTransition），必须由用户先 workflow_revisit 或开新会话。
+ */
+export function assertWorkflowNotComplete(workflow: WorkflowState, action: string): void {
+  const def = getDefinition(workflow.type)
+  if (!def.stages.every((name) => workflow.stages[name].status === "approved")) return
+  throw new WorkflowOpError(
+    `工作流已完成，不能${action}。修改请用 workflow_revisit 回退到对应阶段；开始新任务/需求请执行 /new。`,
+  )
+}
+
 /** 依据定义 stages 的 approved 状况重算提交门禁（3.4）；保留既有的一次性强制提交授权。 */
 export function recomputeCommit(workflow: WorkflowState): WorkflowState {
   const def = getDefinition(workflow.type)

@@ -42,7 +42,7 @@ export const EVAL_TOOLS: OpenAITool[] = [
         properties: {
           type: {
             type: "string",
-            enum: ["task", "sdlc", "reqdoc"],
+            enum: ["task", "sdlc", "reqdoc", "websec"],
             description: "要启动的工作流类型；必须与当前会话已定类型一致（由 identity.workflowType 决定，默认 sdlc）",
           },
         },
@@ -331,6 +331,11 @@ export const EVAL_TOOLS: OpenAITool[] = [
           resolution: bool("职责清晰(技术初步可行性已确认)"),
           force_kb: bool("仅知识库定稿门禁(kbGate)未通过时使用：业务明确「不想再补」时放行。必须同时给 force_reason。默认 false"),
           force_reason: str("force_kb=true 时必填：业务给的不再补齐的理由(模型不得代填)"),
+          scopeAuthorized: bool("websec：测试范围与边界已确认"),
+          surfaceCovered: bool("websec：入口与接口已覆盖"),
+          checksEvidenced: bool("websec：每项结论有证据"),
+          falsePositiveReviewed: bool("websec：误报已复核"),
+          remediationActionable: bool("websec：修复建议可执行"),
         },
       },
     },
@@ -664,6 +669,122 @@ export const EVAL_TOOLS: OpenAITool[] = [
       parameters: { type: "object", properties: {} },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "websec_scope",
+      description: "记录 WEB 安全测试范围与边界（scope 阶段）。必须由开发者确认目标属于其负责或获准自测范围。",
+      parameters: {
+        type: "object",
+        properties: {
+          target: str("目标 URL 或环境标识"),
+          environment: str("环境，如 dev/staging/prod"),
+          authorization: str("可选：授权说明"),
+          accounts: { type: "array", items: { type: "object", properties: { name: str("账号代号"), role: str("角色/权限"), note: str("备注") }, required: ["name", "role"] } },
+          window: str("允许测试的时间窗"),
+          rateLimit: str("限速要求"),
+          stopConditions: { type: "array", items: { type: "string" } },
+          evidence_dir: str("项目内证据正文目录，默认 websec-evidence"),
+          developer_confirmed: bool("必须为 true"),
+        },
+        required: ["target", "environment", "accounts", "stopConditions", "developer_confirmed"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "websec_edge_capture",
+      description: "通过 Edge/CDP 进行模式化安全自测。start 后用 Edge 走查；用户完成后 capture/finish。",
+      parameters: {
+        type: "object",
+        properties: {
+          action: { type: "string", enum: ["start", "capture", "switch_identity", "finish", "stop", "fallback"] },
+          mode: { type: "string", enum: ["normal", "authz"] },
+          reason: str("fallback 原因"),
+          developer_confirmed: bool("fallback 时须为 true"),
+          url: str("start 目标 URL"),
+          phase: { type: "string", enum: ["single", "baseline", "privileged"] },
+          identity: str("身份标签"),
+          url_contains: str("只采集 URL 包含该字符串的条目"),
+          limit: { type: "number", description: "最多采集条数" },
+          note: str("证据备注"),
+        },
+        required: ["action"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "websec_anonymous_probe",
+      description: "对 Edge 已捕获的同源 GET/HEAD 端点做无 Cookie 匿名只读探测；需开发者授权。",
+      parameters: {
+        type: "object",
+        properties: {
+          urls: { type: "array", items: { type: "string" } },
+          url_contains: str("只探测 URL 包含该字符串的端点"),
+          limit: { type: "number" },
+          developer_confirmed: bool("必须为 true"),
+        },
+        required: ["developer_confirmed"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "websec_evidence",
+      description: "登记证据索引：URL、方法、身份、时间、哈希、本地路径；不存正文。",
+      parameters: {
+        type: "object",
+        properties: {
+          id: str("证据 id，可省略"),
+          url: str("请求 URL"),
+          method: str("HTTP 方法"),
+          identity: str("身份/角色"),
+          capturedAt: { type: "number" },
+          hash: str("正文 SHA-256 或等价哈希"),
+          localPath: str("项目内证据正文路径"),
+          note: str("说明"),
+          phase: { type: "string", enum: ["single", "baseline", "privileged", "anonymous"] },
+          status: { type: "number" },
+          mimeType: str("响应 MIME"),
+          resourceType: str("资源类型"),
+          bodyPresent: bool("是否有正文"),
+        },
+        required: ["url", "method", "hash"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "websec_authz_compare",
+      description: "越权测试专用：对比 baseline 与 privileged 证据。",
+      parameters: {
+        type: "object",
+        properties: { url_contains: str("只对比 URL 包含该字符串的端点"), method: str("只看指定 HTTP 方法") },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "websec_report",
+      description: "提交 WEB 安全测试结构化报告，并写入项目内 report.md/report.json。",
+      parameters: {
+        type: "object",
+        properties: {
+          method: str("测试方法概述"),
+          findings: { type: "array", items: { type: "object" } },
+          limitations: { type: "array", items: { type: "string" } },
+          verdict: { type: "string", enum: ["passed", "issues_found"] },
+        },
+        required: ["method", "findings", "verdict"],
+      },
+    },
+  },
 ]
 
 /**
@@ -703,7 +824,25 @@ const TASK_TOOLS = new Set([
   "list_locked_files",
 ])
 
+const WEBSEC_TOOLS = new Set([
+  "workflow_start",
+  "workflow_advance",
+  "workflow_revisit",
+  "workflow_baseline",
+  "websec_scope",
+  "websec_edge_capture",
+  "websec_anonymous_probe",
+  "websec_evidence",
+  "websec_authz_compare",
+  "websec_report",
+  "review_submit",
+  "open_ide",
+  "unlock_file",
+  "list_locked_files",
+])
+
 export function toolsForWorkflow(type: WorkflowType): OpenAITool[] {
-  if (type !== "task") return EVAL_TOOLS
-  return EVAL_TOOLS.filter((tool) => TASK_TOOLS.has(tool.function.name))
+  if (type === "task") return EVAL_TOOLS.filter((tool) => TASK_TOOLS.has(tool.function.name))
+  if (type === "websec") return EVAL_TOOLS.filter((tool) => WEBSEC_TOOLS.has(tool.function.name))
+  return EVAL_TOOLS
 }

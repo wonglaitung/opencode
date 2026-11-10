@@ -7,7 +7,7 @@ import { createHash } from "node:crypto"
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import type { NetworkDetail, NetworkEntry } from "edge-debug-core"
+import type { NetworkDetail, NetworkEntry, PageNavigation } from "edge-debug-core"
 import { Store } from "../src/db"
 import { createWebsecEdgeTools } from "../src/tools/websec-edge"
 
@@ -53,6 +53,7 @@ function setup() {
   })
 
   let logs: NetworkEntry[] = []
+  let navigations: PageNavigation[] = []
   const details = new Map<string, NetworkDetail>()
   const policies: unknown[] = []
   let cleared = 0
@@ -62,6 +63,7 @@ function setup() {
     start: async () => "started",
     stop: async () => true,
     networkLogs: () => logs,
+    pageNavigations: () => navigations,
     responseDetailData: async (requestId: string) => {
       const detail = details.get(requestId)
       if (!detail) throw new Error("no detail")
@@ -86,6 +88,9 @@ function setup() {
     policies,
     getCleared: () => cleared,
     getClearedNetworkLogs: () => clearedNetworkLogs,
+    setNavigations(next: PageNavigation[]) {
+      navigations = next
+    },
     setLogs(next: NetworkEntry[]) {
       logs = next
     },
@@ -106,7 +111,7 @@ function setup() {
 
 describe("websec_edge_capture", () => {
   test("普通测试：start 必须选模式，capture 为 single，finish 后才能报告", async () => {
-    const { projectDir, store, tools, setLogs, setDetail } = setup()
+    const { projectDir, store, tools, setLogs, setDetail, setNavigations } = setup()
     try {
       await expect(
         tools.websec_edge_capture!.execute({ action: "start" } as never, ctx),
@@ -125,6 +130,7 @@ describe("websec_edge_capture", () => {
       const body = '{"id":1,"name":"alice"}'
       setLogs([entry])
       setDetail(entry, body)
+      setNavigations([{ time: "12:00:01", url: "http://127.0.0.1:18086/home", title: "Home" }])
       const out = String(
         await tools.websec_edge_capture!.execute({ action: "capture", identity: "u1/user" } as never, ctx),
       )
@@ -139,9 +145,11 @@ describe("websec_edge_capture", () => {
       expect(ev.localPath!.startsWith(join(projectDir, "websec-evidence", "s1"))).toBe(true)
       expect(existsSync(join(projectDir, "websec-evidence", ".gitignore"))).toBe(true)
       expect(readFileSync(ev.localPath!, "utf8")).toBe(body)
+      expect(existsSync(join(projectDir, "websec-evidence", "s1", "journey.json"))).toBe(true)
 
       const finished = String(await tools.websec_edge_capture!.execute({ action: "finish" } as never, ctx))
       expect(finished).toContain("采集完成")
+      expect(finished).toContain("匿名")
       expect(store.get("s1")!.workflow!.websec?.edge?.finished).toBe(true)
     } finally {
       store.close()
@@ -149,7 +157,7 @@ describe("websec_edge_capture", () => {
   })
 
   test("evidence_dir 可配置到项目内其它目录", async () => {
-    const { projectDir, store, tools, setLogs, setDetail } = setup()
+    const { projectDir, store, tools, setLogs, setDetail, setNavigations } = setup()
     try {
       store.mutateWorkflow("s1", (wf) => {
         wf.websec!.scope!.evidenceDir = "artifacts/websec"

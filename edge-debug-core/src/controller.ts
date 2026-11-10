@@ -25,6 +25,7 @@ import {
   type HeadersLike,
   type NetworkCapturePolicy,
   type NetworkEntry,
+  type PageNavigation,
   type RemoteObjectLike,
   type ResponseBodyLike,
 } from "./logs"
@@ -58,6 +59,8 @@ export interface EdgeDebugController {
   stop(): Promise<boolean>
   consoleLogs(): ConsoleEntry[]
   networkLogs(): NetworkEntry[]
+  /** 主页面导航记录（含 SPA 路由切换）。 */
+  pageNavigations(): PageNavigation[]
   /** 在页面上下文执行任意 JS,返回格式化结果(截断);页面抛错时以中文错误呈现。 */
   evaluate(expression: string): Promise<string>
   /** 取页面元信息(url/title/readyState/viewport)的 JSON 字符串。 */
@@ -106,6 +109,7 @@ export function createEdgeDebugController(directory: string): EdgeDebugControlle
   let capturePolicy: NetworkCapturePolicy = {}
   const consoleBuffer = createRingBuffer<ConsoleEntry>(LOG_BUFFER_CAPACITY)
   const networkBuffer = createRingBuffer<NetworkEntry>(LOG_BUFFER_CAPACITY)
+  const navigationBuffer = createRingBuffer<PageNavigation>(LOG_BUFFER_CAPACITY)
   // requestId → 待回填的请求信息(responseReceived 不携带 method/postData/请求头,3.2、3.5)
   const pendingRequests = new Map<string, { method: string; postData?: string; requestHeaders?: HeadersLike }>()
 
@@ -127,6 +131,16 @@ export function createEdgeDebugController(directory: string): EdgeDebugControlle
         level: "UNCAUGHT_EXCEPTION",
         text: details?.exception?.description ?? details?.text ?? "未知异常",
       })
+    })
+    client.on("Page.frameNavigated", (params) => {
+      const frame = params["frame"] as { url?: string; parentId?: string; name?: string } | undefined
+      if (!frame?.url || frame.parentId) return
+      navigationBuffer.push({ time: nowTime(), url: frame.url, title: frame.name })
+    })
+    client.on("Page.navigatedWithinDocument", (params) => {
+      const url = params["url"]
+      if (typeof url !== "string") return
+      navigationBuffer.push({ time: nowTime(), url })
     })
     client.on("Network.requestWillBeSent", (params) => {
       const requestId = params["requestId"]
@@ -186,7 +200,7 @@ export function createEdgeDebugController(directory: string): EdgeDebugControlle
       throw new EdgeDebugError("未找到可调试的页面 target(浏览器可能没有打开任何页面)。请在浏览器中打开页面后重试。")
     }
     const client = await CdpClient.connect(wsUrl)
-    await Promise.all([client.call("Runtime.enable"), client.call("Network.enable")])
+    await Promise.all([client.call("Runtime.enable"), client.call("Network.enable"), client.call("Page.enable")])
     listen(client)
     cdp = client
     return client
@@ -239,6 +253,7 @@ export function createEdgeDebugController(directory: string): EdgeDebugControlle
         await client.call("Page.navigate", { url })
         return `检测到端口 ${DEBUG_PORT} 已有 Edge 调试实例,已直接接入并导航到 ${url}。`
       }
+      navigationBuffer.clear()
       const binary = resolveEdgeBinary()
       const userDataDir = join(directory, ".opencode", "edge-debug", "profile")
       mkdirSync(userDataDir, { recursive: true })
@@ -275,6 +290,7 @@ export function createEdgeDebugController(directory: string): EdgeDebugControlle
       child = null
       consoleBuffer.clear()
       networkBuffer.clear()
+      navigationBuffer.clear()
       pendingRequests.clear()
       console.log("[edge-debug] Edge 浏览器及 CDP 监听已安全关闭")
       return true
@@ -286,6 +302,10 @@ export function createEdgeDebugController(directory: string): EdgeDebugControlle
 
     networkLogs() {
       return networkBuffer.snapshot()
+    },
+
+    pageNavigations() {
+      return navigationBuffer.snapshot()
     },
 
     evaluate(expression: string) {

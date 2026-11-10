@@ -554,6 +554,10 @@ export function createReviewTools(store: Store, type?: WorkflowType): Record<str
         ? ""
         : `\n📋 本次变更（相对基线 ${saved.kb?.baselineSnapshot?.file?.split("/").pop() ?? "基线"}）：${baselineDiffSummary(changeDiff)}` +
           `\n  请把上面这份清单转述给业务（这是评审要看的，不必让业务自己对比新旧两版）。`
+      const websecReportNote =
+        saved.type === "websec" && saved.websec?.report?.markdownPath && saved.websec.report.jsonPath
+          ? `\n报告位置（请在最终回复原样告知开发者）：\n- ${saved.websec.report.markdownPath}\n- ${saved.websec.report.jsonPath}`
+          : ""
       return (
         `✅ 审查阶段通过（清单 ${def.checklist.length}/${def.checklist.length}，片段定论 ${total}/${total}）` +
         (rate !== null ? `，一次通过率 ${rate}%` : "") +
@@ -564,7 +568,7 @@ export function createReviewTools(store: Store, type?: WorkflowType): Record<str
             ? `\n⚑ 工作流已完成，请提醒开发者执行 /new 开始下一个测试（修复后复测请开新会话，保持统计隔离）。`
             : `\n⚑ 工作流已完成，请提醒开发者执行 /new 开始下一个需求（保持统计隔离）。`
           : "") +
-        lockedNote + lazyNote + recallNote + changeNote
+        lockedNote + lazyNote + recallNote + changeNote + websecReportNote
       )
     },
   })
