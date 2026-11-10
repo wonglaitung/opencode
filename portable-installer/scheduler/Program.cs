@@ -189,7 +189,7 @@ internal sealed class TrayContext : ApplicationContext
         var opencode = Path.Combine(Root, "runtime", "node_modules", "opencode-ai", "bin", "opencode.exe");
         if (!File.Exists(opencode)) throw new InvalidOperationException("未找到运行环境，请重新运行安装包");
         // 完全后台：直接执行 opencode.exe，使用 run 子命令，不加载外部插件。
-        // 不使用 TUI/OpenConsole；输出重定向后由调度器写入运行日志。
+        // 不启动 TUI/终端；输出重定向后由调度器写入运行日志。
         var psi = new ProcessStartInfo(opencode)
         {
             UseShellExecute = false,

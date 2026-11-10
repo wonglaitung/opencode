@@ -23,7 +23,7 @@
 | 收集服务地址 | `http://<内网看板收集器地址>:<端口>`（占位，业务弹窗填真实地址） |
 | 默认工作流 | `sdlc` |
 | 弹窗填写项 | **分两页**：第 1 页（baseURL、API 密钥、默认模型名称、collector）；第 2 页（context、output、workflow、终端类型） |
-| 终端类型 | 默认「原生终端」；可选「专用终端(OpenConsole)」；写入 `terminal_mode.ini` 为 ASCII 令牌（`native`/`dedicated`），用户可事后自行修改 |
+| 终端类型 | 默认「原生终端」；可选「专用终端(Windows Terminal / CMD)」；写入 `terminal_mode.ini` 为 ASCII 令牌（`native`/`dedicated`），用户可事后自行修改 |
 | 项目目录 | **不随安装包分发**（方案②）：业务经网络盘/单独包已取得 doc_process 项目（含 `.claude/skills`、`工作要求.txt`、`raw/`、`00~07` 骨架），启动器每次打开时由业务选择 |
 | 代码签名 | 先出**未签名包**；业务首次运行点「更多信息 → 仍要运行」即可，IT 可按需把 exe 哈希加进 Defender/AppLocker 允许列表 |
 
@@ -37,7 +37,7 @@
   - 含 `pandas 2.3.2`、`openpyxl 3.1.5`，技能（如 md-to-word）可直接调用；并已补 `python3.exe` 别名
   - **已剔除 `torch`**：单文件 `Lib\site-packages\torch\lib\dnnl.lib` 体积 2.17 GB，超出 NSIS 单文件 2 GB 上限；且技能仅需 pandas/openpyxl，不依赖 torch
 - `terminal-1.23.20211.0` 整目录 → `terminal\`
-  - 含 `OpenConsole.exe`（Windows Terminal 命令行宿主）、`wt.exe`、字体、defaults.json 等完整终端环境；所有用户均部署，由 `terminal_mode.ini` 控制是否使用
+  - 含 `WindowsTerminal.exe`（专用终端入口，固定使用 Command Prompt / cmd.exe）、`OpenConsole.exe`（内部命令行宿主）、字体、defaults.json 等完整终端环境；所有用户均部署，由 `terminal_mode.ini` 控制是否使用
 
 > 载荷约 1.8 GB（另已剔除各 plugin bundle 内 `node_modules/.bin` 的 npm 符号链接——属构建期工具，opencode 运行时不调用，且符号链接无法被 NSIS 直接打包），已加入 `portable-installer/.gitignore`（忽略 `payload/` 与 `build/*.exe`），不入库。经 LZMA 固实压缩后，最终安装包 `OpenCode-Setup.exe` 约 330 MB。
 
@@ -46,7 +46,7 @@
 1. 创建 `%USERPROFILE%\OpenCode`，复制 `runtime\` 与 `python\`，补 `python\python3.exe` 别名。
 2. 弹窗分两页填写：
    - **第 1 页**：模型服务地址 `baseURL`、`API 密钥`（密码框掩码）、默认模型名称 `model`（默认 `athlon-coder`）、收集服务地址 `collector_url`
-   - **第 2 页**：上下文长度上限 `limit.context`、输出长度上限 `limit.output`、工作流类型（下拉 `task` / `sdlc` / `reqdoc` / `websec`）、终端类型（下拉「原生终端」/「专用终端(OpenConsole)」）
+   - **第 2 页**：上下文长度上限 `limit.context`、输出长度上限 `limit.output`、工作流类型（下拉 `task` / `sdlc` / `reqdoc` / `websec`）、终端类型（下拉「原生终端」/「专用终端(Windows Terminal / CMD)」）
 3. 写入三处配置 + 一个终端模式文件（路径在安装时展开为实际绝对路径）：模型名称取第 1 页「默认模型名称」输入框的值，并作为 `opencode.jsonc` 中唯一（即默认）模型写入。
     - `opencode.jsonc` → `%USERPROFILE%\.config\opencode\`
       ```jsonc
@@ -123,7 +123,7 @@
 - 启动时按当前工作流向 opencode 注入 `--prompt` 启动短语（一般任务 / SDLC / REQDOC / WEB 安全测试）。新会话会自动发送；勾选「继续上次会话」时直接恢复原会话，不注入启动短语。
 - 打开前读取当前配置回填：工作流取 `identity.json` 的 `workflowType`（缺省 `sdlc`），终端取 `terminal_mode.ini` 首行（缺省 `native`），插件状态取 `opencode.jsonc` 的 `plugin` 数组。
 - 点「打开 Digital Programmer」时才写配置：工作流写回 `identity.json`，终端写回 `terminal_mode.ini`，插件只替换 `opencode.jsonc` 的 `plugin` 数组，其余字段原样保留。写前留 `.bak`，失败弹窗并取消启动。
-- 工作流用侧栏按钮选择（一般任务 / SDLC / REQDOC / WEB 安全自测），终端用 HTML 下拉框选择。终端「原生」由 WebView2 host 启动 `opencode.cmd`，使用系统控制台；「专用」启动 `OpenConsole.exe cmd /c "title 数字程序员 && opencode.cmd"`，使用打包的 Windows Terminal，退出即关。默认启动新会话；只有勾选「继续上次会话」且项目目录、工作流都与上次启动一致时，才追加 `-c` 续接上次对话。工作流变化时复选框自动置灰并新建会话，避免旧会话沿用旧工作流。
+- 工作流用侧栏按钮选择（一般任务 / SDLC / REQDOC / WEB 安全自测），终端用 HTML 下拉框选择。终端「原生」由 WebView2 host 启动 `opencode.cmd`，使用系统控制台；「专用」启动 `WindowsTerminal.exe -p "{0caa0dad-35be-5f56-a8ff-afceeeaa6101}" -d "<项目目录>" cmd.exe /d /c "title 数字程序员 && opencode.cmd"`，显式选择 Command Prompt profile 并以 cmd.exe 运行，不落到 PowerShell，退出即关。默认启动新会话；只有勾选「继续上次会话」且项目目录、工作流都与上次启动一致时，才追加 `-c` 续接上次对话。工作流变化时复选框自动置灰并新建会话，避免旧会话沿用旧工作流。
 - 关闭「会话管理」插件时工作流菜单置灰；插件开关是机器级设置，对所有项目生效。配置文件缺失或无法解析时，插件开关置灰并提示重装；`identity.json` 缺失时工作流不可选。
 - 启动时把 WebView2 host 的 `WorkingDirectory` 设为所选目录 → **该目录即项目根 `ctx.directory`**，reqdoc 扫描/导出/技能全部基于此。
 - 所选目录须为业务已取得的 doc_process 项目（含 `.claude/skills`、`工作要求.txt`、`raw/`、`00~07` 骨架）；安装包不负责分发这些项目文件。
@@ -220,7 +220,7 @@ cmd /c portable-installer\build\build.bat
 | `.opencode/skills/opencode-installer/SKILL.md` | **首选打包入口**：强制清缓存、完整重建、依赖核对与验收 |
 | `portable-installer/payload/OpenCode/runtime` | Node 工具链载荷 |
 | `portable-installer/payload/OpenCode/python` | Python 载荷（含 `python3.exe`） |
-| `portable-installer/payload/OpenCode/terminal` | Windows Terminal 载荷（`OpenConsole.exe`，所有用户均部署） |
+| `portable-installer/payload/OpenCode/terminal` | Windows Terminal 载荷（`WindowsTerminal.exe` + `OpenConsole.exe`，所有用户均部署） |
 | `OpenCode-Setup.exe`（构建产物） | **唯一需要分发给业务的文件**：内置载荷 + 启动器 + 清空历史工具，双击即装 |
 
 > **交付与安装只需一个文件**：业务侧只分发并双击 `OpenCode-Setup.exe` 即可。`OpenCode-launch.exe` 与 `OpenCode-Reset.exe` 是构建中间产物，已被主安装包内嵌并释放到 `%USERPROFILE%\OpenCode\`，桌面/开始菜单的「数字程序员」快捷方式指向启动器，开始菜单的「清空历史会话」指向重置工具，无需单独安装或分发。安装后双击「数字程序员」快捷方式 → 选项目目录 → 进 opencode。

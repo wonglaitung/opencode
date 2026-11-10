@@ -238,7 +238,7 @@ Function WriteConfigs
   FileClose $1
 
   ; terminal_mode.ini
-  ${If} $TerminalMode == "专用终端(OpenConsole)"
+  ${If} $TerminalMode == "专用终端(Windows Terminal / CMD)"
     StrCpy $0 "dedicated"
   ${Else}
     StrCpy $0 "native"
@@ -328,7 +328,7 @@ Function ConfigPage2
   ${NSD_CreateDropList} 0 84u 100% 12u ""
   Pop $hTerminal
   ${NSD_CB_AddString} $hTerminal "原生终端"
-  ${NSD_CB_AddString} $hTerminal "专用终端(OpenConsole)"
+  ${NSD_CB_AddString} $hTerminal "专用终端(Windows Terminal / CMD)"
   ${NSD_CB_SelectString} $hTerminal "${DEFAULT_TERMINAL}"
 
   nsDialogs::Show

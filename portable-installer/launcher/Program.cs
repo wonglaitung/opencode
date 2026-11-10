@@ -288,10 +288,12 @@ internal sealed class LauncherForm : Form
             if (!File.Exists(opencode)) return new { ok = false, error = "未找到运行环境，请重新运行安装包" };
             if (terminal == "dedicated")
             {
-                var openConsole = Path.Combine(Root, "terminal", "OpenConsole.exe");
-                if (!File.Exists(openConsole)) return new { ok = false, error = "未找到专用终端 OpenConsole.exe" };
-                var command = "cmd /c \"title 数字程序员 && " + Quote(opencode) + " " + string.Join(" ", common.Select(Quote)) + "\"";
-                Process.Start(new ProcessStartInfo(openConsole) { UseShellExecute = true, WorkingDirectory = dir, Arguments = command });
+                const string commandPromptProfile = "{0caa0dad-35be-5f56-a8ff-afceeeaa6101}";
+                var windowsTerminal = Path.Combine(Root, "terminal", "WindowsTerminal.exe");
+                if (!File.Exists(windowsTerminal)) return new { ok = false, error = "未找到专用终端 WindowsTerminal.exe" };
+                var command = "cmd.exe /d /c \"title 数字程序员 && " + Quote(opencode) + " " + string.Join(" ", common.Select(Quote)) + "\"";
+                var arguments = "-p \"" + commandPromptProfile + "\" -d " + Quote(dir) + " " + command;
+                Process.Start(new ProcessStartInfo(windowsTerminal) { UseShellExecute = true, WorkingDirectory = dir, Arguments = arguments });
             }
             else
             {

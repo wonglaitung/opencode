@@ -519,7 +519,7 @@ Function DoLaunch
   ; 在该目录启动 opencode (cwd 即项目根)
   SetOutPath "$DirPath"
   ${If} $TerminalMode == "dedicated"
-    Exec '"$PROFILE\OpenCode\terminal\OpenConsole.exe" cmd /c "title 数字程序员 && $PROFILE\OpenCode\runtime\opencode.cmd$ResumeFlag$PromptFlag"'
+    Exec '"$PROFILE\OpenCode\terminal\WindowsTerminal.exe" -p "{0caa0dad-35be-5f56-a8ff-afceeeaa6101}" -d "$DirPath" cmd.exe /d /c "title 数字程序员 && $PROFILE\OpenCode\runtime\opencode.cmd$ResumeFlag$PromptFlag"'
   ${Else}
     Exec '"$PROFILE\OpenCode\runtime\opencode.cmd"$ResumeFlag$PromptFlag'
   ${EndIf}
@@ -725,7 +725,7 @@ Function LaunchPage
   ${NSD_CreateDropList} 380 460 150 120 ""
   Pop $hTerminal
   ${NSD_CB_AddString} $hTerminal "原生"
-  ${NSD_CB_AddString} $hTerminal "专用"
+  ${NSD_CB_AddString} $hTerminal "专用 (WT/CMD)"
   ${If} $TerminalMode == "dedicated"
     ${NSD_CB_SetSelectionIndex} $hTerminal 1
   ${Else}
