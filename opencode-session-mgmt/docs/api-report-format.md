@@ -117,6 +117,34 @@ task 额外携带可选分类字段（sdlc/reqdoc/websec 不携带）：
 | `task.source` | `model`（模型归类）或 `heuristic`（预留的本地兜底） |
 | `task: null` | task 尚未分类；旧插件缺省该字段同样按未分类处理 |
 
+websec 额外携带可选质量摘要（其他工作流不携带）：
+
+```json
+"workflow": {
+  "type": "websec",
+  "websec": {
+    "surfaces": 2,
+    "findings": {
+      "confirmed": 3,
+      "suspected": 1,
+      "confirmedBySeverity": { "critical": 1, "high": 2, "medium": 0, "low": 0, "info": 0 },
+      "confirmedByCategory": { "authn": 0, "authz": 2, "input": 1, "config": 0, "logic": 0, "other": 0 }
+    },
+    "regression": { "total": 4, "fixed": 2, "stillPresent": 1, "notApplicable": 1 }
+  }
+}
+```
+
+| 字段 | 含义 |
+|------|------|
+| `websec.surfaces` | 本次测试登记的入口数，用于给发现数提供范围上下文 |
+| `websec.findings.confirmed` / `suspected` | confirmed / suspected finding 计数；疑似项不进主 KPI |
+| `websec.findings.confirmedBySeverity` | 仅 confirmed 的 critical/high/medium/low/info 分布 |
+| `websec.findings.confirmedByCategory` | 仅 confirmed 的 authn/authz/input/config/logic/other 分布 |
+| `websec.regression` | 历史 finding 复测结果：fixed / stillPresent / notApplicable 计数；`fixed` 是复测验证次数，不是独立漏洞数 |
+
+> `workflow.websec` 只含计数/枚举，不含标题、endpoint、复现/影响/修复建议或证据正文。旧收集端可忽略该字段；旧插件缺省时收集端按 `null` 处理。
+
 ---
 
 ## 四、审查阶段特有字段
@@ -163,6 +191,7 @@ task 额外携带可选分类字段（sdlc/reqdoc/websec 不携带）：
 | `commit.force` | 强制提交授权时出现（逃生口留痕） |
 | `baseline` | 需求/目标阶段或一般任务开始时录入后出现，后续不变 |
 | `task` | task 专属；模型调用 `task_classify` 后出现，可覆盖；未分类为 null，sdlc/reqdoc/websec 不携带 |
+| `websec` | websec 专属质量摘要；只含计数/枚举，随报告/回归更新；其他工作流不携带 |
 
 ---
 

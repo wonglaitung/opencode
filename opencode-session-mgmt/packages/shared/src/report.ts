@@ -6,6 +6,8 @@
 import { sumLinesByCategory, type LinesCategory } from "./loc"
 import {
   getDefinition,
+  WEBSEC_CATEGORY_KEYS,
+  WEBSEC_SEVERITY_KEYS,
   type BaselineEstimate,
   type CommitGate,
   type QualityMetrics,
@@ -14,6 +16,9 @@ import {
   type TaskCategory,
   type TaskCategorySource,
   type Transition,
+  type WebsecCategory,
+  type WebsecSeverity,
+  type WebsecState,
   type WorkflowState,
   type WorkflowType,
 } from "./workflow"
@@ -51,6 +56,29 @@ export interface TaskSummary {
 }
 
 /**
+ * websec 质量指标的汇报投影：只上行计数与枚举，不上行 finding 标题、endpoint、
+ * 复现/影响/修复建议或证据正文（12 安全与隐私）。
+ */
+export interface WebsecSummary {
+  /** 本次测试登记的入口数，仅用于给发现数提供范围上下文。 */
+  surfaces: number
+  findings: {
+    confirmed: number
+    suspected: number
+    /** 仅 confirmed finding 的严重度分布。 */
+    confirmedBySeverity: Record<WebsecSeverity, number>
+    /** 仅 confirmed finding 的类别分布。 */
+    confirmedByCategory: Record<WebsecCategory, number>
+  }
+  regression: {
+    total: number
+    fixed: number
+    stillPresent: number
+    notApplicable: number
+  }
+}
+
+/**
  * WorkflowState 的汇报投影：剔除代码相关内容（comprehension.explanation、file/lines，
  * 以及 quality.iterationByFile 的文件路径），只保留流程时间戳、迭代、审查结论与质量指标。
  */
@@ -70,10 +98,45 @@ export interface WorkflowSummary {
   durationMs?: number
   /** task 专属：一般任务分类；sdlc/reqdoc/websec 不携带，task 未分类为 null */
   task?: TaskSummary | null
+  /** websec 专属：安全测试质量摘要；其他工作流不携带。 */
+  websec?: WebsecSummary
 }
 
 function summarizeStage(stage: StageRecord): StageSummary {
   return { status: stage.status, revision: stage.revision, transitions: stage.transitions }
+}
+
+function summarizeWebsec(state: WebsecState | undefined): WebsecSummary {
+  const confirmedBySeverity = Object.fromEntries(
+    WEBSEC_SEVERITY_KEYS.map((key) => [key, 0]),
+  ) as Record<WebsecSeverity, number>
+  const confirmedByCategory = Object.fromEntries(
+    WEBSEC_CATEGORY_KEYS.map((key) => [key, 0]),
+  ) as Record<WebsecCategory, number>
+
+  let confirmed = 0
+  let suspected = 0
+  for (const finding of state?.report?.findings ?? []) {
+    if (finding.status === "confirmed") {
+      confirmed++
+      confirmedBySeverity[finding.severity]++
+      confirmedByCategory[finding.category]++
+    } else if (finding.status === "suspected") {
+      suspected++
+    }
+  }
+
+  const regression = state?.report?.regression ?? state?.regression ?? []
+  return {
+    surfaces: state?.surface?.length ?? 0,
+    findings: { confirmed, suspected, confirmedBySeverity, confirmedByCategory },
+    regression: {
+      total: regression.length,
+      fixed: regression.filter((item) => item.status === "fixed").length,
+      stillPresent: regression.filter((item) => item.status === "still_present").length,
+      notApplicable: regression.filter((item) => item.status === "not_applicable").length,
+    },
+  }
 }
 
 /** 将完整 WorkflowState 投影为汇报摘要（剥离代码相关内容；3.2 经定义驱动）。 */
@@ -116,6 +179,7 @@ export function summarizeWorkflow(workflow: WorkflowState): WorkflowSummary {
             : null,
         }
       : {}),
+    ...(workflow.type === "websec" ? { websec: summarizeWebsec(workflow.websec) } : {}),
   }
 }
 

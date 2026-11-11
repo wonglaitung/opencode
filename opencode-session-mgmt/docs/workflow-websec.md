@@ -116,7 +116,9 @@ Edge/CDP 是默认必经能力：`websec_edge_capture` 复用 `edge-debug-core` 
 - `evidence[]`：证据 id、URL、方法、身份、阶段（single/baseline/privileged/anonymous）、来源（edge/anonymous-probe/http-check/write-probe/manual）、采集时间、哈希、本地路径、备注、状态码/正文有无、允许列表内的响应头（CORS/安全头等，不含 Cookie 原值）；
 - `report`：方法、findings、历史回归、局限性、结论、提交时间，以及项目内 `reportDir` / `markdownPath` / `jsonPath`。
 
-不存请求/响应正文、Cookie、令牌、真实用户数据。汇报投影（`WorkflowSummary`）不包含 `websec` 字段，收集端无需数据库迁移。
+不存请求/响应正文、Cookie、令牌、真实用户数据。
+
+汇报投影（`WorkflowSummary.websec`）只上行计数与枚举：入口数、confirmed/suspected 数、confirmed 的严重度/类别分布、历史 finding 回归的 fixed/still_present/not_applicable 计数。**不上行** finding 标题、endpoint/URL、复现/影响/修复建议、证据正文。新增字段为可选字段，旧收集端可忽略，旧汇报缺失时按 `null` 处理，无需数据库迁移。
 
 ## 6. 规约注入
 

@@ -157,6 +157,118 @@ describe("summarizeWorkflow", () => {
   })
 })
 
+describe("summarizeWorkflow websec 质量投影", () => {
+  test("只上行计数，不上行标题/端点/证据正文", () => {
+    const state = createWorkflowState("websec")
+    state.websec = {
+      evidence: [],
+      surface: [
+        { id: "s1", method: "GET", endpoint: "/secret/a", source: "edge", addedAt: 1 },
+        { id: "s2", method: "POST", endpoint: "/secret/b", source: "manual", addedAt: 2 },
+      ],
+      regression: [
+        {
+          id: "r1",
+          sourceSessionID: "old-1",
+          sourceFindingID: "f-1",
+          title: "secret old 1",
+          endpoint: "/secret/a",
+          severity: "high",
+          status: "fixed",
+          evidenceRef: "e1",
+        },
+        {
+          id: "r2",
+          sourceSessionID: "old-2",
+          sourceFindingID: "f-2",
+          title: "secret old 2",
+          endpoint: "/secret/b",
+          severity: "medium",
+          status: "still_present",
+          evidenceRef: "e2",
+        },
+        {
+          id: "r3",
+          sourceSessionID: "old-3",
+          sourceFindingID: "f-3",
+          title: "secret old 3",
+          endpoint: "/secret/c",
+          severity: "low",
+          status: "not_applicable",
+          note: "out of scope",
+        },
+      ],
+      report: {
+        status: "submitted",
+        method: "manual",
+        findings: [
+          {
+            id: "f-1",
+            title: "secret title 1",
+            category: "authz",
+            severity: "critical",
+            endpoint: "/secret/a",
+            status: "confirmed",
+            evidenceRef: "e1",
+            reproduction: "secret repro",
+            impact: "secret impact",
+            remediation: "secret fix",
+          },
+          {
+            id: "f-2",
+            title: "secret title 2",
+            category: "input",
+            severity: "high",
+            endpoint: "/secret/b",
+            status: "confirmed",
+            evidenceRef: "e2",
+            reproduction: "secret repro",
+            impact: "secret impact",
+            remediation: "secret fix",
+          },
+          {
+            id: "f-3",
+            title: "secret title 3",
+            category: "config",
+            severity: "low",
+            endpoint: "/secret/c",
+            status: "suspected",
+            evidenceRef: "e3",
+            reproduction: "secret repro",
+            impact: "secret impact",
+            remediation: "secret fix",
+          },
+        ],
+        limitations: ["secret limitation"],
+        verdict: "issues_found",
+        submittedAt: 1,
+      },
+    }
+
+    const summary = summarizeWorkflow(state)
+    expect(summary.websec).toEqual({
+      surfaces: 2,
+      findings: {
+        confirmed: 2,
+        suspected: 1,
+        confirmedBySeverity: { critical: 1, high: 1, medium: 0, low: 0, info: 0 },
+        confirmedByCategory: { authn: 0, authz: 1, input: 1, config: 0, logic: 0, other: 0 },
+      },
+      regression: { total: 3, fixed: 1, stillPresent: 1, notApplicable: 1 },
+    })
+
+    const text = JSON.stringify(summary)
+    expect(text).not.toContain("secret title")
+    expect(text).not.toContain("/secret")
+    expect(text).not.toContain("secret repro")
+    expect(text).not.toContain("secret limitation")
+  })
+
+  test("非 websec 不携带 websec", () => {
+    expect(summarizeWorkflow(createWorkflowState("sdlc"))).not.toHaveProperty("websec")
+  })
+})
+
 describe("WorkflowDefinition 注册表（3.2）", () => {
   test("SDLC 定义与旧硬编码常量一致（阶段键/清单键/标签）", () => {
     expect(SDLC.type).toBe("sdlc")

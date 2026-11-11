@@ -27,6 +27,7 @@ flowchart TD
 | `workflow.stages.review.comprehension.confirmed` | 返工副作用观测：理解确认被级联重置后 confirmed 会下降 |
 | `workflow.commit.status` | 完结口径：`allowed` 即全部阶段 approved（reqdoc 同样适用） |
 | `workflow.durationMs` | 会话总活跃耗时（毫秒，优先于 transitions 首末跨度；旧汇报缺省时回退） |
+| `workflow.websec` | websec 质量摘要：入口数、confirmed/suspected、严重度/类别分布、回归 fixed/still_present/not_applicable；详见 7.6 与 `collector-spec.md` |
 | `reportedAt` | 本机时钟快照时间；`in_progress` 阶段耗时用它当右端点 |
 
 阶段键随工作流类型不同：
@@ -34,6 +35,7 @@ flowchart TD
 - `task`：`execute`（单阶段，无 review）
 - `sdlc`：`requirements` / `design` / `implementation` / `testing` / `review`
 - `reqdoc`：`goal` / `rules` / `edge` / `prd` / `review`
+- `websec`：`scope` / `surface` / `checks` / `verify` / `report`
 
 ## 当前阶段
 
@@ -81,6 +83,25 @@ idle_gap        = nextStage.enter.at − prevStage.approve.at
   `edgeCoverage` / `resolution`），聚合时不要复用 sdlc 的四个键。
 - `task` 没有 `review` 阶段；不要为 task 会话读取 checklist/comprehension，按无审查处理。
 - 旧版插件可能缺 `workflow.type`（缺省按 sdlc）、`baseline`、`lines` 等字段，缺失时按空值处理，不得报错。
+
+## websec 质量指标（一期）
+
+仅统计 `workflow.type=websec` 且带 `workflow.websec` 摘要的汇报。字段定义见 `collector-spec.md` 7.6。
+
+| 指标 | 口径 | 注意事项 |
+|---|---|---|
+| 确认发现 | `findings.confirmed` 求和 | 会话累计，未跨会话去重 |
+| 高危及以上 | `confirmedBySeverity.critical + high` 求和 | 只统计 confirmed |
+| 修复验证 | `regression.fixed` 求和 | 历史 finding 复测标记 fixed 的次数，不是独立漏洞数 |
+| 仍存在 | `regression.stillPresent` 求和 | 与修复验证成对观察 |
+| 修复验证率 | `fixed / (fixed + stillPresent)` | 样本为 0 时 null；小样本不排名 |
+| 平均测试入口 | `Σ surfaces / sessions` | 仅作范围上下文，不做排名 |
+
+边界：
+
+- 覆盖完成率、回归收口率、误报复核完成率、证据完整率在提交报告前已被工作流门禁强制收口，已提交报告基本恒为 100%，不作为一期看板指标。
+- `suspected` 只作旁注，不进主 KPI，避免通过多标疑似刷发现数。
+- 旧汇报无 `workflow.websec` 时计入 `missingSummaries`，质量指标显示占位，不按 0 处理。
 
 ## 计算示例
 

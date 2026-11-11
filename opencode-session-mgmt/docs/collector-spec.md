@@ -2,11 +2,13 @@
 
 | | |
 |---|---|
-| 版本 | v1.6 |
-| 日期 | 2026-11-09 |
+| 版本 | v1.7 |
+| 日期 | 2026-11-11 |
 | 读者 | 后端收集服务开发团队、网关集成团队 |
 | 状态 | 生效 |
 
+> **v1.7（2026-11-11）**：新增可选字段 `workflow.websec`（一期质量摘要）——只上行入口数、confirmed/suspected 计数、confirmed 严重度/类别分布、历史 finding 回归 fixed/still_present/not_applicable 计数；不上行标题/endpoint/证据正文。收集端新增 `ScopeStats.websec` / `perAccount[].websec` 可选聚合，无数据库迁移。
+>
 > **v1.6（2026-11-09）**：新增 `websec` 轻量级 WEB 安全测试工作流——五阶段 `scope/surface/checks/verify/report`，`workflow_type`/`workflowType` 取值扩展为 `task | sdlc | reqdoc | websec`；报告与证据正文只存插件本地，不上报，收集端无需数据库迁移。
 >
 > **v1.5（2026-10-30）**：task 分类新增 `code_review`（代码审核）。审核报告（scope/六维/findings，无 checks）与 regex 扫描结果只存插件本地，不上报；收集端只按任务分类统计，无需数据库迁移。
@@ -387,6 +389,7 @@ flowchart LR
 | `apiKey` | string | 是 | `api_key` 的 SHA-256（hex）哈希；身份标识，网络不传明文密钥（见 2.3） |
 | `workflow.type` | `"task" \| "sdlc" \| "reqdoc" \| "websec"` | 否 | 工作流类型（task 一般任务 / sdlc 开发 / reqdoc 需求书 / websec 安全测试）。缺省按 sdlc 处理（旧插件兼容） |
 | `workflow.task` | `{category, source} \| null` | 否 | task 专属：一般任务分类。`category ∈ {documentation, testing, debugging, coding, code_review, research, environment, other}`；`source ∈ {model, heuristic}`；task 未分类为 `null`；sdlc/reqdoc/websec 不携带。旧收集器可忽略，无需迁移 |
+| `workflow.websec` | object | 否 | websec 专属质量摘要（一期）：入口数、confirmed/suspected 计数、confirmed 严重度/类别分布、历史 finding 回归 fixed/still_present/not_applicable 计数。只含计数/枚举，不含标题/endpoint/证据正文；其他工作流不携带，旧汇报缺省按 `null` 处理 |
 | `workflow.stages.*.status` | `"not_started" \| "in_progress" \| "approved"` | 是 | 阶段状态。键随 `workflow.type` 的定义：sdlc 为 `requirements`/`design`/`implementation`/`testing`/`review`，reqdoc 为 `goal`/`rules`/`edge`/`prd`/`review`，websec 为 `scope`/`surface`/`checks`/`verify`/`report`，task 为单阶段 `execute` |
 | `workflow.stages.*.revision` | number | 是 | 阶段回退次数（需求质量信号） |
 | `workflow.stages.*.transitions` | array | 是 | 阶段转换时间戳序列（耗时统计的数据源），`action ∈ {"enter","revisit","approve"}`，`note` 可选 |
@@ -497,6 +500,8 @@ flowchart LR
 **错误**：`scope` 非法 → `400`；缺 `group`/`org` → `400 {"error": "缺少 group 参数"}`。
 
 > 响应为「最小集超集」：上述字段为契约必含项，实现方可额外返回可选字段（如顶层 `tokensInput`/`tokensOutput`/`avgEstimatedHours`/`avgEffDurationMs`），**消费方（CLI）必须忽略未知字段**。数值等价性判定仅针对必含字段。
+>
+> `workflowType=websec` 时还可返回可选 `websec` 对象与 `perAccount[].websec`，字段与计算见 7.6；其他工作流可不返回或返回 `null`。
 
 ### 5.4 `GET /healthz` — 存活探针
 
@@ -599,6 +604,31 @@ CREATE INDEX idx_reports_type ON reports(workflow_type);
 - 组/组织级全部指标来自收集服务聚合；CLI 查询时对 `avgFirstPassRate` 过低成员、`linesTotal` 等做展示层标注（仅展示，无告警）。
 
 ---
+
+### 7.6 websec 质量指标（一期，可选字段）
+
+收集端在 `ScopeStats.websec` 返回以下可选聚合；仅统计 `workflow_type=websec` 的会话。旧汇报没有 `workflow.websec` 时计入 `missingSummaries`，不按 0 参与质量均值。
+
+| 字段 | 计算 |
+|---|---|
+| `sessions` | 有 `workflow.websec` 摘要的 websec 会话数 |
+| `missingSummaries` | `workflow_type=websec` 但缺少 `workflow.websec` 的会话数 |
+| `confirmedFindings` | `workflow.websec.findings.confirmed` 求和（会话累计，未跨会话去重） |
+| `suspectedFindings` | `workflow.websec.findings.suspected` 求和；只作旁注，不进主 KPI |
+| `highPlusFindings` | `confirmedBySeverity.critical + confirmedBySeverity.high` 求和 |
+| `confirmedBySeverity` / `confirmedByCategory` | 分别对 `workflow.websec.findings.*` 的计数求和 |
+| `fixVerifications` | `workflow.websec.regression.fixed` 求和；表示历史 finding 复测标记 fixed 的次数，不是独立漏洞数 |
+| `stillPresent` | `workflow.websec.regression.stillPresent` 求和 |
+| `regressionTotal` | `workflow.websec.regression.total` 求和 |
+| `fixVerificationSample` | `fixVerifications + stillPresent` |
+| `fixVerificationRate` | `fixVerifications / fixVerificationSample`；样本为 0 时 `null` |
+| `avgSurfaces` | `Σ workflow.websec.surfaces / sessions`；`sessions=0` 时为 0 |
+| `avgDurationMs` | 有摘要的 websec 会话耗时均值（口径同 7.2） |
+| `avgEfficiency` | 有摘要、有基线且耗时 > 0 的 websec 会话提效率均值；无数据为 `null` |
+
+`perAccount[].websec` 为成员级精简版：`sessions`、`missingSummaries`、`confirmedFindings`、`highPlusFindings`、`fixVerifications`、`stillPresent`、`fixVerificationSample`、`fixVerificationRate`、`avgSurfaces`、`avgDurationMs`、`avgEfficiency`。
+
+> 口径边界：`confirmedFindings` 与 `fixVerifications` 都是**会话累计/复测事件**，不是跨会话去重后的独立漏洞数；同一 finding 多次复测可能重复计数。`fixVerificationRate` 在小样本下不稳定，看板应在样本不足时显示占位而非排名。
 
 ## 8. 隐私与安全
 

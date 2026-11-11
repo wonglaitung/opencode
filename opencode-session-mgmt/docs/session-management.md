@@ -181,7 +181,7 @@ graph LR
 | **`workflow-task.md`** | 工作流三：task 一般任务（单阶段 execute、只记预估/实际工时、完成提示与自动收口、统一预估话术、统计边界） | 需要记录一般任务工时的人 |
 | **`workflow-sdlc.md`** | 工作流一：sdlc 软件开发定义（2 章）、12 条规则全文（3 章）、场景一~四（4 章）、审查清单（5 章）、提交门禁（6 章）、统计口径（7 章）、评测场景（8 章） | 开发者 |
 | **`workflow-reqdoc.md`** | 工作流二：reqdoc 需求书定义（2 章）、需求资料目录契约（3 章）、24 条规则全文（4 章）、打分卡（5 章）、追问探针（6 章）、渲染结构校验（7 章）、专属工具（8 章）、场景五（9 章）、评测（10 章） | 需求分析师 |
-| **`workflow-websec.md`** | 工作流四：websec 轻量级 WEB 安全测试——范围与边界、资产接口枚举、只读/低风险检查、取证定级、结构化报告；默认只读、证据驱动、报告不上行 | 开发者 / 安全测试人员 |
+| **`workflow-websec.md`** | 工作流四：websec 轻量级 WEB 安全测试——范围与边界、资产接口枚举、只读/低风险检查、取证定级、结构化报告；默认只读、证据驱动、报告正文不上行（仅上行质量计数摘要） | 开发者 / 安全测试人员 |
 
 **阅读建议**：先读本文档 1~3 章理解通用机制，再按角色读对应工作流文件；各工作流文件里出现的「见 session-management.md X.Y」即回指本文档的通用机制。跨文件引用带文件名前缀、不带前缀的章号指当前文件。
 
@@ -538,7 +538,7 @@ export function resolveWorkflowType(v: unknown): WorkflowType   // 未知值回�
 
 新增工作流必须经 `defineWorkflow` 构造并声明 `standard`（漏填过不了 typecheck）；工厂会校验同名规则是否带统一预估话术与 `/new`，缺失则自动补一条，因此新工作流不会静默漏掉「会话开始问预估、结束提示 /new」；绕过工厂手写定义时由 `packages/shared/test/shared.test.ts` 遍历 `WORKFLOW_DEFINITIONS` 的断言兜底。
 
-`WorkflowState` 含 `type` 字段标明本会话属于哪种工作流；`stages` 为泛化的 `Record<string, StageRecord>`，审查阶段经 `reviewRecord()` 定位（`getDefinition(s.type).reviewStage`）。系统不设 `STAGE_ORDER`/`STAGE_LABELS`/`StageName` 常量——消费方一律通过 `getDefinition(workflow.type)` 取阶段键/中文名/清单。task 可选 `task: {category, source, setAt}` 记录一般任务分类；汇报投影只带 `category/source`，未分类为 `null`。websec 可选 `websec` 记录 scope/evidence/report，仅存本机、不进入汇报投影。`ComprehensionRecord` 是通用机制（sdlc 编码段与 reqdoc PRD 要点共用，reqdoc 语义见 workflow-reqdoc.md 2 章）。`metricKind`、`workflow_set_type` 工具未实现（不做会话内类型切换，避免死代码）；`workflow_start` 跨类型启动直接拒绝。
+`WorkflowState` 含 `type` 字段标明本会话属于哪种工作流；`stages` 为泛化的 `Record<string, StageRecord>`，审查阶段经 `reviewRecord()` 定位（`getDefinition(s.type).reviewStage`）。系统不设 `STAGE_ORDER`/`STAGE_LABELS`/`StageName` 常量——消费方一律通过 `getDefinition(workflow.type)` 取阶段键/中文名/清单。task 可选 `task: {category, source, setAt}` 记录一般任务分类；汇报投影只带 `category/source`，未分类为 `null`。websec 可选 `websec` 记录 scope/evidence/report；汇报时只投影计数摘要（`WorkflowSummary.websec`），不上行标题、endpoint、复现/影响/修复建议或证据正文。`ComprehensionRecord` 是通用机制（sdlc 编码段与 reqdoc PRD 要点共用，reqdoc 语义见 workflow-reqdoc.md 2 章）。`metricKind`、`workflow_set_type` 工具未实现（不做会话内类型切换，避免死代码）；`workflow_start` 跨类型启动直接拒绝。
 
 **sdlc 定义**（五阶段 `["requirements","design","implementation","testing","review"]`、审查阶段 `review`、四清单项 businessIntent/logicExplainable/behaviorVerifiable/designRationale、`hasCommitGate=true`）已移至 **workflow-sdlc.md 2 章**，规则全文见 **workflow-sdlc.md 3 章**。
 
