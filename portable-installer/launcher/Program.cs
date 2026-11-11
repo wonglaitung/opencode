@@ -291,8 +291,9 @@ internal sealed class LauncherForm : Form
                 const string commandPromptProfile = "{0caa0dad-35be-5f56-a8ff-afceeeaa6101}";
                 var windowsTerminal = Path.Combine(Root, "terminal", "WindowsTerminal.exe");
                 if (!File.Exists(windowsTerminal)) return new { ok = false, error = "未找到专用终端 WindowsTerminal.exe" };
-                var command = "cmd.exe /d /c \"title 数字程序员 && " + Quote(opencode) + " " + string.Join(" ", common.Select(Quote)) + "\"";
-                var arguments = "-p \"" + commandPromptProfile + "\" -d " + Quote(dir) + " " + command;
+                // 直接交给 Windows Terminal 执行；用 cmd /c 包裹会丢失提示词引号，带空格的提示词会被拆成多个参数。
+                var command = Quote(opencode) + " " + string.Join(" ", common.Select(Quote));
+                var arguments = "-p \"" + commandPromptProfile + "\" -d " + Quote(dir) + " --title \"数字程序员\" " + command;
                 Process.Start(new ProcessStartInfo(windowsTerminal) { UseShellExecute = true, WorkingDirectory = dir, Arguments = arguments });
             }
             else
@@ -333,7 +334,33 @@ internal sealed class LauncherForm : Form
         }
     }
 
-    private static string Quote(string value) => "\"" + value.Replace("\"", "\\\"") + "\"";
+    private static string Quote(string value)
+    {
+        var sb = new System.Text.StringBuilder(value.Length + 2);
+        sb.Append('"');
+        var backslashes = 0;
+        foreach (var c in value)
+        {
+            if (c == '\\')
+            {
+                backslashes++;
+                continue;
+            }
+            if (c == '"')
+            {
+                sb.Append('\\', backslashes * 2 + 1);
+                sb.Append('"');
+                backslashes = 0;
+                continue;
+            }
+            sb.Append('\\', backslashes);
+            backslashes = 0;
+            sb.Append(c);
+        }
+        sb.Append('\\', backslashes * 2);
+        sb.Append('"');
+        return sb.ToString();
+    }
 
     private static (int ExitCode, string Stdout, string Stderr) RunNode(IEnumerable<string> args, int timeoutMs)
     {
