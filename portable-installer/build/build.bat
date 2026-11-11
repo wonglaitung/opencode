@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
 setlocal
 set BUILD=%~dp0
 set PAYLOAD=%BUILD%..\payload\OpenCode
@@ -21,11 +21,23 @@ echo [WARN] 载荷超过 2GB (%SIZE% bytes), 32位 NSIS 可能无法构建
 echo        建议清理源目录中不必要的包后重新 sync_payload.bat
 :size_ok
 
-echo [1/3] 构建清空历史会话工具 OpenCode-Reset.exe ...
+echo [0/4] 清理旧构建产物与 dotnet 增量缓存 ...
+if exist "%BUILD%OpenCode-Setup.exe" del /f /q "%BUILD%OpenCode-Setup.exe"
+if exist "%BUILD%OpenCode-launch.exe" del /f /q "%BUILD%OpenCode-launch.exe"
+if exist "%BUILD%OpenCode-Scheduler.exe" del /f /q "%BUILD%OpenCode-Scheduler.exe"
+if exist "%BUILD%OpenCode-Reset.exe" del /f /q "%BUILD%OpenCode-Reset.exe"
+if exist "%BUILD%launcher-publish" rmdir /s /q "%BUILD%launcher-publish"
+if exist "%BUILD%scheduler-publish" rmdir /s /q "%BUILD%scheduler-publish"
+if exist "%BUILD%..\launcher\bin" rmdir /s /q "%BUILD%..\launcher\bin"
+if exist "%BUILD%..\launcher\obj" rmdir /s /q "%BUILD%..\launcher\obj"
+if exist "%BUILD%..\scheduler\bin" rmdir /s /q "%BUILD%..\scheduler\bin"
+if exist "%BUILD%..\scheduler\obj" rmdir /s /q "%BUILD%..\scheduler\obj"
+
+echo [1/4] 构建清空历史会话工具 OpenCode-Reset.exe ...
 "%MAKENSIS%" "%BUILD%OpenCode-Reset.nsi"
 if errorlevel 1 (echo [FAIL] 清空历史会话工具构建失败 & exit /b 1)
 
-echo [2/3] 构建 WebView2 启动器 OpenCode-launch.exe ...
+echo [2/4] 构建 WebView2 启动器 OpenCode-launch.exe ...
 where dotnet >nul 2>nul
 if errorlevel 1 (echo [FAIL] 未找到 dotnet SDK，无法构建 WebView2 启动器 & exit /b 1)
 dotnet publish "%BUILD%..\launcher\Launcher.csproj" -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o "%BUILD%launcher-publish"

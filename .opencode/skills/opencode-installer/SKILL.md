@@ -20,7 +20,7 @@ description: 打包 Windows 版 OpenCode 图形化安装包（portable-installer
 1. NSIS 3.x 存在：优先 `C:\Program Files (x86)\NSIS\makensis.exe`，其次 `C:\Program Files\NSIS\`，最后 PATH。
 2. .NET 8 SDK 存在（WebView2 启动器构建）：`dotnet --info` 可用；目标机需安装 Microsoft Edge WebView2 Runtime。
 3. 源目录齐全：`D:\Tools\node-v22.23.2-win-x64`、`D:\Tools\Python312`、`D:\Tools\terminal-1.23.20211.0`。可用 `SRC_NODE`、`SRC_PY`、`SRC_TERMINAL` 覆盖。
-4. 编码检查：三个 `.nsi` 为 UTF-8 带 BOM 且 `Unicode true` 在位；`build.bat` / `sync_payload.bat` 为纯 CRLF。Windows checkout 可能因 Git 换行转换改写文件，必须先用下面的自检脚本确认，不通过就修正后再构建。
+4. 编码检查：三个 `.nsi` 为 UTF-8 带 BOM 且 `Unicode true` 在位；`build.bat` / `sync_payload.bat` 为纯 CRLF 且不能带 UTF-8 BOM。Windows checkout 可能因 Git 换行转换改写文件，必须先用下面的自检脚本确认，不通过就修正后再构建。
 5. 空闲磁盘至少 5 GB，完整重建要同时容纳源目录、新载荷和压缩中间文件。
 
 ### 编码自检
@@ -28,6 +28,9 @@ description: 打包 Windows 版 OpenCode 图形化安装包（portable-installer
 ```powershell
 foreach ($f in Get-ChildItem portable-installer\build\*.bat) {
   $b = [IO.File]::ReadAllBytes($f.FullName)
+  if ($b.Length -ge 3 -and $b[0] -eq 0xEF -and $b[1] -eq 0xBB -and $b[2] -eq 0xBF) {
+    throw "$($f.Name): 不能包含 UTF-8 BOM"
+  }
   $lf = 0; $crlf = 0
   for ($i = 0; $i -lt $b.Length; $i++) {
     if ($b[$i] -eq 10) {
@@ -59,15 +62,17 @@ foreach ($f in Get-ChildItem portable-installer\build\*.nsi) {
 >
 > 从 WSL 仓库构建时，先在 Windows PowerShell 复制并保留 `portable-installer` 目录层级，同时复制本技能以便在副本中直接触发：
 > ```powershell
-> robocopy \\wsl.localhost\Ubuntu\data\opencode\portable-installer D:\Tools\opencode-build\portable-installer /E /XD payload
+> robocopy \\wsl.localhost\Ubuntu\data\opencode\portable-installer D:\Tools\opencode-build\portable-installer /E /XD payload launcher\bin launcher\obj launcher\publish scheduler\bin scheduler\obj scheduler\publish build\launcher-publish build\scheduler-publish /XF OpenCode-Setup.exe OpenCode-launch.exe OpenCode-Scheduler.exe OpenCode-Reset.exe
 > robocopy \\wsl.localhost\Ubuntu\data\opencode\.opencode\skills\opencode-installer D:\Tools\opencode-build\.opencode\skills\opencode-installer /E
 > cd D:\Tools\opencode-build
 > ```
 > 后续命令继续使用 `portable-installer\...`。
 
 ```powershell
-# 1. 清构建产物与日志
-Remove-Item portable-installer\build\OpenCode-Setup.exe,portable-installer\build\OpenCode-launch.exe,portable-installer\build\OpenCode-Reset.exe,portable-installer\build\_build.log -Force -ErrorAction SilentlyContinue
+# 1. 清构建产物、dotnet 增量缓存与日志
+Remove-Item portable-installer\build\OpenCode-Setup.exe,portable-installer\build\OpenCode-launch.exe,portable-installer\build\OpenCode-Scheduler.exe,portable-installer\build\OpenCode-Reset.exe,portable-installer\build\_build.log -Force -ErrorAction SilentlyContinue
+Remove-Item portable-installer\launcher\bin,portable-installer\launcher\obj,portable-installer\build\launcher-publish -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item portable-installer\scheduler\bin,portable-installer\scheduler\obj,portable-installer\build\scheduler-publish -Recurse -Force -ErrorAction SilentlyContinue
 
 # 2. 清空整个载荷目录，避免旧文件残留
 Remove-Item portable-installer\payload\OpenCode -Recurse -Force -ErrorAction SilentlyContinue
@@ -104,12 +109,14 @@ cmd /c portable-installer\build\build.bat
 ```powershell
 $rt='portable-installer\payload\OpenCode\runtime'
 $declared = Get-Content "$rt\package.json" -Raw | ConvertFrom-Json
-foreach($n in @('opencode-ai','opencode-sm','npm','corepack','bun','@mermaid-js/mermaid-cli')){
+foreach($n in @('opencode-ai','opencode-sm','npm','corepack','bun')){
   $installed = (Get-Content "$rt\node_modules\$n\package.json" -Raw | ConvertFrom-Json).version
   "{0}: declared={1} installed={2}" -f $n,$declared.dependencies.$n,$installed
 }
 & "$rt\node_modules\opencode-ai\bin\opencode.exe" --version
 ```
+
+`sync_payload.bat` 第 8 步会主动删除 `@mermaid-js`、`mermaid` 等包，因此不要把它们列入依赖核对，否则每次都会误报缺失。
 
 处理规则：
 
@@ -119,7 +126,7 @@ foreach($n in @('opencode-ai','opencode-sm','npm','corepack','bun','@mermaid-js/
 - 先改源目录 `D:\Tools\node-v22.23.2-win-x64\package.json`，再同步到 `portable-installer\payload\OpenCode\runtime\package.json`；只改 payload 会在下次清空重建时被覆盖。
 - 改完再跑第 6 步编译，确保进包的是新声明。
 
-`build.bat` 先编 `OpenCode-Reset.exe`，再用 `dotnet publish` 构建 WebView2 `OpenCode-launch.exe`，最后编内嵌载荷的 `OpenCode-Setup.exe`；任一步 `makensis` 返回非零立即 `exit /b 1`，不会留下看似成功的残缺包。
+`build.bat` 会先删除旧 exe、`launcher-publish` / `scheduler-publish` 以及两个 .NET 项目的 `bin` / `obj`，再编 `OpenCode-Reset.exe`、`dotnet publish` 构建 WebView2 `OpenCode-launch.exe` 和托盘 `OpenCode-Scheduler.exe`，最后编内嵌载荷的 `OpenCode-Setup.exe`；任一步 `makensis` 返回非零立即 `exit /b 1`，不会留下看似成功的残缺包。不要只删 `launcher-publish` 而保留 `bin` / `obj`，否则 `dotnet publish` 可能判定项目未变化并复制旧 exe。
 
 ## 清空历史会话工具
 
@@ -144,7 +151,7 @@ foreach($n in @('opencode-ai','opencode-sm','npm','corepack','bun','@mermaid-js/
 
 1. 看时间戳：`OpenCode-Setup.exe`、`OpenCode-launch.exe`、`OpenCode-Reset.exe` 均晚于本次开始时间，且晚于对应 `.nsi`。
 2. 看输出尾部：出现 `Output: "...\OpenCode-Setup.exe"` 与 `Using lzma (compress whole) compression` 即成功。
-3. 看体积：启动器约 76 KB，清空工具约 65 KB；载荷低于 2 GiB（NSIS 上限），主包压后约 330 MB。量级明显偏离时先查载荷是否被误删或缓存未清。
+3. 看体积：`OpenCode-launch.exe` 与 `OpenCode-Scheduler.exe` 为 self-contained 单文件，各约 155 MiB（约 163 MB）；`OpenCode-Reset.exe` 约 80 KB；载荷低于 2 GiB（NSIS 上限），主包压后约 440 MiB（约 463 MB）。量级明显偏离时先查载荷是否被误删或缓存未清。
 4. 看残留：`portable-installer\payload\OpenCode\python` 下 `__pycache__` 计数应为 0，`runtime` 下 `opencode-windows-x64*` 目录计数应为 0。
 5. 看可执行文件：`runtime\node_modules\opencode-ai\bin\opencode.exe` 必须存在（约 200 MB）。平台包删掉后，运行时只认这个文件。
 6. 看声明：`runtime\package.json` 中 `opencode-ai`、`opencode-sm` 的版本与 `node_modules` 实装版本一致，`opencode.exe --version` 与声明一致。
@@ -155,8 +162,9 @@ foreach($n in @('opencode-ai','opencode-sm','npm','corepack','bun','@mermaid-js/
 - 载荷超 2 GiB 时先删 `opencode-ai\node_modules` 下的平台包，再考虑清理 `python\Lib\site-packages` 下无用大包，不要换压缩算法。
 - `opencode-ai` 的平台包可能嵌在 `node_modules\opencode-ai\node_modules\` 下，不在顶层；同步脚本的第 6 步两处都要删。
 - 符号链接（`node_modules/.bin`）NSIS 打不进去，必须在同步或清缓存阶段删除，不要手工加回。
+- `dotnet publish` 可能因为 `launcher\bin` / `obj` 仍是“最新”而复制上次的 exe，表现为产物时间戳早于本次构建。`build.bat` 已清这两个目录；手工构建不要省略。
 - opencode 自动升级会留下 `opencode.exe.bak-*`（约 200 MB），同步脚本第 6 步已删；手工同步时必须清理，否则载荷逼近 2 GiB。
-- `.bat` 必须 CRLF 换行。LF 换行的批处理会让 cmd 把相邻命令拼在一起，报出莫名其妙的「不是内部或外部命令」。
+- `.bat` 必须 CRLF 换行且不能带 UTF-8 BOM。BOM 会让第一行变成「\ufeff@echo」并报「不是内部或外部命令」；LF 换行会让 cmd 把相邻命令拼在一起。
 - `::` 注释里不要出现 `>` 或 `->`，cmd 会当成重定向；统一用 `rem`。
 - 默认 baseURL、collector、模型名、上下文/输出上限都在 `OpenCode-Setup.nsi` 顶部的 `!define DEFAULT_*`，业务安装时仍可在弹窗改。
 - 未签名 exe 首次运行会被 SmartScreen 拦一次，需点「更多信息 → 仍要运行」。
