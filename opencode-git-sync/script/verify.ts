@@ -19,7 +19,7 @@ import { decrypt, deriveKey } from "../src/crypto"
 import { git } from "../src/git"
 import { detectRemote } from "../src/remote"
 import { META_FILE, SyncRepo } from "../src/repo"
-import { stateDbPath } from "../src/paths"
+import { projectStateDir } from "../src/paths"
 
 const args = process.argv.slice(2)
 function arg(name: string): string | undefined {
@@ -105,10 +105,11 @@ if (!keycheck) {
   }
 }
 
-// 4) 本地状态
-if (fs.existsSync(stateDbPath())) {
+// 4) 本地状态（状态目录按项目隔离，取当前目录对应的那一份）
+const localStateDb = path.join(projectStateDir(process.cwd()), "state.db")
+if (fs.existsSync(localStateDb)) {
   const { Database } = await import("bun:sqlite")
-  const db = new Database(stateDbPath(), { readonly: true })
+  const db = new Database(localStateDb, { readonly: true })
   const row = db.query("SELECT value FROM meta WHERE key = 'repo_id'").get() as { value?: string } | null
   db.close()
   console.log(`本地 repoId: ${row?.value ?? "(尚未加入任何同步仓库)"}`)

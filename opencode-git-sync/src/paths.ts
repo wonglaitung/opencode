@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import os from "node:os"
 import path from "node:path"
 
@@ -10,9 +11,40 @@ export function dataDir(): string {
   return path.join(xdg, "opencode")
 }
 
-/** 插件自有状态目录（本地 clone、状态库、日志）。 */
-export function stateDir(): string {
+/** 插件状态目录根：各项目的状态目录都挂在它下面。 */
+export function stateBaseDir(): string {
   return process.env["OPENCODE_GIT_SYNC_DIR"] ?? path.join(dataDir(), "git-sync")
+}
+
+let stateDirOverride: string | undefined
+
+/**
+ * 由插件工厂按项目锁定状态目录。
+ * 一个项目一份（本地 clone + 状态库 + 日志），项目之间不再互相覆盖。
+ */
+export function setStateDir(dir: string | undefined) {
+  stateDirOverride = dir
+}
+
+/** 当前生效的状态目录（仓库工作副本、状态库、日志都在它下面）。 */
+export function stateDir(): string {
+  return stateDirOverride ?? stateBaseDir()
+}
+
+/**
+ * 项目键：同一工作区路径恒得同一个键。
+ * 取目录名 + 路径哈希，目录名可读、哈希防同名项目互相覆盖。
+ */
+export function projectKey(worktree: string): string {
+  const resolved = path.resolve(worktree)
+  const name = path.basename(resolved).replace(/[^a-zA-Z0-9._-]/g, "-") || "root"
+  const hash = createHash("sha256").update(resolved).digest("hex").slice(0, 8)
+  return `${name}-${hash}`
+}
+
+/** 某项目专属的状态目录。 */
+export function projectStateDir(worktree: string): string {
+  return path.join(stateBaseDir(), projectKey(worktree))
 }
 
 /** 本地 sync 仓库工作副本（与项目仓库完全隔离）。 */

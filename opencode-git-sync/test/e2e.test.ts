@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import fs from "node:fs"
 import path from "node:path"
 import { git } from "../src/git"
-import { createOpencodeDb, fakeClient, tempDir } from "./helpers"
+import { createOpencodeDb, fakeClient, resetStateDir, tempDir } from "./helpers"
 import type { PluginInput } from "../src/types"
 
 /**
@@ -88,7 +88,7 @@ describe("端到端：两台机器自动探测同一远端", () => {
     expect(messageRows.length).toBe(1)
     db.close()
 
-    delete process.env["OPENCODE_GIT_SYNC_DIR"]
+    resetStateDir()
     delete process.env["OPENCODE_DB"]
   })
 })

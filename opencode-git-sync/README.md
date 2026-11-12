@@ -134,7 +134,7 @@ opencode -c       # 继续上次会话（跨机时自动接上另一台机器的
       // "machine": "laptop",          // 不填 = 自动生成
       "debounceMs": 3000,
       "syncTimeoutMs": 5000,
-      "gitTimeoutMs": 8000
+      "gitTimeoutMs": 30000
     }]
   ]
 }
@@ -153,7 +153,7 @@ opencode -c       # 继续上次会话（跨机时自动接上另一台机器的
 | `machine` | 自动生成 | 机器名，决定分支 `ocsync/<machine>` |
 | `debounceMs` | 3000 | 会话结束后的防抖推送间隔 |
 | `syncTimeoutMs` | 5000 | 首屏同步上限，超时即离线降级（首次 fetch 含 SSH 握手，约 1~2s） |
-| `gitTimeoutMs` | 8000 | 单条 git 命令硬超时（超时 kill 子进程） |
+| `gitTimeoutMs` | 30000 | 单条 git 命令硬超时（超时 kill 子进程）；推送用它的 2 倍 |
 | `enabled` | true | 设为 false 可临时停用 |
 
 ## 环境变量
@@ -163,7 +163,7 @@ opencode -c       # 继续上次会话（跨机时自动接上另一台机器的
 | `OPENCODE_GIT_SYNC_PASSPHRASE` | 口令（配置项 `passphrase` / `passphraseFile` 优先） |
 | `OPENCODE_GIT_SYNC_REMOTE` | 覆盖同步远端（默认用项目 origin） |
 | `OPENCODE_GIT_SYNC_MACHINE` | 覆盖机器名（默认自动生成） |
-| `OPENCODE_GIT_SYNC_DIR` | 插件状态目录（默认 `~/.local/share/opencode/git-sync`） |
+| `OPENCODE_GIT_SYNC_DIR` | 插件状态目录**根**（默认 `~/.local/share/opencode/git-sync`），每个项目再挂一个子目录 |
 | `OPENCODE_GIT_SYNC_LOG` | `debug` / `info` / `warn` / `error`（默认 `warn`） |
 | `OPENCODE_DB` | 由上游使用；插件据此定位要写入的 opencode 主库 |
 
@@ -185,6 +185,26 @@ opencode -c       # 继续上次会话（跨机时自动接上另一台机器的
 - 提交用 `--amend --force` → 每条分支**永远只有 1 条提交**，不会堆版本
 - 一条消息一个文件 → 内容寻址去重，体积只随真实新增消息增长
 - 导入时按 messageID 取并集 → 同一会话两机并发编辑**不丢消息**
+
+## 按项目隔离
+
+**一个项目 = 一个远端 = 一份本地状态**，互不串台：
+
+```
+<状态目录根>/<项目键>/
+├── repo/            ← 该项目专属的 sync 仓库工作副本（origin = 该项目自己的 origin）
+├── state.db         ← 该项目专属的指纹库（已暂存过哪些消息）
+└── git-sync.log     ← 该项目专属的日志
+
+<状态目录根> = ~/.local/share/opencode/git-sync（可用 OPENCODE_GIT_SYNC_DIR 改根）
+<项目键>     = 目录名 + 路径哈希，如 fortune-1f2e3d4c
+```
+
+为什么必须隔离：sync 仓库的提交是 `--amend --force`（整份目录重推），
+多个项目共用一份工作副本时，后一个项目的会话会连同前一个项目的会话一起被推到前一个项目的仓库去，
+指纹库与日志也会互相干扰（一个项目退出时关掉状态库，另一个项目随即报 `Cannot use a closed database`）。
+
+隔离之后：项目 A 的会话只进 A 的仓库、只写 A 的分支；换台机器跑同一个项目，仍然从 A 的仓库拉别人的 `ocsync/*` 分支。
 
 ## 加密模型
 
@@ -224,7 +244,7 @@ passphrase ──scrypt(N=32768, salt)──▶ 32B 内容密钥
 ## 日志与排查
 
 ```
-~/.local/share/opencode/git-sync/git-sync.log
+~/.local/share/opencode/git-sync/<项目键>/git-sync.log
 ```
 
 ```bash
@@ -268,14 +288,14 @@ bun run script/verify.ts
 ```bash
 # 1) 插件有没有真的跑起来（看有没有日志、有没有状态目录）
 ls -la ~/.local/share/opencode/git-sync/
-tail -30 ~/.local/share/opencode/git-sync/git-sync.log
+tail -30 ~/.local/share/opencode/git-sync/*/git-sync.log
 
 # 2) 本地有没有暂存出文件（有文件但没推上去 = 推送环节的问题）
-ls -R ~/.local/share/opencode/git-sync/repo/sessions 2>/dev/null | head
+ls -R ~/.local/share/opencode/git-sync/*/repo/sessions 2>/dev/null | head
 
 # 3) 本地分支状态
-git -C ~/.local/share/opencode/git-sync/repo log --oneline -3
-git -C ~/.local/share/opencode/git-sync/repo status --porcelain | head
+git -C ~/.local/share/opencode/git-sync/*/repo log --oneline -3
+git -C ~/.local/share/opencode/git-sync/*/repo status --porcelain | head
 
 # 4) 口令是否与远端一致
 bun run script/verify.ts
@@ -288,7 +308,7 @@ bun run script/verify.ts
 | 日志里「未找到 passphrase，插件不启用」 | 那台机器没放口令文件 | `./install.sh`（选「使用现有口令」） |
 | 日志里「passphrase 不匹配」 | 两机口令不同 | 用 `--passphrase-file` 换成同一个口令 |
 | 有 `sessions/` 文件但远端是空分支 | 推送环节失败（网络/权限） | 看日志里 `push 失败:` 的报错 |
-| 日志里「已暂存会话 … N 个文件」但远端没变 | 推送被拒 | `git -C ~/.local/share/opencode/git-sync/repo push --force origin ocsync/<机器名>` 手动重试看报错 |
+| 日志里「已暂存会话 … N 个文件」但远端没变 | 推送被拒 | `git -C ~/.local/share/opencode/git-sync/<项目键>/repo push --force origin ocsync/<机器名>` 手动重试看报错 |
 
 ## 快速验证（装完确认能用）
 

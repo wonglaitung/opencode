@@ -2,8 +2,7 @@ import { describe, expect, test } from "bun:test"
 import fs from "node:fs"
 import path from "node:path"
 import { git } from "../src/git"
-import { createOpencodeDb, fakeClient, tempDir } from "./helpers"
-import { useTempStateDir } from "./helpers"
+import { createOpencodeDb, fakeClient, resetStateDir, tempDir, useTempStateDir } from "./helpers"
 
 useTempStateDir()
 import type { PluginEvent, PluginInput } from "../src/types"
@@ -71,7 +70,7 @@ describe("插件入口", () => {
     const refs = await git(["ls-remote", remote], { cwd: root, timeoutMs: 10000 })
     expect(refs.stdout).toContain("refs/heads/ocsync/machine-a")
 
-    delete process.env["OPENCODE_GIT_SYNC_DIR"]
+    resetStateDir()
     delete process.env["OPENCODE_DB"]
   })
 
@@ -87,7 +86,7 @@ describe("插件入口", () => {
     expect(Object.keys(await loadPlugin(input, { passphrase: "x" })).length).toBe(0)
     expect(Object.keys(await loadPlugin(input, { remote: "x" })).length).toBe(0)
     expect(Object.keys(await loadPlugin(input, { remote: "x", passphrase: "y", enabled: false })).length).toBe(0)
-    delete process.env["OPENCODE_GIT_SYNC_DIR"]
+    resetStateDir()
   })
 
   test("支持从口令文件读取 passphrase", async () => {

@@ -16,6 +16,16 @@ export function useTempStateDir(): string {
   return dir
 }
 
+/**
+ * 复位状态目录到新的临时目录。
+ * 测试中途不能 `delete` 这个变量：插件会回落到用户真实目录，把数据写进去。
+ */
+export function resetStateDir(): string {
+  const dir = tempDir("git-sync-state-")
+  process.env["OPENCODE_GIT_SYNC_DIR"] = dir
+  return dir
+}
+
 /** 临时目录，测试结束自动清理。 */
 export function tempDir(prefix: string): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix))

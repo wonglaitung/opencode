@@ -2,9 +2,9 @@ import { describe, expect, test } from "bun:test"
 import fs from "node:fs"
 import path from "node:path"
 import { git } from "../src/git"
+import { projectStateDir } from "../src/paths"
 import { detectRemote } from "../src/remote"
-import { createOpencodeDb, fakeClient, tempDir } from "./helpers"
-import { useTempStateDir } from "./helpers"
+import { createOpencodeDb, fakeClient, resetStateDir, tempDir, useTempStateDir } from "./helpers"
 
 useTempStateDir()
 import type { PluginInput } from "../src/types"
@@ -70,13 +70,13 @@ describe("零配置启用", () => {
 
     // 同步仓库应指向项目自身的 origin
     const repoRemote = await git(["remote", "get-url", "origin"], {
-      cwd: path.join(root, "state", "repo"),
+      cwd: path.join(projectStateDir(worktree), "repo"),
       timeoutMs: 10000,
     })
     expect(repoRemote.stdout.trim()).toBe(remote)
 
     delete process.env["XDG_CONFIG_HOME"]
-    delete process.env["OPENCODE_GIT_SYNC_DIR"]
+    resetStateDir()
     delete process.env["OPENCODE_DB"]
   })
 })

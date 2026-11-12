@@ -2,7 +2,7 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { log } from "./log"
-import { defaultPassphraseFiles, findOpencodeDb, repoDir, stateDbPath } from "./paths"
+import { defaultPassphraseFiles, findOpencodeDb, projectStateDir, repoDir, setStateDir, stateDbPath } from "./paths"
 import { detectRemote } from "./remote"
 import { OpencodeDb } from "./ocdb"
 import { SyncRepo } from "./repo"
@@ -47,7 +47,7 @@ const DEFAULTS = {
   debounceMs: 3000,
   // 首屏预算：首次 fetch 需要一次 SSH 握手（GitHub 约 1~2s），默认给到 5s。
   syncTimeoutMs: 5000,
-  gitTimeoutMs: 8000,
+  gitTimeoutMs: 30000,
 }
 
 /** 展开 ~ 并读取口令文件；失败返回 undefined。 */
@@ -104,6 +104,9 @@ async function withTimeout<T>(task: Promise<T>, ms: number): Promise<T | undefin
 }
 
 const GitSync = async (input: PluginInput, options?: unknown) => {
+  // 先按项目锁定状态目录：本地 clone / 状态库 / 日志都归这个项目所有，
+  // 否则多项目共用一份会互相 amend/force-push 覆盖。
+  setStateDir(projectStateDir(input.worktree))
   const config = readOptions(options)
   if (config.enabled === false) return {}
 
