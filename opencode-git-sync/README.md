@@ -249,6 +249,47 @@ OPENCODE_GIT_SYNC_LOG=debug opencode        # 打开详细日志
 4. **同一会话并发编辑**：按 messageID 合并，不丢消息；会话标题等元信息按 `time.updated` 取新（依赖各机时钟基本准确）。
 5. **首次使用需要联网**：加入同步仓库时需要能访问远端。
 
+## 排查「另一台机器的会话没出现」
+
+```bash
+bun run script/verify.ts
+```
+
+会**逐分支**列出每台机器推了多少内容：
+
+```
+各机器分支内容：
+  ocsync/HP-Laptop-4bb94a      会话   2  消息  319  meta ✓
+  ocsync/IcbcaChatbot-ded734   会话   0  消息    0  meta ✗  ← 空分支：该机器没推上任何会话
+```
+
+若某台机器是**空分支**（`meta ✗` + 会话 0），说明那台机器的插件没把任何东西推上来。到那台机器上按顺序查：
+
+```bash
+# 1) 插件有没有真的跑起来（看有没有日志、有没有状态目录）
+ls -la ~/.local/share/opencode/git-sync/
+tail -30 ~/.local/share/opencode/git-sync/git-sync.log
+
+# 2) 本地有没有暂存出文件（有文件但没推上去 = 推送环节的问题）
+ls -R ~/.local/share/opencode/git-sync/repo/sessions 2>/dev/null | head
+
+# 3) 本地分支状态
+git -C ~/.local/share/opencode/git-sync/repo log --oneline -3
+git -C ~/.local/share/opencode/git-sync/repo status --porcelain | head
+
+# 4) 口令是否与远端一致
+bun run script/verify.ts
+```
+
+常见原因：
+
+| 现象 | 原因 | 处理 |
+|---|---|---|
+| 日志里「未找到 passphrase，插件不启用」 | 那台机器没放口令文件 | `./install.sh`（选「使用现有口令」） |
+| 日志里「passphrase 不匹配」 | 两机口令不同 | 用 `--passphrase-file` 换成同一个口令 |
+| 有 `sessions/` 文件但远端是空分支 | 推送环节失败（网络/权限） | 看日志里 `push 失败:` 的报错 |
+| 日志里「已暂存会话 … N 个文件」但远端没变 | 推送被拒 | `git -C ~/.local/share/opencode/git-sync/repo push --force origin ocsync/<机器名>` 手动重试看报错 |
+
 ## 快速验证（装完确认能用）
 
 ```bash

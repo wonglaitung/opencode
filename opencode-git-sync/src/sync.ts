@@ -265,6 +265,7 @@ export class SyncService {
 
     if (files.length === 0) return false
     await this.deps.repo.writeFiles(files)
+    log.info(`已暂存会话 ${sessionID}：${files.length} 个文件`)
     return true
   }
 
@@ -284,8 +285,15 @@ export class SyncService {
       }
 
       const changed = await this.deps.repo.hasChanges()
-      if (changed) await this.deps.repo.commit(`opencode-git-sync ${new Date().toISOString()}`)
-      return await this.deps.repo.push()
+      if (!changed) {
+        // 没有新内容就不推：避免把本地那个 "init" 空提交推成远端空分支
+        log.warn("没有待推送内容，跳过 push（若远端分支是空的，说明本机还没成功暂存过会话）")
+        return false
+      }
+      await this.deps.repo.commit(`opencode-git-sync ${new Date().toISOString()}`)
+      const pushed = await this.deps.repo.push()
+      if (pushed) log.info(`已推送到 ${this.deps.repo.branch()}`)
+      return pushed
     } catch (error) {
       log.warn(`推送失败: ${error instanceof Error ? error.message : String(error)}`)
       return false

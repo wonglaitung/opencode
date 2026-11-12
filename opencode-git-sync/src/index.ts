@@ -192,7 +192,12 @@ const GitSync = async (input: PluginInput, options?: unknown) => {
       const sessionID = event.properties?.["sessionID"]
       if (typeof sessionID !== "string") return
       try {
-        await service.stage(sessionID)
+        // 暂存失败就不入队：否则 flush 时会推一个空分支上去
+        const staged = await service.stage(sessionID)
+        if (!staged) {
+          log.warn(`会话暂存为空（可能没有新消息）: ${sessionID}`)
+          return
+        }
         service.schedule(sessionID, config.debounceMs ?? DEFAULTS.debounceMs)
       } catch (error) {
         log.warn(`暂存会话失败 ${sessionID}: ${error instanceof Error ? error.message : String(error)}`)

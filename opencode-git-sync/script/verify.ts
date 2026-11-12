@@ -117,13 +117,26 @@ if (fs.existsSync(stateDbPath())) {
   }
 }
 
-// 5) 远端分支里的会话数量（仅统计，不解密内容）
-let sessions = 0
-let messages = 0
-for (const files of branches.values()) {
+// 5) 逐分支统计（仅统计，不解密内容）——空分支要一眼看出来
+console.log("")
+console.log("各机器分支内容：")
+let totalSessions = 0
+let totalMessages = 0
+for (const [branch, files] of branches) {
+  let sessions = 0
+  let messages = 0
+  let hasMeta = false
   for (const filePath of files.keys()) {
-    if (filePath.endsWith("/meta.ocgs")) sessions += 1
+    if (filePath === META_FILE) hasMeta = true
+    else if (filePath.endsWith("/meta.ocgs")) sessions += 1
     else if (filePath.endsWith(".ocgs")) messages += 1
   }
+  totalSessions += sessions
+  totalMessages += messages
+  const flag = sessions === 0 ? "  ← 空分支：该机器没推上任何会话" : ""
+  console.log(
+    `  ${branch.padEnd(28)} 会话 ${String(sessions).padStart(3)}  消息 ${String(messages).padStart(4)}  ` +
+      `${hasMeta ? "meta ✓" : "meta ✗"}${flag}`,
+  )
 }
-console.log(`远端会话数: ${sessions}，消息数: ${messages}`)
+console.log(`  合计：会话 ${totalSessions}，消息 ${totalMessages}`)
