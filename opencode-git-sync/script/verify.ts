@@ -127,6 +127,7 @@ for (const [branch, files] of branches) {
   let hasMeta = false
   for (const [filePath, blob] of files) {
     if (filePath === META_FILE) hasMeta = true
+    else if (filePath === KEYCHECK_PATH) continue
     else if (filePath.endsWith("/meta.ocgs")) sessions += 1
     else if (parsePackPath(filePath)) {
       packs += 1

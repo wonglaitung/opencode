@@ -15,14 +15,14 @@
 **打包**（在本机执行，产出一个可直接拷走的 tgz）：
 
 ```bash
-./script/pack.sh        # → dist/opencode-git-sync-0.1.0.tgz
+./script/pack.sh        # → dist/opencode-git-sync-0.2.0.tgz
 ```
 
 **在新机器上**：
 
 ```bash
-tar xzf opencode-git-sync-0.1.0.tgz
-cd opencode-git-sync-0.1.0
+tar xzf opencode-git-sync-0.2.0.tgz
+cd opencode-git-sync-0.2.0
 
 # 情况 A：这台机器是第一台 → 生成新口令
 ./install.sh --generate
@@ -282,8 +282,8 @@ bun run script/verify.ts
 
 ```
 各机器分支内容：
-  ocsync/HP-Laptop-4bb94a      会话   2  消息  319  meta ✓
-  ocsync/IcbcaChatbot-ded734   会话   0  消息    0  meta ✗  ← 空分支：该机器没推上任何会话
+  ocsync/laptop-a1b2c3   会话   2  消息  319  meta ✓  封包  14
+  ocsync/laptop-d4e5f6   会话   0  消息    0  meta ✗  ← 空分支：该机器没推上任何会话
 ```
 
 若某台机器是**空分支**（`meta ✗` + 会话 0），说明那台机器的插件没把任何东西推上来。到那台机器上按顺序查：
@@ -311,7 +311,7 @@ bun run script/verify.ts
 | 日志里「未找到 passphrase，插件不启用」 | 那台机器没放口令文件 | `./install.sh`（选「使用现有口令」） |
 | 日志里「passphrase 不匹配」 | 两机口令不同 | 用 `--passphrase-file` 换成同一个口令 |
 | 有 `sessions/` 文件但远端是空分支 | 推送环节失败（网络/权限） | 看日志里 `push 失败:` 的报错 |
-| 日志里「已暂存会话 … N 个文件」但远端没变 | 推送被拒 | `git -C ~/.local/share/opencode/git-sync/<项目键>/repo push --force origin ocsync/<机器名>` 手动重试看报错 |
+| 日志里「已暂存会话 … N 条消息（M 个文件）」但远端没变 | 推送被拒 | `git -C ~/.local/share/opencode/git-sync/<项目键>/repo push --force origin ocsync/<机器名>` 手动重试看报错 |
 
 ## 快速验证（装完确认能用）
 
@@ -334,7 +334,7 @@ bun run script/verify.ts
 ## 开发
 
 ```bash
-bun test          # 23 项单测：加密往返、路径归一化、git 分支、远端自动探测、两机端到端导入
+bun test          # 30 项单测：加密往返、封包切分/迁移、路径归一化、git 分支、远端自动探测、两机端到端导入
 bun run typecheck # tsc --noEmit（strict）
 bun run build     # 单文件产物 dist/git-sync.ts
 ```
@@ -342,6 +342,9 @@ bun run build     # 单文件产物 dist/git-sync.ts
 测试覆盖的关键行为：
 
 - 加密往返 / 口令错误 / AAD 绑定 / keycheck 校验
+- 封包编解码往返、256KB 封口切分、只重写最后一个包
+- 旧布局（一条消息一个文件）迁移成封包，另一台机器可正常导入
+- 拉取按包序号覆盖：后序封包里的同 ID 消息生效
 - 路径归一化与还原
 - `amend` 提交保持历史恒定 1 条
 - 两台机器通过远端互相可见
