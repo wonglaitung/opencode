@@ -2,7 +2,7 @@
 
 import { parseArgs } from "util"
 
-const defaultRepo = "anomalyco/opencode"
+const defaultRepo = process.env.GH_REPO ?? process.env.GITHUB_REPOSITORY ?? "anomalyco/opencode"
 const defaultAgeMonths = 1
 const defaultThreshold = 2
 const defaultSleepMs = 20_000
@@ -175,11 +175,25 @@ async function main() {
   await ensureCleanupLabel()
 
   console.log(`\nCommenting and closing ${selected.length} PRs...`)
+  let failed = 0
   for (const pr of selected) {
-    await closePullRequest(pr)
+    const closed = await closePullRequest(pr).catch((cause: unknown) => {
+      console.warn(
+        `Failed to close #${pr.number}: ${cause instanceof Error ? cause.message : String(cause)}`,
+      )
+      return false
+    })
+    if (!closed) {
+      failed++
+      continue
+    }
     if (sleepMs > 0) await sleep(sleepMs)
   }
-  console.log(`Closed ${selected.length} PRs`)
+  console.log(`Closed ${selected.length - failed} PRs`)
+  if (failed > 0) {
+    console.error(`Failed to close ${failed} PRs`)
+    process.exitCode = 1
+  }
 }
 
 async function fetchOpenPullRequests() {
@@ -255,7 +269,7 @@ async function graphql(input: { query: string; variables: Record<string, string 
   return body.data
 }
 
-async function closePullRequest(pr: CleanupCandidate) {
+async function closePullRequest(pr: CleanupCandidate): Promise<boolean> {
   await githubRequest(`/repos/${repo.owner}/${repo.name}/issues/${pr.number}/comments`, {
     method: "POST",
     body: JSON.stringify({ body: message }),
@@ -269,6 +283,7 @@ async function closePullRequest(pr: CleanupCandidate) {
     body: JSON.stringify({ labels: [cleanupLabel] }),
   })
   console.log(`Closed #${pr.number} positive=${pr.positiveReactions} ${pr.url}`)
+  return true
 }
 
 async function ensureCleanupLabel() {

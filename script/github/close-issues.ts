@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-const repo = "anomalyco/opencode"
+const repo = process.env.GH_REPO ?? process.env.GITHUB_REPOSITORY ?? "anomalyco/opencode"
 const days = 60
 const msg = `To stay organized issues are automatically closed after ${days} days of no activity. If the issue is still relevant please open a new one.`
 
@@ -39,7 +39,7 @@ function shouldSkip(i: Issue) {
   return login === agentLogin || (login ? teamMembers.has(login) : false) || teamAssociations.has(i.author_association)
 }
 
-async function close(num: number) {
+async function close(num: number): Promise<boolean> {
   const base = `https://api.github.com/repos/${repo}/issues/${num}`
 
   const comment = await fetch(`${base}/comments`, {
@@ -57,11 +57,36 @@ async function close(num: number) {
   if (!patch.ok) throw new Error(`Failed to close #${num}: ${patch.status} ${patch.statusText}`)
 
   console.log(`Closed https://github.com/${repo}/issues/${num}`)
+  return true
+}
+
+async function closeAll(nums: number[]) {
+  let closed = 0
+  let failed = 0
+  for (const num of nums) {
+    const done = await close(num).catch((cause: unknown) => {
+      console.warn(`Failed to close #${num}: ${cause instanceof Error ? cause.message : String(cause)}`)
+      return false
+    })
+    if (done) {
+      closed++
+      continue
+    }
+    failed++
+  }
+  return { closed, failed }
+}
+
+function reportFailures(failed: number) {
+  if (failed === 0) return
+  console.error(`Failed to close ${failed} issues`)
+  process.exitCode = 1
 }
 
 async function main() {
   let page = 1
   let closed = 0
+  let failed = 0
 
   while (true) {
     const res = await fetch(
@@ -85,28 +110,24 @@ async function main() {
         stale.push(i.number)
       } else {
         console.log(`\nFound fresh issue #${i.number}, stopping`)
-        if (stale.length > 0) {
-          for (const num of stale) {
-            await close(num)
-            closed++
-          }
-        }
+        const result = await closeAll(stale)
+        closed += result.closed
+        failed += result.failed
         console.log(`Closed ${closed} issues total`)
+        reportFailures(failed)
         return
       }
     }
 
-    if (stale.length > 0) {
-      for (const num of stale) {
-        await close(num)
-        closed++
-      }
-    }
+    const result = await closeAll(stale)
+    closed += result.closed
+    failed += result.failed
 
     page++
   }
 
   console.log(`Closed ${closed} issues total`)
+  reportFailures(failed)
 }
 
 main().catch((err) => {

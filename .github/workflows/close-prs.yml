@@ -39,7 +39,7 @@ jobs:
             max_close="50"
           fi
 
-          args=("--threshold" "2" "--age-months" "1" "--sleep-ms" "20000" "--max-close" "$max_close")
+          args=("--threshold" "2" "--age-months" "1" "--sleep-ms" "20000" "--max-close" "$max_close" "--repo" "${{ github.repository }}")
 
           if [ "${{ github.event_name }}" = "schedule" ]; then
             args+=("--execute")

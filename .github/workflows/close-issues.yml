@@ -21,4 +21,5 @@ jobs:
       - name: Close stale issues
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: bun script/github/close-issues.ts
