@@ -68,10 +68,16 @@ scp laptop:~/.config/opencode/git-sync.key .
 ```bash
 ./install.sh --check
 #   口令 / 远端一致性校验
+#     远端: git@github.com:you/proj.git
 #     远端 repoId: 17b23662...
+#     远端 salt:   21626a21...
+#     远端分支:    ocsync/laptop-a1b2c3
 #     口令: ✓ 与远端一致（可以用这个口令继续同步）
 #     本地 repoId: 17b23662...
-#     远端会话数: 1，消息数: 2
+#
+#     各机器分支内容：
+#       ocsync/laptop-a1b2c3   会话   1  消息   12  meta ✓  封包   1
+#       合计：会话 1，消息 12
 ```
 
 （校验需要 `bun`；没有 bun 时会跳过并提示。也可以单独跑 `bun run script/verify.ts`。）
