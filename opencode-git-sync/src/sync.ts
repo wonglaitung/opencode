@@ -1,8 +1,13 @@
 import { decrypt, deriveKey, encrypt, keycheck, verifyKeycheck, KEYCHECK_PATH } from "./crypto"
 import { log } from "./log"
 import {
+  decodePack,
   denormalize,
-  messagePath,
+  encodePack,
+  messageBytes,
+  PACK_BYTES,
+  packPath,
+  parsePackPath,
   parseSessionPath,
   sessionMetaPath,
   sha256,
@@ -45,9 +50,20 @@ export class SyncService {
   private disposed = false
   private timer: ReturnType<typeof setTimeout> | undefined
   private pushing = false
+  /** 串行化所有会改写工作区的操作（暂存 / 迁移 / 推送）。 */
+  private lock: Promise<unknown> = Promise.resolve()
 
   constructor(deps: SyncDeps) {
     this.deps = deps
+  }
+
+  private withLock<T>(task: () => Promise<T>): Promise<T> {
+    const run = this.lock.then(task, task)
+    this.lock = run.then(
+      () => undefined,
+      () => undefined,
+    )
+    return run
   }
 
   /** 本地缓存的仓库元信息（无网时也能拿到 salt）。 */
@@ -187,9 +203,14 @@ export class SyncService {
       const metas: Map<string, SessionMeta> = new Map()
       const payloads: Map<string, MessagePayload[]> = new Map()
 
-      for (const [filePath, blob] of files) {
-        const parsed = parseSessionPath(filePath)
-        if (!parsed) continue
+      // 按路径字典序处理：旧布局（<messageID>.ocgs）在 packs/ 之前，
+      // 封包之间按序号升序 → 后面的覆盖前面的（覆盖项写在更新的封包里）。
+      for (const filePath of [...files.keys()].sort()) {
+        const blob = files.get(filePath)!
+        const pack = parsePackPath(filePath)
+        const parsed = pack ? undefined : parseSessionPath(filePath)
+        if (!pack && !parsed) continue
+
         let plain: Buffer
         try {
           plain = decrypt(blob, key, effective.repoId, filePath)
@@ -197,6 +218,22 @@ export class SyncService {
           log.warn(`跳过无法解密的文件 ${branch}:${filePath} (${error instanceof Error ? error.message : String(error)})`)
           continue
         }
+
+        if (pack) {
+          let packed: MessagePayload[]
+          try {
+            packed = decodePack(plain)
+          } catch (error) {
+            log.warn(`跳过无法解析的封包 ${branch}:${filePath} (${error instanceof Error ? error.message : String(error)})`)
+            continue
+          }
+          const list = payloads.get(pack.sessionID) ?? []
+          for (const message of packed) list.push(denormalize(message, this.deps.rules) as MessagePayload)
+          payloads.set(pack.sessionID, list)
+          continue
+        }
+        if (!parsed) continue
+
         const value = denormalize(JSON.parse(plain.toString("utf8")), this.deps.rules)
         if (parsed.messageID === undefined) {
           metas.set(parsed.sessionID, value as SessionMeta)
@@ -207,16 +244,18 @@ export class SyncService {
         }
       }
 
-      for (const [sessionID, sessionMeta] of metas) {
-        const updated = db.upsertSession(sessionMeta, this.deps.scope)
-        if (updated) changed.push(sessionID)
-        sessions += 1
-      }
-      for (const [sessionID, list] of payloads) {
-        for (const message of list) {
-          if (db.upsertMessage(sessionID, message.info, message.parts)) messages += 1
+      db.transaction(() => {
+        for (const [sessionID, sessionMeta] of metas) {
+          const updated = db.upsertSession(sessionMeta, this.deps.scope)
+          if (updated) changed.push(sessionID)
+          sessions += 1
         }
-      }
+        for (const [sessionID, list] of payloads) {
+          for (const message of list) {
+            if (db.upsertMessage(sessionID, message.info, message.parts)) messages += 1
+          }
+        }
+      })
     }
 
     this.deps.state.setLastSyncAt(Date.now())
@@ -240,6 +279,10 @@ export class SyncService {
   /** 抓取并加密写入本机分支（不推送）。 */
   async stage(sessionID: string): Promise<boolean> {
     if (this.disposed) return false
+    return this.withLock(() => this.stageUnlocked(sessionID))
+  }
+
+  private async stageUnlocked(sessionID: string): Promise<boolean> {
     const meta = await this.ensureMeta()
     if (!meta) return false
     const snapshot = await captureSession(this.deps.client, sessionID, this.deps.rules)
@@ -247,26 +290,172 @@ export class SyncService {
 
     const key = this.contentKey(meta.salt)
     const files: Array<{ path: string; content: Buffer }> = []
+    const staged: MessagePayload[] = []
 
     const metaHash = sha256(snapshot.meta)
     if (this.deps.state.sessionHash(sessionID) !== metaHash) {
       const path = sessionMetaPath(sessionID)
       files.push({ path, content: encrypt(Buffer.from(JSON.stringify(snapshot.meta)), key, meta.repoId, path) })
-      this.deps.state.setSessionHash(sessionID, metaHash)
     }
 
     for (const message of snapshot.messages) {
-      const hash = sha256(message)
-      if (this.deps.state.messageHash(sessionID, message.info.id) === hash) continue
-      const path = messagePath(sessionID, message.info.id)
-      files.push({ path, content: encrypt(Buffer.from(JSON.stringify(message)), key, meta.repoId, path) })
-      this.deps.state.setMessageHash(sessionID, message.info.id, hash)
+      if (this.deps.state.messageHash(sessionID, message.info.id) === sha256(message)) continue
+      staged.push(message)
     }
+    if (staged.length > 0) files.push(...(await this.appendToPacks(sessionID, staged, key, meta.repoId)))
 
     if (files.length === 0) return false
     await this.deps.repo.writeFiles(files)
-    log.info(`已暂存会话 ${sessionID}：${files.length} 个文件`)
+
+    if (this.deps.state.sessionHash(sessionID) !== metaHash) this.deps.state.setSessionHash(sessionID, metaHash)
+    for (const message of staged) this.deps.state.setMessageHash(sessionID, message.info.id, sha256(message))
+    log.info(`已暂存会话 ${sessionID}：${staged.length} 条消息（${files.length} 个文件）`)
     return true
+  }
+
+  /**
+   * 把变化的消息追加到最后一个封包；包满（PACK_BYTES）后开新包。
+   * 已封口的包不再改写：旧消息被修改时作为覆盖项追加到当前开口包，
+   * 拉取按文件名升序处理，后者覆盖前者。
+   */
+  private async appendToPacks(
+    sessionID: string,
+    incoming: MessagePayload[],
+    key: Buffer,
+    repoId: string,
+  ): Promise<Array<{ path: string; content: Buffer }>> {
+    const packs = await this.deps.repo.listPackFiles(sessionID)
+    let seq = packs.at(-1)?.seq ?? 0
+    let open = seq > 0
+    let entries: MessagePayload[] = []
+    let size = 0
+
+    if (open) {
+      const current = packPath(sessionID, seq)
+      const blob = await this.deps.repo.readLocalFile(current)
+      if (!blob) {
+        open = false
+        seq = 0
+      } else {
+        entries = decodePack(decrypt(blob, key, repoId, current))
+        size = entries.reduce((total, entry) => total + messageBytes(entry), 0)
+        // 上一个包已经写满：不再追加，直接开新包。
+        if (size >= PACK_BYTES) {
+          open = false
+          entries = []
+          size = 0
+        }
+      }
+    }
+
+    const files: Array<{ path: string; content: Buffer }> = []
+    const write = () => {
+      if (entries.length === 0) return
+      if (!open) {
+        seq += 1
+        open = true
+      }
+      const path = packPath(sessionID, seq)
+      files.push({ path, content: encrypt(encodePack(entries), key, repoId, path) })
+    }
+
+    for (const message of incoming) {
+      const index = entries.findIndex((entry) => entry.info.id === message.info.id)
+      if (index >= 0) {
+        size += messageBytes(message) - messageBytes(entries[index]!)
+        entries[index] = message
+        continue
+      }
+      const addition = messageBytes(message)
+      if (entries.length > 0 && size + addition > PACK_BYTES) {
+        write()
+        open = false
+        entries = []
+        size = 0
+      }
+      entries.push(message)
+      size += addition
+    }
+    write()
+    return files
+  }
+
+  /**
+   * 把旧布局（一条消息一个文件）合并成封包。
+   * 先写包、再删旧文件：中途失败最多留下重复文件，不会丢消息。
+   */
+  async migrateLegacy(): Promise<void> {
+    if (this.disposed) return
+    await this.withLock(async () => {
+      const meta = this.repoMeta ?? this.cachedMeta()
+      if (!meta) return
+      const key = this.contentKey(meta.salt)
+      let changed = false
+
+      for (const sessionID of await this.deps.repo.listSessionIDs()) {
+        const legacy = await this.deps.repo.listLegacyMessageFiles(sessionID)
+        if (legacy.length === 0) continue
+
+        const messages: MessagePayload[] = []
+        const migrated: string[] = []
+        for (const filePath of legacy) {
+          const blob = await this.deps.repo.readLocalFile(filePath)
+          if (!blob) continue
+          try {
+            messages.push(JSON.parse(decrypt(blob, key, meta.repoId, filePath).toString("utf8")) as MessagePayload)
+            migrated.push(filePath)
+          } catch (error) {
+            // 解不开的文件保留原样，绝不在没写进封包前删掉。
+            log.warn(`迁移时跳过无法解密的文件 ${filePath} (${error instanceof Error ? error.message : String(error)})`)
+          }
+        }
+        if (messages.length === 0) continue
+
+        messages.sort(
+          (a, b) =>
+            (a.info.time?.created ?? 0) - (b.info.time?.created ?? 0) || a.info.id.localeCompare(b.info.id),
+        )
+        const packs = await this.buildPacks(sessionID, messages, key, meta.repoId)
+        await this.deps.repo.writeFiles(packs)
+        await this.deps.repo.removeFiles(migrated)
+        changed = true
+        log.info(`已合并会话 ${sessionID}：${messages.length} 条消息 → ${packs.length} 个封包`)
+      }
+
+      if (changed) await this.push()
+    })
+  }
+
+  /** 把消息按 PACK_BYTES 切分成封包（追加在已有封包之后）。 */
+  private async buildPacks(
+    sessionID: string,
+    messages: MessagePayload[],
+    key: Buffer,
+    repoId: string,
+  ): Promise<Array<{ path: string; content: Buffer }>> {
+    const existing = await this.deps.repo.listPackFiles(sessionID)
+    let seq = existing.at(-1)?.seq ?? 0
+    const files: Array<{ path: string; content: Buffer }> = []
+    let entries: MessagePayload[] = []
+    let size = 0
+
+    const flush = () => {
+      if (entries.length === 0) return
+      seq += 1
+      const path = packPath(sessionID, seq)
+      files.push({ path, content: encrypt(encodePack(entries), key, repoId, path) })
+      entries = []
+      size = 0
+    }
+
+    for (const message of messages) {
+      const addition = messageBytes(message)
+      if (entries.length > 0 && size + addition > PACK_BYTES) flush()
+      entries.push(message)
+      size += addition
+    }
+    flush()
+    return files
   }
 
   /** 把待推送的会话提交并推送（失败静默，下次再推）。 */
@@ -323,8 +512,11 @@ export class SyncService {
     this.pending.clear()
     if (sessions.length === 0) return
     try {
-      for (const sessionID of sessions) await this.stage(sessionID)
-      await this.push()
+      await this.withLock(async () => {
+        if (this.disposed) return
+        for (const sessionID of sessions) await this.stageUnlocked(sessionID)
+        await this.push()
+      })
     } catch (error) {
       log.warn(`同步推送异常: ${error instanceof Error ? error.message : String(error)}`)
     }

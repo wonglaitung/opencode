@@ -3,7 +3,7 @@ import path from "node:path"
 import { git, gitOrThrow, readBlobs } from "./git"
 import { log } from "./log"
 import { randomRepoId, randomSalt } from "./crypto"
-import type { PayloadFile } from "./payload"
+import { PACK_DIR, packPath, type PayloadFile } from "./payload"
 
 /**
  * 同步仓库层。
@@ -136,6 +136,59 @@ export class SyncRepo {
       fs.mkdirSync(path.dirname(target), { recursive: true })
       await Bun.write(target, file.content)
     }
+  }
+
+  /** 删除工作区里的文件（不存在时忽略）。 */
+  async removeFiles(files: string[]): Promise<void> {
+    for (const file of files) {
+      try {
+        fs.rmSync(path.join(this.options.dir, file), { force: true })
+      } catch {
+        // 删除失败不影响后续提交
+      }
+    }
+  }
+
+  /** 本地工作区里的会话 ID 列表。 */
+  async listSessionIDs(): Promise<string[]> {
+    const dir = path.join(this.options.dir, "sessions")
+    try {
+      return fs
+        .readdirSync(dir, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name)
+    } catch {
+      return []
+    }
+  }
+
+  /** 某会话的旧布局消息文件（`sessions/<sid>/<messageID>.ocgs`，不含 meta 与封包）。 */
+  async listLegacyMessageFiles(sessionID: string): Promise<string[]> {
+    const dir = path.join(this.options.dir, "sessions", sessionID)
+    try {
+      return fs
+        .readdirSync(dir)
+        .filter((name) => name.endsWith(".ocgs") && name !== "meta.ocgs")
+        .map((name) => `sessions/${sessionID}/${name}`)
+    } catch {
+      return []
+    }
+  }
+
+  /** 某会话已存在的封包（按序号升序）。 */
+  async listPackFiles(sessionID: string): Promise<Array<{ seq: number; path: string }>> {
+    const dir = path.join(this.options.dir, "sessions", sessionID, PACK_DIR)
+    let entries: string[]
+    try {
+      entries = fs.readdirSync(dir)
+    } catch {
+      return []
+    }
+    return entries
+      .map((name) => /^pack-(\d{6})\.ocgs$/.exec(name))
+      .filter((match): match is RegExpExecArray => match !== null)
+      .map((match) => ({ seq: Number(match[1]), path: packPath(sessionID, Number(match[1])) }))
+      .sort((a, b) => a.seq - b.seq)
   }
 
   /** 是否有待提交的内容。 */

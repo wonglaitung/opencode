@@ -7,7 +7,7 @@ import { detectRemote } from "./remote"
 import { OpencodeDb } from "./ocdb"
 import { SyncRepo } from "./repo"
 import { State } from "./state"
-import { SyncService } from "./sync"
+import { SyncService, type PullResult } from "./sync"
 import type { PluginEvent, PluginInput } from "./types"
 
 /**
@@ -161,16 +161,20 @@ const GitSync = async (input: PluginInput, options?: unknown) => {
     const file = await findOpencodeDb()
     if (!file) {
       log.warn("未找到 opencode 数据库，本次不同步")
+      await service.migrateLegacy()
       return undefined
     }
     const db = new OpencodeDb(file)
+    let result: PullResult | undefined
     try {
-      const result = await service.pull(db)
+      result = await service.pull(db)
       if (result.changed.length > 0) await service.notifyChanged(result.changed)
-      return result
     } finally {
       db.close()
     }
+    // 旧布局（一条消息一个文件）合并成封包；先写包再删旧文件，失败不丢数据。
+    await service.migrateLegacy()
+    return result
   })()
 
   const budget = config.syncTimeoutMs ?? DEFAULTS.syncTimeoutMs

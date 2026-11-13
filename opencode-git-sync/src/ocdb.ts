@@ -47,6 +47,11 @@ export class OpencodeDb {
     return row !== null && row !== undefined
   }
 
+  /** 在单个事务里执行一批写入（逐条自动提交时每条都要 fsync，批量导入会慢几十倍）。 */
+  transaction<T>(fn: () => T): T {
+    return this.db.transaction(fn)()
+  }
+
   sessionUpdatedAt(sessionID: string): number | undefined {
     const row = this.db.query("SELECT time_updated FROM session WHERE id = ?").get(sessionID) as
       | { time_updated?: number }

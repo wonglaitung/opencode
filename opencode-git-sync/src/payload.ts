@@ -1,12 +1,16 @@
 import crypto from "node:crypto"
+import { gunzipSync, gzipSync } from "node:zlib"
 import type { MessageInfo, MessageWithParts, PartInfo, SessionInfo } from "./types"
 
 /**
  * 同步载荷格式（加密前的明文）。
  *
  * 仓库布局：
- *   sessions/<sessionID>/meta.ocgs            会话元信息
- *   sessions/<sessionID>/<messageID>.ocgs      单条消息 + parts
+ *   sessions/<sessionID>/meta.ocgs                    会话元信息
+ *   sessions/<sessionID>/packs/pack-<seq>.ocgs        消息封包（多条消息一个文件）
+ *
+ * 封包按未压缩 JSON 大小封口（PACK_BYTES），只重写最后一个「开口包」；
+ * 旧布局的 `sessions/<sessionID>/<messageID>.ocgs` 仍会被读取并迁移成封包。
  *
  * 路径归一化：跨机绝对路径不同，写入前把本机根目录替换为占位符，
  * 导入时再还原为当前机器的实际路径。占位符替换只作用于「字符串值」，不动 key。
@@ -127,4 +131,39 @@ export function parseSessionPath(filePath: string): { sessionID: string; message
   const name = match[2]!
   if (name === "meta") return { sessionID }
   return { sessionID, messageID: name }
+}
+
+/** 封包目录与封口阈值（按未压缩 JSON 字节数计算）。 */
+export const PACK_DIR = "packs"
+export const PACK_BYTES = 256 * 1024
+
+/** 封包明文结构。 */
+export type PackPayload = { v: 1; messages: MessagePayload[] }
+
+export function packPath(sessionID: string, seq: number): string {
+  return `sessions/${sessionID}/${PACK_DIR}/pack-${String(seq).padStart(6, "0")}.ocgs`
+}
+
+/** 从仓库相对路径解析出封包所属会话与序号。 */
+export function parsePackPath(filePath: string): { sessionID: string; seq: number } | undefined {
+  const match = /^sessions\/([^/]+)\/packs\/pack-(\d{6})\.ocgs$/.exec(filePath)
+  if (!match) return undefined
+  return { sessionID: match[1]!, seq: Number(match[2]) }
+}
+
+/** 单条消息的未压缩 JSON 字节数（封口阈值口径）。 */
+export function messageBytes(message: MessagePayload): number {
+  return Buffer.byteLength(JSON.stringify(message))
+}
+
+/** 多条消息 → 压缩后的封包明文（加密前）。 */
+export function encodePack(messages: MessagePayload[]): Buffer {
+  return gzipSync(Buffer.from(JSON.stringify({ v: 1, messages } satisfies PackPayload), "utf8"))
+}
+
+/** 解压并解析封包明文。 */
+export function decodePack(buffer: Buffer): MessagePayload[] {
+  const parsed = JSON.parse(gunzipSync(buffer).toString("utf8")) as Partial<PackPayload>
+  if (parsed.v !== 1 || !Array.isArray(parsed.messages)) throw new Error("封包格式不匹配（版本不一致?）")
+  return parsed.messages
 }

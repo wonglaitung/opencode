@@ -15,8 +15,9 @@
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { decrypt, deriveKey } from "../src/crypto"
+import { decrypt, deriveKey, KEYCHECK_PATH } from "../src/crypto"
 import { git } from "../src/git"
+import { decodePack, parsePackPath } from "../src/payload"
 import { detectRemote } from "../src/remote"
 import { META_FILE, SyncRepo } from "../src/repo"
 import { projectStateDir } from "../src/paths"
@@ -73,13 +74,8 @@ for (const files of branches.values()) {
     }
   }
   if (!keycheck) {
-    for (const blob of files.values()) {
-      // keycheck.ocgs 是「magic 头 + nonce + 密文」，用魔数判断
-      if (blob.length > 21 && blob.subarray(0, 5).toString("utf8") === "OCGS1") {
-        keycheck = blob
-        break
-      }
-    }
+    const check = files.get(KEYCHECK_PATH)
+    if (check) keycheck = check
   }
 }
 
@@ -92,12 +88,13 @@ if (!repoId || !salt) {
   process.exit(0)
 }
 
+let contentKey: Buffer | undefined
 if (!keycheck) {
   console.log("远端没有 keycheck.ocgs，跳过口令校验。")
 } else {
-  const key = deriveKey(passphrase, salt)
+  contentKey = deriveKey(passphrase, salt)
   try {
-    decrypt(keycheck, key, repoId, "keycheck.ocgs")
+    decrypt(keycheck, contentKey, repoId, KEYCHECK_PATH)
     console.log("口令: ✓ 与远端一致（可以用这个口令继续同步）")
   } catch {
     console.log("口令: ✗ 与远端不一致（换机器时必须填「现有机器正在用的那个口令」）")
@@ -118,7 +115,7 @@ if (fs.existsSync(localStateDb)) {
   }
 }
 
-// 5) 逐分支统计（仅统计，不解密内容）——空分支要一眼看出来
+// 5) 逐分支统计——空分支要一眼看出来
 console.log("")
 console.log("各机器分支内容：")
 let totalSessions = 0
@@ -126,18 +123,28 @@ let totalMessages = 0
 for (const [branch, files] of branches) {
   let sessions = 0
   let messages = 0
+  let packs = 0
   let hasMeta = false
-  for (const filePath of files.keys()) {
+  for (const [filePath, blob] of files) {
     if (filePath === META_FILE) hasMeta = true
     else if (filePath.endsWith("/meta.ocgs")) sessions += 1
-    else if (filePath.endsWith(".ocgs")) messages += 1
+    else if (parsePackPath(filePath)) {
+      packs += 1
+      if (!contentKey) continue
+      try {
+        messages += decodePack(decrypt(blob, contentKey, repoId!, filePath)).length
+      } catch {
+        // 解不开的包不计入消息数
+      }
+    } else if (filePath.endsWith(".ocgs")) messages += 1
   }
   totalSessions += sessions
   totalMessages += messages
   const flag = sessions === 0 ? "  ← 空分支：该机器没推上任何会话" : ""
+  const packInfo = packs > 0 ? `  封包 ${String(packs).padStart(3)}` : ""
   console.log(
     `  ${branch.padEnd(28)} 会话 ${String(sessions).padStart(3)}  消息 ${String(messages).padStart(4)}  ` +
-      `${hasMeta ? "meta ✓" : "meta ✗"}${flag}`,
+      `${hasMeta ? "meta ✓" : "meta ✗"}${packInfo}${flag}`,
   )
 }
 console.log(`  合计：会话 ${totalSessions}，消息 ${totalMessages}`)

@@ -4,7 +4,7 @@
 
 - 会话内容**端到端加密**：远端仓库里只有密文，passphrase 永不进仓库
 - 远端用 git 分支承载，每台机器一条 `ocsync/<machine>` 分支，**历史恒定 1 条提交**（`--amend --force`）
-- 增量存储：一条消息一个文件，内容寻址天然去重，体积只随真实新增消息增长
+- 增量存储：消息按 256 KB 封包（`packs/pack-<seq>.ocgs`），只重写最后一个包；加密前先 gzip 压缩
 - 首屏有界同步（默认 5s）：保证 `opencode -c` 拿到远端会话；**断网时自动降级为离线，不阻塞启动**
 - 导入直接写 opencode 主库的 `session/message/part` 三表（口径对齐上游 `opencode import`），**不需要改动上游代码**
 
@@ -176,15 +176,17 @@ opencode -c       # 继续上次会话（跨机时自动接上另一台机器的
     │   ├── sync-meta.json          （明文：repoId + salt，非机密）
     │   ├── keycheck.ocgs           （加密哨兵：校验口令）
     │   └── sessions/<sessionID>/
-    │       ├── meta.ocgs            （会话元信息）
-    │       └── <messageID>.ocgs     （单条消息 + parts，增量）
+    │       ├── meta.ocgs                     （会话元信息）
+    │       └── packs/pack-000001.ocgs        （消息封包：多条消息 + parts）
     └── ocsync/<机器B>
 ```
 
 - 每台机器只写自己那条分支 → **不会互相 force 覆盖**
 - 提交用 `--amend --force` → 每条分支**永远只有 1 条提交**，不会堆版本
-- 一条消息一个文件 → 内容寻址去重，体积只随真实新增消息增长
+- 消息按未压缩 JSON 大小封口（256 KB/包），只重写最后一个「开口包」；已封口的包内容不再变化
+- 旧消息被修改时作为覆盖项写进更新的包，拉取按包序号升序处理 → 后者覆盖前者
 - 导入时按 messageID 取并集 → 同一会话两机并发编辑**不丢消息**
+- 旧布局（一条消息一个文件）会在启动同步后自动合并成封包（先写包、再删旧文件）
 
 ## 按项目隔离
 
@@ -212,10 +214,11 @@ opencode -c       # 继续上次会话（跨机时自动接上另一台机器的
 passphrase ──scrypt(N=32768, salt)──▶ 32B 内容密钥
                                         │
 每文件：AES-256-GCM(nonce=随机12B, AAD=repoId + 仓库相对路径)
+封包先 gzip 再加密（密文不可压缩，必须先压后加密）
 仓库内：sync-meta.json（明文：repoId/salt，非机密）
         keycheck.ocgs（加密哨兵，用于校验 passphrase 正确性）
         sessions/<sessionID>/meta.ocgs
-        sessions/<sessionID>/<messageID>.ocgs
+        sessions/<sessionID>/packs/pack-<seq>.ocgs
 ```
 
 - **口令错误会被识别**：读取 `keycheck.ocgs` 失败 → 直接中止同步，**绝不会把解不开的密文当成新数据写回远端**。
