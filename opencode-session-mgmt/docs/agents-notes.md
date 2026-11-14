@@ -47,6 +47,19 @@ AI 录入」的真多轮；r54 的 1/3 落空即模型先问材料目录而未�
 **解析失败返回 null 优于误解析（fail-safe）。** 中文数词（半天/十天左右）不解析成数字是刻意取舍：
 漏捕 = 开发者真实估值被拒（安全），而非被毒化（危险）。给解析层加能力时，宁可不识别也别猜。
 
+**项目外 file: 依赖被顶层导入，会拖垮整个插件（2026-11，websec）。** `packages/plugin/package.json`
+声明 `edge-debug-core: file:../../../edge-debug-core`，解析到**本工程目录之外**的兄弟目录；
+`toolset.ts` 顶层导入 `websec-edge.ts`，后者又静态导入 `edge-debug-core`。依赖未装时 `import` 链在
+**插件加载阶段**就抛 `Cannot find package`——后果不是「websec 不可用」而是**整个插件加载失败**，
+连带 14 测试 7 error（`websec.test.ts` 并未直接依赖它，纯被传递拖累）。修复：类型改 `import type`
+（运行时擦除），值改 `loadEdgeDebug()` 按需 `await import()`，失败抛可操作的 `WorkflowOpError`
+（要求装依赖后**重启进程**：实测 Bun 会缓存失败的动态 import，同进程重试仍抛
+`Cannot find package`，与 `plugin-guide/plugin-loading-debug.md` 第 4.3 节一致），
+`disposeWebsecEdge` 吞异常返回 false。
+护栏 `packages/plugin/test/websec-edge-dep.test.ts`：文本契约（禁止静态值导入）+ 端到端（11 个
+websec 工具注册）；破坏验证已做——把 `import type` 改回 `import` 立即报红。
+配套缺口（未修）：本工程**无任何 CI**，该问题只能靠本地跑测试发现。
+
 ## 对抗性审查
 
 **拖到提交前集中审等于走过场。** 与验证同拍时上下文最热、diff 最小、归因最容易；提交前审的

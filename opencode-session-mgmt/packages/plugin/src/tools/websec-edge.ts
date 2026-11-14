@@ -11,15 +11,11 @@ import { tool, type ToolDefinition } from "@opencode-ai/plugin"
 import { createHash } from "node:crypto"
 import { mkdir } from "node:fs/promises"
 import { join } from "node:path"
-import {
-  disposeEdgeDebugController,
-  getEdgeDebugController,
-  shouldCaptureBody,
-  WEBSEC_CAPTURE_POLICY,
-  type EdgeDebugController,
-  type NetworkCapturePolicy,
-  type NetworkDetail,
-  type PageNavigation,
+import type {
+  EdgeDebugController,
+  NetworkCapturePolicy,
+  NetworkDetail,
+  PageNavigation,
 } from "edge-debug-core"
 import type { WebsecEvidence, WebsecPhase, WorkflowState } from "sm-shared"
 import type { Store } from "../db"
@@ -34,6 +30,33 @@ import {
 } from "./websec-paths"
 
 const z = tool.schema
+
+type EdgeDebugModule = typeof import("edge-debug-core")
+
+let edgeDebugModule: EdgeDebugModule | undefined
+
+/**
+ * 按需加载 edge-debug-core（项目外的 file: 依赖）。
+ *
+ * toolset.ts 在插件加载时顶层导入本文件，因此这里绝不能有静态值导入——
+ * 依赖缺失时只允许 Edge 走查不可用，不能把整个插件拖垮。
+ * 注意：Bun 会缓存失败的动态 import，装好依赖后必须重启 opencode 进程才会生效。
+ */
+async function loadEdgeDebug(): Promise<EdgeDebugModule> {
+  if (edgeDebugModule === undefined) {
+    try {
+      edgeDebugModule = await import("edge-debug-core")
+    } catch {
+      // 保持 undefined；但 Bun 缓存了解析失败，重试无效，需重启进程
+    }
+  }
+  if (!edgeDebugModule) {
+    throw new WorkflowOpError(
+      "edge-debug-core 依赖不可用，Edge 走查无法执行：请先在 opencode-session-mgmt 目录执行 bun install，然后重启 opencode。",
+    )
+  }
+  return edgeDebugModule
+}
 
 type EdgeLike = Pick<
   EdgeDebugController,
@@ -74,7 +97,10 @@ function sha256(text: string): string {
   return createHash("sha256").update(text, "utf8").digest("hex")
 }
 
-function capturePolicyFor(workflow: WorkflowState): NetworkCapturePolicy {
+async function capturePolicyFor(
+  workflow: WorkflowState,
+  edge: EdgeDebugModule,
+): Promise<NetworkCapturePolicy> {
   const target = workflow.websec?.scope?.target
   let origins: string[] | undefined
   if (target) {
@@ -84,7 +110,7 @@ function capturePolicyFor(workflow: WorkflowState): NetworkCapturePolicy {
       origins = undefined
     }
   }
-  return { ...WEBSEC_CAPTURE_POLICY, origins }
+  return { ...edge.WEBSEC_CAPTURE_POLICY, origins }
 }
 
 function modeLabel(mode: "normal" | "authz"): string {
@@ -113,7 +139,8 @@ function endpointKey(ev: WebsecEvidence): string {
 /** 插件卸载时兜底关闭 websec 启动的 Edge（共享 controller）。 */
 export async function disposeWebsecEdge(projectDir: string): Promise<boolean> {
   try {
-    return await disposeEdgeDebugController(projectDir)
+    const edge = await loadEdgeDebug()
+    return await edge.disposeEdgeDebugController(projectDir)
   } catch {
     return false
   }
@@ -122,7 +149,8 @@ export async function disposeWebsecEdge(projectDir: string): Promise<boolean> {
 export function createWebsecEdgeTools(
   store: Store,
   projectDir: string,
-  controllerFactory: () => EdgeLike = () => getEdgeDebugController(projectDir),
+  controllerFactory: () => EdgeLike | Promise<EdgeLike> = async () =>
+    (await loadEdgeDebug()).getEdgeDebugController(projectDir),
 ): Record<string, ToolDefinition> {
   const websec_edge_capture = tool({
     description:
@@ -149,8 +177,9 @@ export function createWebsecEdgeTools(
     },
     async execute(args, context) {
       const workflow = requireWebsec(store.get(context.sessionID)?.workflow)
-      const controller = controllerFactory()
-      const policy = capturePolicyFor(workflow)
+      const edge = await loadEdgeDebug()
+      const controller = await controllerFactory()
+      const policy = await capturePolicyFor(workflow, edge)
 
       if (args.action === "stop") {
         const closed = await controller.stop()
@@ -296,7 +325,7 @@ export function createWebsecEdgeTools(
           .filter(
             (entry) =>
               !existing.has(`edge-baseline-${entry.requestId}`) &&
-              (entry.status >= 400 || shouldCaptureBody(entry, policy)),
+              (entry.status >= 400 || edge.shouldCaptureBody(entry, policy)),
           )
         if (uncaptured.length > 0) {
           throw new WorkflowOpError(
@@ -434,7 +463,7 @@ export function createWebsecEdgeTools(
       for (const entry of candidates) {
         let detail: NetworkDetail | null = null
         let bodyNote: string | undefined
-        if (shouldCaptureBody(entry, policy)) {
+        if (edge.shouldCaptureBody(entry, policy)) {
           try {
             detail = await controller.responseDetailData(entry.requestId)
           } catch {
