@@ -71,7 +71,7 @@ function createUsageProvider(client: PluginInput["client"]) {
  * 失败静默。
  * 注意：内部辅助函数**不要加 export**——opencode 的 legacy 插件加载器会把模块
  * 「所有函数导出」都当作插件工厂，以 (input, options) 逐一调用，曾致插件加载失败
- * （见 CLAUDE.md 铁律）。
+ * （见 AGENTS.md 铁律）。
  */
 async function syncSessionTitle(store: Store, client: PluginInput["client"], sessionID: string): Promise<void> {
   const cur = store.get(sessionID)?.title

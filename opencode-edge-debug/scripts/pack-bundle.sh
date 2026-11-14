@@ -80,7 +80,7 @@ cp .npmrc "$bundle_dir/"
 cp -r src "$bundle_dir/"
 cp -r test "$bundle_dir/"
 cp README.md "$bundle_dir/"
-cp CLAUDE.md "$bundle_dir/"
+cp AGENTS.md "$bundle_dir/"
 
 # 共享核心：复制到 bundle 根，并把包内 file: 依赖改为包内相对路径，
 # 保证解压后即使重新 bun install 也能找到 edge-debug-core。

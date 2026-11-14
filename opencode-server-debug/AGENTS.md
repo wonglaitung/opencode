@@ -4,7 +4,7 @@ OpenCode 按需远程服务器日志调试插件：自然语言经 SSH 拉取/�
 
 ## 铁律（破坏则同步上游必冲突）
 
-- **不修改 `packages/*` 下任何上游文件**，也不改仓库根目录的 `CLAUDE.md` 等上游文件——根 CLAUDE.md 是上游的，本文件才是本工程的。
+- **不修改 `packages/*` 下任何上游文件**，也不改仓库根目录的 `AGENTS.md` 等上游文件——根 AGENTS.md 是上游的，本文件才是本工程的。
 - 所有定制产出只落在定制目录内：`opencode-server-debug/`（本工程）。
 - 本目录是独立 bun 工程，**不被上游根 workspace 收录**（上游 glob 为 `packages/*` 等，不匹配本路径）；改动后须确认上游根 `package.json` 的 workspace glob 仍不匹配本目录。
 

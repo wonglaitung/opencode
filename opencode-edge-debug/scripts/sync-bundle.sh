@@ -6,7 +6,7 @@
 # 与 opencode-session-mgmt 的 sync-bundle.sh 同型，但本工程是单插件（无 workspace 包双份）：
 # 插件以 package.json 的 main=src/index.ts 被 OpenCode 直接加载，整份源码就是运行所需。
 #
-# 同步范围：镜像 src / test / package.json / README.md / CLAUDE.md / bun.lock / .npmrc。
+# 同步范围：镜像 src / test / package.json / README.md / AGENTS.md / bun.lock / .npmrc。
 # 必须保留不覆盖的项（用 --exclude 同时从传输与 --delete 中剔除）：
 #   - node_modules：Windows 侧已用 hoisted 模式装好，真实文件，覆盖会破坏/误删
 #   - setup.sh / setup.ps1：由 pack-bundle.sh 在打包时生成、源码仓库不含，删除会让目标机失去环境校验脚本
@@ -38,7 +38,7 @@ if [ ! -d "$BUNDLE" ]; then
 fi
 
 # 同步工具：优先 rsync（支持 --delete 镜像），否则回退 cp。
-# -L 解引用符号链接（如本工程的 AGENTS.md -> CLAUDE.md），把软链目标作为真实文件拷入。
+# -L 解引用符号链接，把链接目标作为真实文件拷入（源码树内若用 ln -s 共享文件需要）。
 # --exclude 项既不被传输，也不被 --delete 删除（保护 Windows 侧 node_modules 与 setup 脚本）。
 if command -v rsync >/dev/null 2>&1; then
   SYNC=(rsync -aL --delete \

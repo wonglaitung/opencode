@@ -38,7 +38,7 @@ if [ ! -d "$BUNDLE" ]; then
 fi
 
 # 同步工具：优先 rsync（支持 --delete 镜像），否则回退 cp。
-# -L 解引用符号链接（如本工程的 AGENTS.md -> CLAUDE.md），把软链目标作为真实文件拷入。
+# -L 解引用符号链接，把链接目标作为真实文件拷入（源码树内若用 ln -s 共享文件需要）。
 # --exclude 项既不被传输，也不被 --delete 删除（保护 Windows 侧 node_modules 与 setup 脚本）。
 if command -v rsync >/dev/null 2>&1; then
   SYNC=(rsync -aL --delete \

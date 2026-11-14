@@ -80,7 +80,7 @@ bun run build:plugin  # 编译为自包含 JS → dist/plugin/index.js
 bun run pack:bundle   # 打成可移植 tarball → dist/opencode-edge-debug-bundle-<版本>.tgz
 ```
 
-- 工程规约见 [CLAUDE.md](./CLAUDE.md)；架构与决策记录见 [docs/design.md](./docs/design.md)。
+- 工程规约见 [AGENTS.md](./AGENTS.md)；架构与决策记录见 [docs/design.md](./docs/design.md)。
 - 跨插件通用开发规范见 [../plugin-guide/plugin-dev-guide.md](../plugin-guide/plugin-dev-guide.md)。
 
 ## 隐私
