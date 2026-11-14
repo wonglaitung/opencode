@@ -1,7 +1,8 @@
 # opencode-edge-debug
 
 OpenCode 按需 Edge 浏览器调试插件：自然语言启动/关闭带调试端口的 Edge，抓取页面 Console 与网络日志。
-零重型框架（不引入 Playwright/Puppeteer）、零运行时依赖（CDP 用 bun 原生 WebSocket + fetch 实现），
+零重型框架（不引入 Playwright/Puppeteer）、零第三方运行时依赖（CDP 用 bun 原生 WebSocket + fetch 实现，
+核心逻辑抽为仓库内自研共享包 `edge-debug-core`），
 对 OpenCode 上游**零修改**，以便持续同步上游更新。
 
 ## 铁律（破坏则同步上游必冲突）
@@ -54,7 +55,7 @@ test/
 ## 技术约定
 
 - bun 直接跑 TS；TypeScript strict，新代码零 `any`。
-- **零运行时依赖**：package.json 不得出现 dependencies；新增任何依赖须先论证必要性（首选原生实现）。
+- **零第三方运行时依赖**：不引入第三方运行时库；唯一允许的 `dependencies` 是本仓库自研共享包 `edge-debug-core`（`file:../edge-debug-core`，其自身也无运行时依赖）。新增其它依赖须先论证必要性（首选原生实现）。
 - `bun test` 跑测试，测试在 `test/*.test.ts`，**零 mock**（用 Bun.serve 等真实实现验证）。
 - `bun run typecheck` 走 tsc（tsconfig 独立，不引 session-mgmt）。
 - 插件 Hook 基于 `@opencode-ai/plugin` 的 `Hooks` 接口——**同步上游后优先核对 hook/tool 签名**；experimental hook 若将来引入，须集中于单一适配文件。

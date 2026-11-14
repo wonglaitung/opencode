@@ -29,7 +29,7 @@
 
 **没有服务器要部署、没有跨机器组件**——这与 `opencode-session-mgmt`（插件 + CLI + 收集服务三件套）不同。你只需要在自己的机器上装好 OpenCode、启用插件、装好 Edge。
 
-**依赖互联网的部分只有两处**：① OpenCode 本体的安装、② 插件开发依赖的 `bun install`。插件**运行期零依赖**——CDP 客户端用 bun 原生 WebSocket + fetch 实现，不引入 Playwright/Puppeteer 等任何运行时依赖；装好之后插件代码本身完全不需要外网。内网隔离环境怎么把这两处搬进去，见第 8 章。
+**依赖互联网的部分只有两处**：① OpenCode 本体的安装、② 插件开发依赖的 `bun install`。插件**运行期无第三方依赖**——CDP 客户端用 bun 原生 WebSocket + fetch 实现，不引入 Playwright/Puppeteer 等任何第三方运行时库（仅依赖仓库内自研共享包 `edge-debug-core`）；装好之后插件代码本身完全不需要外网。内网隔离环境怎么把这两处搬进去，见第 8 章。
 
 ---
 
@@ -111,7 +111,7 @@ git clone <本仓库地址> opencode-edge-debug
 
 > 本工程是独立 bun 工程，不被 OpenCode 上游的 workspace 收录，放在上游源码树里也不会互相干扰。
 
-在插件目录装**开发依赖**（运行期零依赖；需要 `@opencode-ai/plugin` 编译期类型，见 8.2 节内网做法）：
+在插件目录装**开发依赖**（运行期无第三方依赖；需要 `@opencode-ai/plugin` 编译期类型，见 8.2 节内网做法）：
 
 ```bash
 cd opencode-edge-debug
@@ -264,7 +264,7 @@ bun run typecheck    # 严格类型检查
 
 ## 8. 内网隔离（air-gapped）环境部署
 
-**核心判断**：本插件**运行期零依赖**——CDP 客户端用 bun 原生 WebSocket + fetch 实现，不引入任何第三方运行时库。因此软件本体搬进内网后**完全不需要外网**。需要「搬进去」的只有三样：**OpenCode 本体、插件开发依赖、大模型**。逐项给做法。
+**核心判断**：本插件**运行期无第三方依赖**——CDP 客户端用 bun 原生 WebSocket + fetch 实现，不引入任何第三方运行时库（仅依赖仓库内自研共享包 `edge-debug-core`）。因此软件本体搬进内网后**完全不需要外网**。需要「搬进去」的只有三样：**OpenCode 本体、插件开发依赖、大模型**。逐项给做法。
 
 ### 8.1 总体流程
 
@@ -279,7 +279,7 @@ bun run typecheck    # 严格类型检查
 
 ### 8.2 把插件与依赖搬进去
 
-由于零运行时依赖，插件只需**一份含 `node_modules` 的目录**即可运行。推荐用一键打包脚本（与 `opencode-session-mgmt` 的 `pack:bundle` 对齐），它会自动清理重装依赖、附带 `setup.sh`/`setup.ps1` 环境校验：
+由于运行期无第三方依赖，插件只需**一份含 `node_modules` 的目录**即可运行（其中 `edge-debug-core` 为本仓库自研共享包）。推荐用一键打包脚本（与 `opencode-session-mgmt` 的 `pack:bundle` 对齐），它会自动清理重装依赖、附带 `setup.sh`/`setup.ps1` 环境校验：
 
 ```bash
 # 联网区：一键打成可移植 tarball（含 node_modules + 源码 + setup 脚本）

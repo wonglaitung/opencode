@@ -2,7 +2,8 @@
 
 OpenCode 按需 Edge 浏览器调试插件：用自然语言让 Agent 启动带调试端口的 Microsoft Edge、
 抓取页面 Console 与网络日志、主动读取页面信息（DOM/JS 状态/存储）、查看网络请求详情、安全关闭浏览器。
-**零重型框架**（无 Playwright/Puppeteer）、**零运行时依赖**（CDP 客户端由 bun 原生 WebSocket + fetch 实现）。
+**零重型框架**（无 Playwright/Puppeteer）、**零第三方运行时依赖**（CDP 客户端由 bun 原生 WebSocket + fetch 实现，
+核心逻辑抽为仓库内自研共享包 `edge-debug-core`）。
 
 ## 功能
 

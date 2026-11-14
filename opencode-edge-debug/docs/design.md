@@ -1,7 +1,7 @@
 # opencode-edge-debug 设计文档
 
 OpenCode 按需 Edge 浏览器调试插件：以自然语言驱动「启动 Edge → 抓取 Console/网络日志 → 关闭」的调试闭环。
-零重型框架、零运行时依赖，对上游零修改。
+零重型框架、零第三方运行时依赖，对上游零修改。
 
 > 核心实现已抽到 `../edge-debug-core/src/`；本文档描述的核心链路仍适用，源码路径按该共享包理解。
 
@@ -162,7 +162,7 @@ flowchart LR
 ## 8 决策记录
 
 - **D1 零依赖 CDP 客户端**：chrome-remote-interface 引入 ws/commander 且为 CJS；本插件所需协议面极小
-  （命令调用 + 事件订阅），bun 原生 WebSocket + fetch 约 150 行即可覆盖，保持零运行时依赖。
+  （命令调用 + 事件订阅），bun 原生 WebSocket + fetch 约 150 行即可覆盖，保持零第三方运行时依赖。
 - **D2 专用 user-data-dir**：用户已有 Edge 实例运行时，共用默认 profile 的进程不会开放调试端口
   （Chromium 单实例机制），必须专用 profile 才能稳定拉起调试实例；落在会话项目目录下便于隔离与清理。
 - **D3 Browser.close 优先**：优雅关闭让浏览器自行落盘会话数据、正常退出；
