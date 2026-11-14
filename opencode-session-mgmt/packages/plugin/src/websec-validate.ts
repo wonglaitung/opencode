@@ -2,7 +2,7 @@
  * websec 产物独立校验器（零 import）。
  *
  * 刻意不复用产出侧模块（websec.ts / websec-state.ts）：类别、状态、严重度在这里是
- * 独立字面量，避免「同一份错误一起变绿」。离线 CLI 见 script/validate-websec.ts。
+ * 独立字面量，避免「同一份错误一起变绿」。离线 CLI 见 scripts/validate-websec.ts。
  *
  * 校验对象：
  * - coverage-ledger.json：入口 × 9 个必检类别是否恰好各一条、证据引用是否有效、

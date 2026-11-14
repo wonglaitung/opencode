@@ -13,6 +13,8 @@ import { resetSubagentCache } from "../src/subagent"
 
 const ctx = (sessionID: string) => ({ sessionID }) as never
 
+const busySessions = new Set<string>()
+
 function fakeClient(): PluginInput["client"] {
   return {
     session: {
@@ -21,6 +23,10 @@ function fakeClient(): PluginInput["client"] {
         const parentID = id.endsWith("-verifier") ? id.slice(0, -"-verifier".length) : undefined
         return { data: { id, title: "会话标题", parentID } }
       },
+      // 上游 /session/status 只列 busy/retry；idle 会被删除。
+      status: async () => ({
+        data: Object.fromEntries([...busySessions].map((id) => [id, { type: "busy" as const }])),
+      }),
       messages: async () => ({ data: [] }),
       list: async () => ({ data: [] }),
     },
@@ -216,6 +222,33 @@ describe("websec 工作流", () => {
           c,
         ),
       ).rejects.toThrow(/ev-missing/)
+
+      busySessions.add("w1-verifier")
+      await expect(
+        hooks.tool!.websec_report!.execute(
+          {
+            method: "manual + Edge/CDP",
+            verdict: "issues_found",
+            findings: [
+              {
+                title: "IDOR 读取他人资料",
+                category: "authz",
+                severity: "high",
+                endpoint: "/api/users/1",
+                status: "confirmed",
+                verifierSessionID: "w1-verifier",
+                verifierDecision: "confirmed",
+                evidenceRef: "ev1",
+                reproduction: "baseline: 用户 1 读取自己；proof: 用户 1 读取用户 2",
+                impact: "可读取他人资料",
+                remediation: "按当前用户校验资源归属",
+              },
+            ],
+          } as never,
+          c,
+        ),
+      ).rejects.toThrow(/不是本会话已完成的子会话/)
+      busySessions.delete("w1-verifier")
 
       await expect(
         hooks.tool!.websec_report!.execute(

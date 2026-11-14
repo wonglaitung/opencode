@@ -177,7 +177,11 @@ const SessionMgmtPlugin: Plugin = async (input) => {
       isVerifierSession: async (childSessionID, parentSessionID) => {
         try {
           const res = await input.client.session.get({ path: { id: childSessionID } })
-          return res.data?.parentID === parentSessionID
+          if (res.data?.parentID !== parentSessionID) return false
+          // 上游 /session/status 只列 busy/retry（idle 会被删除）：缺省即已空闲。
+          // 据此拒绝「后台复核还没跑完就提交」。
+          const statuses = await input.client.session.status()
+          return statuses.data?.[childSessionID] === undefined
         } catch {
           return false
         }

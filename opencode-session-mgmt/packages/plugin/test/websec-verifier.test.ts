@@ -155,7 +155,7 @@ describe("独立复核门禁", () => {
           } as never,
           ctx,
         ),
-      ).rejects.toThrow(/不是本会话的子会话/)
+      ).rejects.toThrow(/不是本会话已完成的子会话/)
     } finally {
       store.close()
     }

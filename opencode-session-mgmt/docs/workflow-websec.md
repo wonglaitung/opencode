@@ -83,7 +83,7 @@ Edge/CDP 是默认必经能力：`websec_edge_capture` 复用 `edge-debug-core` 
 
 报告门禁：必须先启动 Edge、用户走查并 `finish` 才能提交报告；`confirmed` 必须引用 `source=edge`、`anonymous-probe`、`http-check` 或 `write-probe` 证据（fallback 除外）；越权 `confirmed` 必须同时引用 baseline/privileged 证据，普通测试 `confirmed` 必须有正文证据。存在 `websec.surface` 时，覆盖矩阵未收口不能提交报告；存在 `websec.regression` 时，历史 finding 未逐条回归不能提交报告。
 
-独立复核门禁：`confirmed` 必须由 `task` 工具启动的**只读复核子会话**确认——复核会话 id 记入 `verifierSessionID`，必须（a）不等于提交会话、（b）经上游 `session.get` 校验确实是提交会话的子会话；`verifierDecision` 只能填 `confirmed`。`suspected` 不评严重度，携带 `severity` 会被 schema 直接拒收。
+独立复核门禁：`confirmed` 必须由 `task` 工具启动的**只读复核子会话**确认——复核会话 id 记入 `verifierSessionID`，必须（a）不等于提交会话、（b）经上游 `session.get` 校验确实是提交会话的子会话、（c）已结束（`/session/status` 中不处于 busy/retry）；`verifierDecision` 只能填 `confirmed`。`suspected` 不评严重度，携带 `severity` 会被 schema 直接拒收。
 
 产物校验：`websec_report` 落盘前先跑一次产物自检；`review_submit` 再从磁盘读 `report.json` + `coverage-ledger.json` 独立复核，失败即拒绝定稿。离线/CI 可单独跑 `bun run scripts/validate-websec.ts <报告目录>`。
 
@@ -205,7 +205,8 @@ websec 模式会保留同源 2xx 页面/接口、3xx 和 4xx/5xx，缓冲 500 �
 - 工作流类型是 daemon/identity 级，切换需重新 `init` 并重启，不能会话内切换。
 - 证据正文默认落 `<项目>/websec-evidence/<sessionID>/`，目录内 `.gitignore` 忽略正文；文件权限 0600（Windows 忽略）。
 - 不内置漏洞库、Payload 库或自动化利用能力；结论质量取决于测试者的判断与证据。
-- 独立复核是流程门禁而非密码学证明：服务端能校验「复核会话确实存在且是本会话的子会话」，但无法验证子会话内部是否真的尝试了推翻。复核质量仍取决于提示词与模型判断。
+- 独立复核是流程门禁而非密码学证明：服务端能校验「复核会话确实存在、是本会话的子会话、且已结束」，但无法验证子会话内部是否真的尝试了推翻。复核质量仍取决于提示词与模型判断。
+- 独立复核依赖 `task` 工具（子代理）可用；若当前 agent 禁用了子代理，`confirmed` 无法提交，只能输出 `suspected`。
 - 越权测试需要至少两个不同角色的账号；切换身份后必须重新登录，不能沿用上一个账号的 Cookie。baseline 日志未采集完时不能切换身份。
 - `switch_identity` 会清 Cookie/storage/cache 并刷新，但仍共用同一个浏览器 profile；高安全场景建议使用独立 profile/无痕窗口。
 - Edge 采集是默认路径：需要安装 Edge；`edge-debug-core` 保留同源 2xx Document/XHR/Fetch、3xx、4xx/5xx（缓冲 500），脚本仅元数据，静态资源丢弃；仍受单标签页、响应体按需读取等限制。

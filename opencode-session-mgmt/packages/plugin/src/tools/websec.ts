@@ -97,7 +97,7 @@ function renderReportMarkdown(report: WebsecReport, state: WebsecState): string 
               `- 独立复核：${item.verifierSessionID}（${item.verifierDecision}）\n`,
           )
           .join("\n")
-      : "未发现问题。\n"
+      : "无已确认发现。\n"
   const suspectedBlock =
     suspected.length > 0
       ? suspected
@@ -312,7 +312,8 @@ export function createWebsecTools(
   const websec_report = tool({
     description:
       "提交 WEB 安全测试结构化报告（report 阶段）。每条 finding 必须引用已登记的 evidenceRef；" +
-      "无发现时 verdict=passed。报告会展示给开发者，并作为 review_submit 的前置条件。",
+      "confirmed 必须带独立复核子会话（verifierSessionID + verifierDecision=confirmed），" +
+      "suspected 不评严重度。无发现时 verdict=passed。报告会展示给开发者，并作为 review_submit 的前置条件。",
     args: {
       method: z.string().min(1).describe("测试方法概述"),
       findings: z.array(finding).describe("发现清单（可为空）"),
@@ -331,8 +332,8 @@ export function createWebsecTools(
         }
         if (!(await isVerifierSession(item.verifierSessionID, context.sessionID))) {
           throw new WorkflowOpError(
-            `发现「${item.title}」的复核会话 ${item.verifierSessionID} 不是本会话的子会话：` +
-              `请用 task 工具启动只读复核子代理（提示它「尝试推翻这条候选」），并填入其返回的 <task id>`,
+            `发现「${item.title}」的复核会话 ${item.verifierSessionID} 不是本会话已完成的子会话：` +
+              `请用 task 工具启动只读复核子代理（提示它「尝试推翻这条候选」），等它返回后再填入其 <task id>`,
           )
         }
       }

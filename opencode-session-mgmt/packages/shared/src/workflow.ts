@@ -1371,7 +1371,7 @@ export const WEBSEC = defineWorkflow({
     {
       id: "websec-r31",
       stage: "verify",
-      text: "确认（confirmed）前必须用 task 工具启动一个独立的只读复核子代理：给它候选、复现步骤与证据位置，要求它「尝试推翻这条候选」，不要透露你已经认定的结论。复核未被推翻才可标 confirmed，并在 finding 中填入复核子会话 id（verifierSessionID）与 verifierDecision=confirmed；被推翻的降为 suspected 或移出报告。复核会话必须是本会话的子会话，不能是当前会话。",
+      text: "确认（confirmed）前必须用 task 工具启动一个独立的只读复核子代理：给它候选、复现步骤与证据位置，要求它「尝试推翻这条候选」，不要透露你已经认定的结论。复核未被推翻才可标 confirmed，并在 finding 中填入复核子会话 id（verifierSessionID）与 verifierDecision=confirmed；被推翻的降为 suspected 或移出报告。复核会话必须是本会话的子会话、不能是当前会话，且必须已结束（仍在运行时报告会被拒）。",
     },
     {
       id: "websec-r32",

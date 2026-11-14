@@ -3,9 +3,11 @@
  * 每个用例只改一个变量，确保坏输入一定报红。
  */
 import { describe, expect, test } from "bun:test"
+import { WEBSEC_REQUIRED_CHECK_CATEGORY_KEYS } from "sm-shared"
 import { validateWebsecArtifacts } from "../src/websec-validate"
 
-const CATEGORIES = ["authn", "authz", "input", "cors", "headers", "options", "export", "debug", "logic"]
+// 用生产侧常量构造夹具：若 shared 与校验器字面量漂移，「合法产物通过」会立刻报红。
+const CATEGORIES = [...WEBSEC_REQUIRED_CHECK_CATEGORY_KEYS]
 
 function ledger() {
   return {

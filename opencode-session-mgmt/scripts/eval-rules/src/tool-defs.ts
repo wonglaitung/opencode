@@ -772,12 +772,25 @@ export const EVAL_TOOLS: OpenAITool[] = [
     type: "function",
     function: {
       name: "websec_report",
-      description: "提交 WEB 安全测试结构化报告，并写入项目内 report.md/report.json。",
+      description:
+        "提交 WEB 安全测试结构化报告，并写入项目内 report.md/report.json/coverage-ledger.json。" +
+        "confirmed 必须带独立复核子会话（verifierSessionID + verifierDecision=confirmed）；suspected 不评严重度。",
       parameters: {
         type: "object",
         properties: {
           method: str("测试方法概述"),
-          findings: { type: "array", items: { type: "object" } },
+          findings: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                status: { type: "string", enum: ["confirmed", "suspected"] },
+                severity: { type: "string", enum: ["critical", "high", "medium", "low", "info"] },
+                verifierSessionID: str("独立复核子会话 id（task 工具返回的 <task id>）"),
+                verifierDecision: { type: "string", enum: ["confirmed"] },
+              },
+            },
+          },
           limitations: { type: "array", items: { type: "string" } },
           verdict: { type: "string", enum: ["passed", "issues_found"] },
         },
