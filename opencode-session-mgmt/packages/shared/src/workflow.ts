@@ -313,15 +313,13 @@ export interface WebsecEvidence {
   bodyPresent?: boolean
 }
 
-export interface WebsecFinding {
+interface WebsecFindingBase {
   id: string
   title: string
   category: WebsecCategory
-  severity: WebsecSeverity
   endpoint: string
   method?: string
   identity?: string
-  status: WebsecFindingStatus
   evidenceRef: string
   /** 越权测试：baseline 证据 id（普通账号）。 */
   baselineEvidenceRef?: string
@@ -331,6 +329,26 @@ export interface WebsecFinding {
   impact: string
   remediation: string
 }
+
+/** 已复现的发现：有严重度，且必须经独立复核子会话确认。 */
+export interface WebsecConfirmedFinding extends WebsecFindingBase {
+  status: "confirmed"
+  severity: WebsecSeverity
+  /** 独立复核子会话 id；必须是本会话的子会话，且不等于提交会话。 */
+  verifierSessionID: string
+  /** 复核结论；只有未被推翻（confirmed）才能提交。 */
+  verifierDecision: "confirmed"
+}
+
+/** 待验证的发现：不评严重度，避免用严重度给未证实结论背书。 */
+export interface WebsecSuspectedFinding extends WebsecFindingBase {
+  status: "suspected"
+  severity?: undefined
+  verifierSessionID?: undefined
+  verifierDecision?: undefined
+}
+
+export type WebsecFinding = WebsecConfirmedFinding | WebsecSuspectedFinding
 
 /** 报告阶段的结构化交付物（仅存本机 WorkflowState，不进汇报投影）。 */
 export interface WebsecReport {
@@ -347,6 +365,8 @@ export interface WebsecReport {
   reportDir?: string
   markdownPath?: string
   jsonPath?: string
+  /** 覆盖台账文件路径（独立 validator 的输入）。 */
+  ledgerPath?: string
 }
 
 /** Edge 不可用时，经开发者明确确认的降级记录。 */
@@ -1189,7 +1209,7 @@ export const WEBSEC = defineWorkflow({
     scope: "确认范围后询问普通/越权模式，并调用 websec_edge_capture(start, mode=...) 打开 Edge。",
     surface: "让用户在 Edge 中走查；用户说「本次录入已完成」后 capture → finish → approve surface → enter checks。",
     checks: "分析已采集页面和接口；完成后 approve checks → enter verify。",
-    verify: "复现/定级；完成后 approve verify → enter report → websec_report。",
+    verify: "复现/定级；confirmed 必须用 task 子代理独立复核（要求它尝试推翻）；完成后 approve verify → enter report → websec_report。",
     report: "websec_report 写报告；然后 review_submit 定稿。",
   },
   checklist: [
@@ -1281,7 +1301,7 @@ export const WEBSEC = defineWorkflow({
     {
       id: "websec-r16",
       stage: "report",
-      text: "调用 websec_report 提交结构化报告；每条 finding 的 evidenceRef 必须指向已登记的 websec_evidence，confirmed 必须引用 Edge、匿名探测、只读配置检查或显式写探测证据（fallback 除外）。报告同时写入项目内 report.md 和 report.json；完成后必须明确告知开发者两个文件的绝对路径。无发现时 verdict=passed，并列出已检查项与局限。",
+      text: "调用 websec_report 提交结构化报告；每条 finding 的 evidenceRef 必须指向已登记的 websec_evidence，confirmed 必须引用 Edge、匿名探测、只读配置检查或显式写探测证据（fallback 除外）且带独立复核会话。报告同时写入项目内 report.md、report.json 和 coverage-ledger.json；完成后必须明确告知开发者这三个文件的绝对路径。无发现时 verdict=passed，并列出已检查项与局限。",
     },
     {
       id: "websec-r17",
@@ -1347,6 +1367,21 @@ export const WEBSEC = defineWorkflow({
       id: "websec-r30",
       stage: "checks",
       text: "写探测只能使用 websec_write_probe，且必须在开发者逐次明确授权后调用：单次 POST/PUT/PATCH，禁止 DELETE、批量、爆破或真实用户数据；url 必须已登记；执行后按授权说明清理测试数据。未授权写操作一律不做。",
+    },
+    {
+      id: "websec-r31",
+      stage: "verify",
+      text: "确认（confirmed）前必须用 task 工具启动一个独立的只读复核子代理：给它候选、复现步骤与证据位置，要求它「尝试推翻这条候选」，不要透露你已经认定的结论。复核未被推翻才可标 confirmed，并在 finding 中填入复核子会话 id（verifierSessionID）与 verifierDecision=confirmed；被推翻的降为 suspected 或移出报告。复核会话必须是本会话的子会话，不能是当前会话。",
+    },
+    {
+      id: "websec-r32",
+      stage: "report",
+      text: "待验证（suspected）结论不评严重度：只有经过独立复核的 confirmed 才能填 severity；suspected 携带 severity 会被直接拒收。",
+    },
+    {
+      id: "websec-r33",
+      stage: "report",
+      text: "websec_report 会额外写出 coverage-ledger.json，并在落盘前校验产物（入口 × 9 类覆盖、证据引用、confirmed 的复核字段）；review_submit 会再次独立校验 report.json 与 coverage-ledger.json，失败则拒绝定稿。",
     },
   ],
 })

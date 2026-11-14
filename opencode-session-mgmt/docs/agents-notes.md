@@ -47,6 +47,19 @@ AI 录入」的真多轮；r54 的 1/3 落空即模型先问材料目录而未�
 **解析失败返回 null 优于误解析（fail-safe）。** 中文数词（半天/十天左右）不解析成数字是刻意取舍：
 漏捕 = 开发者真实估值被拒（安全），而非被毒化（危险）。给解析层加能力时，宁可不识别也别猜。
 
+**websec 的三道「反自证」防线（2026-11）。** 原 websec 的判定完全依赖单代理自查，存在三类自证偏差：
+① 候选由谁提出就由谁复核；② 覆盖是否收口由产出侧自己算；③ suspected 也能填严重度（用严重度给
+未证实结论背书）。本次补齐：
+- `confirmed` 必须由 `task` 子会话复核：服务端经上游 `session.get` 校验该会话**确为提交会话的子会话**
+  （不只做 ID 不等——那是软约束），并拒绝 `verifierDecision` 不是 `confirmed` 的记录。
+- `websec_report` 写 `coverage-ledger.json`；独立 validator（`websec-validate.ts`，零 import、
+  类别/状态/严重度全为字面量）在落盘前与 `review_submit` 时各校验一次；离线/CI 走
+  `scripts/validate-websec.ts`。
+- `suspected` 禁止 `severity`：schema 用 `.strict()` 拒收而非静默丢弃。
+破坏验证（每条都被观测到报红）：去掉 `.strict()` → 2 个 schema 用例红；去掉子会话校验 → 门禁用例红；
+去掉缺类别检查 → validator 用例红。已知边界：服务端只能证明「复核会话存在且是子会话」，无法验证子会话
+内部真的尝试了推翻；复核质量仍取决于提示词与模型。
+
 **项目外 file: 依赖被顶层导入，会拖垮整个插件（2026-11，websec）。** `packages/plugin/package.json`
 声明 `edge-debug-core: file:../../../edge-debug-core`，解析到**本工程目录之外**的兄弟目录；
 `toolset.ts` 顶层导入 `websec-edge.ts`，后者又静态导入 `edge-debug-core`。依赖未装时 `import` 链在

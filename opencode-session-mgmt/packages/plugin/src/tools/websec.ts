@@ -10,8 +10,9 @@ import { tool, type ToolDefinition } from "@opencode-ai/plugin"
 import { join } from "node:path"
 import {
   WEBSEC_CATEGORY_KEYS,
-  WEBSEC_FINDING_STATUS_KEYS,
+  WEBSEC_REQUIRED_CHECK_CATEGORY_KEYS,
   WEBSEC_SEVERITY_KEYS,
+  type WebsecConfirmedFinding,
   type WebsecEvidence,
   type WebsecFinding,
   type WebsecReport,
@@ -20,6 +21,7 @@ import {
 } from "sm-shared"
 import type { Store } from "../db"
 import { WorkflowOpError, assertWorkflowNotComplete } from "../workflow-ops"
+import { validateWebsecArtifacts } from "../websec-validate"
 import { coverageGaps, coverageSummary, regressionGaps, regressionSummary } from "./websec-state"
 import {
   ensureEvidenceGitignore,
@@ -65,27 +67,48 @@ function requireScope(workflow: WorkflowState): WebsecState {
   return state
 }
 
+function renderFindingBody(item: WebsecFinding): string {
+  return (
+    `- 类别：${item.category}\n` +
+    `- 端点：${item.method ? `${item.method} ` : ""}${item.endpoint}\n` +
+    `- 身份：${item.identity ?? "未记录"}\n` +
+    `- 证据：${item.evidenceRef}${
+      item.baselineEvidenceRef ? `（baseline ${item.baselineEvidenceRef}）` : ""
+    }${item.privilegedEvidenceRef ? `（privileged ${item.privilegedEvidenceRef}）` : ""}\n\n` +
+    `**复现**\n\n${item.reproduction}\n\n` +
+    `**影响**\n\n${item.impact}\n\n` +
+    `**修复建议**\n\n${item.remediation}\n`
+  )
+}
+
 function renderReportMarkdown(report: WebsecReport, state: WebsecState): string {
   const scope = state.scope
-  const findings =
-    report.findings.length > 0
-      ? report.findings
+  const confirmed = report.findings
+    .filter((item): item is WebsecConfirmedFinding => item.status === "confirmed")
+    .sort((a, b) => WEBSEC_SEVERITY_KEYS.indexOf(a.severity) - WEBSEC_SEVERITY_KEYS.indexOf(b.severity))
+  const suspected = report.findings.filter((item) => item.status === "suspected")
+  const confirmedBlock =
+    confirmed.length > 0
+      ? confirmed
           .map(
             (item) =>
               `### ${item.id} [${item.severity}] ${item.title}\n\n` +
-              `- 类别：${item.category}\n` +
-              `- 端点：${item.method ? `${item.method} ` : ""}${item.endpoint}\n` +
-              `- 身份：${item.identity ?? "未记录"}\n` +
-              `- 状态：${item.status}\n` +
-              `- 证据：${item.evidenceRef}${
-                item.baselineEvidenceRef ? `（baseline ${item.baselineEvidenceRef}）` : ""
-              }${item.privilegedEvidenceRef ? `（privileged ${item.privilegedEvidenceRef}）` : ""}\n\n` +
-              `**复现**\n\n${item.reproduction}\n\n` +
-              `**影响**\n\n${item.impact}\n\n` +
-              `**修复建议**\n\n${item.remediation}\n`,
+              renderFindingBody(item) +
+              `- 独立复核：${item.verifierSessionID}（${item.verifierDecision}）\n`,
           )
           .join("\n")
       : "未发现问题。\n"
+  const suspectedBlock =
+    suspected.length > 0
+      ? suspected
+          .map(
+            (item) =>
+              `### ${item.id} ${item.title}\n\n` +
+              renderFindingBody(item) +
+              `- 状态：待验证（不评严重度，需补充证据并独立复核后升级为 confirmed）\n`,
+          )
+          .join("\n")
+      : ""
   const evidence =
     state.evidence.length > 0
       ? state.evidence
@@ -106,7 +129,8 @@ function renderReportMarkdown(report: WebsecReport, state: WebsecState): string 
     `- 提交时间：${new Date(report.submittedAt).toISOString()}\n` +
     `- 覆盖矩阵：${coverageSummary(state)}\n` +
     `- 历史回归：${regressionSummary(state)}\n\n` +
-    `## 发现\n\n${findings}\n` +
+    `## 发现（已确认）\n\n${confirmedBlock}\n` +
+    (suspectedBlock ? `## 待验证（不评严重度）\n\n${suspectedBlock}\n` : "") +
     (report.regression?.length
       ? `## 历史 finding 回归\n\n${report.regression
           .map(
@@ -144,24 +168,50 @@ const evidence = z.object({
   response_headers: z.record(z.string(), z.string()).optional().describe("允许列表内的响应头（CORS/安全头等），不要传 Cookie/令牌"),
 })
 
-const finding = z.object({
+const findingBase = {
   id: z.string().min(1).optional().describe("发现 id（可选；缺省自动生成）"),
   title: z.string().min(1).describe("标题"),
   category: z.enum(WEBSEC_CATEGORY_KEYS).describe("检查类别"),
-  severity: z.enum(WEBSEC_SEVERITY_KEYS).describe("严重度"),
   endpoint: z.string().min(1).describe("受影响端点/页面"),
   method: z.string().optional().describe("HTTP 方法（可选）"),
   identity: z.string().optional().describe("复现所用身份（可选）"),
-  status: z.enum(WEBSEC_FINDING_STATUS_KEYS).describe("confirmed=已复现；suspected=待验证"),
   evidenceRef: z.string().min(1).describe("必须引用已登记的 websec_evidence id"),
   baselineEvidenceRef: z.string().optional().describe("越权测试：baseline 证据 id（普通账号）"),
   privilegedEvidenceRef: z.string().optional().describe("越权测试：privileged 证据 id（高权账号）"),
   reproduction: z.string().min(1).describe("复现步骤（baseline 与 proof）"),
   impact: z.string().min(1).describe("影响与利用前提"),
   remediation: z.string().min(1).describe("可执行的修复建议"),
+}
+
+const confirmedFinding = z.object({
+  ...findingBase,
+  status: z.literal("confirmed").describe("confirmed=已复现且经独立复核确认"),
+  severity: z.enum(WEBSEC_SEVERITY_KEYS).describe("严重度（仅 confirmed 必填）"),
+  verifierSessionID: z
+    .string()
+    .min(1)
+    .describe("独立复核子会话 id（task 工具返回的 <task id>），必须是当前会话的子会话"),
+  verifierDecision: z.literal("confirmed").describe("复核结论；只有未被推翻才能填 confirmed"),
 })
 
-export function createWebsecTools(store: Store, projectDir: string): Record<string, ToolDefinition> {
+// .strict()：待验证结论若带 severity/复核字段会被直接拒收，而不是静默丢弃。
+const suspectedFinding = z
+  .object({
+    ...findingBase,
+    status: z.literal("suspected").describe("suspected=待验证，不评严重度"),
+  })
+  .strict()
+
+const finding = z.discriminatedUnion("status", [confirmedFinding, suspectedFinding])
+
+/** 仅供单测：校验 finding 参数形态（suspected 不得带 severity / 复核字段）。 */
+export const websecFindingSchema = finding
+
+export function createWebsecTools(
+  store: Store,
+  projectDir: string,
+  isVerifierSession: (childSessionID: string, parentSessionID: string) => Promise<boolean>,
+): Record<string, ToolDefinition> {
   const websec_scope = tool({
     description:
       "记录 WEB 安全测试的范围与边界（scope 阶段）。必须由开发者确认目标属于其负责或获准自测的范围后调用；" +
@@ -270,6 +320,22 @@ export function createWebsecTools(store: Store, projectDir: string): Record<stri
       verdict: z.enum(["passed", "issues_found"]).describe("passed=未发现问题；issues_found=存在发现"),
     },
     async execute(args, context) {
+      // 独立复核门禁（异步，先于状态变更）：confirmed 必须由本会话的子会话复核。
+      // 只做 ID 不等检查是软约束，故额外要求该会话确实是当前会话的子会话。
+      for (const item of args.findings) {
+        if (item.status !== "confirmed") continue
+        if (item.verifierSessionID === context.sessionID) {
+          throw new WorkflowOpError(
+            `发现「${item.title}」的独立复核会话不能是当前会话：请用 task 工具启动只读复核子代理，并填入其返回的 <task id>`,
+          )
+        }
+        if (!(await isVerifierSession(item.verifierSessionID, context.sessionID))) {
+          throw new WorkflowOpError(
+            `发现「${item.title}」的复核会话 ${item.verifierSessionID} 不是本会话的子会话：` +
+              `请用 task 工具启动只读复核子代理（提示它「尝试推翻这条候选」），并填入其返回的 <task id>`,
+          )
+        }
+      }
       const saved = store.mutateWorkflow(context.sessionID, (workflow) => {
         const state = requireWebsec(workflow)
         const base = requireScope(state)
@@ -313,7 +379,30 @@ export function createWebsecTools(store: Store, projectDir: string): Record<stri
           if (!primary) {
             throw new WorkflowOpError(`发现 ${id} 引用了不存在的证据 ${item.evidenceRef}；请先调用 websec_evidence 登记`)
           }
-          if (base.testMode === "authz" && item.status === "confirmed" && primary.source !== "anonymous-probe") {
+          if (item.baselineEvidenceRef && !byId.has(item.baselineEvidenceRef)) {
+            throw new WorkflowOpError(`发现 ${id} 的 baselineEvidenceRef 不存在：${item.baselineEvidenceRef}`)
+          }
+          if (item.privilegedEvidenceRef && !byId.has(item.privilegedEvidenceRef)) {
+            throw new WorkflowOpError(`发现 ${id} 的 privilegedEvidenceRef 不存在：${item.privilegedEvidenceRef}`)
+          }
+          if (item.status === "suspected") {
+            return {
+              id,
+              title: item.title,
+              category: item.category,
+              endpoint: item.endpoint,
+              method: item.method,
+              identity: item.identity,
+              status: "suspected" as const,
+              evidenceRef: item.evidenceRef,
+              baselineEvidenceRef: item.baselineEvidenceRef,
+              privilegedEvidenceRef: item.privilegedEvidenceRef,
+              reproduction: item.reproduction,
+              impact: item.impact,
+              remediation: item.remediation,
+            }
+          }
+          if (base.testMode === "authz" && primary.source !== "anonymous-probe") {
             if (!item.baselineEvidenceRef || !item.privilegedEvidenceRef) {
               throw new WorkflowOpError(
                 `发现 ${id} 是越权 confirmed，必须同时提供 baselineEvidenceRef 与 privilegedEvidenceRef`,
@@ -338,7 +427,6 @@ export function createWebsecTools(store: Store, projectDir: string): Record<stri
           }
           if (
             base.testMode === "normal" &&
-            item.status === "confirmed" &&
             !base.edgeFallback &&
             primary.source !== "edge" &&
             primary.source !== "anonymous-probe" &&
@@ -349,24 +437,20 @@ export function createWebsecTools(store: Store, projectDir: string): Record<stri
               `发现 ${id} 的 confirmed 证据必须来自 Edge 走查、匿名探测、只读配置检查或显式写探测；manual/curl 证据只能标 suspected 或走 fallback`,
             )
           }
-          if (base.testMode === "normal" && item.status === "confirmed" && !primary.bodyPresent) {
+          if (base.testMode === "normal" && !primary.bodyPresent) {
             throw new WorkflowOpError(`发现 ${id} 的证据只有元数据（bodyPresent=false），不能标 confirmed`)
-          }
-          if (item.baselineEvidenceRef && !byId.has(item.baselineEvidenceRef)) {
-            throw new WorkflowOpError(`发现 ${id} 的 baselineEvidenceRef 不存在：${item.baselineEvidenceRef}`)
-          }
-          if (item.privilegedEvidenceRef && !byId.has(item.privilegedEvidenceRef)) {
-            throw new WorkflowOpError(`发现 ${id} 的 privilegedEvidenceRef 不存在：${item.privilegedEvidenceRef}`)
           }
           return {
             id,
             title: item.title,
             category: item.category,
-            severity: item.severity,
             endpoint: item.endpoint,
             method: item.method,
             identity: item.identity,
-            status: item.status,
+            status: "confirmed" as const,
+            severity: item.severity,
+            verifierSessionID: item.verifierSessionID,
+            verifierDecision: item.verifierDecision,
             evidenceRef: item.evidenceRef,
             baselineEvidenceRef: item.baselineEvidenceRef,
             privilegedEvidenceRef: item.privilegedEvidenceRef,
@@ -399,17 +483,48 @@ export function createWebsecTools(store: Store, projectDir: string): Record<stri
           reportDir,
           markdownPath: join(reportDir, "report.md"),
           jsonPath: join(reportDir, "report.json"),
+          ledgerPath: join(reportDir, "coverage-ledger.json"),
         }
         workflow.websec = { ...base, report }
       })
       const report = saved.websec?.report
       if (!report) throw new WorkflowOpError("报告写入失败")
+      const ledger = {
+        sessionID: context.sessionID,
+        testMode: saved.websec?.testMode,
+        requiredCategories: [...WEBSEC_REQUIRED_CHECK_CATEGORY_KEYS],
+        evidence: (saved.websec?.evidence ?? []).map((item) => item.id),
+        surfaces: (saved.websec?.surface ?? []).map((item) => ({
+          id: item.id,
+          method: item.method,
+          endpoint: item.endpoint,
+          source: item.source,
+        })),
+        coverage: (saved.websec?.coverage ?? []).map((item) => ({
+          surfaceRef: item.surfaceRef,
+          category: item.category,
+          status: item.status,
+          evidenceRefs: item.evidenceRefs,
+          note: item.note,
+        })),
+      }
+      // 先校验产物再落盘：产出侧自检（独立离线复核见 script/validate-websec.ts）。
+      const errors = validateWebsecArtifacts(report, ledger)
+      if (errors.length > 0) {
+        throw new WorkflowOpError(
+          `WEB 安全测试产物校验失败（${errors.length} 项）：${errors.slice(0, 6).join("；")}` +
+            `${errors.length > 6 ? " 等" : ""}。请修复后重新提交报告。`,
+        )
+      }
       const evidenceRoot = resolveEvidenceRoot(projectDir, saved.websec?.scope?.evidenceDir)
       await ensureEvidenceGitignore(evidenceRoot)
       await writeEvidenceFile(report.markdownPath!, renderReportMarkdown(report, saved.websec!))
       await writeEvidenceFile(report.jsonPath!, JSON.stringify(report, null, 2))
+      await writeEvidenceFile(report.ledgerPath!, JSON.stringify(ledger, null, 2))
+      const confirmed = report.findings.filter((item) => item.status === "confirmed")
+      const suspectedCount = report.findings.length - confirmed.length
       const bySeverity = WEBSEC_SEVERITY_KEYS.map((severity) => {
-        const count = report.findings.filter((item) => item.severity === severity).length
+        const count = confirmed.filter((item) => item.severity === severity).length
         return count > 0 ? `${severity} ${count}` : null
       })
         .filter(Boolean)
@@ -417,20 +532,21 @@ export function createWebsecTools(store: Store, projectDir: string): Record<stri
       const findingLines =
         report.findings.length > 0
           ? report.findings
-              .map(
-                (item, index) =>
-                  `${index + 1}. [${item.severity}] ${item.title}（${item.endpoint}，${item.status}，证据 ${item.evidenceRef}）`,
+              .map((item, index) =>
+                item.status === "confirmed"
+                  ? `${index + 1}. [${item.severity}] ${item.title}（${item.endpoint}，证据 ${item.evidenceRef}，复核 ${item.verifierSessionID}）`
+                  : `${index + 1}. [待验证] ${item.title}（${item.endpoint}，证据 ${item.evidenceRef}；不评严重度）`,
               )
               .join("\n")
           : "无"
       return (
         `✅ WEB 安全测试报告已提交\n` +
         `结论：${report.verdict === "passed" ? "未发现问题（passed）" : "存在发现（issues_found）"}\n` +
-        `发现：${report.findings.length}${bySeverity ? `（${bySeverity}）` : ""}\n` +
+        `发现：已确认 ${confirmed.length}${bySeverity ? `（${bySeverity}）` : ""}，待验证 ${suspectedCount}\n` +
         `方法：${report.method}\n` +
         `发现清单：\n${findingLines}\n` +
         `局限：${report.limitations.length > 0 ? report.limitations.join("；") : "无"}\n` +
-        `报告文件：\n- ${report.markdownPath}\n- ${report.jsonPath}\n` +
+        `报告文件：\n- ${report.markdownPath}\n- ${report.jsonPath}\n- ${report.ledgerPath}\n` +
         `下一步：用 review_submit 完成审查清单并定稿；最终回复必须告知开发者上述报告位置。`
       )
     },

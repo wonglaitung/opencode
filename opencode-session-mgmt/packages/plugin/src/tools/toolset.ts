@@ -31,6 +31,8 @@ type Input = {
   ideEntries: IdeEntry[]
   lockRegistry: LockRegistry
   projectDir: string
+  /** 判断某会话是否为另一会话的子会话（websec confirmed 的独立复核门禁）。 */
+  isVerifierSession: (childSessionID: string, parentSessionID: string) => Promise<boolean>
 }
 
 export function createToolset(input: Input): Record<string, ToolDefinition> {
@@ -50,7 +52,7 @@ export function createToolset(input: Input): Record<string, ToolDefinition> {
     ...(def.type === "task" ? createTaskCheckTool(input.store) : {}),
     ...(def.reviewStage === null ? {} : createReviewTools(input.store, def.type)),
     ...(def.type === "reqdoc" ? reqdocTools(input.store) : {}),
-    ...(def.type === "websec" ? createWebsecTools(input.store, input.projectDir) : {}),
+    ...(def.type === "websec" ? createWebsecTools(input.store, input.projectDir, input.isVerifierSession) : {}),
     ...(def.type === "websec" ? createWebsecEdgeTools(input.store, input.projectDir) : {}),
     ...(def.type === "websec" ? createWebsecAnonymousTool(input.store, input.projectDir) : {}),
     ...(def.type === "websec" ? createWebsecSurfaceTools(input.store, input.projectDir) : {}),

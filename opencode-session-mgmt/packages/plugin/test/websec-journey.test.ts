@@ -34,7 +34,7 @@ describe("websec 完整客户旅程", () => {
     store.ensure("s1")
     const workflow = createWorkflowTools(store)
     const start = createWorkflowStartTools(store)
-    const websec = createWebsecTools(store, projectDir)
+    const websec = createWebsecTools(store, projectDir, async (child, parent) => child === `${parent}-verifier`)
     const workflowStart = start.workflow_start!
 
     let logs: NetworkEntry[] = []
@@ -161,6 +161,8 @@ describe("websec 完整客户旅程", () => {
                 severity: "high",
                 endpoint: "/api/settings",
                 status: "confirmed",
+                verifierSessionID: "s1-verifier",
+                verifierDecision: "confirmed",
                 evidenceRef: "edge-single-r1",
                 reproduction: "匿名探测返回 200 且包含 token",
                 impact: "token 泄露",

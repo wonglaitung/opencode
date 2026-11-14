@@ -16,7 +16,11 @@ const ctx = (sessionID: string) => ({ sessionID }) as never
 function fakeClient(): PluginInput["client"] {
   return {
     session: {
-      get: async () => ({ data: { id: "s", title: "会话标题" } }),
+      get: async (input: { path?: { id?: string } }) => {
+        const id = input?.path?.id ?? "s"
+        const parentID = id.endsWith("-verifier") ? id.slice(0, -"-verifier".length) : undefined
+        return { data: { id, title: "会话标题", parentID } }
+      },
       messages: async () => ({ data: [] }),
       list: async () => ({ data: [] }),
     },
@@ -200,6 +204,8 @@ describe("websec 工作流", () => {
                 severity: "high",
                 endpoint: "/api/users/1",
                 status: "confirmed",
+                verifierSessionID: "w1-verifier",
+                verifierDecision: "confirmed",
                 evidenceRef: "ev-missing",
                 reproduction: "baseline: 用户 1 读取自己；proof: 用户 1 读取用户 2",
                 impact: "可读取他人资料",
@@ -223,6 +229,8 @@ describe("websec 工作流", () => {
                 severity: "high",
                 endpoint: "/api/users/1",
                 status: "confirmed",
+                verifierSessionID: "w1-verifier",
+                verifierDecision: "confirmed",
                 evidenceRef: "ev1",
                 reproduction: "baseline: 用户 1 读取自己；proof: 用户 1 读取用户 2",
                 impact: "可读取他人资料",

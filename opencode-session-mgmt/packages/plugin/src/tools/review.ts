@@ -44,6 +44,7 @@ const SERVICE_SECTION_RE = /^##\s/
 const CHANGE_ROW_RE = /^\|\s*1\.\d+\s*\|[^|]*\|[^|]*\|[^|]*\|[^|]*\|$/
 import { WorkflowOpError, applyTransition, recomputeCommit } from "../workflow-ops"
 import { coverageGaps, regressionGaps } from "./websec-state"
+import { validateWebsecArtifacts } from "../websec-validate"
 import { projectRoot, resolveWithinWorktree } from "../fs-safe"
 
 const z = tool.schema
@@ -349,6 +350,29 @@ export function createReviewTools(store: Store, type?: WorkflowType): Record<str
       }
       // 是否首次定稿（幂等：重复 review_submit 不再重复写变更记录行）
       const preWf = store.ensure(context.sessionID).workflow
+      // websec 定稿前独立校验落盘产物（report.json + coverage-ledger.json）。
+      // 仅在基线工时已录入时校验：缺基线本就无法定稿，优先报基线门禁。
+      if (preWf?.type === "websec" && preWf.websec?.report && preWf.baseline) {
+        const dir = preWf.websec.report.reportDir
+        if (!dir) throw new WorkflowOpError("websec 报告缺少目录信息：请重新提交 websec_report")
+        const readJson = async (name: string): Promise<unknown> => {
+          try {
+            return await Bun.file(join(dir, name)).json()
+          } catch {
+            return null
+          }
+        }
+        const errors = validateWebsecArtifacts(
+          await readJson("report.json"),
+          await readJson("coverage-ledger.json"),
+        )
+        if (errors.length > 0) {
+          throw new WorkflowOpError(
+            `WEB 安全测试产物校验失败（${errors.length} 项）：${errors.slice(0, 6).join("；")}` +
+              `${errors.length > 6 ? " 等" : ""}。请修复后重新提交 websec_report。`,
+          )
+        }
+      }
       const preApproved = preWf ? preWf.stages[getDefinition(preWf.type).reviewStage!]?.status === "approved" : false
       const saved = store.mutateWorkflow(context.sessionID, (workflow) => {
         const def = getDefinition(workflow.type)

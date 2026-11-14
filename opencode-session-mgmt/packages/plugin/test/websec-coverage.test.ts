@@ -52,7 +52,7 @@ function setup() {
       ],
     }
   })
-  return { store, projectDir, surfaceTools: createWebsecSurfaceTools(store, projectDir), tools: createWebsecTools(store, projectDir) }
+  return { store, projectDir, surfaceTools: createWebsecSurfaceTools(store, projectDir), tools: createWebsecTools(store, projectDir, async (child, parent) => child === `${parent}-verifier`) }
 }
 
 function allCoverage(surfaceRef: string, status: "tested" | "not_applicable" = "tested") {
@@ -89,6 +89,8 @@ describe("websec 覆盖矩阵", () => {
                 severity: "medium",
                 endpoint: "/api/tasks",
                 status: "confirmed",
+                verifierSessionID: "s1-verifier",
+                verifierDecision: "confirmed",
                 evidenceRef: "edge-get",
                 reproduction: "baseline/proof",
                 impact: "测试",
@@ -128,6 +130,8 @@ describe("websec 覆盖矩阵", () => {
                 severity: "medium",
                 endpoint: "/api/tasks",
                 status: "confirmed",
+                verifierSessionID: "s1-verifier",
+                verifierDecision: "confirmed",
                 evidenceRef: "edge-get",
                 reproduction: "baseline/proof",
                 impact: "测试",

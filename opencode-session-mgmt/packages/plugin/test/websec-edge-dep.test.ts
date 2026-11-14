@@ -55,6 +55,7 @@ describe("websec 的 edge-debug-core 依赖降级", () => {
         ideEntries: [],
         lockRegistry: createLockRegistry(process.cwd(), store),
         projectDir: process.cwd(),
+        isVerifierSession: async (child, parent) => child === `${parent}-verifier`,
       })
       for (const name of WEBSEC_TOOLS) expect(tools[name]).toBeDefined()
       expect(Object.keys(tools).filter((name) => name.startsWith("websec_"))).toHaveLength(11)

@@ -174,6 +174,14 @@ const SessionMgmtPlugin: Plugin = async (input) => {
       ideEntries: entries,
       lockRegistry: registry,
       projectDir: input.directory,
+      isVerifierSession: async (childSessionID, parentSessionID) => {
+        try {
+          const res = await input.client.session.get({ path: { id: childSessionID } })
+          return res.data?.parentID === parentSessionID
+        } catch {
+          return false
+        }
+      },
     }),
 
     // 人工文件锁拦截先行，提交门禁随后；任一 throw 即阻断本次工具调用。

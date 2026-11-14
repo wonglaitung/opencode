@@ -7,7 +7,14 @@ import { createToolset } from "../src/tools/toolset"
 function setup(workflowType: WorkflowType) {
   const store = Store.memory(() => workflowType)
   const lockRegistry = createLockRegistry(process.cwd(), store)
-  const tools = createToolset({ store, workflowType, ideEntries: [], lockRegistry, projectDir: process.cwd() })
+  const tools = createToolset({
+    store,
+    workflowType,
+    ideEntries: [],
+    lockRegistry,
+    projectDir: process.cwd(),
+    isVerifierSession: async (child, parent) => child === `${parent}-verifier`,
+  })
   return { store, tools }
 }
 

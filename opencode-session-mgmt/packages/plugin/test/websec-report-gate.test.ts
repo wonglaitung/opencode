@@ -54,7 +54,7 @@ function setup(mode: WebsecTestMode, items: WebsecEvidence[], finished = true) {
   })
   const projectDir = mkdtempSync(join(tmpdir(), "sm-websec-report-"))
   dirs.push(projectDir)
-  return { store, tools: createWebsecTools(store, projectDir), projectDir }
+  return { store, tools: createWebsecTools(store, projectDir, async (child, parent) => child === `${parent}-verifier`), projectDir }
 }
 
 function finding(overrides: Record<string, unknown> = {}) {
@@ -64,6 +64,8 @@ function finding(overrides: Record<string, unknown> = {}) {
     severity: "medium",
     endpoint: "/api/users/1",
     status: "confirmed",
+    verifierSessionID: "s1-verifier",
+    verifierDecision: "confirmed",
     evidenceRef: "p1",
     reproduction: "baseline 200 / privileged 200",
     impact: "普通账号可读取",

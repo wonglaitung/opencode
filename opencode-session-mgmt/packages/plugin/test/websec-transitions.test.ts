@@ -44,7 +44,7 @@ function setup() {
     clearNetworkLogs: () => {},
   }
   const workflow = createWorkflowTools(store)
-  const websec = createWebsecTools(store, projectDir)
+  const websec = createWebsecTools(store, projectDir, async (child, parent) => child === `${parent}-verifier`)
   const edge = createWebsecEdgeTools(store, projectDir, () => controller)
   const anon = createWebsecAnonymousTool(
     store,
@@ -386,6 +386,8 @@ describe("websec 状态转换矩阵", () => {
                 severity: "high",
                 endpoint: "/api/settings",
                 status: "confirmed",
+                verifierSessionID: "s1-verifier",
+                verifierDecision: "confirmed",
                 evidenceRef: "edge-baseline-b1",
                 baselineEvidenceRef: "edge-baseline-b1",
                 privilegedEvidenceRef: "edge-privileged-p1",
@@ -483,6 +485,8 @@ describe("websec 状态转换矩阵", () => {
                 severity: "high",
                 endpoint: "/api/settings",
                 status: "confirmed",
+                verifierSessionID: "s1-verifier",
+                verifierDecision: "confirmed",
                 evidenceRef: "manual-1",
                 reproduction: "无 Cookie GET 200",
                 impact: "匿名可读",
