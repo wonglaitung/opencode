@@ -112,6 +112,47 @@ export type Judge =
       note?: string
     }
   | {
+      /**
+       * 工具回执内容判定——查**回执文本**（不是模型正文，也不是调用参数）。
+       *
+       * 存在的理由：websec-r33 的要点是「报告同时写出 report.md / report.json /
+       * coverage-ledger.json 三件套」，这只出现在 `websec_report` 的成功回执里，
+       * 调了工具不等于产出了三件套。看回执才是这条规则的落点。
+       */
+      kind: "tool_result"
+      /** 目标工具名 */
+      tool: string
+      /** 是否要求该次调用成功（缺省要求成功；置 false 表示要求「被拒」） */
+      ok?: boolean
+      /** 回执须包含的子串（全部命中） */
+      keyword?: string
+      /** 回执须包含的子串（任一命中即可） */
+      keywordAny?: string[]
+      note?: string
+    }
+  | {
+      /**
+       * websec 报告 finding 字段形状判定——直接查 `websec_report` 调用参数里的 findings。
+       *
+       * 为什么不用「服务端拒收」判定：模型若**本来就没违规**，服务端自然不拒，
+       * 用拒收口径会把「守规矩」判成失败（判据与规则反向，本项目已栽多次）。
+       * 这里直接判形状：suspected 不得带 severity、confirmed 必须带 severity 与
+       * verifierSessionID——正是 websec-r31/r32 想让模型做对的事。
+       */
+      kind: "websec_findings"
+      /** suspected 发现不得带 severity */
+      suspectedNoSeverity?: boolean
+      /** confirmed 发现必须带 severity */
+      confirmedSeverity?: boolean
+      /** confirmed 发现必须带 verifierSessionID */
+      confirmedVerifier?: boolean
+      /** 至少这么多条 confirmed */
+      minConfirmed?: number
+      /** 至少这么多条 suspected */
+      minSuspected?: number
+      note?: string
+    }
+  | {
       kind: "score"
       /** 渲染结构校验：文本命中任一标记才算真的渲染出 PRD(防空谈不渲染) */
       renderMarkers: string[]
@@ -162,6 +203,14 @@ export interface Scenario {
    * 不给锁 = 判据要求的事根本不会出现在注入里，场景不可满足。
    */
   lockedFiles?: string[]
+  /**
+   * 单场景最大工具轮数（缺省 4）。
+   *
+   * 为什么需要：生产里没有轮数上限，而 websec 的一次「收口 9 类覆盖矩阵 + 询问匿名探测」
+   * 天然是多轮动作。默认 4 轮会把「模型先收口覆盖、还没来得及问」判成失败——那是夹具
+   * 逼出来的假失败（实测 w2：maxTurns=4 时 0/3，提到 8 后 2/2 通过）。
+   */
+  maxTurns?: number
 }
 
 export interface ToolCall {

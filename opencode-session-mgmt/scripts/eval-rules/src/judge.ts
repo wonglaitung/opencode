@@ -233,6 +233,75 @@ export function judgeScenario(judge: Judge, out: ModelOutput): { pass: boolean; 
       return { pass: false, detail: `未知 text 判定类型 ${(judge as any).type}` }
     }
 
+    case "tool_result": {
+      const hits = (out.toolResults ?? []).filter((t) => t.name === judge.tool)
+      if (hits.length === 0) {
+        return {
+          pass: false,
+          detail: `未调用 ${judge.tool}（实际:${out.toolCalls.map((c) => c.name).join("、") || "无工具调用"}）`,
+        }
+      }
+      const wantOK = judge.ok !== false
+      const matched = hits.filter((t) => t.ok === wantOK)
+      if (matched.length === 0) {
+        return {
+          pass: false,
+          detail: `${judge.tool} 被调用 ${hits.length} 次但没有${wantOK ? "成功" : "被拒"}的（回执:${hits[0]!.result.slice(0, 80)}）`,
+        }
+      }
+      const texts = matched.map((t) => t.result)
+      const missKeyword = judge.keyword && !texts.some((t) => t.includes(judge.keyword!))
+      const missAny = judge.keywordAny && !texts.some((t) => judge.keywordAny!.some((k) => t.includes(k)))
+      if (missKeyword || missAny) {
+        return {
+          pass: false,
+          detail:
+            `${judge.tool} 回执缺关键内容` +
+            `${judge.keyword ? `（须含「${judge.keyword}」）` : ""}` +
+            `${judge.keywordAny ? `（须含其一：${judge.keywordAny.join("、")}）` : ""}` +
+            `；回执:${texts[0]!.slice(0, 120)}`,
+        }
+      }
+      return { pass: true, detail: `✓ ${judge.tool} 回执达标（${matched.length} 次${wantOK ? "成功" : "被拒"}）` }
+    }
+
+    case "websec_findings": {
+      const calls = out.toolCalls.filter((c) => c.name === "websec_report")
+      if (calls.length === 0) {
+        return { pass: false, detail: `未调用 websec_report（实际:${out.toolCalls.map((c) => c.name).join("、") || "无"}）` }
+      }
+      const findings = calls.flatMap((c) => {
+        const list = c.args.findings
+        return Array.isArray(list) ? (list as Record<string, unknown>[]) : []
+      })
+      const confirmed = findings.filter((f) => f.status === "confirmed")
+      const suspected = findings.filter((f) => f.status === "suspected")
+      const fails: string[] = []
+      if (judge.suspectedNoSeverity) {
+        const bad = suspected.filter((f) => f.severity !== undefined)
+        if (bad.length > 0) fails.push(`suspected 带了 severity（${bad.map((f) => `${f.title ?? "?"}=${f.severity}`).join("、")}）`)
+      }
+      if (judge.confirmedSeverity) {
+        const bad = confirmed.filter((f) => typeof f.severity !== "string" || f.severity === "")
+        if (bad.length > 0) fails.push(`confirmed 缺 severity（${bad.map((f) => String(f.title ?? "?")).join("、")}）`)
+      }
+      if (judge.confirmedVerifier) {
+        const bad = confirmed.filter((f) => typeof f.verifierSessionID !== "string" || f.verifierSessionID.trim() === "")
+        if (bad.length > 0) fails.push(`confirmed 缺 verifierSessionID（${bad.map((f) => String(f.title ?? "?")).join("、")}）`)
+      }
+      if (judge.minConfirmed !== undefined && confirmed.length < judge.minConfirmed)
+        fails.push(`confirmed 数量 ${confirmed.length}<${judge.minConfirmed}`)
+      if (judge.minSuspected !== undefined && suspected.length < judge.minSuspected)
+        fails.push(`suspected 数量 ${suspected.length}<${judge.minSuspected}`)
+      return {
+        pass: fails.length === 0,
+        detail:
+          fails.length === 0
+            ? `✓ finding 形状达标（confirmed ${confirmed.length}、suspected ${suspected.length}）`
+            : `${fails.join("；")}（confirmed ${confirmed.length}、suspected ${suspected.length}）`,
+      }
+    }
+
     case "score": {
       // 同 render：优先评真实产物，无产物即不通过（详见 render 分支注释）
       if (!out.artifact) return { pass: false, detail: "✗ 未产出组装件，无法评 PRD 质量" }

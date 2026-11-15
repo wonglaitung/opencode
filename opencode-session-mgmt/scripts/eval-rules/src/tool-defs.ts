@@ -784,11 +784,37 @@ export const EVAL_TOOLS: OpenAITool[] = [
             items: {
               type: "object",
               properties: {
+                id: str("发现 id（可选；缺省自动生成）"),
+                title: str("标题"),
+                category: {
+                  type: "string",
+                  enum: [
+                    "authn",
+                    "authz",
+                    "input",
+                    "cors",
+                    "headers",
+                    "options",
+                    "export",
+                    "debug",
+                    "logic",
+                  ],
+                },
+                endpoint: str("受影响端点/页面"),
+                method: str("HTTP 方法（可选）"),
+                identity: str("复现所用身份（可选）"),
+                evidenceRef: str("必须引用已登记的 websec_evidence id"),
+                baselineEvidenceRef: str("越权测试：baseline 证据 id（普通账号）"),
+                privilegedEvidenceRef: str("越权测试：privileged 证据 id（高权账号）"),
+                reproduction: str("复现步骤（baseline 与 proof）"),
+                impact: str("影响与利用前提"),
+                remediation: str("可执行的修复建议"),
                 status: { type: "string", enum: ["confirmed", "suspected"] },
                 severity: { type: "string", enum: ["critical", "high", "medium", "low", "info"] },
                 verifierSessionID: str("独立复核子会话 id（task 工具返回的 <task id>）"),
                 verifierDecision: { type: "string", enum: ["confirmed"] },
               },
+              required: ["title", "category", "endpoint", "evidenceRef", "reproduction", "impact", "remediation", "status"],
             },
           },
           limitations: { type: "array", items: { type: "string" } },
@@ -801,15 +827,216 @@ export const EVAL_TOOLS: OpenAITool[] = [
 ]
 
 /**
- * 工具参数类型表（从 `EVAL_TOOLS` 的 JSON schema 派生），给 `parseXmlToolCalls` 用。
+ * websec 专属工具（只暴露给 websec 工作流）。
+ *
+ * 为什么不并进 `EVAL_TOOLS`：`toolsForWorkflow` 对 sdlc/reqdoc 返回全部 `EVAL_TOOLS`，
+ * 并进去等于给那两个工作流凭空多出 websec 工具——会扰动已入库的基线对比（多工具 = 弱模型
+ * 更易分心），而这次改动的目标只是 websec。故单列一份，按工作流定向暴露。
+ *
+ * `task` 是上游 opencode 的内置工具（不在插件工具面里），但 websec-r31 要求用它启动
+ * 独立复核子会话：模型看不到 `task` 的契约就无从调用，r31 无法评测。
+ */
+export const WEBSEC_EXTRA_TOOLS: OpenAITool[] = [
+  {
+    type: "function",
+    function: {
+      name: "task",
+      // 描述**照抄上游内置 task 工具**（packages/opencode/src/tool/task.txt）。
+      // 不能写成「用它开独立复核子会话」——那等于把 websec-r31 的教学塞进工具描述，
+      // 评测就测不出「规则注入有没有用」：模型不读规则也能照工具描述做对。
+      // 保持与生产同构，r31 是否真的驱动行为才测得出来。
+      description:
+        "Launch a new agent to handle complex, multistep tasks autonomously.\n\n" +
+        "When using the Task tool, you must specify a subagent_type parameter to select which agent type to use.\n\n" +
+        "When NOT to use the Task tool:\n" +
+        "- If you want to read a specific file path, use the Read or Glob tool instead of the Task tool, to find the match more quickly\n" +
+        "- If you are searching for a specific class definition like 'class Foo', use the Grep tool instead of the Task tool, to find the match more quickly\n" +
+        "- If you are searching for code within a specific file or set of 2-3 files, use the Read tool instead of the Task tool, to find the match more quickly\n" +
+        "- If no available agent is a good fit for the task, use other tools directly\n\n\n" +
+        "Usage notes:\n" +
+        "1. Launch multiple agents concurrently whenever possible, to maximize performance; to do that, use a single message with multiple tool uses\n" +
+        "2. Once you have delegated work to an agent, do not duplicate that work yourself. Continue with non-overlapping tasks, or wait for the result. For background tasks, you will be notified automatically when the result is ready.\n" +
+        "3. The agent is done, it will return a single message back to you. The result returned by the agent is not visible to the user. The output includes a task_id you can reuse later to continue the same subagent session.\n" +
+        "4. Each agent invocation starts with a fresh context unless you provide task_id to resume the same subagent session. When starting fresh, your prompt should contain a highly detailed task description and specify exactly what information the agent should return back to you in its final and only message to you.\n" +
+        "5. The agent's outputs should generally be trusted\n" +
+        "6. Clearly tell the agent whether you expect it to write code or just to do research, since it is not aware of the user's intent. Tell it how to verify its work if possible.\n" +
+        "7. If the agent description mentions that it should be used proactively, then you should try your best to use it without the user having to ask you first. Use your judgement.",
+      parameters: {
+        type: "object",
+        properties: {
+          description: str("A short (3-5 words) description of the task"),
+          prompt: str("The task for the agent to perform"),
+          subagent_type: str("The type of specialized agent to use for this task"),
+          task_id: str("仅在续用既有子会话时传；否则留空表示新开一个"),
+          command: str("触发该任务的命令（可选）"),
+          background: bool("后台运行子代理（默认前台；需要结果后再继续时用前台）"),
+        },
+        required: ["description", "prompt", "subagent_type"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "websec_surface",
+      description:
+        "登记/补全资产与接口清单（surface 阶段）。可把 Edge 已采集证据同步为清单，也可补充源码路由或人工入口。" +
+        "新增入口会自动创建必检类别的覆盖记录；后续必须用 websec_coverage 逐项收口。",
+      parameters: {
+        type: "object",
+        properties: {
+          sync_edge: bool("true=把 Edge/匿名/HTTP 证据同步为入口清单"),
+          entries: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                id: str("入口 id（可选；缺省自动生成）"),
+                method: str("HTTP 方法，如 GET/POST"),
+                endpoint: str("路径或 URL，如 /api/tasks"),
+                source: {
+                  type: "string",
+                  enum: ["edge", "source", "manual", "anonymous-probe", "http-check", "write-probe"],
+                },
+                identity: str("该入口使用的身份/角色"),
+                params: { type: "array", items: { type: "string" } },
+                requires_auth: { type: "string", enum: ["yes", "no", "unknown"] },
+                note: str("备注"),
+              },
+              required: ["method", "endpoint", "source"],
+            },
+          },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "websec_coverage",
+      description:
+        "记录入口 × 检查类别的覆盖结果。tested/finding 必须引用已登记证据；not_applicable 必须写理由。" +
+        "必检类别未收口时，报告不能提交。",
+      parameters: {
+        type: "object",
+        properties: {
+          records: {
+            type: "array",
+            minItems: 1,
+            items: {
+              type: "object",
+              properties: {
+                surface_ref: str("websec_surface 返回的入口 id"),
+                category: {
+                  type: "string",
+                  enum: [
+                    "authn",
+                    "authz",
+                    "input",
+                    "cors",
+                    "headers",
+                    "options",
+                    "export",
+                    "debug",
+                    "logic",
+                  ],
+                },
+                status: { type: "string", enum: ["tested", "finding", "not_applicable"] },
+                evidence_refs: { type: "array", items: { type: "string" } },
+                note: str("not_applicable 必须写理由"),
+              },
+              required: ["surface_ref", "category", "status"],
+            },
+          },
+        },
+        required: ["records"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "websec_regression",
+      description:
+        "历史 finding 回归：action=load 加载历史报告中的 finding；action=record 逐条记录复测结果。" +
+        "still_present/fixed 必须引用本轮证据，not_applicable 必须写理由；未收口时报告会被拦截。",
+      parameters: {
+        type: "object",
+        properties: {
+          action: { type: "string", enum: ["load", "record"] },
+          records: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                id: str("回归记录 id（可选）"),
+                source_session_id: str("历史 finding 的来源会话 id"),
+                source_finding_id: str("历史 finding id"),
+                status: { type: "string", enum: ["still_present", "fixed", "not_applicable", "not_retested"] },
+                evidence_ref: str("still_present/fixed 必须引用本轮证据"),
+                note: str("not_applicable 必须写理由"),
+              },
+              required: ["source_session_id", "source_finding_id", "status"],
+            },
+          },
+        },
+        required: ["action"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "websec_config_check",
+      description:
+        "只读配置检查：对入口清单/证据中的同源 URL 发无 Cookie GET 与 OPTIONS，采集 CORS、安全响应头与方法允许情况。" +
+        "不发写操作；需开发者明确授权。结果自动写入 cors/headers/options 覆盖记录。",
+      parameters: {
+        type: "object",
+        properties: {
+          urls: { type: "array", items: { type: "string" } },
+          include_options: bool("是否发 OPTIONS 预检，默认 true"),
+          origin: str("CORS 探测使用的 Origin"),
+          limit: { type: "number", description: "最多检查的 URL 数，默认 20" },
+          developer_confirmed: bool("必须为 true，表示开发者已授权只读配置探测"),
+        },
+        required: ["developer_confirmed"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "websec_write_probe",
+      description:
+        "显式授权的单次写探测：对已登记入口发一次无 Cookie POST/PUT/PATCH，检查服务端是否拒绝未授权写。" +
+        "仅用于可丢弃测试数据；不发 DELETE，不做批量/爆破；必须逐次授权并写明影响。",
+      parameters: {
+        type: "object",
+        properties: {
+          url: str("同源且已登记入口/证据的 URL"),
+          method: { type: "string", enum: ["POST", "PUT", "PATCH"] },
+          body: str("可选请求体；不要放真实用户数据"),
+          authorization_note: str("开发者授权说明与可丢弃数据说明"),
+          developer_confirmed: bool("必须为 true，表示开发者已逐次授权这次写操作"),
+        },
+        required: ["url", "method", "authorization_note", "developer_confirmed"],
+      },
+    },
+  },
+]
+
+/**
+ * 工具参数类型表（从 `EVAL_TOOLS` 与 `WEBSEC_EXTRA_TOOLS` 的 JSON schema 派生），
+ * 给 `parseXmlToolCalls` 用。
  *
  * 为什么需要：XML 形态里参数全是字符串，而服务端按 `z.string()` / `z.number()` 校验——
- * 槽位地址 `"3.1"` 被转成 `3.1` 就会校验失败（实测踩过，模型调不动 `reqdoc_answer`）。
+ * 槽位地址 `"3.1"` 被转成 3.1 就会校验失败（实测踩过，模型调不动 `reqdoc_answer`）。
  * **按 schema 转，不猜**：未声明的参数一律当字符串。
  */
 export function evalToolParamTypes(): Record<string, Record<string, "string" | "number" | "boolean">> {
   const out: Record<string, Record<string, "string" | "number" | "boolean">> = {}
-  for (const t of EVAL_TOOLS) {
+  for (const t of [...EVAL_TOOLS, ...WEBSEC_EXTRA_TOOLS]) {
     const props = (t.function.parameters as { properties?: Record<string, { type?: string }> }).properties ?? {}
     const params: Record<string, "string" | "number" | "boolean"> = {}
     for (const [k, v] of Object.entries(props)) {
@@ -856,6 +1083,10 @@ const WEBSEC_TOOLS = new Set([
 
 export function toolsForWorkflow(type: WorkflowType): OpenAITool[] {
   if (type === "task") return EVAL_TOOLS.filter((tool) => TASK_TOOLS.has(tool.function.name))
-  if (type === "websec") return EVAL_TOOLS.filter((tool) => WEBSEC_TOOLS.has(tool.function.name))
+  if (type === "websec")
+    return [
+      ...EVAL_TOOLS.filter((tool) => WEBSEC_TOOLS.has(tool.function.name)),
+      ...WEBSEC_EXTRA_TOOLS,
+    ]
   return EVAL_TOOLS
 }

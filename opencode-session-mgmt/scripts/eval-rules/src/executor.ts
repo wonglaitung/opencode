@@ -38,10 +38,13 @@ import { createTaskCheckTool } from "../../../packages/plugin/src/tools/task-che
 import { createWebsecTools } from "../../../packages/plugin/src/tools/websec"
 import { createWebsecEdgeTools } from "../../../packages/plugin/src/tools/websec-edge"
 import { createWebsecAnonymousTool } from "../../../packages/plugin/src/tools/websec-anonymous"
+import { createWebsecSurfaceTools } from "../../../packages/plugin/src/tools/websec-surface"
+import { createWebsecHttpTools } from "../../../packages/plugin/src/tools/websec-http"
 import { createOpenIdeTool } from "../../../packages/plugin/src/open-ide/open-ide-tool"
 import { createLockTools } from "../../../packages/plugin/src/open-ide/tools/lock-tools"
 import { extractBaselineHours } from "../../../packages/plugin/src/tools/baseline-proposal"
 import type { LockRegistry } from "../../../packages/plugin/src/open-ide/lock"
+import { tool as pluginTool } from "@opencode-ai/plugin"
 
 /**
  * 内存锁注册表：让 `open_ide` / `unlock_file` / `list_locked_files` 在评测环境**真实可执行**。
@@ -112,7 +115,29 @@ export interface ExecResult {
 
 const OUT_DIR = "07_需求规格产出"
 
-type ToolLike = { execute: (args: unknown, ctx: unknown) => Promise<unknown> }
+type ToolLike = { execute: (args: unknown, ctx: unknown) => Promise<unknown>; args?: Record<string, unknown> }
+
+/**
+ * 按工具的 zod schema 校验参数——**与上游宿主同构**。
+ *
+ * 上游 `packages/opencode/src/tool/registry.ts` 在注册插件工具时构造
+ * `z.object(def.args)`，模型调用参数不合法会在**进工具之前**被拒（AI SDK 参数校验）。
+ * 评测执行器此前直接把模型给的 args 丢给 `execute`，等于**跳过了参数校验**：
+ * 后果是「suspected 带 severity 会被拒收」这类防线在评测里根本不会触发——
+ * 判据看到的是「调用成功」，读数会以为防线不存在（对抗审核第 6 条：验证器自身也要审）。
+ *
+ * 这里补上校验，并把失败当作**服务端拒绝**记录（ok=false），模型能读到拒绝理由并改。
+ */
+function validateArgs(tool: ToolLike, args: Record<string, unknown>): { ok: true; args: unknown } | { ok: false; message: string } {
+  if (!tool.args) return { ok: true, args }
+  const schema = pluginTool.schema.object(tool.args as never)
+  const parsed = schema.safeParse(args)
+  if (parsed.success) return { ok: true, args: parsed.data }
+  const issues = parsed.error.issues
+    .map((issue) => `${issue.path.join(".") || "(根)"} ${issue.message}`)
+    .join("；")
+  return { ok: false, message: `参数校验失败（服务端 schema 拒收）：${issues}` }
+}
 
 /**
  * 工具实现注册表 —— **必须覆盖 `EVAL_TOOLS` 里的每一个工具**。
@@ -123,8 +148,15 @@ type ToolLike = { execute: (args: unknown, ctx: unknown) => Promise<unknown> }
  * 这类假失败会被当成「规则没效果」，把排查引向完全错误的方向。
  * 故 `exec-selfcheck` 会在每次执行模式评测前核对覆盖率，缺一个就中止。
  */
-export function buildRegistry(store: Store, projectDir: string = process.cwd()): Record<string, ToolLike | undefined> {
+export function buildRegistry(
+  store: Store,
+  projectDir: string = process.cwd(),
+  opts: { childSessions?: Set<string>; sessionID?: string } = {},
+): Record<string, ToolLike | undefined> {
   const locks = memLocks()
+  const sessions = opts.childSessions ?? new Set<string>()
+  const parentSessionID = opts.sessionID ?? "eval"
+  let taskSeq = 0
   return {
     ...createReqdocKbTools(store),
     ...createReqdocFeatureTools(store),
@@ -135,7 +167,11 @@ export function buildRegistry(store: Store, projectDir: string = process.cwd()):
     ...createTaskScanTool(store),
     ...createTaskCheckTool(store),
     ...createReviewTools(store),
-    ...createWebsecTools(store, projectDir),
+    // 独立复核门禁：`isVerifierSession` 判定「该 id 是本次评测里由 task 工具开出的子会话」。
+    // 未知 id 一律 false——模型若凭空编一个 verifierSessionID，服务端必须拒收（防线要真能挡）。
+    ...createWebsecTools(store, projectDir, async (childSessionID, parent) => {
+      return sessions.has(childSessionID) && parent === parentSessionID
+    }),
     ...createWebsecEdgeTools(store, projectDir, () => ({
       isRunning: () => true,
       start: async () => "Edge 已启动",
@@ -147,9 +183,15 @@ export function buildRegistry(store: Store, projectDir: string = process.cwd()):
       },
       setCapturePolicy: () => {},
       clearSession: async () => "已清除登录态",
-      clearNetworkLogs: () => {},
+      clearNetworkLogs: () => [],
     })),
     ...createWebsecAnonymousTool(
+      store,
+      projectDir,
+      (async () => new Response("{}", { status: 401, headers: { "content-type": "application/json" } })) as unknown as typeof fetch,
+    ),
+    ...createWebsecSurfaceTools(store, projectDir),
+    ...createWebsecHttpTools(
       store,
       projectDir,
       (async () => new Response("{}", { status: 401, headers: { "content-type": "application/json" } })) as unknown as typeof fetch,
@@ -162,6 +204,38 @@ export function buildRegistry(store: Store, projectDir: string = process.cwd()):
     // 与生产装配（index.ts）保持同构：open_ide 单个 + 锁工具组
     open_ide: createOpenIdeTool([], locks) as unknown as ToolLike,
     ...createLockTools(locks),
+    /**
+     * 上游内置 `task` 工具的评测替身（websec-r31 独立复核要用）。
+     *
+     * 只做两件事：登记一个子会话 id 并同步返回（生产里是异步后台子会话，
+     * 这里同步结束，故「复核会话已结束」这道门禁在评测里恒成立——**已知简化**），
+     * 以及回一句中性结论。**回执格式照抄上游**（`<task id=... state="completed">`），
+     * 因为模型要自己从回执里取 id 填进 verifierSessionID；这里若直接告诉它「填进
+     * verifierSessionID」，等于把规则答案塞进工具输出，r31 就测不出来了。
+     * 已知简化：不能真的跑子代理，复核结论是固定文案（复核质量不在本评测口径内）。
+     */
+    task: {
+      args: {
+        description: pluginTool.schema.string().optional(),
+        prompt: pluginTool.schema.string().optional(),
+        subagent_type: pluginTool.schema.string().optional(),
+        task_id: pluginTool.schema.string().optional(),
+        command: pluginTool.schema.string().optional(),
+        background: pluginTool.schema.boolean().optional(),
+      },
+      execute: async () => {
+        taskSeq += 1
+        const id = `ses_eval_${taskSeq}`
+        sessions.add(id)
+        return [
+          `<task id="${id}" state="completed">`,
+          `<task_result>`,
+          "复核完成：已核对证据、复现步骤与影响，未能推翻该候选。",
+          `</task_result>`,
+          `</task>`,
+        ].join("\n")
+      },
+    },
   } as Record<string, ToolLike | undefined>
 }
 
@@ -258,7 +332,9 @@ export async function executeTurns(
     // 场景要测「有锁时会提示解锁」就必须真的有锁，否则判据不可满足（s22 曾稳定 0/3）。
     for (const f of opts.lockedFiles ?? []) store.lockFile(sessionID, f)
     const ctx = { worktree: root, sessionID } as never
-    const registry = buildRegistry(store, root)
+    // 子会话登记表：`task` 工具开出的 id 记在这里，`isVerifierSession` 据此判定真伪。
+    const childSessions = new Set<string>()
+    const registry = buildRegistry(store, root, { childSessions, sessionID })
     const prior: PriorMessage[] = []
     const allCalls: ToolCall[] = []
     const allTexts: string[] = []
@@ -304,7 +380,14 @@ export async function executeTurns(
           continue
         }
         try {
-          const out = await tool.execute(c.args, ctx)
+          // 参数先过 schema（与上游宿主同构）：不合法即拒收，模型能读到理由并改。
+          const validated = validateArgs(tool, c.args)
+          if (!validated.ok) {
+            toolResults.push({ name: c.name, ok: false, result: validated.message })
+            prior.push({ role: "tool", tool_call_id: c.id ?? c.name, content: validated.message })
+            continue
+          }
+          const out = await tool.execute(validated.args, ctx)
           const result = Array.isArray(out) ? out.filter((x) => typeof x === "string").join("\n") : String(out ?? "")
           toolResults.push({ name: c.name, ok: true, result })
           prior.push({ role: "tool", tool_call_id: c.id ?? c.name, content: result })

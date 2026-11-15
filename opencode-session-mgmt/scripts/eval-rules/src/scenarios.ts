@@ -25,6 +25,7 @@ import {
   getDefinition,
   requiredSlots,
   reviewRecord,
+  WEBSEC_REQUIRED_CHECK_CATEGORY_KEYS,
   type WorkflowState,
 } from "sm-shared"
 import type { Scenario } from "./types"
@@ -91,6 +92,58 @@ const newSdlc = () => createWorkflowState("sdlc")
 const newReqdoc = () => createWorkflowState("reqdoc")
 const newTask = () => createWorkflowState("task")
 const newWebsec = () => createWorkflowState("websec")
+
+/**
+ * websec 夹具：范围已确认、Edge 走查完成、证据已登记、覆盖矩阵已收口。
+ *
+ * 覆盖矩阵**预先收口是必需的**：真实链路上 `websec_report` 会在覆盖未收口时直接拒收，
+ * 场景若留着缺口，模型会被「覆盖矩阵未收口」顶回来——那测到的是覆盖门禁，不是本次要验的规则。
+ * 入口清单放 `/api/settings`，与已登记证据同键：模型再调 `websec_surface(sync_edge=true)`
+ * 也不会新增入口、不会新增覆盖缺口（去重按 method+path）。
+ */
+export function websecState(stage: "verify" | "report"): WorkflowState {
+  const s = newWebsec()
+  approve(s, "scope")
+  approve(s, "surface")
+  approve(s, "checks")
+  if (stage === "report") approve(s, "verify")
+  enter(s, stage)
+  s.websec = {
+    testMode: "normal",
+    edge: { started: true, finished: true },
+    scope: {
+      target: "http://127.0.0.1:18086",
+      environment: "dev",
+      accounts: [{ name: "u1", role: "普通用户" }],
+      stopConditions: ["异常即停"],
+      confirmedAt: 1000,
+    },
+    surface: [
+      { id: "surface-1", method: "GET", endpoint: "/api/settings", source: "edge", identity: "u1", addedAt: 1000 },
+    ],
+    coverage: WEBSEC_REQUIRED_CHECK_CATEGORY_KEYS.map((category) => ({
+      id: `surface-1:${category}`,
+      surfaceRef: "surface-1",
+      category,
+      status: "not_applicable" as const,
+      evidenceRefs: [],
+      note: "本轮未覆盖（夹具占位）",
+      checkedAt: 1000,
+    })),
+    evidence: [
+      {
+        id: "edge-single-1",
+        url: "http://127.0.0.1:18086/api/settings",
+        method: "GET",
+        source: "edge",
+        phase: "single",
+        hash: "a".repeat(64),
+        bodyPresent: true,
+      },
+    ],
+  }
+  return finish(s)
+}
 
 /**
  * 槽位版夹具（重构 2c）：给 reqdoc state 挂上完整知识库，使其通过 kbGate。
@@ -1286,6 +1339,8 @@ export const SCENARIOS: Scenario[] = [
   {
     name: "w1 普通测试后启动 Edge",
     workflowType: "websec",
+    // websec 一次走查链天然多轮（收口 9 类覆盖 + 询问匿名探测），4 轮预算会造出假失败（w2 实测）。
+    maxTurns: 8,
     state: (() => {
       const s = newWebsec()
       enter(s, "scope")
@@ -1308,6 +1363,8 @@ export const SCENARIOS: Scenario[] = [
   {
     name: "w2 Edge 采集完成后询问匿名探测",
     workflowType: "websec",
+    // websec 一次走查链天然多轮（收口 9 类覆盖 + 询问匿名探测），4 轮预算会造出假失败（w2 实测）。
+    maxTurns: 8,
     state: (() => {
       const s = newWebsec()
       approve(s, "scope")
@@ -1343,6 +1400,8 @@ export const SCENARIOS: Scenario[] = [
   {
     name: "w3 报告阶段调用 websec_report",
     workflowType: "websec",
+    // websec 一次走查链天然多轮（收口 9 类覆盖 + 询问匿名探测），4 轮预算会造出假失败（w2 实测）。
+    maxTurns: 8,
     state: (() => {
       const s = newWebsec()
       approve(s, "scope")
@@ -1381,6 +1440,8 @@ export const SCENARIOS: Scenario[] = [
   {
     name: "w4 完成后给出报告路径",
     workflowType: "websec",
+    // websec 一次走查链天然多轮（收口 9 类覆盖 + 询问匿名探测），4 轮预算会造出假失败（w2 实测）。
+    maxTurns: 8,
     state: (() => {
       const s = newWebsec()
       approveAll(s)
@@ -1414,6 +1475,49 @@ export const SCENARIOS: Scenario[] = [
     userTurn: "好的，完成了",
     judge: { kind: "text", type: "keyword", keyword: "report.md" },
     note: "websec-r18：完成态必须告知 report.md 位置",
+  },
+  {
+    name: "w5 标 confirmed 前先开独立复核子会话",
+    workflowType: "websec",
+    // websec 一次走查链天然多轮（收口 9 类覆盖 + 询问匿名探测），4 轮预算会造出假失败（w2 实测）。
+    maxTurns: 8,
+    state: websecState("verify"),
+    userTurn: "这条我复现了：GET /api/settings 未登录也能拿到全部用户字段，定级 high，帮我走完后面的流程。",
+    judge: { kind: "tool", expectTool: "task" },
+    note: "websec-r31：标 confirmed 前必须用 task 工具开一个独立只读复核子会话",
+  },
+  {
+    name: "w6 confirmed 必须带严重度与复核会话",
+    workflowType: "websec",
+    // websec 一次走查链天然多轮（收口 9 类覆盖 + 询问匿名探测），4 轮预算会造出假失败（w2 实测）。
+    maxTurns: 8,
+    state: websecState("report"),
+    userTurn: "结论定了：GET /api/settings 未授权可读，定级 high，提交报告。",
+    judge: { kind: "websec_findings", confirmedSeverity: true, confirmedVerifier: true, minConfirmed: 1 },
+    note: "websec-r31/r16：confirmed 必须带 severity 与 verifierSessionID（先被服务端拒再补齐也算过）",
+  },
+  {
+    name: "w7 待验证结论不评严重度",
+    workflowType: "websec",
+    // websec 一次走查链天然多轮（收口 9 类覆盖 + 询问匿名探测），4 轮预算会造出假失败（w2 实测）。
+    maxTurns: 8,
+    state: websecState("report"),
+    // 候选端点必须是**已登记证据**的那个（/api/settings）：finding 强制要求 evidenceRef，
+    // 换个没证据的端点，模型向开发者追问证据是合理行为——那测到的是「要不要追问」，
+    // 不是「suspected 评不评严重度」。末尾「不用再问我」把「追问」这条歧路堵掉。
+    userTurn: "我怀疑 GET /api/settings 未授权可读，但还没复现。本轮没有别的证据了，直接按待验证写进报告提交，不用再问我。",
+    judge: { kind: "websec_findings", suspectedNoSeverity: true, minSuspected: 1 },
+    note: "websec-r32/r4：没复现只能标 suspected，且不得评严重度",
+  },
+  {
+    name: "w8 报告落盘三件套含覆盖台账",
+    workflowType: "websec",
+    // websec 一次走查链天然多轮（收口 9 类覆盖 + 询问匿名探测），4 轮预算会造出假失败（w2 实测）。
+    maxTurns: 8,
+    state: websecState("report"),
+    userTurn: "本次走查没有发现问题，按已通过提交报告。",
+    judge: { kind: "tool_result", tool: "websec_report", ok: true, keyword: "coverage-ledger.json" },
+    note: "websec-r33/r16：报告必须同时产出 report.md、report.json 与 coverage-ledger.json",
   },
   // ---- task ----
   {

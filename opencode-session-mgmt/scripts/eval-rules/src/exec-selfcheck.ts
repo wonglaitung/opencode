@@ -18,7 +18,8 @@ import { requiredSlots } from "../../../packages/shared/src/reqdoc-slots.ts"
 import { judgeScenario } from "./judge.ts"
 import { executeTurns, buildRegistry } from "./executor.ts"
 import { Store } from "../../../packages/plugin/src/db"
-import { EVAL_TOOLS } from "./tool-defs.ts"
+import { EVAL_TOOLS, WEBSEC_EXTRA_TOOLS } from "./tool-defs.ts"
+import { websecState } from "./scenarios.ts"
 import type { ModelOutput, WorkflowState } from "./types.ts"
 
 const NOOP: ModelOutput = { text: "", toolCalls: [] }
@@ -96,10 +97,11 @@ export async function execSelfCheck(): Promise<string[]> {
     if (scored.score === undefined) fails.push("判据接线：score 判据未给出分数（产物未进入评分）")
   }
 
-  // 3) 工具覆盖率：`EVAL_TOOLS` 里每个工具都必须有真实实现，否则评测结果失真且看不出失真
+  // 3) 工具覆盖率：`EVAL_TOOLS` 与 websec 专属工具里每个工具都必须有真实实现，
+  // 否则评测结果失真且看不出失真
   const probeStore = Store.memory(() => "reqdoc")
   const registry = buildRegistry(probeStore)
-  const all = (EVAL_TOOLS as { function: { name: string } }[]).map((t) => t.function.name)
+  const all = [...EVAL_TOOLS, ...WEBSEC_EXTRA_TOOLS].map((t) => t.function.name)
   const missing = all.filter((n) => !registry[n])
   probeStore.close()
   // 不再有「已知缺口」豁免：open_ide 系列已用内存锁注册表补齐（见 executor 的 memLocks）。
@@ -191,5 +193,81 @@ export async function execSelfCheck(): Promise<string[]> {
   const types = evalToolParamTypes()
   if (types.reqdoc_answer?.address !== "string") fails.push("工具参数类型表：reqdoc_answer.address 应为 string")
   if (types.workflow_baseline?.estimated_hours !== "number") fails.push("工具参数类型表：workflow_baseline.estimated_hours 应为 number")
+  // 6) websec 独立复核门禁与参数 schema 拒收（websec-r31/r32 的服务端侧）
+  //    这三条是「模型评测能不能测到防线」的前提：执行器若跳过 schema 校验或没接
+  //    isVerifierSession，防线在评测里就不存在，读数会误以为「模型随便就能提交」。
+  const reportArgs = (finding: Record<string, unknown>) => ({
+    method: "Edge 用户走查",
+    findings: [finding],
+    verdict: "issues_found",
+  })
+  const confirmedFinding = {
+    title: "未授权读取用户设置",
+    category: "authn",
+    endpoint: "/api/settings",
+    evidenceRef: "edge-single-1",
+    reproduction: "未登录直接 GET /api/settings",
+    impact: "越权读取用户配置",
+    remediation: "补鉴权校验",
+    status: "confirmed",
+    severity: "high",
+    verifierSessionID: "ses_eval_1",
+    verifierDecision: "confirmed",
+  }
+  // 6a) task 开出的子会话 id → 复核门禁放行，报告落盘
+  const accepted = await executeTurns(websecState("report"), async (prior) =>
+    prior.length === 0
+      ? { text: "", toolCalls: [{ id: "t1", name: "task", args: { description: "独立复核", prompt: "尝试推翻该候选", subagent_type: "general" } }] }
+      : { text: "", toolCalls: [{ id: "r1", name: "websec_report", args: reportArgs(confirmedFinding) }] },
+  )
+  const reportOk = accepted.toolResults.find((t) => t.name === "websec_report")
+  if (!reportOk?.ok)
+    fails.push(`websec 复核门禁：task 开出的子会话 id 应被放行，websec_report 却失败（${reportOk?.result.slice(0, 100) ?? "未调用"}）`)
+  if (!accepted.toolResults.some((t) => t.name === "task" && t.ok)) fails.push("websec 复核门禁：task 工具未被执行（模型无法开复核子会话）")
+
+  // 6b) 编造的复核会话 id → 门禁拒收
+  const forged = await executeTurns(websecState("report"), async () => ({
+    text: "",
+    toolCalls: [
+      {
+        id: "r2",
+        name: "websec_report",
+        args: reportArgs({ ...confirmedFinding, verifierSessionID: "ses_forged_1" }),
+      },
+    ],
+  }))
+  const forgedResult = forged.toolResults.find((t) => t.name === "websec_report")
+  if (forgedResult?.ok)
+    fails.push("websec 复核门禁：编造的 verifierSessionID 被放行了——独立复核门禁失效")
+  if (!forgedResult?.result.includes("复核"))
+    fails.push(`websec 复核门禁：拒绝理由不含「复核」（实际:${forgedResult?.result.slice(0, 80) ?? "未调用"}）`)
+
+  // 6c) suspected 带 severity → schema 拒收（执行器必须做参数校验，否则这道防线在评测里不存在）
+  const suspected = await executeTurns(websecState("report"), async () => ({
+    text: "",
+    toolCalls: [
+      {
+        id: "r3",
+        name: "websec_report",
+        args: reportArgs({
+          title: "疑似越权导出",
+          category: "export",
+          endpoint: "/api/export",
+          evidenceRef: "edge-single-1",
+          reproduction: "未复现",
+          impact: "可能越权导出",
+          remediation: "补鉴权校验",
+          status: "suspected",
+          severity: "high",
+        }),
+      },
+    ],
+  }))
+  const suspectedResult = suspected.toolResults.find((t) => t.name === "websec_report")
+  if (suspectedResult?.ok)
+    fails.push("websec suspected 不得评严重度：suspected 带 severity 却被接受——schema 防线未生效（执行器跳过参数校验？）")
+  if (!suspectedResult?.result.includes("severity"))
+    fails.push(`websec suspected 不得评严重度：拒绝理由未点名 severity（实际:${suspectedResult?.result.slice(0, 80) ?? "未调用"}）`)
+
   return fails
 }
