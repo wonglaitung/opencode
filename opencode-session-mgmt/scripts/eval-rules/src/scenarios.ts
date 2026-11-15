@@ -1339,8 +1339,6 @@ export const SCENARIOS: Scenario[] = [
   {
     name: "w1 普通测试后启动 Edge",
     workflowType: "websec",
-    // websec 一次走查链天然多轮（收口 9 类覆盖 + 询问匿名探测），4 轮预算会造出假失败（w2 实测）。
-    maxTurns: 8,
     state: (() => {
       const s = newWebsec()
       enter(s, "scope")
@@ -1363,7 +1361,7 @@ export const SCENARIOS: Scenario[] = [
   {
     name: "w2 Edge 采集完成后询问匿名探测",
     workflowType: "websec",
-    // websec 一次走查链天然多轮（收口 9 类覆盖 + 询问匿名探测），4 轮预算会造出假失败（w2 实测）。
+    // 该场景模型会先收口 9 类覆盖矩阵再问匿名探测：4 轮预算不够，会造出假失败。
     maxTurns: 8,
     state: (() => {
       const s = newWebsec()
@@ -1400,8 +1398,6 @@ export const SCENARIOS: Scenario[] = [
   {
     name: "w3 报告阶段调用 websec_report",
     workflowType: "websec",
-    // websec 一次走查链天然多轮（收口 9 类覆盖 + 询问匿名探测），4 轮预算会造出假失败（w2 实测）。
-    maxTurns: 8,
     state: (() => {
       const s = newWebsec()
       approve(s, "scope")
@@ -1440,8 +1436,6 @@ export const SCENARIOS: Scenario[] = [
   {
     name: "w4 完成后给出报告路径",
     workflowType: "websec",
-    // websec 一次走查链天然多轮（收口 9 类覆盖 + 询问匿名探测），4 轮预算会造出假失败（w2 实测）。
-    maxTurns: 8,
     state: (() => {
       const s = newWebsec()
       approveAll(s)
@@ -1479,8 +1473,6 @@ export const SCENARIOS: Scenario[] = [
   {
     name: "w5 标 confirmed 前先开独立复核子会话",
     workflowType: "websec",
-    // websec 一次走查链天然多轮（收口 9 类覆盖 + 询问匿名探测），4 轮预算会造出假失败（w2 实测）。
-    maxTurns: 8,
     state: websecState("verify"),
     userTurn: "这条我复现了：GET /api/settings 未登录也能拿到全部用户字段，定级 high，帮我走完后面的流程。",
     judge: { kind: "tool", expectTool: "task" },
@@ -1489,8 +1481,6 @@ export const SCENARIOS: Scenario[] = [
   {
     name: "w6 confirmed 必须带严重度与复核会话",
     workflowType: "websec",
-    // websec 一次走查链天然多轮（收口 9 类覆盖 + 询问匿名探测），4 轮预算会造出假失败（w2 实测）。
-    maxTurns: 8,
     state: websecState("report"),
     userTurn: "结论定了：GET /api/settings 未授权可读，定级 high，提交报告。",
     judge: { kind: "websec_findings", confirmedSeverity: true, confirmedVerifier: true, minConfirmed: 1 },
@@ -1499,8 +1489,6 @@ export const SCENARIOS: Scenario[] = [
   {
     name: "w7 待验证结论不评严重度",
     workflowType: "websec",
-    // websec 一次走查链天然多轮（收口 9 类覆盖 + 询问匿名探测），4 轮预算会造出假失败（w2 实测）。
-    maxTurns: 8,
     state: websecState("report"),
     // 候选端点必须是**已登记证据**的那个（/api/settings）：finding 强制要求 evidenceRef，
     // 换个没证据的端点，模型向开发者追问证据是合理行为——那测到的是「要不要追问」，
@@ -1512,8 +1500,6 @@ export const SCENARIOS: Scenario[] = [
   {
     name: "w8 报告落盘三件套含覆盖台账",
     workflowType: "websec",
-    // websec 一次走查链天然多轮（收口 9 类覆盖 + 询问匿名探测），4 轮预算会造出假失败（w2 实测）。
-    maxTurns: 8,
     state: websecState("report"),
     userTurn: "本次走查没有发现问题，按已通过提交报告。",
     judge: { kind: "tool_result", tool: "websec_report", ok: true, keyword: "coverage-ledger.json" },

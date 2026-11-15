@@ -10,6 +10,7 @@ import { createWebsecEdgeTools } from "../src/tools/websec-edge"
 import { createWebsecTools } from "../src/tools/websec"
 import { createWorkflowStartTools } from "../src/tools/workflow-start"
 import { createWorkflowTools } from "../src/tools/workflow"
+import { buildSystemFragment } from "../src/prompt"
 
 const ctx = { sessionID: "s1" } as never
 const dirs: string[] = []
@@ -179,6 +180,16 @@ describe("websec 完整客户旅程", () => {
       expect(final).toContain("report.json")
       expect(existsSync(join(projectDir, "websec-evidence", "s1", "report.md"))).toBe(true)
       expect(existsSync(join(projectDir, "websec-evidence", "s1", "report.json"))).toBe(true)
+      // r33：报告必须同时落覆盖台账
+      expect(existsSync(join(projectDir, "websec-evidence", "s1", "coverage-ledger.json"))).toBe(true)
+      // 端到端：完成态注入必须与完成块同口径（否则模型重开一轮采集），且三件套路径都给全。
+      const completion = buildSystemFragment(store.get("s1")!.workflow!)
+      expect(completion).toContain("# Workflow 已完成")
+      expect(completion).toContain("当前阶段：已完成")
+      expect(completion).not.toContain("下一步：「范围与边界」")
+      expect(completion).toContain("report.md")
+      expect(completion).toContain("report.json")
+      expect(completion).toContain("coverage-ledger.json")
     } finally {
       store.close()
     }

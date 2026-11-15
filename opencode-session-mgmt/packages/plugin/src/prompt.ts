@@ -98,6 +98,11 @@ export function buildSystemFragment(
       return parts.join("\n")
     }
     parts.push("# Workflow 已完成", "")
+    if (def.type === "websec") {
+      // 完成态必须明确禁止「继续干活」：弱模型会把「已完成」当成打招呼，转身重新提交报告
+      // （本地模型实测 w4：不走收尾、改去 websec_report 并编造 verifierSessionID，被拒后继续重试）。
+      parts.push("⛔ 本工作流已完结：不要重开流程、不要重复调用测试工具、不要重复提交报告；直接按下方信息回复开发者。", "")
+    }
     if (def.hasCommitGate) {
       parts.push(
         "如需提交代码：先调用 commit_gate_check 确认门禁；门禁已 allowed 或本轮不提交时不要重复调用，直接回复开发者。",
@@ -112,10 +117,13 @@ export function buildSystemFragment(
     }
     if (def.type === "websec") {
       if (workflow.websec?.report?.markdownPath && workflow.websec.report.jsonPath) {
+        // 三件套口径：r16/r33 要求告知 report.md / report.json / coverage-ledger.json，
+        // 完成块漏掉台账文件会让模型只报两个（与规则文本不一致，属「宣称与门禁不一致」）。
         parts.push(
           "本次报告位置（最终回复必须原样告知开发者）：",
           `- ${workflow.websec.report.markdownPath}`,
           `- ${workflow.websec.report.jsonPath}`,
+          ...(workflow.websec.report.ledgerPath ? [`- ${workflow.websec.report.ledgerPath}`] : []),
         )
       }
       parts.push(
@@ -324,11 +332,16 @@ export function buildStateBar(workflow: WorkflowState, stage: string | null): st
       `当前阶段：${def.labels[stage] ?? stage}（第 ${idx + 1}/${total} 步），状态 ${statusZh(st.status)}` +
       (purpose ? ` ｜ 目的：${purpose}` : "")
   } else {
-    // stage===null：全未开始（起步）或空档（部分 approved 无进行中）
+    // stage===null：全未开始（起步）/ 空档（部分 approved 无进行中）/ 完成（全部 approved）
     const notStarted = def.stages.filter((n) => workflow.stages[n].status === "not_started")
     if (notStarted.length === total) {
       const first = def.stages[0]
       header = `当前阶段：未开始（第 1/${total} 步），请从「${def.labels[first] ?? first}」开始`
+    } else if (notStarted.length === 0) {
+      // 完成态**不能**再输出「空档…下一步：首阶段」：调用方（完成块注入）刚说完「Workflow 已完成」，
+      // 状态条却指着首阶段，模型会重开一轮（本地模型实测：websec w4 稳定 0/3，工具调用全是
+      // 重新 capture/surface）。三态必须与完成块口径一致。
+      header = `当前阶段：已完成（${total} 个阶段全部 approved），不要重开流程；下一步：按完成块提示收尾`
     } else {
       const done = def.stages
         .filter((n) => workflow.stages[n].status === "approved")
@@ -360,31 +373,36 @@ export function buildStateBar(workflow: WorkflowState, stage: string | null): st
     }
   }
   if (workflow.baseline) lines.push(`基线：已录入 ${workflow.baseline.estimatedHours} 小时`)
-  if (workflow.type === "websec" && workflow.websec?.testMode) {
-    const mode = workflow.websec.testMode === "authz" ? "越权测试" : "普通测试"
-    const edge = workflow.websec.edge
-    const phase = workflow.websec.edgeFallback
-      ? `人工/curl fallback（${workflow.websec.edgeFallback.reason}）`
-      : edge?.finished
-        ? "已完成"
-        : edge?.phase === "baseline"
-          ? "普通账号（baseline）"
-          : edge?.phase === "privileged"
-            ? "高权账号（privileged）"
-            : edge?.phase === "single"
-              ? "普通测试（single）"
-              : edge?.started
-                ? "已启动"
-                : "未启动"
-    lines.push(`Edge：${mode} · 当前阶段：${phase}`)
-    if (workflow.websec.scope) {
+  if (workflow.type === "websec" && workflow.websec) {
+    const ws = workflow.websec
+    if (ws.testMode) {
+      const mode = ws.testMode === "authz" ? "越权测试" : "普通测试"
+      const edge = ws.edge
+      const phase = ws.edgeFallback
+        ? `人工/curl fallback（${ws.edgeFallback.reason}）`
+        : edge?.finished
+          ? "已完成"
+          : edge?.phase === "baseline"
+            ? "普通账号（baseline）"
+            : edge?.phase === "privileged"
+              ? "高权账号（privileged）"
+              : edge?.phase === "single"
+                ? "普通测试（single）"
+                : edge?.started
+                  ? "已启动"
+                  : "未启动"
+      lines.push(`Edge：${mode} · 当前阶段：${phase}`)
+    }
+    // 范围独立于 testMode：`websec_scope` 落库后、还没定普通/越权时，模型同样需要看到
+    // 范围已记录——否则它会重复追问目标/账号/停止条件（本地模型实测 w1 稳定 0/3）。
+    if (ws.scope) {
       lines.push(
-        `范围：${workflow.websec.scope.target}（${workflow.websec.scope.environment}） · ` +
-          `账号：${workflow.websec.scope.accounts.map((item) => `${item.name}/${item.role}`).join("、")}`,
+        `范围：${ws.scope.target}（${ws.scope.environment}） · ` +
+          `账号：${ws.scope.accounts.map((item) => `${item.name}/${item.role}`).join("、")}`,
       )
     }
-    if (workflow.websec.surface?.length || workflow.websec.regression?.length) {
-      lines.push(`覆盖：${coverageSummary(workflow.websec)} · 回归：${regressionSummary(workflow.websec)}`)
+    if (ws.surface?.length || ws.regression?.length) {
+      lines.push(`覆盖：${coverageSummary(ws)} · 回归：${regressionSummary(ws)}`)
     }
   }
   // 知识库覆盖（重构 2c）：槽位覆盖率 + 开放项全部由服务端派生，不再展示打分卡/探针/渲染校验

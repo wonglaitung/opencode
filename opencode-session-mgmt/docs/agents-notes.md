@@ -61,6 +61,83 @@ AI 录入」的真多轮；r54 的 1/3 落空即模型先问材料目录而未�
 busy/retry（上游 idle 会从该表删除，缺省即空闲），否则「复核还没跑完就能提交」。已知边界：服务端只能证明
 「复核会话存在、是子会话、已结束」，无法验证子会话内部真的尝试了推翻；复核质量仍取决于提示词与模型。
 
+**websec 独立复核与覆盖台账的本地模型验证（2026-11-15，qwen3@SGLang）。** 针对 2026-11-14 的
+三道防线（r31 独立复核、r32 待验证不评严重度、r33 覆盖台账）做模型侧验证。**先补夹具再测**：
+评测器的 websec 工具面原本只有 6 个工具，缺 `task` 与
+`websec_surface`/`websec_coverage`/`websec_regression`/`websec_config_check`/`websec_write_probe`，
+并且**跳过参数 schema 校验**、`createWebsecTools` 也没接 `isVerifierSession`——这三处缺口会让
+「suspected 带 severity 被拒」「编造复核会话被拒」在评测里**根本不发生**（读数会以为防线不存在，
+正是对抗审查第 6 条「验证器自身也要审」）。已补齐：
+
+- `tool-defs.ts`：新增 `WEBSEC_EXTRA_TOOLS`（`task` + 5 个 websec 工具），**只暴露给 websec 工作流**
+  ——并进 `EVAL_TOOLS` 会凭空给 sdlc/reqdoc 多出工具、扰动已入库基线的对比；`task` 的描述**照抄上游**
+  （`packages/opencode/src/tool/task.txt`），不写「用它开复核子会话」，否则等于把 r31 的答案塞进
+  工具描述，规则有没有起作用就测不出来。
+- `executor.ts`：按上游 `registry.ts` 同构补 `z.object(def.args).safeParse` 参数校验（不合法记为
+  服务端拒绝，回执带理由）；`task` 评测替身返回上游同格式 `<task id=... state="completed">`，
+  并把 id 登记进子会话表供 `isVerifierSession` 判定（未知 id 一律 false）。
+- `exec-selfcheck.ts`：新增 3 条护栏——task 开出的 id 必须放行、编造的 id 必须被拒（理由含「复核」）、
+  suspected 带 severity 必须被 schema 拒（理由点名 severity）。破坏验证：把参数校验改成永远通过、
+  把 `isVerifierSession` 改成恒 true → 后两条立即报红（已实测）。
+
+口径与过程：`EVAL_EXECUTE=1 EVAL_DISABLE_THINKING=1 EVAL_MAX_TOKENS=2048`，模型 `qwen3`
+（容器 `lmsysorg/sglang:latest`，`http://localhost:8086/v1`，max_model_len 102400），
+`--workflow websec --repeat 3`；w2 单场景放宽 `maxTurns: 8`（其余沿用 4）。结果落
+`scripts/eval-rules/results/new.websec.json`（子集运行 8/78，不覆盖全量），旧 4 场景结果另存
+`new.websec-20261110-pre-r31.json`。
+
+```
+cd opencode-session-mgmt
+EVAL_EXECUTE=1 EVAL_DISABLE_THINKING=1 bun run scripts/eval-rules/run.ts --variant new --workflow websec --repeat 3
+```
+
+数值（n=3，共 24 次运行，**修复注入层缺陷之前**）：**18/24（75%）**。本次改动覆盖的四个场景
+**12/12**——w5 标 confirmed 前开独立复核 3/3、w6 confirmed 带 severity + verifierSessionID 3/3、
+w7 suspected 不评严重度 3/3、w8 报告落盘三件套（回执含 coverage-ledger.json）3/3。既有场景：
+w1 0/3、w2 3/3、w3 3/3、w4 0/3。修复后 w1 转 3/3（见下文缺陷一节），w4 仍 0/3。
+
+对照实验（只改一个变量：把 r31 从注入里删掉）：w5 6/6 → **6/6**、w6 6/6 → **6/6**，无变化
+（`new.websec-w5,w6-no-r31.json`）。结论：对本地弱模型，「用 task 复核 + 填 verifierSessionID」
+主要被 `websec_report` 的工具描述与**服务端硬拦**驱动，r31 文本不是唯一抓手。这正是协议想要的
+形态（不变量在代码里，不靠提示词），但也说明**不能拿 r31 的存在当行为保证**。
+
+模型暴露的三个既有缺陷（P2/P2/P3，当天已修 + 破坏验证）：
+
+- **P2 完成态状态条与完成块自相矛盾**：`isComplete` 分支仍调 `buildStateBar`（stage=null 落进
+  「空档」分支），注入里同时出现「# Workflow 已完成 / 本次报告位置…」与「当前阶段：空档（已
+  approved：…），下一步：『范围与边界』」→ 模型重开一轮采集（w4 稳定 0/3）。修法两处：
+  `buildStateBar` 的 stage=null 分支增加「全部 approved」一态（输出「当前阶段：已完成（N 个阶段
+  全部 approved），不要重开流程」）；完成块再补一句「⛔ 本工作流已完结：不要重开流程、不要重复
+  调用测试工具、不要重复提交报告」——只改状态条不够：弱模型会把「已完成」当招呼，转身又调
+  `websec_report`（探针实测：编造 `verifierSessionID`、被拒后重试，单场景烧掉 5 分 44 秒）。
+- **P2 状态条漏显「范围已记录」**：`websec?.testMode` 门控把「范围：…」整块包在里面，于是
+  `websec_scope` 已落库、还没定普通/越权时状态条一个字都不提范围 → 模型重复追问目标/账号/
+  停止条件（w1 稳定 0/3）。修：范围与覆盖行独立于 testMode，只有 Edge 行仍按模式显示。
+  生产同会话有对话史可缓解，但上下文压缩或续接后只剩状态条即复现。
+- **P3 完成块只列 report.md / report.json**：漏 `coverage-ledger.json`，与 r16/r33「必须告知
+  三个文件」不一致。修：有 `ledgerPath` 时一并列出。
+
+护栏（文本契约 + 端到端各一，且**逐条当场破坏验证报红**）：`prompt.test.ts` 三条——完成态状态条
+不指回首阶段且不含「空档」、scope 已记录但未定模式时仍显示范围、完成块含台账；`websec-journey.test.ts`
+端到端——报告落盘三件（含 `coverage-ledger.json`）+ 完成态注入与完成块同口径。破坏验证：把三处
+各自改回坏的样子（完成态回落「空档」/范围重新被 testMode 门控/完成块去掉台账），对应用例分别报红；
+F3 曾与 F2 同例被掩盖，已拆成独立用例单独观测。
+
+修复后复测（同口径 n=3，`EVAL_EXECUTE=1`、关思考）：w1 **0/3 → 3/3**
+（`new.websec-w1.json`）、w5/w6/w7/w8 **12/12**（`new.websec-w5,w6,w7,w8.json`）；w2/w3 不在
+完成态、注入未变，沿用 3/3；w4 评测仍 **0/3**（`new.websec-w4.json`，另有探针单跑 1/1，合计 1/4）
+——注入层矛盾已消除（dry 注入只剩一套口径），剩余失败是弱模型在完成态**常常只发工具调用、不产出
+任何正文**，属模型能力问题，不再改提示词。修复后合计 **21/24（87.5%）**。
+
+夹具缺陷（已修）：w2 原先 4 轮预算不够（模型先收口 9 类覆盖矩阵、再问匿名探测）→ 4 轮时 0/3，
+`maxTurns: 8` 后 5/5、全量复跑 3/3。**4 轮全局默认对 websec 这种多轮链路本身就不合适**，故新增
+场景级 `Scenario.maxTurns`，只在需要的场景放宽（全部放宽会让全量跑超时）。
+
+已知局限：① 本机端点只有 SGLang，按 AGENTS.md 口径 **SGLang 的数字不作合入门槛**，本次只作方向性
+参考；② `task` 是评测替身、子会话**同步结束**，故「复核会话仍在运行被拒」这条防线只有单测覆盖，
+模型评测测不到；③ 单轮夹具没有对话史，w1 这类「重复追问」在生产会被历史缓解，读数偏严；
+④ 子代理内部是否真的尝试推翻无法验证（与生产同一已知边界）。
+
 **项目外 file: 依赖被顶层导入，会拖垮整个插件（2026-11，websec）。** `packages/plugin/package.json`
 声明 `edge-debug-core: file:../../../edge-debug-core`，解析到**本工程目录之外**的兄弟目录；
 `toolset.ts` 顶层导入 `websec-edge.ts`，后者又静态导入 `edge-debug-core`。依赖未装时 `import` 链在

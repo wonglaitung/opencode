@@ -784,6 +784,88 @@ describe("task 一般任务状态条与入口提示", () => {
     expect(buildSystemFragment(s)).toContain("Edge：越权测试 · 当前阶段：已完成")
   })
 
+  // 缺陷（2026-11-15 本地模型验证，w1 0/3）：「范围：…」原先被 `websec?.testMode` 门控包住，
+  // `websec_scope` 已落库、还没定普通/越权时状态条一个字不提范围 → 模型重复追问目标/账号/停止条件。
+  test("websec scope 已记录但未定模式时，状态条仍显示范围", () => {
+    const s = createWorkflowState("websec")
+    applyTransition(s, "scope", "enter", 1)
+    s.websec = {
+      evidence: [],
+      scope: {
+        target: "http://127.0.0.1:18086",
+        environment: "dev",
+        accounts: [{ name: "u1", role: "普通用户" }],
+        stopConditions: ["异常即停"],
+        confirmedAt: 1,
+      },
+    }
+    const text = buildSystemFragment(s)
+    expect(text).toContain("范围：http://127.0.0.1:18086（dev） · 账号：u1/普通用户")
+    // Edge 行仍只在定了模式后出现（避免把「未启动」误报成事实）
+    expect(text).not.toContain("Edge：")
+  })
+
+  // 缺陷（2026-11-15 本地模型验证，w4 0/3）：完成块说「Workflow 已完成」，状态条却说
+  // 「空档…下一步：『范围与边界』」→ 模型重开一轮采集。三态必须同口径。
+  test("websec 完成态：状态条说已完成、不指回首阶段", () => {
+    const s = createWorkflowState("websec")
+    for (const name of ["scope", "surface", "checks", "verify", "report"]) s.stages[name].status = "approved"
+    s.commit = { status: "allowed", blocked_by: [] }
+    s.websec = {
+      testMode: "normal",
+      edge: { started: true, finished: true },
+      evidence: [],
+      report: {
+        status: "submitted",
+        testMode: "normal",
+        method: "Edge 用户走查",
+        findings: [],
+        limitations: [],
+        verdict: "passed",
+        submittedAt: 1,
+        reportDir: "/p/websec-evidence/s1",
+        markdownPath: "/p/websec-evidence/s1/report.md",
+        jsonPath: "/p/websec-evidence/s1/report.json",
+        ledgerPath: "/p/websec-evidence/s1/coverage-ledger.json",
+      },
+    }
+    const text = buildSystemFragment(s)
+    expect(text).toContain("# Workflow 已完成")
+    expect(text).toContain("当前阶段：已完成")
+    expect(text).not.toContain("下一步：「范围与边界」")
+    expect(text).not.toContain("空档")
+  })
+
+  // 缺陷（P3）：完成块只列 report.md / report.json，漏 coverage-ledger.json，
+  // 与 r16/r33「必须告知三个文件」不一致。独立成例，免得被完成态断言的失败掩盖。
+  test("websec 完成态：完成块列出报告三件套（含覆盖台账）", () => {
+    const s = createWorkflowState("websec")
+    for (const name of ["scope", "surface", "checks", "verify", "report"]) s.stages[name].status = "approved"
+    s.commit = { status: "allowed", blocked_by: [] }
+    s.websec = {
+      testMode: "normal",
+      edge: { started: true, finished: true },
+      evidence: [],
+      report: {
+        status: "submitted",
+        testMode: "normal",
+        method: "Edge 用户走查",
+        findings: [],
+        limitations: [],
+        verdict: "passed",
+        submittedAt: 1,
+        reportDir: "/p/websec-evidence/s1",
+        markdownPath: "/p/websec-evidence/s1/report.md",
+        jsonPath: "/p/websec-evidence/s1/report.json",
+        ledgerPath: "/p/websec-evidence/s1/coverage-ledger.json",
+      },
+    }
+    const text = buildSystemFragment(s)
+    expect(text).toContain("/p/websec-evidence/s1/report.md")
+    expect(text).toContain("/p/websec-evidence/s1/report.json")
+    expect(text).toContain("/p/websec-evidence/s1/coverage-ledger.json")
+  })
+
   test("未开始：四个工作流都给出各自入口提示", () => {
     expect(buildSystemFragment(createWorkflowState("sdlc"))).toContain("启动 SDLC 工作流")
     expect(buildSystemFragment(createWorkflowState("reqdoc"))).toContain("启动 REQDOC 工作流")
