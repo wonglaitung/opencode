@@ -40,6 +40,8 @@ internal sealed class LauncherForm : Form
     private static readonly string Root = Path.Combine(Home, "OpenCode");
     private static readonly string Node = Path.Combine(Root, "runtime", "node.exe");
     private static readonly string ConfigHelper = Path.Combine(AppContext.BaseDirectory, "launcher-config.js");
+    private static readonly string Bun = Path.Combine(Root, "runtime", "node_modules", "bun", "bin", "bun.exe");
+    private static readonly string TeamShareCli = Path.Combine(Root, "runtime", "opencode-team-share", "cli.ts");
     private const string SmartHubUrl = "http://123.33.13.9:9090";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -153,6 +155,64 @@ internal sealed class LauncherForm : Form
                 case "launch":
                     Post("launch", await LaunchAsync(root.GetProperty("payload")));
                     break;
+                case "teamListSessions":
+                {
+                    var search = PayloadString(root, "search");
+                    var args = new List<string> { "list-sessions" };
+                    if (search.Length > 0) { args.Add("--search"); args.Add(search); }
+                    PostTeamJson("teamSessions", RunTeamShare(args), "读取会话失败");
+                    break;
+                }
+                case "teamListProjects":
+                    PostTeamJson("teamProjects", RunTeamShare(new[] { "list-projects" }), "读取项目失败");
+                    break;
+                case "teamBrowseFile":
+                {
+                    var picked = ChooseOpenPath();
+                    if (picked.Length > 0) Post("teamFilePath", new { path = picked });
+                    break;
+                }
+                case "teamSaveFile":
+                {
+                    var saved = ChooseSavePath(PayloadString(root, "defaultName"));
+                    if (saved.Length > 0) Post("teamSavePath", new { path = saved });
+                    break;
+                }
+                case "teamExport":
+                {
+                    var args = new List<string>
+                    {
+                        "export",
+                        "--session", PayloadString(root, "sessionId"),
+                        "--out", PayloadString(root, "out"),
+                        "--note", PayloadString(root, "note")
+                    };
+                    AppendDb(args, PayloadString(root, "db"));
+                    PostTeamJson("teamExported", RunTeamShare(args), "导出失败");
+                    break;
+                }
+                case "teamInspect":
+                    PostTeamJson("teamInspected", RunTeamShare(new[] { "inspect", "--file", PayloadString(root, "path") }), "读取交接文件失败");
+                    break;
+                case "teamImport":
+                {
+                    if (IsOpencodeRunning())
+                    {
+                        Post("error", "请先退出 opencode 再导入（避免与运行中的进程同时写库）");
+                        break;
+                    }
+                    var args = new List<string> { "import", "--file", PayloadString(root, "path"), "--project", PayloadString(root, "projectId") };
+                    AppendDb(args, PayloadString(root, "db"));
+                    PostTeamJson("teamImported", RunTeamShare(args), "导入失败");
+                    break;
+                }
+                case "teamOpenFolder":
+                {
+                    var target = PayloadString(root, "path");
+                    if (target.Length > 0 && File.Exists(target))
+                        Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{target}\"") { UseShellExecute = true });
+                    break;
+                }
                 case "cancel":
                     Close();
                     break;
@@ -173,6 +233,120 @@ internal sealed class LauncherForm : Form
             SelectedPath = Directory.Exists(current) ? current : Home
         };
         return dialog.ShowDialog() == DialogResult.OK ? dialog.SelectedPath : "";
+    }
+
+    // ---------------------------------------------------------------- 团队协作
+
+    private static string PayloadString(JsonElement root, string name)
+    {
+        if (!root.TryGetProperty("payload", out var payload)) return "";
+        if (!payload.TryGetProperty(name, out var value)) return "";
+        return value.ValueKind == JsonValueKind.String ? value.GetString() ?? "" : "";
+    }
+
+    /// <summary>把界面里选定的数据库路径透传给 CLI，避免导出与导入分两次探测时选到不同的库。</summary>
+    private static void AppendDb(List<string> args, string db)
+    {
+        if (db.Length == 0) return;
+        args.Add("--db");
+        args.Add(db);
+    }
+
+    private void PostTeamJson(string type, (int ExitCode, string Stdout, string Stderr) run, string fallback)
+    {
+        if (run.ExitCode != 0)
+        {
+            var message = run.Stderr.Trim();
+            Post("error", message.Length > 0 ? message : fallback);
+            return;
+        }
+        try
+        {
+            Post(type, JsonSerializer.Deserialize<JsonElement>(run.Stdout.Trim()));
+        }
+        catch
+        {
+            Post("error", fallback);
+        }
+    }
+
+    /// <summary>调用随包分发的团队协作 CLI（bun 直接跑 TypeScript，无需编译）。</summary>
+    private static (int ExitCode, string Stdout, string Stderr) RunTeamShare(IEnumerable<string> args, int timeoutMs = 120000)
+    {
+        if (!File.Exists(Bun)) return (-1, "", "未找到运行时 bun.exe，请重新运行安装包");
+        if (!File.Exists(TeamShareCli)) return (-1, "", "未找到团队协作组件，请重新运行安装包");
+        var psi = new ProcessStartInfo(Bun)
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            // bun 输出 UTF-8；不显式指定会按系统代码页解码，中文会变乱码。
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
+            StandardErrorEncoding = System.Text.Encoding.UTF8,
+            WorkingDirectory = Path.GetDirectoryName(TeamShareCli)!
+        };
+        psi.ArgumentList.Add("run");
+        psi.ArgumentList.Add(TeamShareCli);
+        foreach (var arg in args) psi.ArgumentList.Add(arg);
+        using var process = Process.Start(psi) ?? throw new InvalidOperationException("无法启动团队协作组件");
+        var stdout = process.StandardOutput.ReadToEnd();
+        var stderr = process.StandardError.ReadToEnd();
+        if (!process.WaitForExit(timeoutMs))
+        {
+            try { process.Kill(true); } catch { }
+            return (-1, stdout, "团队协作组件超时");
+        }
+        return (process.ExitCode, stdout, stderr);
+    }
+
+    /// <summary>opencode 是否在运行（导入要写库，必须独占）。</summary>
+    private static bool IsOpencodeRunning()
+    {
+        try
+        {
+            var psi = new ProcessStartInfo("tasklist")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true
+            };
+            psi.ArgumentList.Add("/FI");
+            psi.ArgumentList.Add("IMAGENAME eq opencode.exe");
+            using var process = Process.Start(psi);
+            if (process is null) return false;
+            var output = process.StandardOutput.ReadToEnd();
+            process.WaitForExit(5000);
+            return output.Contains("opencode.exe", StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static string ChooseSavePath(string defaultName)
+    {
+        using var dialog = new SaveFileDialog
+        {
+            Title = "导出交接文件",
+            Filter = "会话交接 (*.ocsave)|*.ocsave|所有文件 (*.*)|*.*",
+            FileName = defaultName.Length > 0 ? defaultName : "会话交接.ocsave",
+            InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
+            OverwritePrompt = true
+        };
+        return dialog.ShowDialog() == DialogResult.OK ? dialog.FileName : "";
+    }
+
+    private static string ChooseOpenPath()
+    {
+        using var dialog = new OpenFileDialog
+        {
+            Title = "选择交接文件",
+            Filter = "会话交接 (*.ocsave)|*.ocsave|所有文件 (*.*)|*.*",
+            CheckFileExists = true
+        };
+        return dialog.ShowDialog() == DialogResult.OK ? dialog.FileName : "";
     }
 
     private static ConfigState LoadState()

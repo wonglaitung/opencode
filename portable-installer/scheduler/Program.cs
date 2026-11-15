@@ -31,7 +31,7 @@ internal static class Program
                     break;
                 }
             }
-            MessageBox.Show("定时任务程序正在启动，请稍后重试。", "OpenCode 定时任务", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show("定时任务程序正在启动，请稍后重试。", "数字程序员定时任务", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
 
@@ -131,7 +131,7 @@ internal sealed class TrayContext : ApplicationContext
             try { scheduler.SetEnabled(task.Id, enabled); }
             catch (Exception ex)
             {
-                tray.ShowBalloonTip(3000, "OpenCode 定时任务", ex.Message, ToolTipIcon.Warning);
+                tray.ShowBalloonTip(3000, "数字程序员定时任务", ex.Message, ToolTipIcon.Warning);
             }
         }
         RefreshManager();
@@ -147,7 +147,7 @@ internal sealed class TrayContext : ApplicationContext
     private string TrayText()
     {
         var enabled = scheduler.List().Count(x => x.Enabled);
-        return enabled > 0 ? $"OpenCode 定时任务 · {enabled} 个启用" : "OpenCode 定时任务";
+        return enabled > 0 ? $"数字程序员定时任务 · {enabled} 个启用" : "数字程序员定时任务";
     }
 
     private void RefreshManager()

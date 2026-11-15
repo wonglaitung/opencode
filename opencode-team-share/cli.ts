@@ -1,0 +1,199 @@
+#!/usr/bin/env bun
+/**
+ * opencode-team-share —— 会话交接 CLI（供启动器调用）。
+ *
+ * 一次交接 = 一个 .ocsave 文件：同事导出后自行传递，对方导入后接着做。
+ * 不依赖 git、不联网、不做 opencode 插件。
+ *
+ * 命令：
+ *   list-sessions [--search <关键词>]      列出可交接的会话
+ *   list-projects                          列出本机可作为导入目标的项目
+ *   inspect --file <文件>                  只读解析交接文件（导入前确认）
+ *   export --session <id> --out <文件> [--note <说明>]
+ *   import --file <文件> --project <projectId>
+ *
+ * 约定：stdout 输出 JSON（给启动器解析），stderr 输出人话错误；退出码 0 成功 / 1 失败 / 2 参数错。
+ */
+import { mkdirSync, writeFileSync } from "node:fs"
+import { hostname, userInfo } from "node:os"
+import { dirname, join } from "node:path"
+import { backupDb, openDb, resolveDbPath } from "./src/db"
+import { TeamShareError } from "./src/errors"
+import { decodeHandoff, encodeHandoff, handoffSummary, type HandoffFile } from "./src/handoff"
+import { exportHandoff, importSession, listProjects, listSessions } from "./src/session"
+
+const USAGE = `用法（--db 可选，指定 opencode 数据库路径；缺省自动探测）：
+  team-share list-sessions [--search <关键词>] [--db <库>]
+  team-share list-projects [--db <库>]
+  team-share inspect --file <文件>
+  team-share export --session <id> --out <文件> [--note <说明>] [--db <库>]
+  team-share import --file <文件> --project <projectId> [--db <库>]`
+
+type Args = { command: string; flags: Record<string, string> }
+
+function parseArgs(argv: string[]): Args {
+  const [command = "", ...rest] = argv
+  const flags: Record<string, string> = {}
+  for (let index = 0; index < rest.length; index++) {
+    const item = rest[index]!
+    if (!item.startsWith("--")) continue
+    const key = item.slice(2)
+    const next = rest[index + 1]
+    if (next === undefined || next.startsWith("--")) {
+      flags[key] = "true"
+      continue
+    }
+    flags[key] = next
+    index++
+  }
+  return { command, flags }
+}
+
+function required(flags: Record<string, string>, key: string): string {
+  const value = flags[key]
+  if (!value || value === "true") throw new UsageError(`缺少 --${key}`)
+  return value
+}
+
+class UsageError extends Error {}
+
+function exportedBy() {
+  let user = "unknown"
+  try {
+    user = userInfo().username
+  } catch {
+    // 取不到用户名不阻断导出
+  }
+  return { user, machine: hostname() }
+}
+
+function dbFor(args: Args, readonly = true) {
+  const dbPath = resolveDbPath(args.flags["db"])
+  return { dbPath, db: openDb(dbPath, { readonly }) }
+}
+
+function commandListSessions(args: Args) {
+  const { db, dbPath } = dbFor(args)
+  try {
+    const search = args.flags["search"]?.toLowerCase()
+    const items = listSessions(db)
+      .filter((item) => (search ? item.title.toLowerCase().includes(search) : true))
+      .map((item) => ({
+        id: item.id,
+        title: item.title,
+        messages: item.messages,
+        updatedAt: item.updatedAt,
+        createdAt: item.createdAt,
+        project: item.project ?? item.directory,
+        path: item.path ?? "",
+      }))
+    console.log(JSON.stringify({ db: dbPath, items }))
+  } finally {
+    db.close()
+  }
+}
+
+function commandListProjects(args: Args) {
+  const { db, dbPath } = dbFor(args)
+  try {
+    console.log(JSON.stringify({ db: dbPath, items: listProjects(db) }))
+  } finally {
+    db.close()
+  }
+}
+
+async function commandInspect(args: Args) {
+  const file = required(args.flags, "file")
+  const buffer = await Bun.file(file).arrayBuffer()
+  const parsed = decodeHandoff(Buffer.from(buffer))
+  console.log(JSON.stringify(handoffSummary(parsed)))
+}
+
+async function commandExport(args: Args) {
+  const sessionID = required(args.flags, "session")
+  const out = required(args.flags, "out")
+  const note = args.flags["note"] ?? ""
+  const { db, dbPath } = dbFor(args)
+  try {
+    const file = exportHandoff(db, sessionID, note, exportedBy())
+    mkdirSync(dirname(out), { recursive: true })
+    writeFileSync(out, encodeHandoff(file))
+    console.log(
+      JSON.stringify({
+        db: dbPath,
+        path: out,
+        sessionId: file.session.id,
+        title: file.session.title,
+        messages: file.messages.length,
+        exportedAt: file.exportedAt,
+      }),
+    )
+  } finally {
+    db.close()
+  }
+}
+
+async function commandImport(args: Args) {
+  const file = required(args.flags, "file")
+  const projectID = required(args.flags, "project")
+  const parsed = decodeHandoff(Buffer.from(await Bun.file(file).arrayBuffer()))
+  const { db, dbPath } = dbFor(args, false)
+  try {
+    const project = db.query("SELECT id, worktree FROM project WHERE id = ?").get(projectID) as
+      | { id: string; worktree: string }
+      | undefined
+    if (!project) {
+      const available = listProjects(db)
+      throw new TeamShareError(
+        `目标项目不存在（project id=${projectID}）。本机可用项目：${
+          available.length > 0 ? available.map((item) => item.worktree).join("、") : "无"
+        }`,
+      )
+    }
+    const directory = parsed.session.path ? join(project.worktree, parsed.session.path) : project.worktree
+    const backup = backupDb(dbPath)
+    const result = importSession(db, parsed, {
+      projectID: project.id,
+      worktree: project.worktree,
+      directory,
+    })
+    console.log(JSON.stringify({ ok: true, backup, ...result }))
+  } finally {
+    db.close()
+  }
+}
+
+async function main() {
+  const args = parseArgs(process.argv.slice(2))
+  switch (args.command) {
+    case "list-sessions":
+      return commandListSessions(args)
+    case "list-projects":
+      return commandListProjects(args)
+    case "inspect":
+      return commandInspect(args)
+    case "export":
+      return commandExport(args)
+    case "import":
+      return commandImport(args)
+    case "":
+    case "-h":
+    case "--help":
+      console.log(USAGE)
+      return
+    default:
+      throw new UsageError(`未知命令：${args.command}`)
+  }
+}
+
+main()
+  .then(() => process.exit(0))
+  .catch((error) => {
+    if (error instanceof UsageError) {
+      console.error(error.message)
+      console.error(USAGE)
+      process.exit(2)
+    }
+    console.error(error instanceof Error ? error.message : String(error))
+    process.exit(1)
+  })

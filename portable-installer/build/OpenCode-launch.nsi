@@ -675,7 +675,7 @@ Function LaunchPage
   Pop $0
   SendMessage $0 ${WM_SETFONT} $TitleFont 1
   SetCtlColors $0 0x0F172A transparent
-  ${NSD_CreateLabel} 320 112 620 18 "选择项目目录与工作流，然后打开 Digital Programmer"
+  ${NSD_CreateLabel} 320 112 620 18 "选择项目目录与工作流，然后打开数字程序员"
   Pop $0
   SendMessage $0 ${WM_SETFONT} $SubFont 1
   SetCtlColors $0 0x64748B transparent
@@ -690,7 +690,7 @@ Function LaunchPage
   Pop $0
   ${NSD_OnClick} $0 DirBrowse
 
-  ${NSD_CreateButton} 320 228 650 44 "打开 Digital Programmer"
+  ${NSD_CreateButton} 320 228 650 44 "打开数字程序员"
   Pop $2
   SendMessage $2 ${WM_SETFONT} $ButtonFont 1
   ${NSD_OnClick} $2 DoLaunch

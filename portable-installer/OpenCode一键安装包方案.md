@@ -214,15 +214,17 @@ cmd /c portable-installer\build\build.bat
 |---|---|
 | `portable-installer/OpenCode一键安装包方案.md` | 本方案文档 |
 | `portable-installer/build/OpenCode-Setup.nsi` | 主安装脚本 |
-| `portable-installer/build/OpenCode-launch.nsi` | 启动器脚本（构建中间产物，已内嵌进主包） |
+| `portable-installer/launcher/`（`Program.cs` / `index.html` / `Launcher.csproj`） | **现役启动器**（.NET 8 WinForms + WebView2）；`build.bat` 用 `dotnet publish` 产出 `OpenCode-launch.exe`，主安装包再把它内嵌进去 |
+| `portable-installer/build/OpenCode-launch.nsi` | **历史遗留脚本**：旧版 NSIS 启动器，`build.bat` 已不再编译（现役启动器见上一行）；保留仅为历史参考，不要按它判断启动器行为 |
 | `portable-installer/build/launcher-config.js` | 启动器配置助手（编译时内嵌，读写 `identity.json`、`terminal_mode.ini` 与 `opencode.jsonc`） |
 | `portable-installer/build/OpenCode-Reset.nsi` | 清空历史会话工具脚本（构建中间产物，已内嵌进主包） |
 | `.opencode/skills/opencode-installer/SKILL.md` | **首选打包入口**：强制清缓存、完整重建、依赖核对与验收 |
 | `portable-installer/payload/OpenCode/runtime` | Node 工具链载荷 |
+| `portable-installer/payload/OpenCode/runtime/opencode-team-share` | 团队协作 CLI（会话交接导出/导入；启动器「团队协作」入口调用，bun 直接跑 TS，零第三方依赖） |
 | `portable-installer/payload/OpenCode/python` | Python 载荷（含 `python3.exe`） |
 | `portable-installer/payload/OpenCode/terminal` | Windows Terminal 载荷（`WindowsTerminal.exe` + `OpenConsole.exe`，所有用户均部署） |
 | `OpenCode-Setup.exe`（构建产物） | **唯一需要分发给业务的文件**：内置载荷 + 启动器 + 清空历史工具，双击即装 |
 
-> **交付与安装只需一个文件**：业务侧只分发并双击 `OpenCode-Setup.exe` 即可。`OpenCode-launch.exe` 与 `OpenCode-Reset.exe` 是构建中间产物，已被主安装包内嵌并释放到 `%USERPROFILE%\OpenCode\`，桌面/开始菜单的「数字程序员」快捷方式指向启动器，开始菜单的「清空历史会话」指向重置工具，无需单独安装或分发。安装后双击「数字程序员」快捷方式 → 选项目目录 → 进 opencode。
+> **交付与安装只需一个文件**：业务侧只分发并双击 `OpenCode-Setup.exe` 即可。`OpenCode-launch.exe`（`dotnet publish` 产物）与 `OpenCode-Reset.exe`（NSIS 产物）是构建中间产物，已被主安装包内嵌并释放到 `%USERPROFILE%\OpenCode\`，桌面/开始菜单的「数字程序员」快捷方式指向启动器，开始菜单的「清空历史会话」指向重置工具，无需单独安装或分发。安装后双击「数字程序员」快捷方式 → 选项目目录 → 进 opencode。
 >
 > 项目目录里的 `doc_process` 文件（`.claude/skills`、`工作要求.txt`、`raw/`、`00~07` 骨架）仍按方案②另行取得，安装包不负责分发。
