@@ -154,7 +154,7 @@ describe("导出与导入", () => {
       path: string
     }
     expect(row.id).toBe("ses_1")
-    expect(row.title).toBe("支付网关重构")
+    expect(row.title).toBe("[交接] 支付网关重构")
     expect(row.project_id).toBe("p2")
     expect(row.directory).toBe("/other/work/sub")
 
@@ -272,5 +272,175 @@ describe("回归：路径过短不替换", () => {
     expect(file.session.path).toBe("a/b")
     expect(file.messages[0]!.info["text"]).toBe("看 a/b/c.ts")
     expect(JSON.stringify(file)).not.toContain("${WORKSPACE_ROOT}")
+  })
+})
+
+describe("交接标题前缀", () => {
+  test("导入时加 [交接] 前缀，重复导入不重复加", () => {
+    const source = makeDb()
+    seedProject(source.db, "p1", "/work/proj")
+    seedSession(source.db, {
+      id: "ses_p",
+      projectID: "p1",
+      directory: "/work/proj",
+      title: "支付网关重构",
+      messages: [{ id: "m1", data: { role: "user", text: "hi" } }],
+    })
+    const file = exportHandoff(source.db, "ses_p", "", by)
+    const target = makeDb()
+    seedProject(target.db, "p2", "/other/work")
+    const scope = { projectID: "p2", worktree: "/other/work", directory: "/other/work" }
+
+    const first = importSession(target.db, file, scope)
+    expect(first.title).toBe("[交接] 支付网关重构")
+    const row = target.db.query("SELECT title FROM session WHERE id = ?").get("ses_p") as { title: string }
+    expect(row.title).toBe("[交接] 支付网关重构")
+
+    // 重复导入：文件里的标题仍是无前缀的原标题，结果不应变成 "[交接] [交接] ..."
+    const second = importSession(target.db, file, scope)
+    expect(second.title).toBe("[交接] 支付网关重构")
+  })
+
+  test("已带前缀的会话再交接，标题不叠加", () => {
+    const source = makeDb()
+    seedProject(source.db, "p1", "/work/proj")
+    seedSession(source.db, {
+      id: "ses_q",
+      projectID: "p1",
+      directory: "/work/proj",
+      title: "[交接] 数据库连接池改造",
+      messages: [],
+    })
+    const file = exportHandoff(source.db, "ses_q", "", by)
+    const target = makeDb()
+    seedProject(target.db, "p2", "/other/work")
+    const result = importSession(target.db, file, {
+      projectID: "p2",
+      worktree: "/other/work",
+      directory: "/other/work",
+    })
+    expect(result.title).toBe("[交接] 数据库连接池改造")
+  })
+})
+
+describe("仅参考模式（reference）", () => {
+  function sourceWithFile() {
+    const source = makeDb()
+    seedProject(source.db, "p1", "/work/proj")
+    seedSession(source.db, {
+      id: "ses_src",
+      projectID: "p1",
+      directory: "/work/proj",
+      path: "",
+      title: "支付网关重构",
+      messages: [
+        {
+          id: "m1",
+          data: { role: "user", text: "看 /work/proj/src/auth.ts" },
+          parts: [{ id: "pt1", data: { type: "text", text: "hi" } }],
+        },
+        { id: "m2", data: { role: "assistant", text: "好的" } },
+      ],
+    })
+    return exportHandoff(source.db, "ses_src", "参考", by)
+  }
+
+  test("生成新会话 ID、[参考] 前缀、清 parentID、成本归零", () => {
+    const file = sourceWithFile()
+    file.session.parentID = "ses_parent"
+    file.session.cost = 12.5
+    file.session.tokens = { input: 100, output: 50, reasoning: 0, cacheRead: 0, cacheWrite: 0 }
+
+    const target = makeDb()
+    seedProject(target.db, "p2", "/other/work")
+    const result = importSession(
+      target.db,
+      file,
+      { projectID: "p2", worktree: "/other/work", directory: "/other/work" },
+      { mode: "reference" },
+    )
+
+    expect(result.mode).toBe("reference")
+    expect(result.sessionID).not.toBe("ses_src")
+    expect(result.sessionID.startsWith("ses_")).toBe(true)
+    expect(result.title).toBe("[参考] 支付网关重构")
+    expect(result.messages).toBe(2)
+
+    const row = target.db
+      .query("SELECT id, title, parent_id, cost, tokens_input, time_created, time_updated FROM session")
+      .get() as {
+      id: string
+      title: string
+      parent_id: string | null
+      cost: number
+      tokens_input: number
+      time_created: number
+      time_updated: number
+    }
+    expect(row.id).toBe(result.sessionID)
+    expect(row.parent_id).toBeNull()
+    expect(row.cost).toBe(0)
+    expect(row.tokens_input).toBe(0)
+    expect(row.time_created).toBe(1000) // 保留原创建时间
+    expect(row.time_updated).toBeGreaterThan(1000) // 置为导入时间
+  })
+
+  test("消息与 part 换新 ID，且 part 指向新消息", () => {
+    const file = sourceWithFile()
+    const target = makeDb()
+    seedProject(target.db, "p2", "/other/work")
+    const result = importSession(
+      target.db,
+      file,
+      { projectID: "p2", worktree: "/other/work", directory: "/other/work" },
+      { mode: "reference" },
+    )
+
+    const messages = target.db.query("SELECT id, session_id FROM message ORDER BY id").all() as Array<{
+      id: string
+      session_id: string
+    }>
+    expect(messages).toHaveLength(2)
+    const ids = new Set(messages.map((m) => m.id))
+    expect(ids.has("m1")).toBe(false)
+    expect(ids.has("m2")).toBe(false)
+    for (const message of messages) {
+      expect(message.id.startsWith("msg_")).toBe(true)
+      expect(message.session_id).toBe(result.sessionID)
+    }
+
+    const parts = target.db.query("SELECT id, message_id, session_id FROM part").all() as Array<{
+      id: string
+      message_id: string
+      session_id: string
+    }>
+    expect(parts).toHaveLength(1)
+    expect(parts[0]!.id.startsWith("prt_")).toBe(true)
+    expect(ids.has(parts[0]!.message_id)).toBe(true) // 指向新消息 id
+    expect(parts[0]!.session_id).toBe(result.sessionID)
+  })
+
+  test("参考副本不影响原会话（接手模式仍保留 ID）", () => {
+    const file = sourceWithFile()
+    const target = makeDb()
+    seedProject(target.db, "p2", "/other/work")
+    const scope = { projectID: "p2", worktree: "/other/work", directory: "/other/work" }
+    const reference = importSession(target.db, file, scope, { mode: "reference" })
+    const handoff = importSession(target.db, file, scope, { mode: "handoff" })
+    expect(handoff.sessionID).toBe("ses_src")
+    expect(handoff.title).toBe("[交接] 支付网关重构")
+    expect(reference.sessionID).not.toBe(handoff.sessionID)
+    expect((target.db.query("SELECT COUNT(*) AS n FROM session").get() as { n: number }).n).toBe(2)
+  })
+
+  test("两次参考导入生成两条独立副本", () => {
+    const file = sourceWithFile()
+    const target = makeDb()
+    seedProject(target.db, "p2", "/other/work")
+    const scope = { projectID: "p2", worktree: "/other/work", directory: "/other/work" }
+    const first = importSession(target.db, file, scope, { mode: "reference" })
+    const second = importSession(target.db, file, scope, { mode: "reference" })
+    expect(first.sessionID).not.toBe(second.sessionID)
+    expect((target.db.query("SELECT COUNT(*) AS n FROM session").get() as { n: number }).n).toBe(2)
   })
 })

@@ -20,14 +20,16 @@ import { dirname, join } from "node:path"
 import { backupDb, openDb, resolveDbPath } from "./src/db"
 import { TeamShareError } from "./src/errors"
 import { decodeHandoff, encodeHandoff, handoffSummary, type HandoffFile } from "./src/handoff"
-import { exportHandoff, importSession, listProjects, listSessions } from "./src/session"
+import { denormalize } from "./src/paths"
+import { exportHandoff, importSession, listProjects, listSessions, sessionWorktree } from "./src/session"
+import { readWorkflowState, writeWorkflowState } from "./src/workflow-state"
 
 const USAGE = `用法（--db 可选，指定 opencode 数据库路径；缺省自动探测）：
   team-share list-sessions [--search <关键词>] [--db <库>]
   team-share list-projects [--db <库>]
   team-share inspect --file <文件>
   team-share export --session <id> --out <文件> [--note <说明>] [--db <库>]
-  team-share import --file <文件> --project <projectId> [--db <库>]`
+  team-share import --file <文件> --project <projectId> [--mode handoff|reference] [--db <库>]`
 
 type Args = { command: string; flags: Record<string, string> }
 
@@ -115,13 +117,17 @@ async function commandExport(args: Args) {
   const note = args.flags["note"] ?? ""
   const { db, dbPath } = dbFor(args)
   try {
-    const file = exportHandoff(db, sessionID, note, exportedBy())
+    // 工作流状态在 <项目>/.opencode/session-mgmt.db，随交接文件一起搬
+    const worktree = sessionWorktree(db, sessionID)
+    const workflow = worktree ? await readWorkflowState(worktree, sessionID) : undefined
+    const file = exportHandoff(db, sessionID, note, exportedBy(), workflow)
     mkdirSync(dirname(out), { recursive: true })
     writeFileSync(out, encodeHandoff(file))
     console.log(
       JSON.stringify({
         db: dbPath,
         path: out,
+        workflow: file.workflow ? "included" : "none",
         sessionId: file.session.id,
         title: file.session.title,
         messages: file.messages.length,
@@ -136,6 +142,7 @@ async function commandExport(args: Args) {
 async function commandImport(args: Args) {
   const file = required(args.flags, "file")
   const projectID = required(args.flags, "project")
+  const mode = args.flags["mode"] === "reference" ? "reference" : "handoff"
   const parsed = decodeHandoff(Buffer.from(await Bun.file(file).arrayBuffer()))
   const { db, dbPath } = dbFor(args, false)
   try {
@@ -152,12 +159,32 @@ async function commandImport(args: Args) {
     }
     const directory = parsed.session.path ? join(project.worktree, parsed.session.path) : project.worktree
     const backup = backupDb(dbPath)
-    const result = importSession(db, parsed, {
-      projectID: project.id,
-      worktree: project.worktree,
-      directory,
-    })
-    console.log(JSON.stringify({ ok: true, backup, ...result }))
+    const result = importSession(
+      db,
+      parsed,
+      { projectID: project.id, worktree: project.worktree, directory },
+      { mode },
+    )
+    // 工作流状态：仅「接手继续」模式写回；参考副本不带状态（避免门禁与统计串到本机）
+    let workflowApplied = false
+    if (mode === "handoff" && parsed.workflow) {
+      const restored = {
+        ...parsed.workflow,
+        state: denormalize(parsed.workflow.state, { worktree: project.worktree, directory }) as Record<string, unknown>,
+      }
+      workflowApplied = await writeWorkflowState(project.worktree, result.sessionID, restored)
+    }
+    console.log(
+      JSON.stringify({
+        ok: true,
+        backup,
+        worktree: project.worktree,
+        directory,
+        workflow: parsed.workflow ? "included" : "none",
+        workflowApplied,
+        ...result,
+      }),
+    )
   } finally {
     db.close()
   }

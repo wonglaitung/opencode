@@ -104,6 +104,11 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
 .ok-strip.show{display:block}
 .ok-strip .link{margin-left:10px}
 .warn-line{margin:14px 0;padding:10px 12px;border-radius:8px;background:#fffbeb;border:1px solid #fde68a;color:#92400e;font-size:12px}
+.tip-line{margin:10px 0 0;color:#64748b;font-size:12px;line-height:1.65}
+.mode-item{display:flex;align-items:flex-start;gap:9px;padding:9px 11px;border:1px solid #e2e8f0;border-radius:9px;background:#f8fafc;margin-top:8px;cursor:pointer;color:#334155;font-size:13px}
+.mode-item:hover{border-color:#bfdbfe;background:#f0f7ff}
+.mode-item input{margin-top:2px}
+.mode-item small{display:block;margin-top:2px;color:#64748b;font-size:11px;line-height:1.5}
 .handoff-card{border:1px solid var(--line);border-radius:12px;padding:14px;background:#f8fafc;margin:12px 0}
 .handoff-card dl{display:grid;grid-template-columns:56px 1fr;gap:8px 14px;margin:0}
 .handoff-card dt{color:#64748b;font-size:12px}
@@ -198,7 +203,7 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
             <label for="teamNote">交接说明（给同事的话，可留空）</label>
             <input id="teamNote" placeholder="例如：登录鉴权这块卡住了，帮忙看看 token 校验">
           </div>
-          <div class="warn-line">⚠ 该文件为明文，包含完整会话内容（代码、路径、可能的凭据），请通过可信渠道传递。</div>
+          <div class="warn-line">⚠ 该文件为明文，包含完整会话内容与工作流阶段进度（代码、路径、可能的凭据），请通过可信渠道传递。</div>
           <div class="action-row">
             <button class="primary" id="teamExportBtn" disabled>导出…</button>
           </div>
@@ -217,6 +222,11 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
               <dt>说明</dt><dd id="teamNoteText"></dd>
             </dl>
           </div>
+          <div class="field" id="teamModeField">
+            <label>导入方式</label>
+            <label class="mode-item"><input type="radio" name="teamMode" value="handoff" checked><span>接手继续<small>同一会话，带工作流阶段进度；此后在这个会话里的活动会记入你的统计</small></span></label>
+            <label class="mode-item"><input type="radio" name="teamMode" value="reference"><span>仅参考<small>复制成新会话（标题加「[参考]」），不带阶段进度、不沿用原会话的成本与 Token</small></span></label>
+          </div>
           <div class="field" id="teamProjectField" hidden>
             <label for="teamProject">导入到项目</label>
             <select id="teamProject"></select>
@@ -226,6 +236,8 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
             <button class="primary" id="teamImportBtn" disabled>导入</button>
           </div>
           <div class="ok-strip" id="teamImportOk"></div>
+          <div class="tip-line">导入后可直接点「打开这条会话」继续；也可以稍后打开：启动器选该项目目录 → 打开数字程序员 → 按 Ctrl+X 再按 L 打开会话列表 → 选标题带「[交接]」的那条。</div>
+          <div class="tip-line">接手继续会带上原工作流阶段进度；仅参考是独立副本，打开后由「会话管理」建一个全新工作流，可以按需要重新启动。</div>
         </section>
       </div>
     </div>
@@ -413,6 +425,8 @@ function resetImport() {
   $("teamProjectField").hidden = true;
   $("teamImportBtn").disabled = true;
   $("teamImportOk").classList.remove("show");
+  const handoffMode = document.querySelector('input[name="teamMode"][value="handoff"]');
+  if (handoffMode) handoffMode.checked = true;
 }
 
 function renderTeamProjects(items) {
@@ -454,7 +468,8 @@ $("teamImportBtn").addEventListener("click", () => {
   const projectId = $("teamProject").value;
   if (!projectId) return;
   $("teamImportBtn").disabled = true;
-  post("teamImport", { path: team.file, projectId, db: team.db });
+  const mode = document.querySelector('input[name="teamMode"]:checked')?.value || "handoff";
+  post("teamImport", { path: team.file, projectId, db: team.db, mode });
 });
 
 $("scheduler").addEventListener("click", () => post("openScheduler"));
@@ -560,8 +575,26 @@ window.chrome.webview.addEventListener("message", (event) => {
       renderTeamProjects(payload?.items);
       break;
     case "teamImported":
-      $("teamImportOk").textContent = `已导入《${payload?.title ?? ""}》。可在会话列表打开它继续。`;
-      $("teamImportOk").classList.add("show");
+      if (payload?.ok) {
+        team.imported = payload;
+        const workflowNote = payload.workflow === "included" && payload.workflowApplied === false
+          ? "（工作流状态未写入：本机缺少会话管理组件）"
+          : "";
+        const verb = payload.mode === "reference" ? "已导入为参考副本" : "已导入";
+        $("teamImportOk").innerHTML = `${verb}《${esc(payload.title ?? "")}》${workflowNote}。<a class="link" href="#" id="teamOpenSession">打开这条会话</a>`;
+        $("teamImportOk").classList.add("show");
+        $("teamOpenSession").addEventListener("click", (event) => {
+          event.preventDefault();
+          post("teamOpenSession", {
+            sessionId: payload.sessionID,
+            dir: payload.worktree || payload.directory || state.dir,
+            workflow: state.workflow,
+            terminal: state.terminal,
+            plugins: state.plugins,
+            resume: false,
+          });
+        });
+      }
       $("teamImportBtn").disabled = false;
       break;
     case "error":

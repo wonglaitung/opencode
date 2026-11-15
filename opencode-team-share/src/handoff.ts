@@ -44,6 +44,13 @@ export type HandoffMessage = {
   parts: Record<string, unknown>[]
 }
 
+export type HandoffWorkflow = {
+  /** WorkflowState 的 JSON（路径已归一化）。 */
+  state: Record<string, unknown>
+  tags?: string[]
+  status?: string | null
+}
+
 export type HandoffFile = {
   format: typeof HANDOFF_FORMAT
   exportedAt: number
@@ -51,6 +58,8 @@ export type HandoffFile = {
   note: string
   session: HandoffSession
   messages: HandoffMessage[]
+  /** 工作流状态（可选）：老文件没有这个字段，导入时跳过即可。 */
+  workflow?: HandoffWorkflow
 }
 
 /** 交接文件问题（面向用户的中文提示）。 */

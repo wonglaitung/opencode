@@ -202,8 +202,25 @@ internal sealed class LauncherForm : Form
                         break;
                     }
                     var args = new List<string> { "import", "--file", PayloadString(root, "path"), "--project", PayloadString(root, "projectId") };
+                    var mode = PayloadString(root, "mode");
+                    if (mode == "reference" || mode == "handoff")
+                    {
+                        args.Add("--mode");
+                        args.Add(mode);
+                    }
                     AppendDb(args, PayloadString(root, "db"));
                     PostTeamJson("teamImported", RunTeamShare(args), "导入失败");
+                    break;
+                }
+                case "teamOpenSession":
+                {
+                    var sessionId = PayloadString(root, "sessionId");
+                    if (sessionId.Length == 0)
+                    {
+                        Post("error", "缺少会话 id");
+                        break;
+                    }
+                    Post("launch", await LaunchAsync(root.GetProperty("payload"), sessionId));
                     break;
                 }
                 case "teamOpenFolder":
@@ -416,7 +433,7 @@ internal sealed class LauncherForm : Form
         return new ResumeResult(can, can ? "可回到上次进度" : "项目或工作流变化后需新建会话");
     }
 
-    private async Task<object> LaunchAsync(JsonElement payload)
+    private async Task<object> LaunchAsync(JsonElement payload, string? sessionId = null)
     {
         var state = LoadState();
         var dir = payload.GetProperty("dir").GetString() ?? "";
@@ -449,7 +466,13 @@ internal sealed class LauncherForm : Form
             _ => "启动SDLC工作流"
         };
         var common = new List<string>();
-        if (resume && canResume) common.Add("-c");
+        if (sessionId is { Length: > 0 })
+        {
+            // 直接打开指定会话（交接导入后「打开这条会话」）
+            common.Add("--session");
+            common.Add(sessionId);
+        }
+        else if (resume && canResume) common.Add("-c");
         else
         {
             common.Add("--prompt");

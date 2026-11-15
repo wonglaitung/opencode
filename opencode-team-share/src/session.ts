@@ -9,8 +9,9 @@
 import type { Database } from "bun:sqlite"
 import { relative } from "node:path"
 import { TeamShareError } from "./errors"
+import { newId } from "./ids"
 import { createSlug, denormalize, normalize, type PathRules } from "./paths"
-import type { HandoffFile, HandoffMessage, HandoffSession } from "./handoff"
+import type { HandoffFile, HandoffMessage, HandoffSession, HandoffWorkflow } from "./handoff"
 
 export type ProjectRow = { id: string; worktree: string; name?: string }
 
@@ -226,12 +227,23 @@ export function denormalizeMessages(messages: HandoffMessage[], rules: PathRules
   }))
 }
 
+/** 会话所属项目的工作区根（用于路径归一化与工作流状态定位）。 */
+export function sessionWorktree(db: Database, sessionID: string): string | undefined {
+  const row = db
+    .query(
+      "SELECT p.worktree AS worktree FROM session s LEFT JOIN project p ON p.id = s.project_id WHERE s.id = ?",
+    )
+    .get(sessionID) as { worktree?: string } | undefined
+  return row?.worktree
+}
+
 /** 导出成交接文件：读会话 → 路径归一化 → 组装 manifest。 */
 export function exportHandoff(
   db: Database,
   sessionID: string,
   note: string,
   by: { user: string; machine: string },
+  workflow?: HandoffWorkflow,
 ): HandoffFile {
   const snapshot = readSession(db, sessionID)
   if (!snapshot) throw new TeamShareError(`找不到会话 ${sessionID}`)
@@ -247,7 +259,24 @@ export function exportHandoff(
     // meta 里的绝对路径同样要归一化（directory 必换，标题里出现的路径也应一起换）
     session: normalize(snapshot.meta, rules) as HandoffSession,
     messages: normalizeMessages(snapshot.messages, rules),
+    ...(workflow
+      ? {
+          workflow: {
+            state: normalize(workflow.state, rules) as Record<string, unknown>,
+            tags: workflow.tags,
+            status: workflow.status,
+          },
+        }
+      : {}),
   }
+}
+
+/** 导入会话的标题前缀：一眼看出是交接来的，便于在会话列表里找到。 */
+export const HANDOFF_TITLE_PREFIX = "[交接] "
+
+/** 加前缀（幂等：已有前缀不再重复加）。 */
+export function withHandoffPrefix(title: string): string {
+  return title.startsWith(HANDOFF_TITLE_PREFIX) ? title : `${HANDOFF_TITLE_PREFIX}${title}`
 }
 
 export type ImportScope = {
@@ -263,11 +292,39 @@ export type ImportScope = {
  * 把交接文件导入本机库。
  * 返回导入结果；会话已存在时按 id 更新，不产生重复会话。
  */
+export type ImportMode = "handoff" | "reference"
+
+/** 参考副本的标题前缀，与「接手继续」区分开。 */
+export const REFERENCE_TITLE_PREFIX = "[参考] "
+
+export function withReferencePrefix(title: string): string {
+  return title.startsWith(REFERENCE_TITLE_PREFIX) ? title : `${REFERENCE_TITLE_PREFIX}${title}`
+}
+
+export type ImportResult = {
+  sessionID: string
+  title: string
+  messages: number
+  created: boolean
+  mode: ImportMode
+}
+
+/**
+ * 把交接文件导入本机库。
+ *
+ * - `handoff`（默认）：接手继续做。保留原会话 ID，写回工作流状态（由调用方完成）。
+ * - `reference`：仅参考。复制成**新会话**（新 session/msg/part id）、清 parentID、
+ *   不带成本与 Token 统计、标题加 `[参考]`。目的是不与发送方共享主键，
+ *   避免收集端按 sessionID upsert 时把发送方的工作量改写成本机归属。
+ */
 export function importSession(
   db: Database,
   file: HandoffFile,
   scope: ImportScope,
-): { sessionID: string; title: string; messages: number; created: boolean } {
+  options: { mode?: ImportMode } = {},
+): ImportResult {
+  const mode = options.mode ?? "handoff"
+  const reference = mode === "reference"
   const project = db.query("SELECT id FROM project WHERE id = ?").get(scope.projectID)
   if (!project) {
     throw new TeamShareError(
@@ -278,31 +335,36 @@ export function importSession(
   const rules: PathRules = { worktree: scope.worktree, directory: scope.directory }
   const messages = denormalizeMessages(file.messages, rules)
   const session = file.session
-  const existing = db.query("SELECT id FROM session WHERE id = ?").get(session.id)
+
+  const sessionID = reference ? newId("ses") : session.id
+  const title = reference ? withReferencePrefix(session.title) : withHandoffPrefix(session.title)
+  const existing = reference ? undefined : db.query("SELECT id FROM session WHERE id = ?").get(session.id)
   const created = !existing
 
   const sessionValues = {
-    id: session.id,
+    id: sessionID,
     project_id: scope.projectID,
-    parent_id: session.parentID ?? null,
-    slug: session.slug ?? createSlug(),
+    parent_id: reference ? null : (session.parentID ?? null),
+    slug: reference ? createSlug() : (session.slug ?? createSlug()),
     directory: scope.directory,
     path: session.path ?? relative(scope.worktree, scope.directory).replaceAll("\\", "/"),
-    title: session.title,
+    title,
     version: session.version ?? "unknown",
     agent: session.agent ?? null,
     model: session.model === undefined ? null : JSON.stringify(session.model),
-    cost: numberOr(session.cost, 0),
-    tokens_input: numberOr(session.tokens?.input, 0),
-    tokens_output: numberOr(session.tokens?.output, 0),
-    tokens_reasoning: numberOr(session.tokens?.reasoning, 0),
-    tokens_cache_read: numberOr(session.tokens?.cacheRead, 0),
-    tokens_cache_write: numberOr(session.tokens?.cacheWrite, 0),
+    // 参考副本不携带原会话的成本/Token：否则本机报表会把发送方的消耗记到自己名下
+    cost: reference ? 0 : numberOr(session.cost, 0),
+    tokens_input: reference ? 0 : numberOr(session.tokens?.input, 0),
+    tokens_output: reference ? 0 : numberOr(session.tokens?.output, 0),
+    tokens_reasoning: reference ? 0 : numberOr(session.tokens?.reasoning, 0),
+    tokens_cache_read: reference ? 0 : numberOr(session.tokens?.cacheRead, 0),
+    tokens_cache_write: reference ? 0 : numberOr(session.tokens?.cacheWrite, 0),
     summary_additions: numberOr(session.summary?.additions, 0),
     summary_deletions: numberOr(session.summary?.deletions, 0),
     summary_files: numberOr(session.summary?.files, 0),
     time_created: session.time.created,
-    time_updated: session.time.updated,
+    // 参考副本是今天新建的本地会话：置为当前时间，便于在列表顶部找到
+    time_updated: reference ? Date.now() : session.time.updated,
   }
 
   const run = db.transaction(() => {
@@ -331,7 +393,7 @@ export function importSession(
         sessionValues.summary_deletions,
         sessionValues.summary_files,
         sessionValues.time_updated,
-        session.id,
+        sessionID,
       )
     } else {
       db.query(
@@ -365,30 +427,34 @@ export function importSession(
     }
 
     for (const message of messages) {
-      const { id, sessionID: _sessionID, ...info } = message.info as { id?: string } & Record<string, unknown>
-      if (!id) continue
+      const sourceID = (message.info as { id?: string }).id
+      if (!sourceID) continue
+      const messageID = reference ? newId("msg") : sourceID
+      const { id: _id, sessionID: _sessionID, ...info } = message.info as { id?: string } & Record<string, unknown>
       db.query(
         `INSERT INTO message (id, session_id, time_created, time_updated, data)
          VALUES (?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET data = excluded.data, time_updated = excluded.time_updated`,
       ).run(
-        id,
-        session.id,
+        messageID,
+        sessionID,
         numberOr((message.info["time"] as { created?: number } | undefined)?.created, Date.now()),
         numberOr((message.info["time"] as { updated?: number } | undefined)?.updated, Date.now()),
         JSON.stringify(info),
       )
       for (const part of message.parts) {
-        const { id: partID, sessionID: _s, messageID: _m, ...partData } = part as { id?: string } & Record<string, unknown>
-        if (!partID) continue
+        const sourcePartID = (part as { id?: string }).id
+        if (!sourcePartID) continue
+        const partID = reference ? newId("prt") : sourcePartID
+        const { id: _p, sessionID: _s, messageID: _m, ...partData } = part as { id?: string } & Record<string, unknown>
         db.query(
           `INSERT INTO part (id, message_id, session_id, time_created, time_updated, data)
            VALUES (?, ?, ?, ?, ?, ?)
            ON CONFLICT(id) DO UPDATE SET data = excluded.data, time_updated = excluded.time_updated`,
         ).run(
           partID,
-          id,
-          session.id,
+          messageID,
+          sessionID,
           numberOr((part["time"] as { created?: number } | undefined)?.created, Date.now()),
           numberOr((part["time"] as { updated?: number } | undefined)?.updated, Date.now()),
           JSON.stringify(partData),
@@ -398,5 +464,5 @@ export function importSession(
   })
 
   run()
-  return { sessionID: session.id, title: session.title, messages: messages.length, created }
+  return { sessionID, title, messages: messages.length, created, mode }
 }
