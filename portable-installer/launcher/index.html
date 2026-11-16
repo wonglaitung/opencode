@@ -270,15 +270,15 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
 
         <section id="teamRoom" hidden>
           <div class="field">
-            <label for="roomDir">项目目录（开房用）</label>
-            <div class="path-row"><input id="roomDir" placeholder="选择要开房的项目目录" autocomplete="off"><button class="ghost" id="roomBrowse">浏览</button></div>
+            <label for="roomDir">项目目录（用于开协作房间）</label>
+            <div class="path-row"><input id="roomDir" placeholder="选择要开协作房间的项目目录" autocomplete="off"><button class="ghost" id="roomBrowse">浏览</button></div>
           </div>
           <label class="check"><input type="checkbox" id="roomResume" checked> 继续上次会话（没有历史时自动新建）</label>
           <div class="tip-line" id="roomResumeHint"></div>
           <div class="action-row">
-            <button class="primary" id="roomStartBtn">开房</button>
+            <button class="primary" id="roomStartBtn">开协作房间</button>
           </div>
-          <div class="warn-line">开房后把邀请码发给同事；房间随本机终端关闭而结束。</div>
+          <div class="warn-line">开协作房间后把邀请码发给同事；房间随本机终端关闭而结束。</div>
           <button class="link" id="roomHelp">查看协作房间使用说明 ›</button>
           <div class="field" style="margin-top:20px">
             <label for="roomInvite">邀请码</label>
@@ -290,10 +290,10 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
           </div>
           <div class="field">
             <label for="roomJoinDir">工作目录</label>
-            <div class="path-row"><input id="roomJoinDir" placeholder="选择加入后使用的项目目录" autocomplete="off"><button class="ghost" id="roomBrowseDir">浏览</button></div>
+            <div class="path-row"><input id="roomJoinDir" placeholder="选择加入协作房间后使用的项目目录" autocomplete="off"><button class="ghost" id="roomBrowseDir">浏览</button></div>
           </div>
           <div class="action-row">
-            <button class="primary" id="roomJoinBtn">加入</button>
+            <button class="primary" id="roomJoinBtn">加入协作房间</button>
           </div>
           <div class="ok-strip" id="teamRoomNotice"></div>
         </section>
@@ -327,14 +327,14 @@ const WORKFLOWS = {
 };
 const ROOM_HELP = `协作房间
 协作房间把当前会话实时分享给同事：访客可旁观、提建议、排队任务，不消耗自己的模型额度。
-第一步：开房（主持人）
-· 选项目目录，点「开房」；启动器打开终端后自动关闭。
-· 终端右侧栏会出现「协作房间」卡片，点卡片即可查看邀请码。
-· 也可以按 Ctrl+X 再按 B 打开侧栏，或按 Ctrl+P 搜索「协作房间：邀请码」。
+第一步：开协作房间（主持人）
+· 选项目目录，点「开协作房间」；启动器打开终端后自动关闭。
+· 终端右侧栏的「协作房间」卡片会直接显示邀请码。
+· 若没看到侧栏，按 Ctrl+X 再按 B 打开；Ctrl+P 搜索「协作房间：状态」可看人数与队列。
 · 邀请码形如：ws://192.168.1.5:54321?token=…
 · 通过可信渠道发给同事；房间随你的终端关闭而结束。
-第二步：加入（访客）
-· 在「协作房间」页粘贴邀请码、填写昵称、选择工作目录，点「加入」。
+第二步：加入协作房间（访客）
+· 在「协作房间」页粘贴邀请码、填写昵称、选择工作目录，点「加入协作房间」。
 · 终端会直接进入房间视图：左侧是主机的实时对话，右侧是房间状态。
 房间内操作：
 · 直接输入文字按 Enter：作为「建议」写入主机上下文，不会立即执行。
@@ -353,6 +353,8 @@ const PLUGINS = {
 };
 const state = { workflow: "sdlc", terminal: "native", plugins: ["sm"], configOk: true, identityOk: true, lastProject: "", dir: "", resume: false, browseTarget: "main" };
 let canResume = false;
+let roomResumeInfo = null;
+let roomResumeTimer;
 
 const $ = (id) => document.getElementById(id);
 const post = (type, payload = {}) => window.chrome.webview.postMessage({ type, payload });
@@ -380,10 +382,23 @@ function renderWorkflows() {
   });
   renderTeamWorkflow();
 }
+function activeTeamTab() {
+  return document.querySelector(".tab.active[data-team-tab]")?.dataset.teamTab ?? "export";
+}
+function roomResuming() {
+  const dir = $("roomDir").value.trim();
+  return Boolean(dir && roomResumeInfo && roomResumeInfo.can && $("roomResume").checked);
+}
 function renderTeamWorkflow() {
-  const label = WORKFLOWS[state.workflow]?.label ?? "";
-  $("teamWorkflowLine").innerHTML = `当前工作流：<b>${esc(label)}</b> <a class="link" href="#" id="teamWorkflowSwitch">在向导页切换 ›</a>`;
-  $("teamWorkflowSwitch").addEventListener("click", (event) => {
+  const resuming = activeTeamTab() === "room" && roomResuming();
+  const selected = WORKFLOWS[state.workflow]?.label ?? "";
+  const effective = resuming ? roomResumeInfo?.workflow : state.workflow;
+  const label = (effective && WORKFLOWS[effective]?.label) || selected;
+  const note = resuming ? "（沿用上次会话）" : "";
+  const link = resuming ? "" : ` <a class="link" href="#" id="teamWorkflowSwitch">在向导页切换 ›</a>`;
+  $("teamWorkflowLine").innerHTML = `当前工作流：<b>${esc(label)}</b>${note}${link}`;
+  const switchLink = $("teamWorkflowSwitch");
+  if (switchLink) switchLink.addEventListener("click", (event) => {
     event.preventDefault();
     showView("wizard");
   });
@@ -661,6 +676,7 @@ document.querySelectorAll("[data-team-tab]").forEach((tab) => {
     if (name === "export") loadTeamSessions();
     else if (name === "import") resetImport();
     else prefillRoom();
+    renderTeamWorkflow();
   });
 });
 $("teamRefresh").addEventListener("click", () => loadTeamSessions());
@@ -729,8 +745,6 @@ function roomError(message) {
   $("teamRoomNotice").textContent = message;
   $("teamRoomNotice").classList.add("show", "error");
 }
-let roomResumeInfo = null;
-let roomResumeTimer;
 function checkRoomResume() {
   const dir = $("roomDir").value.trim();
   clearTimeout(roomResumeTimer);
@@ -743,12 +757,17 @@ function updateRoomResume() {
   const resuming = can && $("roomResume").checked;
   $("roomResume").disabled = !can;
   if (!can) $("roomResume").checked = false;
-  const label = roomResumeInfo?.workflow ? (WORKFLOWS[roomResumeInfo.workflow]?.label ?? "") : "";
+  const selected = WORKFLOWS[state.workflow]?.label ?? "";
   if (!dir) $("roomResumeHint").textContent = "选择目录后可查询是否可继续上次会话";
   else if (!roomResumeInfo) $("roomResumeHint").textContent = "";
   else if (!can) $("roomResumeHint").textContent = roomResumeInfo.hint || "";
-  else if (resuming) $("roomResumeHint").textContent = `将沿用上次会话：${label} · ${roomResumeInfo.title ?? ""}`;
-  else $("roomResumeHint").textContent = roomResumeInfo.hint || "";
+  else if (resuming) {
+    const title = roomResumeInfo.title || "上次会话";
+    const suffix = WORKFLOWS[roomResumeInfo.workflow ?? ""] ? "" : "（沿用该会话的工作流）";
+    const extra = roomResumeInfo.workflow === state.workflow ? "" : `（取消勾选则按 ${selected} 新建）`;
+    $("roomResumeHint").textContent = `将沿用上次会话：${title}${suffix}${extra}`;
+  } else $("roomResumeHint").textContent = roomResumeInfo.hint || "";
+  renderTeamWorkflow();
 }
 function prefillRoom() {
   const base = state.lastProject || state.dir || "";
@@ -767,7 +786,7 @@ $("roomStartBtn").addEventListener("click", () => {
   $("teamRoomNotice").textContent = "";
   $("teamRoomNotice").classList.remove("show", "error");
   const dir = $("roomDir").value.trim();
-  if (!dir) { roomError("请先选择开房的项目目录"); return; }
+  if (!dir) { roomError("请先选择开协作房间的项目目录"); return; }
   $("roomStartBtn").disabled = true;
   post("roomStart", {
     dir,
@@ -847,11 +866,11 @@ window.chrome.webview.addEventListener("message", (event) => {
       break;
     case "roomStart":
       if (payload?.ok) { $("teamRoomNotice").textContent = "正在打开数字程序员…"; $("teamRoomNotice").classList.add("show"); $("teamRoomNotice").classList.remove("error"); }
-      else { $("roomStartBtn").disabled = false; roomError(payload?.error || "开房失败"); }
+      else { $("roomStartBtn").disabled = false; roomError(payload?.error || "开协作房间失败"); }
       break;
     case "roomJoin":
       if (payload?.ok) { $("teamRoomNotice").textContent = "正在打开数字程序员…"; $("teamRoomNotice").classList.add("show"); $("teamRoomNotice").classList.remove("error"); }
-      else { $("roomJoinBtn").disabled = false; roomError(payload?.error || "加入失败"); }
+      else { $("roomJoinBtn").disabled = false; roomError(payload?.error || "加入协作房间失败"); }
       break;
     case "resume":
       updateResume(payload);

@@ -29,7 +29,7 @@ export function parseIntent(text: string): Intent | undefined {
   return { mode: "join", invite, name }
 }
 
-// 读后即删：避免下一次普通启动误开房；过期文件同样删除。
+// 读后即删：避免下一次普通启动误开协作房间；过期文件同样删除。
 export async function consumeIntent(candidates: string[], now = Date.now()): Promise<ConsumedIntent | undefined> {
   for (const file of candidates) {
     const handle = Bun.file(file)

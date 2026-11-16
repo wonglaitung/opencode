@@ -191,23 +191,13 @@ export function startHostRoom(api: TuiPluginApi): HostRoom {
   api.slots.register({
     order: 100,
     slots: {
-      sidebar_content: () => <RoomCard api={api} state={state} relay={relay} version={version} onOpen={openPanel} />,
-      home_bottom: () => <RoomCard api={api} state={state} relay={relay} version={version} onOpen={openPanel} />,
+      sidebar_content: () => <RoomCard api={api} state={state} relay={relay} version={version} invite={invite} />,
+      home_bottom: () => <RoomCard api={api} state={state} relay={relay} version={version} invite={invite} />,
     },
   })
 
   api.keymap.registerLayer({
     commands: [
-      {
-        name: "collab.invite",
-        title: "协作房间：邀请码",
-        slashName: "room-invite",
-        category: "Collaboration",
-        namespace: "palette",
-        run() {
-          api.ui.toast({ title: "协作房间邀请码", message: invite, duration: 20_000 })
-        },
-      },
       {
         name: "collab.status",
         title: "协作房间：状态",
@@ -230,8 +220,6 @@ export function startHostRoom(api: TuiPluginApi): HostRoom {
     ],
   })
 
-  api.ui.toast({ title: "协作房间已开启", message: `邀请码：${invite}`, duration: 20_000 })
-
   return {
     state,
     relay,
@@ -248,7 +236,7 @@ function RoomCard(props: {
   state: RoomState
   relay: Relay
   version: () => number
-  onOpen: () => void
+  invite: string
 }) {
   const theme = () => props.api.theme.current
   const info = () => {
@@ -256,20 +244,27 @@ function RoomCard(props: {
     return toWireState(props.state, props.relay.peers().length)
   }
   return (
-    <box flexDirection="column" onMouseDown={() => props.onOpen()}>
-      <text fg={theme().text}>
-        <b>协作房间</b>
-      </text>
-      <text fg={theme().success}>● 进行中 · {info().peers} 人</text>
-      <Show when={info().queue.length > 0}>
-        <text fg={theme().textMuted}>
-          队列 {info().queue.length} · {truncate(info().queue[0]?.text ?? "", 18)}
+    <box flexDirection="column" gap={1}>
+      <box flexDirection="column">
+        <text fg={theme().text}>
+          <b>协作房间</b>
         </text>
-      </Show>
-      <Show when={info().pendingApproval}>
-        <text fg={theme().warning}>⏳ 待审批</text>
-      </Show>
-      <text fg={theme().textMuted}>点击查看邀请码</text>
+        <text fg={theme().success}>● 进行中 · {info().peers} 人</text>
+        <Show when={info().queue.length > 0}>
+          <text fg={theme().textMuted}>
+            队列 {info().queue.length} · {truncate(info().queue[0]?.text ?? "", 18)}
+          </text>
+        </Show>
+        <Show when={info().pendingApproval}>
+          <text fg={theme().warning}>⏳ 待审批</text>
+        </Show>
+      </box>
+      <box flexDirection="column">
+        <text fg={theme().textMuted}>邀请码</text>
+        <text fg={theme().text} wrapMode="char">
+          {props.invite}
+        </text>
+      </box>
     </box>
   )
 }

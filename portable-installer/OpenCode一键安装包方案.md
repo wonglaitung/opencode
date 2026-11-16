@@ -221,7 +221,7 @@ cmd /c portable-installer\build\build.bat
 | `.opencode/skills/opencode-installer/SKILL.md` | **首选打包入口**：强制清缓存、完整重建、依赖核对与验收 |
 | `portable-installer/payload/OpenCode/runtime` | Node 工具链载荷 |
 | `portable-installer/payload/OpenCode/runtime/opencode-team-share` | 团队协作 CLI（会话交接导出/导入；启动器「团队协作」入口调用，bun 直接跑 TS，零第三方依赖） |
-| `opencode-collab-room/` | 协作房间插件（`{tui}` 单入口）：启动器「团队协作 → 协作房间」写意图文件触发开房/加入；WS relay 与 TUI 面板都在插件内，访客不调用本机模型 |
+| `opencode-collab-room/` | 协作房间插件（`{tui}` 单入口）：启动器「团队协作 → 协作房间」写意图文件触发开协作房间/加入协作房间；WS relay 与 TUI 面板都在插件内，访客不调用本机模型 |
 | `portable-installer/payload/OpenCode/runtime/opencode-collab-room` | 协作房间插件载荷（`package.json` + `dist/tui.js`，由 `opencode-collab-room/script/sync-bundle.sh` 生成；通过 `~/.config/opencode/tui.json` 注册） |
 | `portable-installer/payload/OpenCode/python` | Python 载荷（含 `python3.exe`） |
 | `portable-installer/payload/OpenCode/terminal` | Windows Terminal 载荷（`WindowsTerminal.exe` + `OpenConsole.exe`，所有用户均部署） |

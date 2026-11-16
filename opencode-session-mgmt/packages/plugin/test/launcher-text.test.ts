@@ -120,7 +120,7 @@ describe("OpenCode-launch 工作流选项与提示", () => {
 })
 
 describe("协作房间入口", () => {
-  test("团队协作页有第三个 tab 与开房/加入表单", () => {
+  test("团队协作页有第三个 tab 与开协作房间/加入协作房间表单", () => {
     expect(webview).toContain('data-team-tab="room"')
     expect(webview).toContain('id="teamRoom"')
     expect(webview).toContain('id="roomDir"')
@@ -129,12 +129,13 @@ describe("协作房间入口", () => {
     expect(webview).toContain('id="roomInvite"')
     expect(webview).toContain('id="roomName"')
     expect(webview).toContain('id="roomJoinDir"')
-    expect(webview).toContain('id="roomJoinBtn"')
+    expect(webview).toContain('id="roomJoinBtn">加入协作房间<')
+    expect(webview).toContain('id="roomStartBtn">开协作房间<')
     expect(webview).toContain('prefillRoom')
     expect(webview).toContain('state.browseTarget')
   })
 
-  test("Program.cs 写意图文件且开房/加入不注入启动短语", () => {
+  test("Program.cs 写意图文件且开协作房间/加入协作房间不注入启动短语", () => {
     expect(program).toContain('case "roomStart"')
     expect(program).toContain('case "roomJoin"')
     expect(program).toContain('collab-room.json')
@@ -147,8 +148,12 @@ describe("协作房间入口", () => {
   test("协作房间使用说明遵守帮助排版约定并覆盖快捷键", () => {
     expect(webview).toContain('id="roomHelp"')
     expect(webview).toContain("ROOM_HELP")
-    expect(webview).toContain("第一步：开房（主持人）")
-    expect(webview).toContain("第二步：加入（访客）")
+    expect(webview).toContain("第一步：开协作房间（主持人）")
+    expect(webview).toContain("第二步：加入协作房间（访客）")
+    expect(webview).toContain("点「开协作房间」")
+    expect(webview).toContain("点「加入协作房间」")
+    expect(webview).toContain("卡片会直接显示邀请码")
+    expect(webview).toContain("Ctrl+X 再按 B")
     expect(webview).toContain("房间内操作：")
     expect(webview).toContain("审批与断线：")
     expect(webview).toContain("Alt+M 或 F3")
@@ -185,6 +190,15 @@ describe("恢复会话：插件与工作流以数据库为准", () => {
     expect(program).toContain('plugins.Append("sm")')
     // 恢复按会话 id 打开，不再依赖 -c 的排序
     expect(program).toContain("common.Add(session)")
+  })
+
+  test("工作流顶栏跟随实际：恢复时显示会话工作流", () => {
+    expect(webview).toContain("function roomResuming")
+    expect(webview).toContain('activeTeamTab() === "room" && roomResuming()')
+    expect(webview).toContain("（沿用上次会话）")
+    expect(webview).toContain("取消勾选则按")
+    expect(webview).toContain("沿用该会话的工作流")
+    expect(webview).not.toContain("roomWorkflowHint")
   })
 
   test("工作流只有向导页一个选择入口，团队页统一只读展示", () => {
