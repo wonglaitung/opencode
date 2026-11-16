@@ -192,18 +192,19 @@ describe("恢复会话：插件与工作流以数据库为准", () => {
     expect(program).toContain("common.Add(session)")
   })
 
-  test("工作流顶部栏只在协作房间 tab 显示并跟随实际", () => {
+  test("工作流 chip 常驻并跟随实际，恢复时不提供切换入口", () => {
     expect(webview).toContain("function roomResuming")
     expect(webview).toContain('const onRoom = activeTeamTab() === "room"')
-    expect(webview).toContain('$("teamWorkflowLine").hidden = !onRoom')
+    expect(webview).toContain('id="teamWorkflowLine"')
+    expect(webview).toContain("workflow-chip")
+    expect(webview).not.toContain('$("teamWorkflowLine").hidden')
     expect(webview).toContain("恢复「")
     expect(webview).toContain("请取消勾选")
     expect(webview).toContain("可勾选恢复")
-    expect(webview).not.toContain("roomWorkflowHint")
     expect(webview).not.toContain("（沿用上次会话）")
   })
 
-  test("协作房间表单去除重复信息", () => {
+  test("协作房间表单去除重复信息，昵称说明是成员自己的名字", () => {
     expect(webview).toContain("继续上次会话</label>")
     expect(webview).not.toContain("没有历史时自动新建")
     expect(webview).not.toContain("用于开协作房间")
@@ -211,6 +212,37 @@ describe("恢复会话：插件与工作流以数据库为准", () => {
     expect(webview).not.toContain("开协作房间后把邀请码")
     expect(webview).toContain("加入后使用的项目目录")
     expect(webview).not.toContain("选择加入协作房间后使用的项目目录")
+    // 昵称只代表访客本人，不是房间名
+    expect(webview).toContain("你的昵称")
+    expect(webview).toContain("显示给房间里的其他成员")
+    expect(webview).toContain("房间名使用主持人的会话标题")
+    expect(webview).toContain("请填写你的昵称")
+  })
+
+  test("三个 tab 统一版式：分组卡片、列表面板、页脚与固定顺序", () => {
+    // 顶部：tabs 行内含 workflow chip
+    expect(webview).toContain('class="tabs-list"')
+    expect(webview).not.toContain('class="tip-line" id="teamWorkflowLine"')
+    // 导出：列表收进 panel，搜索/筛选变成 list-toolbar / list-filters
+    expect(webview).toContain('class="panel"')
+    expect(webview).toContain('class="list-toolbar"')
+    expect(webview).toContain('class="list-filters"')
+    expect(webview).not.toContain('class="toolbar"')
+    expect(webview).not.toContain('class="filter-row"')
+    // 导入：文件选择与房间一致，用 path-row + 只读输入
+    expect(webview).toContain('id="teamFile"')
+    expect(webview).toContain("readonly")
+    expect(webview).not.toContain('id="teamFileName"')
+    // 房间：两个分组卡片
+    expect(webview).toContain("开协作房间（主持人）")
+    expect(webview).toContain("加入协作房间（访客）")
+    expect(webview).toContain('class="group-card"')
+    expect(webview).toContain('class="group-desc"')
+    // 结果条之后再放帮助/提示
+    expect(webview).toContain('class="tab-foot"')
+    expect(webview).toContain("把文件发给同事")
+    expect(webview).not.toContain('style="margin-top:16px"')
+    expect(webview).not.toContain('style="margin-top:20px"')
   })
 
   test("工作流只有向导页一个选择入口，团队页统一只读展示", () => {

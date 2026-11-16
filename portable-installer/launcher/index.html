@@ -44,7 +44,7 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
 .path-row input:focus{border-color:#60a5fa;box-shadow:0 0 0 3px #dbeafe}
 .path-row button,.ghost{border:1px solid #cbd5e1;background:#fff;color:#334155;border-radius:9px;padding:11px 16px}
 .path-row button:hover,.ghost:hover{border-color:#94a3b8;background:#f8fafc}
-.action-row{display:flex;gap:10px;margin-top:14px}
+.action-row{display:flex;gap:10px;margin-top:16px}
 .primary{flex:1;border:0;border-radius:9px;padding:13px 18px;background:var(--blue);color:#fff;font-size:15px;font-weight:700}
 .primary:hover{background:#1d4ed8}
 .ghost{padding:13px 18px}
@@ -54,13 +54,15 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
 .hint{min-height:76px;margin:0;color:#475569;white-space:pre-line}
 .link{margin-top:10px;border:0;background:transparent;color:var(--blue);padding:0;font-size:13px}
 .link:hover{text-decoration:underline}
-.field{margin-bottom:12px}
+.field{margin:0 0 12px}
 .field label{display:block;margin-bottom:5px;color:#64748b;font-size:12px}
 .field select{width:100%;border:1px solid #cbd5e1;border-radius:9px;padding:10px 12px;background:#fff;color:#0f172a;outline:none}
 .field select:focus{border-color:#60a5fa;box-shadow:0 0 0 3px #dbeafe}
 .field input{width:100%;border:1px solid #cbd5e1;border-radius:9px;padding:11px 12px;background:#fff;color:#0f172a;outline:none}
 .field input:focus{border-color:#60a5fa;box-shadow:0 0 0 3px #dbeafe}
 .field input::placeholder{color:#94a3b8}
+.field input[readonly]{background:#f8fafc;color:#475569}
+.field-hint{margin-top:6px;color:#94a3b8;font-size:11px;line-height:1.5}
 .plugin-card{margin-top:16px}
 .plugin-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:12px}
 .plugin-head h2{margin:0}
@@ -82,19 +84,27 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
 .team-head h1{margin:0}
 .back-link{border:0;background:transparent;color:var(--blue);font-size:13px;padding:0;cursor:pointer}
 .back-link:hover{text-decoration:underline}
-.tabs{display:flex;gap:8px;margin:20px 0 16px}
+.tabs{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:20px 0 16px}
+.tabs-list{display:flex;gap:8px;flex-wrap:wrap}
 .tab{border:1px solid #cbd5e1;background:#fff;color:#334155;border-radius:9px;padding:9px 18px;font-size:13px}
 .tab:hover{border-color:#94a3b8;background:#f8fafc}
 .tab.active{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:600}
-.toolbar{display:flex;gap:10px;align-items:center;margin-bottom:12px}
-.toolbar input{flex:1;min-width:0;border:1px solid #cbd5e1;border-radius:9px;padding:10px 12px;background:#fff;color:#0f172a;outline:none}
-.toolbar input:focus{border-color:#60a5fa;box-shadow:0 0 0 3px #dbeafe}
-.sess-list{border:1px solid var(--line);border-radius:12px;overflow:auto;background:#fff;max-height:min(52vh,460px)}
-.filter-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 10px}
-.filter-row select{border:1px solid #cbd5e1;border-radius:8px;padding:7px 9px;background:#fff;color:#0f172a;font-size:12px;outline:none}
-.filter-row select:focus{border-color:#60a5fa;box-shadow:0 0 0 3px #dbeafe}
+.workflow-chip{margin-left:auto;color:#94a3b8;font-size:12px}
+.workflow-chip b{color:#334155;font-weight:600}
+.workflow-chip .link{margin:0 0 0 4px;font-size:12px}
+.panel{border:1px solid var(--line);border-radius:12px;background:#fff;margin:0 0 16px;overflow:hidden}
+.list-toolbar{display:flex;gap:10px;align-items:center;padding:12px 12px 10px}
+.list-toolbar input{flex:1;min-width:0;border:1px solid #cbd5e1;border-radius:9px;padding:10px 12px;background:#fff;color:#0f172a;outline:none}
+.list-toolbar input:focus{border-color:#60a5fa;box-shadow:0 0 0 3px #dbeafe}
+.list-filters{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:0 12px 10px}
+.list-filters select{border:1px solid #cbd5e1;border-radius:8px;padding:7px 9px;background:#fff;color:#0f172a;font-size:12px;outline:none}
+.list-filters select:focus{border-color:#60a5fa;box-shadow:0 0 0 3px #dbeafe}
+.sess-list{overflow:auto;background:#fff;max-height:min(52vh,460px)}
+.panel .sess-list{border-top:1px solid var(--line)}
 .check{display:inline-flex;align-items:center;gap:5px;color:#475569;font-size:12px;cursor:pointer;user-select:none}
-.more-row{display:flex;justify-content:center;margin-top:8px}
+.check-row{display:flex;align-items:center;gap:8px;color:#475569;font-size:13px;cursor:pointer;user-select:none;margin:0 0 10px}
+.more-row{display:flex;justify-content:center;padding:10px 12px 12px}
+.more-row[hidden]{display:none}
 .more-row .ghost{font-size:12px;padding:6px 14px}
 .sess-id{color:#94a3b8;font-size:11px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 .empty .link{margin-left:8px}
@@ -108,12 +118,20 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
 .sess-meta{color:#64748b;font-size:12px;white-space:nowrap}
 .sess-project{margin-left:auto;color:#94a3b8;font-size:12px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .empty{padding:20px;color:#94a3b8;font-size:13px;text-align:center}
-.ok-strip{margin:14px 0 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;font-size:12px;display:none}
+.ok-strip{margin:16px 0 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;font-size:12px;display:none}
 .ok-strip.show{display:block}
 .ok-strip.error{background:#fef2f2;border-color:#fecaca;color:#991b1b}
 .ok-strip .link{margin-left:10px}
-.warn-line{margin:14px 0;padding:10px 12px;border-radius:8px;background:#fffbeb;border:1px solid #fde68a;color:#92400e;font-size:12px}
-.tip-line{margin:10px 0 0;color:#64748b;font-size:12px;line-height:1.65}
+.warn-line{margin:16px 0 0;padding:10px 12px;border-radius:8px;background:#fffbeb;border:1px solid #fde68a;color:#92400e;font-size:12px}
+.tip-line{margin:8px 0 0;color:#64748b;font-size:12px;line-height:1.65}
+.group-card{border:1px solid var(--line);border-radius:14px;background:#fff;padding:18px;margin:0 0 16px;box-shadow:0 8px 28px rgba(15,23,42,.04)}
+.group-card h3{margin:0 0 4px;font-size:15px;color:#334155}
+.group-desc{margin:0 0 14px;color:#64748b;font-size:12px;line-height:1.6}
+.group-card .field:last-of-type{margin-bottom:0}
+.tab-foot{margin:16px 0 0;padding-top:12px;border-top:1px solid var(--line)}
+.tab-foot .tip-line{margin:0 0 6px}
+.tab-foot .tip-line:last-child{margin-bottom:0}
+.tab-foot .link{margin:0;display:inline-block}
 .mode-item{display:flex;align-items:flex-start;gap:9px;padding:9px 11px;border:1px solid #e2e8f0;border-radius:9px;background:#f8fafc;margin-top:8px;cursor:pointer;color:#334155;font-size:13px}
 .mode-item:hover{border-color:#bfdbfe;background:#f0f7ff}
 .mode-item input{margin-top:2px}
@@ -197,37 +215,41 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
           <h1>团队协作</h1>
         </div>
         <p class="sub">导出/导入会话交给同事，或开协作房间让同事实时旁观、提建议、排队任务</p>
-        <div class="tip-line" id="teamWorkflowLine"></div>
         <div class="tabs">
-          <button class="tab active" data-team-tab="export">导出会话</button>
-          <button class="tab" data-team-tab="import">导入会话</button>
-          <button class="tab" data-team-tab="room">协作房间</button>
+          <div class="tabs-list">
+            <button class="tab active" data-team-tab="export">导出会话</button>
+            <button class="tab" data-team-tab="import">导入会话</button>
+            <button class="tab" data-team-tab="room">协作房间</button>
+          </div>
+          <div class="workflow-chip" id="teamWorkflowLine"></div>
         </div>
 
         <section id="teamExport">
-          <div class="toolbar">
-            <input id="teamSearch" placeholder="搜索标题或项目路径…" autocomplete="off">
-            <button class="ghost" id="teamRefresh">刷新</button>
+          <div class="panel">
+            <div class="list-toolbar">
+              <input id="teamSearch" placeholder="搜索标题或项目路径…" autocomplete="off">
+              <button class="ghost" id="teamRefresh">刷新</button>
+            </div>
+            <div class="list-filters">
+              <select id="teamRange" title="时间范围">
+                <option value="30" selected>近 30 天</option>
+                <option value="7">近 7 天</option>
+                <option value="90">近 90 天</option>
+                <option value="0">全部时间</option>
+              </select>
+              <select id="teamProjectFilter" title="项目"><option value="">全部项目</option></select>
+              <select id="teamSort" title="排序">
+                <option value="updated" selected>最近更新</option>
+                <option value="created">创建时间</option>
+                <option value="messages">消息数</option>
+              </select>
+              <label class="check"><input type="checkbox" id="teamChildren"> 显示子会话</label>
+              <span class="sess-meta" id="teamCount"></span>
+            </div>
+            <div class="sess-list" id="teamSessions"><div class="empty">正在读取会话…</div></div>
+            <div class="more-row" id="teamMoreRow" hidden><button class="ghost" id="teamMore">加载更多</button></div>
           </div>
-          <div class="filter-row">
-            <select id="teamRange" title="时间范围">
-              <option value="30" selected>近 30 天</option>
-              <option value="7">近 7 天</option>
-              <option value="90">近 90 天</option>
-              <option value="0">全部时间</option>
-            </select>
-            <select id="teamProjectFilter" title="项目"><option value="">全部项目</option></select>
-            <select id="teamSort" title="排序">
-              <option value="updated" selected>最近更新</option>
-              <option value="created">创建时间</option>
-              <option value="messages">消息数</option>
-            </select>
-            <label class="check"><input type="checkbox" id="teamChildren"> 显示子会话</label>
-            <span class="sess-meta" id="teamCount"></span>
-          </div>
-          <div class="sess-list" id="teamSessions"><div class="empty">正在读取会话…</div></div>
-          <div class="more-row" id="teamMoreRow" hidden><button class="ghost" id="teamMore">加载更多</button></div>
-          <div class="field" style="margin-top:16px">
+          <div class="field">
             <label for="teamNote">交接说明（给同事的话，可留空）</label>
             <input id="teamNote" placeholder="例如：登录鉴权这块卡住了，帮忙看看 token 校验">
           </div>
@@ -236,12 +258,18 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
             <button class="primary" id="teamExportBtn" disabled>导出…</button>
           </div>
           <div class="ok-strip" id="teamExportOk"></div>
+          <div class="tab-foot">
+            <div class="tip-line">导出后把文件发给同事，让他在「导入会话」里打开即可继续。</div>
+          </div>
         </section>
 
         <section id="teamImport" hidden>
-          <div class="toolbar">
-            <button class="ghost" id="teamPickFile">选择文件…</button>
-            <span class="sess-meta" id="teamFileName">未选择文件</span>
+          <div class="field">
+            <label for="teamFile">交接文件</label>
+            <div class="path-row">
+              <input id="teamFile" readonly placeholder="选择同事发来的 .ocsave 文件…">
+              <button class="ghost" id="teamPickFile">选择文件…</button>
+            </div>
           </div>
           <div class="handoff-card" id="teamHandoff" hidden>
             <dl>
@@ -264,38 +292,52 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
             <button class="primary" id="teamImportBtn" disabled>导入</button>
           </div>
           <div class="ok-strip" id="teamImportOk"></div>
-          <div class="tip-line">导入后可直接点「打开这条会话」继续；也可以稍后打开：启动器选该项目目录 → 打开数字程序员 → 按 Ctrl+X 再按 L 打开会话列表 → 选标题带「[交接]」的那条。</div>
-          <div class="tip-line">接手继续会带上原工作流阶段进度；仅参考是独立副本，打开后由「会话管理」建一个全新工作流，可以按需要重新启动。</div>
+          <div class="tab-foot">
+            <div class="tip-line">导入后可直接点「打开这条会话」继续；也可以稍后打开：启动器选该项目目录 → 打开数字程序员 → 按 Ctrl+X 再按 L 打开会话列表 → 选标题带「[交接]」的那条。</div>
+            <div class="tip-line">接手继续会带上原工作流阶段进度；仅参考是独立副本，打开后由「会话管理」建一个全新工作流，可以按需要重新启动。</div>
+          </div>
         </section>
 
         <section id="teamRoom" hidden>
-          <div class="field">
-            <label for="roomDir">项目目录</label>
-            <div class="path-row"><input id="roomDir" placeholder="选择项目目录" autocomplete="off"><button class="ghost" id="roomBrowse">浏览</button></div>
+          <div class="group-card">
+            <h3>开协作房间（主持人）</h3>
+            <p class="group-desc">把当前会话实时分享给同事；他们在自己的终端旁观、提建议、排队任务。</p>
+            <div class="field">
+              <label for="roomDir">项目目录</label>
+              <div class="path-row"><input id="roomDir" placeholder="选择项目目录" autocomplete="off"><button class="ghost" id="roomBrowse">浏览</button></div>
+            </div>
+            <label class="check-row"><input type="checkbox" id="roomResume" checked> 继续上次会话</label>
+            <div class="tip-line" id="roomResumeHint"></div>
+            <div class="warn-line">把邀请码发给同事；房间随本机终端关闭而结束。</div>
+            <div class="action-row">
+              <button class="primary" id="roomStartBtn">开协作房间</button>
+            </div>
           </div>
-          <label class="check"><input type="checkbox" id="roomResume" checked> 继续上次会话</label>
-          <div class="tip-line" id="roomResumeHint"></div>
-          <div class="action-row">
-            <button class="primary" id="roomStartBtn">开协作房间</button>
-          </div>
-          <div class="warn-line">把邀请码发给同事；房间随本机终端关闭而结束。</div>
-          <button class="link" id="roomHelp">查看协作房间使用说明 ›</button>
-          <div class="field" style="margin-top:20px">
-            <label for="roomInvite">邀请码</label>
-            <input id="roomInvite" placeholder="ws://192.168.1.5:54321?token=…" autocomplete="off">
-          </div>
-          <div class="field">
-            <label for="roomName">昵称</label>
-            <input id="roomName" placeholder="例如 Bob" autocomplete="off">
-          </div>
-          <div class="field">
-            <label for="roomJoinDir">加入后使用的项目目录</label>
-            <div class="path-row"><input id="roomJoinDir" placeholder="选择加入后使用的项目目录" autocomplete="off"><button class="ghost" id="roomBrowseDir">浏览</button></div>
-          </div>
-          <div class="action-row">
-            <button class="primary" id="roomJoinBtn">加入协作房间</button>
+          <div class="group-card">
+            <h3>加入协作房间（访客）</h3>
+            <p class="group-desc">粘贴同事发来的邀请码，用你的昵称加入，不消耗本机模型额度。</p>
+            <div class="field">
+              <label for="roomInvite">邀请码</label>
+              <input id="roomInvite" placeholder="ws://192.168.1.5:54321?token=…" autocomplete="off">
+            </div>
+            <div class="field">
+              <label for="roomName">你的昵称</label>
+              <input id="roomName" placeholder="例如 Bob" autocomplete="off">
+              <div class="field-hint">显示给房间里的其他成员；房间名使用主持人的会话标题。</div>
+            </div>
+            <div class="field">
+              <label for="roomJoinDir">加入后使用的项目目录</label>
+              <div class="path-row"><input id="roomJoinDir" placeholder="选择加入后使用的项目目录" autocomplete="off"><button class="ghost" id="roomBrowseDir">浏览</button></div>
+            </div>
+            <div class="warn-line">房间内容来自主机且未经验证，请自行审阅；主机关闭终端后房间结束。</div>
+            <div class="action-row">
+              <button class="primary" id="roomJoinBtn">加入协作房间</button>
+            </div>
           </div>
           <div class="ok-strip" id="teamRoomNotice"></div>
+          <div class="tab-foot">
+            <button class="link" id="roomHelp">查看协作房间使用说明 ›</button>
+          </div>
         </section>
       </div>
     </div>
@@ -334,7 +376,7 @@ const ROOM_HELP = `协作房间
 · 邀请码形如：ws://192.168.1.5:54321?token=…
 · 通过可信渠道发给同事；房间随你的终端关闭而结束。
 第二步：加入协作房间（访客）
-· 在「协作房间」页粘贴邀请码、填写昵称、选择工作目录，点「加入协作房间」。
+· 在「协作房间」页粘贴邀请码、填写你在房间里的昵称（其他成员可见）、选择工作目录，点「加入协作房间」。
 · 终端会直接进入房间视图：左侧是主机的实时对话，右侧是房间状态。
 房间内操作：
 · 直接输入文字按 Enter：作为「建议」写入主机上下文，不会立即执行。
@@ -391,16 +433,12 @@ function roomResuming() {
 }
 function renderTeamWorkflow() {
   const onRoom = activeTeamTab() === "room";
-  $("teamWorkflowLine").hidden = !onRoom;
-  if (!onRoom) {
-    $("teamWorkflowLine").innerHTML = "";
-    return;
-  }
-  const resuming = roomResuming();
+  const resuming = onRoom && roomResuming();
   const selected = WORKFLOWS[state.workflow]?.label ?? "";
   const effective = resuming ? roomResumeInfo?.workflow : state.workflow;
   const label = (effective && WORKFLOWS[effective]?.label) || selected;
-  const link = resuming ? "" : ` <a class="link" href="#" id="teamWorkflowSwitch">在向导页切换 ›</a>`;
+  // 工作流是状态而不是步骤：常驻显示，避免切 tab 时标题区高度跳动。
+  const link = onRoom && !resuming ? ` <a class="link" href="#" id="teamWorkflowSwitch">在向导页切换 ›</a>` : "";
   $("teamWorkflowLine").innerHTML = `当前工作流：<b>${esc(label)}</b>${link}`;
   const switchLink = $("teamWorkflowSwitch");
   if (switchLink) switchLink.addEventListener("click", (event) => {
@@ -640,7 +678,7 @@ function clearTeamFilters() {
 function resetImport() {
   team.file = "";
   team.inspected = null;
-  $("teamFileName").textContent = "未选择文件";
+  $("teamFile").value = "";
   $("teamHandoff").hidden = true;
   $("teamProjectField").hidden = true;
   $("teamImportBtn").disabled = true;
@@ -807,7 +845,7 @@ $("roomJoinBtn").addEventListener("click", () => {
   const name = $("roomName").value.trim();
   const dir = $("roomJoinDir").value.trim();
   if (!/^wss?:\/\//i.test(invite)) { roomError("邀请码格式不正确"); return; }
-  if (!name) { roomError("请填写昵称"); return; }
+  if (!name) { roomError("请填写你的昵称"); return; }
   if (!dir) { roomError("请选择工作目录"); return; }
   $("roomJoinBtn").disabled = true;
   post("roomJoin", { dir, invite, name, terminal: state.terminal, plugins: state.plugins, noPrompt: true });
@@ -893,7 +931,7 @@ window.chrome.webview.addEventListener("message", (event) => {
     case "teamFilePath":
       if (payload?.path) {
         team.file = payload.path;
-        $("teamFileName").textContent = payload.path;
+        $("teamFile").value = payload.path;
         $("teamImportOk").classList.remove("show");
         post("teamInspect", { path: payload.path });
       }
