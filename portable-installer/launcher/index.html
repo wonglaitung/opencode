@@ -272,7 +272,17 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
             <label for="roomDir">项目目录（开房用）</label>
             <div class="path-row"><input id="roomDir" placeholder="选择要开房的项目目录" autocomplete="off"><button class="ghost" id="roomBrowse">浏览</button></div>
           </div>
+          <div class="field">
+            <label for="roomWorkflow">工作流</label>
+            <select id="roomWorkflow">
+              <option value="task">一般任务</option>
+              <option value="sdlc">SDLC 开发流程</option>
+              <option value="reqdoc">REQDOC 需求书</option>
+              <option value="websec">WEB 安全自测</option>
+            </select>
+          </div>
           <label class="check"><input type="checkbox" id="roomResume" checked> 继续上次会话（没有历史时自动新建）</label>
+          <div class="tip-line" id="roomResumeHint"></div>
           <div class="action-row">
             <button class="primary" id="roomStartBtn">开房</button>
           </div>
@@ -419,15 +429,24 @@ function renderState() {
   renderWorkflows(); renderPlugins(); renderHint();
   checkResume();
 }
+let resumeTimer;
 function checkResume() {
   if (!state.dir) return;
-  post("resume", { dir: state.dir, workflow: state.workflow });
+  // 目录输入会逐字触发；查询要起 bun 子进程，必须防抖。
+  clearTimeout(resumeTimer);
+  resumeTimer = setTimeout(() => post("resume", { dir: state.dir, workflow: state.workflow }), 300);
 }
 function updateResume(result) {
   canResume = !!result?.can;
   $("resume").disabled = !canResume;
   if (!canResume) $("resume").checked = false;
   $("resumeHint").textContent = result?.hint || "";
+  // 继续时工作流必须与历史会话一致（identity.json 是机器级，不能临时换类型）。
+  if (canResume && $("resume").checked && result?.workflow && state.workflow !== result.workflow) {
+    state.workflow = result.workflow;
+    applyWorkflowDefaults();
+    renderWorkflows(); renderPlugins(); renderHint();
+  }
 }
 function showError(message) {
   $("notice").textContent = message;
@@ -694,7 +713,7 @@ $("roomBrowse").addEventListener("click", () => { state.browseTarget = "room"; p
 $("roomBrowseDir").addEventListener("click", () => { state.browseTarget = "roomJoin"; post("browse", { dir: $("roomJoinDir").value.trim() || state.dir }); });
 $("dir").addEventListener("input", () => { state.dir = $("dir").value.trim(); checkResume(); });
 $("terminal").addEventListener("change", () => { state.terminal = $("terminal").value; });
-$("resume").addEventListener("change", () => { state.resume = $("resume").checked; });
+$("resume").addEventListener("change", () => { state.resume = $("resume").checked; checkResume(); });
 $("launch").addEventListener("click", () => {
   clearError();
   state.dir = $("dir").value.trim();
@@ -707,13 +726,44 @@ function roomError(message) {
   $("teamRoomNotice").textContent = message;
   $("teamRoomNotice").classList.add("show", "error");
 }
+let roomResumeInfo = null;
+let roomResumeTimer;
+function checkRoomResume() {
+  const dir = $("roomDir").value.trim();
+  clearTimeout(roomResumeTimer);
+  if (!dir) { roomResumeInfo = null; updateRoomResume(); return; }
+  roomResumeTimer = setTimeout(() => post("roomResume", { dir }), 300);
+}
+function updateRoomResume() {
+  const dir = $("roomDir").value.trim();
+  const can = !!(roomResumeInfo && roomResumeInfo.can && dir);
+  $("roomResume").disabled = !can;
+  if (!can) $("roomResume").checked = false;
+  const select = $("roomWorkflow");
+  const label = roomResumeInfo?.workflow ? (WORKFLOWS[roomResumeInfo.workflow]?.label ?? "") : "";
+  if (!dir) $("roomResumeHint").textContent = "选择目录后可查询是否可继续上次会话";
+  else if (!roomResumeInfo) $("roomResumeHint").textContent = "";
+  else if (!can) $("roomResumeHint").textContent = roomResumeInfo.hint || "";
+  else if ($("roomResume").checked) {
+    if (roomResumeInfo.workflow) select.value = roomResumeInfo.workflow;
+    $("roomResumeHint").textContent = `将沿用上次会话：${label} · ${roomResumeInfo.title ?? ""}`;
+  } else $("roomResumeHint").textContent = roomResumeInfo.hint || "";
+  select.disabled = can && $("roomResume").checked;
+}
 function prefillRoom() {
   const base = state.lastProject || state.dir || "";
   if (base) {
-    if (!$("roomDir").value.trim()) $("roomDir").value = base;
+    if (!$("roomDir").value.trim()) {
+      $("roomDir").value = base;
+      $("roomWorkflow").value = state.workflow;
+      checkRoomResume();
+    }
     if (!$("roomJoinDir").value.trim()) $("roomJoinDir").value = base;
   }
+  updateRoomResume();
 }
+$("roomDir").addEventListener("input", () => checkRoomResume());
+$("roomResume").addEventListener("change", () => updateRoomResume());
 $("roomStartBtn").addEventListener("click", () => {
   $("teamRoomNotice").textContent = "";
   $("teamRoomNotice").classList.remove("show", "error");
@@ -722,11 +772,10 @@ $("roomStartBtn").addEventListener("click", () => {
   $("roomStartBtn").disabled = true;
   post("roomStart", {
     dir,
-    workflow: state.workflow,
+    workflow: $("roomWorkflow").value || state.workflow,
     terminal: state.terminal,
     plugins: state.plugins,
     resume: $("roomResume").checked,
-    noPrompt: true,
   });
 });
 $("roomJoinBtn").addEventListener("click", () => {
@@ -792,6 +841,10 @@ window.chrome.webview.addEventListener("message", (event) => {
         else { state.dir = payload; $("dir").value = payload; checkResume(); }
         state.browseTarget = "";
       }
+      break;
+    case "roomResume":
+      roomResumeInfo = payload || null;
+      updateRoomResume();
       break;
     case "roomStart":
       if (payload?.ok) { $("teamRoomNotice").textContent = "正在打开数字程序员…"; $("teamRoomNotice").classList.add("show"); $("teamRoomNotice").classList.remove("error"); }

@@ -17,7 +17,9 @@ internal static class Program
     }
 }
 
-internal sealed record ResumeResult(bool Can, string Hint);
+internal sealed record ResumeResult(bool Can, string Hint, string? Workflow = null, string? SessionID = null, string? Title = null);
+
+internal sealed record SessionInfo(string SessionID, string Title, string Directory, long Updated, string? Workflow);
 
 internal sealed record ConfigState(
     string Workflow,
@@ -245,6 +247,9 @@ internal sealed class LauncherForm : Form
                         Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{target}\"") { UseShellExecute = true });
                     break;
                 }
+                case "roomResume":
+                    Post("roomResume", CheckResumeFor(PayloadString(root, "dir")));
+                    break;
                 case "roomStart":
                 {
                     var dir = PayloadString(root, "dir");
@@ -258,7 +263,7 @@ internal sealed class LauncherForm : Form
                         Post("roomStart", new { ok = false, error = "写入房间意图失败，请检查目录权限" });
                         break;
                     }
-                    Post("roomStart", await LaunchAsync(root.GetProperty("payload"), null, noPrompt: true));
+                    Post("roomStart", await LaunchAsync(root.GetProperty("payload"), null, noPrompt: false));
                     break;
                 }
                 case "roomJoin":
@@ -508,16 +513,77 @@ internal sealed class LauncherForm : Form
 
     private static ResumeResult CheckResume(JsonElement payload)
     {
-        var state = LoadState();
         var dir = payload.TryGetProperty("dir", out var dirValue) ? dirValue.GetString() ?? "" : "";
-        var workflow = payload.TryGetProperty("workflow", out var workflowValue) ? workflowValue.GetString() ?? "sdlc" : "sdlc";
-        var normalized = dir.TrimEnd('\\', '/');
-        var last = state.LastProject.TrimEnd('\\', '/');
-        var can = state.ConfigOk && state.IdentityOk && state.Sm &&
-                  dir.Length > 0 && last.Length > 0 && normalized.Equals(last, StringComparison.OrdinalIgnoreCase) &&
-                  workflow == state.LastWorkflow;
-        return new ResumeResult(can, can ? "可回到上次进度" : "项目或工作流变化后需新建会话");
+        return CheckResumeFor(dir);
     }
+
+    /// <summary>恢复条件以数据库里的真实会话为准，不再依赖 last_project/last_workflow 文本。</summary>
+    private static ResumeResult CheckResumeFor(string dir)
+    {
+        var state = LoadState();
+        if (dir.Length == 0) return new ResumeResult(false, "请先选择项目目录");
+        var info = LookupSession(dir, null);
+        var can = state.ConfigOk && state.IdentityOk && info != null;
+        var hint = info == null
+            ? "该项目暂无历史会话，将新建"
+            : $"可继续：{WorkflowLabel(info.Workflow)} · {info.Title}";
+        return new ResumeResult(can, hint, info?.Workflow, info?.SessionID, info?.Title);
+    }
+
+    private static readonly object SessionInfoLock = new();
+    private static readonly Dictionary<string, (DateTime At, SessionInfo? Info)> SessionInfoCache = new();
+
+    /// <summary>按目录取最近主会话，或按 id 取指定会话；失败返回 null（调用方回退为新建）。</summary>
+    private static SessionInfo? LookupSession(string? dir, string? sessionId)
+    {
+        var key = (sessionId is { Length: > 0 } ? sessionId : dir ?? "").Trim().ToLowerInvariant();
+        if (key.Length == 0) return null;
+        lock (SessionInfoLock)
+        {
+            if (SessionInfoCache.TryGetValue(key, out var hit) && (DateTime.UtcNow - hit.At).TotalSeconds < 30)
+                return hit.Info;
+        }
+
+        var args = new List<string> { "session-info" };
+        if (sessionId is { Length: > 0 }) { args.Add("--session"); args.Add(sessionId); }
+        else { args.Add("--dir"); args.Add(dir!); }
+
+        SessionInfo? info = null;
+        var run = RunTeamShare(args, 15000);
+        if (run.ExitCode == 0)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(run.Stdout.Trim());
+                var root = doc.RootElement;
+                if (root.TryGetProperty("sessionID", out var id) && id.ValueKind == JsonValueKind.String &&
+                    (id.GetString() ?? "") is { Length: > 0 } sessionID)
+                {
+                    var title = root.TryGetProperty("title", out var t) && t.ValueKind == JsonValueKind.String ? t.GetString() ?? "" : "";
+                    var directory = root.TryGetProperty("directory", out var d) && d.ValueKind == JsonValueKind.String ? d.GetString() ?? "" : "";
+                    var updated = root.TryGetProperty("updated", out var u) && u.ValueKind == JsonValueKind.Number ? u.GetInt64() : 0;
+                    var workflow = root.TryGetProperty("workflow", out var w) && w.ValueKind == JsonValueKind.String ? w.GetString() : null;
+                    info = new SessionInfo(sessionID, title, directory, updated, workflow);
+                }
+            }
+            catch
+            {
+                info = null;
+            }
+        }
+
+        lock (SessionInfoLock) SessionInfoCache[key] = (DateTime.UtcNow, info);
+        return info;
+    }
+
+    private static string WorkflowLabel(string? workflow) => workflow switch
+    {
+        "task" => "一般任务",
+        "sdlc" => "SDLC",
+        "reqdoc" => "REQDOC",
+        "websec" => "WEB 安全自测",
+        _ => "上次工作流",
+    };
 
     private async Task<object> LaunchAsync(JsonElement payload, string? sessionId = null, bool noPrompt = false)
     {
@@ -531,6 +597,12 @@ internal sealed class LauncherForm : Form
             : Array.Empty<string>();
         if (dir.Length == 0 || !Directory.Exists(dir))
             return new { ok = false, error = "请先选择有效的项目目录" };
+
+        // 恢复：会话与工作流都以数据库为准；缺 sm 会丢掉工作流进度，因此自动补齐。
+        var info = sessionId is { Length: > 0 } ? LookupSession(null, sessionId) : (resume ? LookupSession(dir, null) : null);
+        var session = sessionId is { Length: > 0 } ? sessionId : (resume ? info?.SessionID : null);
+        if (info?.Workflow is { Length: > 0 } derived) workflow = derived;
+        if (session is { Length: > 0 } && !plugins.Contains("sm")) plugins = plugins.Append("sm").ToArray();
 
         if (state.ConfigOk)
         {
@@ -554,11 +626,11 @@ internal sealed class LauncherForm : Form
             _ => "启动SDLC工作流"
         };
         var common = new List<string>();
-        if (sessionId is { Length: > 0 })
+        if (session is { Length: > 0 })
         {
-            // 直接打开指定会话（交接导入后「打开这条会话」）
+            // 数据库定位到的会话（继续/交接）直接按 id 打开，比 -c 的排序更确定。
             common.Add("--session");
-            common.Add(sessionId);
+            common.Add(session);
         }
         else if (resume && canResume) common.Add("-c");
         else if (!noPrompt)

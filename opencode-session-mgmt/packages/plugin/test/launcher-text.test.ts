@@ -173,3 +173,32 @@ describe("协作房间入口", () => {
     expect(config).toContain('normalize(item).includes(ROOM_BUNDLE)')
   })
 })
+
+describe("恢复会话：插件与工作流以数据库为准", () => {
+  test("启动器所有恢复入口都走同一套查询", () => {
+    expect(program).toContain('"session-info"')
+    expect(program).toContain("LookupSession")
+    expect(program).toContain("CheckResumeFor")
+    expect(program).toContain("WorkflowLabel")
+    expect(program).toContain('case "roomResume"')
+    // 恢复/交接自动补齐 sm，避免工作流进度丢失
+    expect(program).toContain('plugins.Append("sm")')
+    // 恢复按会话 id 打开，不再依赖 -c 的排序
+    expect(program).toContain("common.Add(session)")
+  })
+
+  test("房间页有工作流选择与恢复提示", () => {
+    expect(webview).toContain('id="roomWorkflow"')
+    expect(webview).toContain('id="roomResumeHint"')
+    expect(webview).toContain("checkRoomResume")
+    expect(webview).toContain('post("roomResume"')
+    expect(webview).toContain('workflow: $("roomWorkflow").value || state.workflow')
+    expect(webview).not.toContain('resume: $("roomResume").checked,\n    noPrompt: true')
+  })
+
+  test("继续上次会话时同步工作流，目录输入防抖", () => {
+    expect(webview).toContain("resumeTimer")
+    expect(webview).toContain("clearTimeout(resumeTimer)")
+    expect(webview).toContain("state.workflow = result.workflow")
+  })
+})

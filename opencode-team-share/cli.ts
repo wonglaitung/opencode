@@ -8,6 +8,8 @@
  * 命令：
  *   list-sessions [筛选/分页参数]          列出可交接的会话（默认只列主会话、每页 50 条）
  *   list-projects                          列出本机可作为导入目标的项目
+ *   session-info --dir <目录> | --session <id>
+ *                                          查询可恢复的会话及其工作流类型（启动器恢复用）
  *   inspect --file <文件>                  只读解析交接文件（导入前确认）
  *   export --session <id> --out <文件> [--note <说明>]
  *   import --file <文件> --project <projectId>
@@ -29,6 +31,7 @@ const USAGE = `用法（--db 可选，指定 opencode 数据库路径；缺省�
                            [--sort updated|created|messages] [--include-children true]
                            [--limit N] [--cursor <游标>] [--db <库>]
   team-share list-projects [--db <库>]
+  team-share session-info --dir <项目目录> | --session <id> [--db <库>]
   team-share inspect --file <文件>
   team-share export --session <id> --out <文件> [--note <说明>] [--db <库>]
   team-share import --file <文件> --project <projectId> [--mode handoff|reference] [--db <库>]`
@@ -208,6 +211,52 @@ async function commandImport(args: Args) {
   }
 }
 
+async function commandSessionInfo(args: Args) {
+  const { db } = dbFor(args)
+  try {
+    const id = args.flags["session"] && args.flags["session"] !== "true" ? args.flags["session"] : undefined
+    const dir = args.flags["dir"] && args.flags["dir"] !== "true" ? args.flags["dir"] : undefined
+    if (!id && !dir) throw new UsageError("session-info 需要 --session <id> 或 --dir <项目目录>")
+
+    // 上游 session.directory 存正斜线（D:/projects/x），启动器传进来是反斜线。
+    const normalized = dir ? dir.replace(/\\/g, "/").replace(/\/+$/, "") : undefined
+    type SessionRow = { id: string; title: string; directory: string; time_updated: number }
+    let row: SessionRow | null = null
+    if (id) {
+      row = db
+        .query("SELECT id, title, directory, time_updated FROM session WHERE id = ?")
+        .get(id) as SessionRow | null
+    } else if (normalized) {
+      row = db
+        .query(
+          `SELECT id, title, directory, time_updated FROM session
+            WHERE parent_id IS NULL AND time_archived IS NULL AND lower(directory) = lower(?)
+            ORDER BY time_updated DESC LIMIT 1`,
+        )
+        .get(normalized) as SessionRow | null
+    }
+
+    if (!row) {
+      console.log(JSON.stringify({ sessionID: null }))
+      return
+    }
+
+    const workflow = await readWorkflowState(row.directory, row.id)
+    const type = typeof workflow?.state["type"] === "string" ? (workflow.state["type"] as string) : null
+    console.log(
+      JSON.stringify({
+        sessionID: row.id,
+        title: row.title,
+        directory: row.directory,
+        updated: row.time_updated,
+        workflow: type,
+      }),
+    )
+  } finally {
+    db.close()
+  }
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2))
   switch (args.command) {
@@ -215,6 +264,8 @@ async function main() {
       return commandListSessions(args)
     case "list-projects":
       return commandListProjects(args)
+    case "session-info":
+      return commandSessionInfo(args)
     case "inspect":
       return commandInspect(args)
     case "export":
