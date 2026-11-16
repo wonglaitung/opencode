@@ -156,11 +156,16 @@ opencode -c       # 继续上次会话（跨机时自动接上另一台机器的
 | `remote` | 自动探测 | 同步远端；默认用项目自身的 `origin` |
 | `passphrase` | 见下 | 口令明文 |
 | `passphraseFile` | 见下 | 口令文件路径（`~` 展开），内容取首尾去空白 |
-| `machine` | 自动生成 | 机器名，决定分支 `ocsync/<machine>` |
+| `machine` | 自动生成 | 机器名，决定分支 `ocsync/<machine>`；不填时随主机名变化自动迁移分支 |
 | `debounceMs` | 3000 | 会话结束后的防抖推送间隔 |
 | `syncTimeoutMs` | 5000 | 首屏同步上限，超时即离线降级（首次 fetch 含 SSH 握手，约 1~2s） |
 | `gitTimeoutMs` | 30000 | 单条 git 命令硬超时（超时 kill 子进程）；推送用它的 2 倍 |
 | `enabled` | true | 设为 false 可临时停用 |
+
+> **电脑改名**：未显式配置 `machine` 时，插件会发现主机名变化，把远端
+> `ocsync/<旧名>` 自动改名为 `ocsync/<新名>`（保留原随机后缀与内容）。
+> 迁移失败（例如离线）时本次继续沿用旧分支，下次启动重试；显式配置
+> `machine` 或 `OPENCODE_GIT_SYNC_MACHINE` 时不做自动改名。
 
 ## 环境变量
 

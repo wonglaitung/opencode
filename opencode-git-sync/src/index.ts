@@ -5,8 +5,8 @@ import { log } from "./log"
 import { defaultPassphraseFiles, findOpencodeDb, projectStateDir, repoDir, setStateDir, stateDbPath } from "./paths"
 import { detectRemote } from "./remote"
 import { OpencodeDb } from "./ocdb"
-import { SyncRepo } from "./repo"
-import { State } from "./state"
+import { BRANCH_PREFIX, SyncRepo } from "./repo"
+import { State, type MachineResolution } from "./state"
 import { SyncService, type PullResult } from "./sync"
 import type { PluginEvent, PluginInput } from "./types"
 
@@ -103,6 +103,28 @@ async function withTimeout<T>(task: Promise<T>, ms: number): Promise<T | undefin
   }
 }
 
+/**
+ * 主机名变化后把远端分支从旧名字迁到新名字。
+ *
+ * 迁移失败不切换身份：本次沿用旧分支，避免离线时把数据推到新分支、
+ * 下次启动又拿旧分支回灌造成两份历史。
+ */
+async function migrateMachine(repo: SyncRepo, state: State, resolved: MachineResolution): Promise<string> {
+  if (!resolved.renamedFrom) return resolved.machine
+  const renamed = await repo.renameBranch(resolved.renamedFrom)
+  if (renamed) {
+    state.confirmMachine(resolved.machine, resolved.hostname)
+    log.info(
+      `主机名已更改：分支 ${BRANCH_PREFIX}/${resolved.renamedFrom} → ${BRANCH_PREFIX}/${resolved.machine}`,
+    )
+    return resolved.machine
+  }
+  log.warn(`主机名已更改，但分支迁移失败：本次沿用 ${BRANCH_PREFIX}/${resolved.renamedFrom}，下次启动重试`)
+  repo.setMachine(resolved.renamedFrom)
+  await repo.ensure()
+  return resolved.renamedFrom
+}
+
 const GitSync = async (input: PluginInput, options?: unknown) => {
   // 先按项目锁定状态目录：本地 clone / 状态库 / 日志都归这个项目所有，
   // 否则多项目共用一份会互相 amend/force-push 覆盖。
@@ -124,13 +146,26 @@ const GitSync = async (input: PluginInput, options?: unknown) => {
   }
 
   const state = new State(stateDbPath())
-  const machine = config.machine ?? state.machineID()
+  // 显式配置 machine 时完全以配置为准（不做主机名改名迁移）。
+  const resolved = config.machine ? { machine: config.machine, hostname: "" } : state.resolveMachine()
   const repo = new SyncRepo({
     dir: repoDir(),
     remote,
-    machine,
+    machine: resolved.machine,
     timeoutMs: config.gitTimeoutMs ?? DEFAULTS.gitTimeoutMs,
   })
+  let machine = resolved.machine
+  try {
+    await repo.ensure()
+    machine = await migrateMachine(repo, state, resolved)
+  } catch (error) {
+    log.warn(`准备同步仓库失败: ${error instanceof Error ? error.message : String(error)}`)
+    // 改名路径出错时退回旧身份，至少不把数据推到一个还没建好的新分支。
+    if (resolved.renamedFrom) {
+      machine = resolved.renamedFrom
+      repo.setMachine(machine)
+    }
+  }
 
   const rules = { worktree: input.worktree, directory: input.directory }
   const scope = {

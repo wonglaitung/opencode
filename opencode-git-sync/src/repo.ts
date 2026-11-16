@@ -48,6 +48,11 @@ export class SyncRepo {
     return `${BRANCH_PREFIX}/${this.options.machine}`
   }
 
+  /** 切换到另一个机器名（主机名变化且远端改名未完成时回退用）。 */
+  setMachine(machine: string) {
+    this.options.machine = machine
+  }
+
   /** 本地仓库是否已就绪。 */
   exists(): boolean {
     return fs.existsSync(path.join(this.options.dir, ".git"))
@@ -81,6 +86,51 @@ export class SyncRepo {
       await gitOrThrow(["commit", "-q", "--allow-empty", "-m", "opencode-git-sync: init"], { cwd: dir, timeoutMs })
     }
     await git(["checkout", "-q", "-B", this.branch()], { cwd: dir, timeoutMs })
+  }
+
+  /**
+   * 把旧机器分支改名成当前 machine（电脑改名后调用）。
+   *
+   * 顺序：先 fetch → 把新分支指到旧分支的最新提交 → 推新分支 → 删旧分支。
+   * 推新分支失败时不删旧分支，调用方可以回退到旧名字继续工作。
+   */
+  async renameBranch(from: string): Promise<boolean> {
+    const to = this.branch()
+    const fromBranch = `${BRANCH_PREFIX}/${from}`
+    if (fromBranch === to) return true
+    const { dir, timeoutMs } = this.options
+    if (!(await this.fetch())) return false
+
+    const local = await git(["rev-parse", "--verify", `refs/heads/${fromBranch}`], { cwd: dir, timeoutMs })
+    const remote = await git(["rev-parse", "--verify", `refs/remotes/origin/${fromBranch}`], {
+      cwd: dir,
+      timeoutMs,
+    })
+    // 优先本地旧分支（可能比远端新）；本地已被清掉时用远端旧分支兜底。
+    const source = local.code === 0 ? fromBranch : remote.code === 0 ? `origin/${fromBranch}` : undefined
+    if (!source) {
+      log.info(`远端没有旧分支 ${fromBranch}，无需改名`)
+      return true
+    }
+
+    const checkout = await git(["checkout", "-q", "-B", to, source], { cwd: dir, timeoutMs })
+    if (checkout.code !== 0) {
+      log.warn(`切换到改名后的分支失败: ${checkout.stderr.trim() || checkout.stdout.trim()}`)
+      return false
+    }
+    const pushed = await git(["push", "--force", "origin", `refs/heads/${to}:refs/heads/${to}`], {
+      cwd: dir,
+      timeoutMs: timeoutMs * 2,
+    })
+    if (pushed.code !== 0) {
+      log.warn(`推送改名后的分支失败: ${pushed.stderr.trim() || pushed.stdout.trim()}`)
+      return false
+    }
+    const deleted = await git(["push", "origin", "--delete", fromBranch], { cwd: dir, timeoutMs: timeoutMs * 2 })
+    if (deleted.code !== 0) log.warn(`删除旧远端分支失败: ${deleted.stderr.trim() || deleted.stdout.trim()}`)
+    if (local.code === 0) await git(["branch", "-D", fromBranch], { cwd: dir, timeoutMs })
+    await git(["update-ref", "-d", `refs/remotes/origin/${fromBranch}`], { cwd: dir, timeoutMs })
+    return true
   }
 
   /** 读取本地分支上的 sync-meta.json（明文，不含机密）。 */
