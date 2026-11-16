@@ -21,7 +21,9 @@ description: 打包 Windows 版 OpenCode 图形化安装包（portable-installer
 2. .NET 8 SDK 存在（WebView2 启动器构建）：`dotnet --info` 可用；目标机需安装 Microsoft Edge WebView2 Runtime。
 3. 源目录齐全：`D:\Tools\node-v22.23.2-win-x64`、`D:\Tools\Python312`、`D:\Tools\terminal-1.23.20211.0`。可用 `SRC_NODE`、`SRC_PY`、`SRC_TERMINAL` 覆盖。
 4. 编码检查：三个 `.nsi` 为 UTF-8 带 BOM 且 `Unicode true` 在位；`build.bat` / `sync_payload.bat` 为纯 CRLF 且不能带 UTF-8 BOM。Windows checkout 可能因 Git 换行转换改写文件，必须先用下面的自检脚本确认，不通过就修正后再构建。
-5. 空闲磁盘至少 5 GB，完整重建要同时容纳源目录、新载荷和压缩中间文件。
+5. **`dotnet` 可能不在 PATH**（本机在 `D:\Tools\dotnet`）。`build.bat` 用 `where dotnet` 判断，直接跑会报「未找到 dotnet SDK」。运行构建前先 `$env:PATH = "D:\Tools\dotnet;" + $env:PATH`。
+6. **驱动脚本只用 ASCII**：Windows PowerShell 5.1 把无 BOM 的 `.ps1` 按 ANSI 读，脚本里写中文会乱码并报语法错；用中文做匹配还会得到假阴性（本次实测：带中文的校验脚本把「已存在」判成「不存在」）。要么给脚本加 UTF-8 BOM，要么全 ASCII；中文内容一律回 WSL 侧用 `grep` 校验。
+7. 空闲磁盘至少 5 GB，完整重建要同时容纳源目录、新载荷和压缩中间文件。
 
 ### 编码自检
 
@@ -67,6 +69,35 @@ foreach ($f in Get-ChildItem portable-installer\build\*.nsi) {
 > cd D:\Tools\opencode-build
 > ```
 > 后续命令继续使用 `portable-installer\...`。
+
+### 步骤 0：先刷新载荷里的手工件（最容易漏）
+
+`sync_payload.bat` **只搬不生成**：它把 `D:\Tools\node-v22.23.2-win-x64` 里的内容搬进载荷，插件与 CLI 都是在这个源目录里
+预先摆好的。改了仓库代码却不刷新源目录，装出来的包就是「新界面配旧逻辑」，而且不会报错。
+
+| 载荷部件 | 源目录 | 刷新方式 |
+|---|---|---|
+| `runtime/opencode-sm-bundle`（插件、模板） | `D:\Tools\node-v22.23.2-win-x64\opencode-sm-bundle` | WSL：`cd opencode-session-mgmt && bash scripts/sync-bundle.sh`（同步 `packages/<ws>` 与 `node_modules/<pkg>` 两处 + docs + lock） |
+| `runtime/opencode-team-share`（团队协作 CLI） | `D:\Tools\node-v22.23.2-win-x64\opencode-team-share` | **手工部署，只放四个条目**：`cli.ts`、`src/`、`package.json`、`tsconfig.json`（不带 README/test/node_modules） |
+| `runtime/node_modules/opencode-ai` 等 | 同源目录 | 由 `sync_payload.bat` 整体同步，不在本仓库维护 |
+
+刷新 team-share（WSL 执行）：
+
+```bash
+SRC=/data/opencode/opencode-team-share
+DST=/mnt/d/Tools/node-v22.23.2-win-x64/opencode-team-share
+rm -rf "$DST/src" && cp -a "$SRC/src" "$DST/src"
+cp -a "$SRC/cli.ts" "$SRC/package.json" "$SRC/tsconfig.json" "$DST/"
+```
+
+为什么必须做：2026-11-15 实测，启动器导出页改成分页（`--limit/--cursor/--include-children`），但载荷里的 CLI 还是旧版，
+未知参数被静默忽略——分页与「隐藏子会话」全部失效，界面看起来完全正常。
+
+插件新增第三方依赖时（`packages/plugin/package.json` 变了）还要在 **Windows 侧** 重装依赖：
+`cd /d D:\Tools\node-v22.23.2-win-x64\opencode-sm-bundle && bun install`（resvg 等平台二进制必须在 Windows 装），
+然后再跑 `sync_bundle` 之后的载荷同步。
+
+### 完整重建
 
 ```powershell
 # 1. 清构建产物、dotnet 增量缓存与日志
@@ -145,7 +176,9 @@ foreach($n in @('opencode-ai','opencode-sm','npm','corepack','bun')){
 
 ## 耗时与中断
 
-完整重建包含约 2 GB 载荷复制和 LZMA 固实压缩，合计十几分钟。压缩阶段没有中间进度输出，不要按 Ctrl+C。中断后从第 1 步重来，不要从中间续跑。
+完整重建包含约 2 GB 载荷复制和 LZMA 固实压缩，合计十几分钟；2026-11-15 实测（清缓存 → 提取载荷 → dotnet publish →
+makensis）约 20 分钟，若还要刷 bundle/team-share 再加约 2 分钟。压缩阶段没有中间进度输出，不要按 Ctrl+C。
+中断后从第 1 步重来，不要从中间续跑。
 
 ## 验收
 
@@ -156,6 +189,14 @@ foreach($n in @('opencode-ai','opencode-sm','npm','corepack','bun')){
 5. 看可执行文件：`runtime\node_modules\opencode-ai\bin\opencode.exe` 必须存在（约 200 MB）。平台包删掉后，运行时只认这个文件。
 6. 看声明：`runtime\package.json` 中 `opencode-ai`、`opencode-sm` 的版本与 `node_modules` 实装版本一致，`opencode.exe --version` 与声明一致。
 7. 看清空工具：安装后开始菜单出现「清空历史会话」；点“否”数据不变；opencode 运行中执行会被拒绝；全部退出后执行，会话与快照消失，配置和项目工作流库保留。
+8. **抽检载荷部件是不是新版**（中文匹配放 WSL，别用 PowerShell）：
+   ```bash
+   P=/mnt/d/Tools/opencode-build/portable-installer
+   grep -c "include-children" "$P/payload/OpenCode/runtime/opencode-team-share/cli.ts"
+   grep -c "本工作流已完结" "$P/payload/OpenCode/runtime/opencode-sm-bundle/node_modules/sm-plugin/src/prompt.ts"
+   python3 -c "d=open('$P/build/OpenCode-launch.exe','rb').read(); print('近 30 天'.encode() in d)"
+   ```
+9. 把 `build\OpenCode-{Setup,launch,Scheduler,Reset}.exe` 回拷到仓库 `portable-installer/build/`；该目录被 gitignore，仅本机分发用。
 
 ## 常见坑位
 
@@ -166,6 +207,9 @@ foreach($n in @('opencode-ai','opencode-sm','npm','corepack','bun')){
 - opencode 自动升级会留下 `opencode.exe.bak-*`（约 200 MB），同步脚本第 6 步已删；手工同步时必须清理，否则载荷逼近 2 GiB。
 - `.bat` 必须 CRLF 换行且不能带 UTF-8 BOM。BOM 会让第一行变成「\ufeff@echo」并报「不是内部或外部命令」；LF 换行会让 cmd 把相邻命令拼在一起。
 - `::` 注释里不要出现 `>` 或 `->`，cmd 会当成重定向；统一用 `rem`。
+- **载荷里有手工部署件**：`opencode-sm-bundle` 与 `opencode-team-share` 都不会从仓库自动生成。改插件先 `sync-bundle.sh`，改团队协作 CLI 手工覆盖那四个条目，否则「新界面配旧 CLI」，参数被静默忽略（2026-11-15 分页失效即此例）。
+- **`dotnet` 不在 PATH**：`build.bat` 走 `where dotnet`，不先加 PATH 必失败；本次产物因漏加 PATH 白跑过一轮。
+- **Windows PowerShell 5.1 按 ANSI 读无 BOM 脚本**：`.ps1` 里写中文会解析失败；用中文 `grep` 校验会假阴性。构建脚本保持 ASCII，中文校验回 WSL。
 - 默认 baseURL、collector、模型名、上下文/输出上限都在 `OpenCode-Setup.nsi` 顶部的 `!define DEFAULT_*`，业务安装时仍可在弹窗改。
 - 未签名 exe 首次运行会被 SmartScreen 拦一次，需点「更多信息 → 仍要运行」。
 - 改动文件清单或默认参数后，同步更新 `portable-installer/OpenCode一键安装包方案.md`。
