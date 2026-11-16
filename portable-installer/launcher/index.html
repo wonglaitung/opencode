@@ -197,6 +197,7 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
           <h1>团队协作</h1>
         </div>
         <p class="sub">把会话交给同事，或接手同事交接过来的会话</p>
+        <div class="tip-line" id="teamWorkflowLine"></div>
         <div class="tabs">
           <button class="tab active" data-team-tab="export">导出会话</button>
           <button class="tab" data-team-tab="import">导入会话</button>
@@ -272,7 +273,6 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
             <label for="roomDir">项目目录（开房用）</label>
             <div class="path-row"><input id="roomDir" placeholder="选择要开房的项目目录" autocomplete="off"><button class="ghost" id="roomBrowse">浏览</button></div>
           </div>
-          <div class="tip-line"><span id="roomWorkflowHint"></span> <a class="link" href="#" id="roomWorkflowSwitch">在向导页切换 ›</a></div>
           <label class="check"><input type="checkbox" id="roomResume" checked> 继续上次会话（没有历史时自动新建）</label>
           <div class="tip-line" id="roomResumeHint"></div>
           <div class="action-row">
@@ -377,6 +377,15 @@ function renderWorkflows() {
       if (!$("teamView").hidden) showView("wizard");
     });
   });
+  renderTeamWorkflow();
+}
+function renderTeamWorkflow() {
+  const label = WORKFLOWS[state.workflow]?.label ?? "";
+  $("teamWorkflowLine").innerHTML = `当前工作流：<b>${esc(label)}</b> <a class="link" href="#" id="teamWorkflowSwitch">在向导页切换 ›</a>`;
+  $("teamWorkflowSwitch").addEventListener("click", (event) => {
+    event.preventDefault();
+    showView("wizard");
+  });
 }
 function renderHint() {
   $("hint").textContent = WORKFLOWS[state.workflow]?.hint ?? "";
@@ -463,6 +472,7 @@ function showView(name) {
   });
   clearError();
   if (isTeam) {
+    renderTeamWorkflow();
     loadTeamSessions();
     post("teamListProjects");
   }
@@ -733,14 +743,10 @@ function updateRoomResume() {
   $("roomResume").disabled = !can;
   if (!can) $("roomResume").checked = false;
   const label = roomResumeInfo?.workflow ? (WORKFLOWS[roomResumeInfo.workflow]?.label ?? "") : "";
-  $("roomWorkflowHint").textContent = resuming
-    ? `工作流：${label}（沿用上次会话）`
-    : `工作流：${WORKFLOWS[state.workflow]?.label ?? ""}`;
-  $("roomWorkflowSwitch").hidden = resuming;
   if (!dir) $("roomResumeHint").textContent = "选择目录后可查询是否可继续上次会话";
   else if (!roomResumeInfo) $("roomResumeHint").textContent = "";
   else if (!can) $("roomResumeHint").textContent = roomResumeInfo.hint || "";
-  else if (resuming) $("roomResumeHint").textContent = `可继续：${label} · ${roomResumeInfo.title ?? ""}`;
+  else if (resuming) $("roomResumeHint").textContent = `将沿用上次会话：${label} · ${roomResumeInfo.title ?? ""}`;
   else $("roomResumeHint").textContent = roomResumeInfo.hint || "";
 }
 function prefillRoom() {
@@ -756,7 +762,6 @@ function prefillRoom() {
 }
 $("roomDir").addEventListener("input", () => checkRoomResume());
 $("roomResume").addEventListener("change", () => updateRoomResume());
-$("roomWorkflowSwitch").addEventListener("click", (event) => { event.preventDefault(); showView("wizard"); });
 $("roomStartBtn").addEventListener("click", () => {
   $("teamRoomNotice").textContent = "";
   $("teamRoomNotice").classList.remove("show", "error");
