@@ -110,6 +110,7 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
 .empty{padding:20px;color:#94a3b8;font-size:13px;text-align:center}
 .ok-strip{margin:14px 0 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;font-size:12px;display:none}
 .ok-strip.show{display:block}
+.ok-strip.error{background:#fef2f2;border-color:#fecaca;color:#991b1b}
 .ok-strip .link{margin-left:10px}
 .warn-line{margin:14px 0;padding:10px 12px;border-radius:8px;background:#fffbeb;border:1px solid #fde68a;color:#92400e;font-size:12px}
 .tip-line{margin:10px 0 0;color:#64748b;font-size:12px;line-height:1.65}
@@ -199,6 +200,7 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
         <div class="tabs">
           <button class="tab active" data-team-tab="export">导出会话</button>
           <button class="tab" data-team-tab="import">导入会话</button>
+          <button class="tab" data-team-tab="room">协作房间</button>
         </div>
 
         <section id="teamExport">
@@ -264,6 +266,34 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
           <div class="tip-line">导入后可直接点「打开这条会话」继续；也可以稍后打开：启动器选该项目目录 → 打开数字程序员 → 按 Ctrl+X 再按 L 打开会话列表 → 选标题带「[交接]」的那条。</div>
           <div class="tip-line">接手继续会带上原工作流阶段进度；仅参考是独立副本，打开后由「会话管理」建一个全新工作流，可以按需要重新启动。</div>
         </section>
+
+        <section id="teamRoom" hidden>
+          <div class="field">
+            <label for="roomDir">项目目录（开房用）</label>
+            <div class="path-row"><input id="roomDir" placeholder="选择要开房的项目目录" autocomplete="off"><button class="ghost" id="roomBrowse">浏览</button></div>
+          </div>
+          <label class="check"><input type="checkbox" id="roomResume" checked> 继续上次会话（没有历史时自动新建）</label>
+          <div class="action-row">
+            <button class="primary" id="roomStartBtn">开房</button>
+          </div>
+          <div class="warn-line">开房后把邀请码发给同事；房间随本机终端关闭而结束。</div>
+          <div class="field" style="margin-top:20px">
+            <label for="roomInvite">邀请码</label>
+            <input id="roomInvite" placeholder="ws://192.168.1.5:54321?token=…" autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="roomName">昵称</label>
+            <input id="roomName" placeholder="例如 Bob" autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="roomJoinDir">工作目录</label>
+            <div class="path-row"><input id="roomJoinDir" placeholder="选择加入后使用的项目目录" autocomplete="off"><button class="ghost" id="roomBrowseDir">浏览</button></div>
+          </div>
+          <div class="action-row">
+            <button class="primary" id="roomJoinBtn">加入</button>
+          </div>
+          <div class="ok-strip" id="teamRoomNotice"></div>
+        </section>
       </div>
     </div>
   </main>
@@ -297,7 +327,7 @@ const PLUGINS = {
   edge: { label: "Edge 调试", desc: "启用独立 Edge 调试插件；WEB 安全自测不需要勾选（使用会话管理内置桥接）" },
   server: { label: "服务器调试", desc: "启用服务器调试插件" }
 };
-const state = { workflow: "sdlc", terminal: "native", plugins: ["sm"], configOk: true, identityOk: true, lastProject: "", dir: "", resume: false };
+const state = { workflow: "sdlc", terminal: "native", plugins: ["sm"], configOk: true, identityOk: true, lastProject: "", dir: "", resume: false, browseTarget: "main" };
 let canResume = false;
 
 const $ = (id) => document.getElementById(id);
@@ -583,9 +613,11 @@ document.querySelectorAll("[data-team-tab]").forEach((tab) => {
     document.querySelectorAll("[data-team-tab]").forEach((item) => item.classList.toggle("active", item === tab));
     $("teamExport").hidden = name !== "export";
     $("teamImport").hidden = name !== "import";
+    $("teamRoom").hidden = name !== "room";
     clearError();
     if (name === "export") loadTeamSessions();
-    else resetImport();
+    else if (name === "import") resetImport();
+    else prefillRoom();
   });
 });
 $("teamRefresh").addEventListener("click", () => loadTeamSessions());
@@ -636,7 +668,9 @@ $("lastProject").addEventListener("click", () => {
   $("dir").value = state.lastProject;
   checkResume();
 });
-$("browse").addEventListener("click", () => post("browse", { dir: state.dir }));
+$("browse").addEventListener("click", () => { state.browseTarget = "main"; post("browse", { dir: state.dir }); });
+$("roomBrowse").addEventListener("click", () => { state.browseTarget = "room"; post("browse", { dir: $("roomDir").value.trim() || state.dir }); });
+$("roomBrowseDir").addEventListener("click", () => { state.browseTarget = "roomJoin"; post("browse", { dir: $("roomJoinDir").value.trim() || state.dir }); });
 $("dir").addEventListener("input", () => { state.dir = $("dir").value.trim(); checkResume(); });
 $("terminal").addEventListener("change", () => { state.terminal = $("terminal").value; });
 $("resume").addEventListener("change", () => { state.resume = $("resume").checked; });
@@ -648,6 +682,44 @@ $("launch").addEventListener("click", () => {
   post("launch", { dir: state.dir, workflow: state.workflow, terminal: state.terminal, plugins: state.plugins, resume: $("resume").checked });
 });
 $("cancel").addEventListener("click", () => post("cancel"));
+function roomError(message) {
+  $("teamRoomNotice").textContent = message;
+  $("teamRoomNotice").classList.add("show", "error");
+}
+function prefillRoom() {
+  const base = state.lastProject || state.dir || "";
+  if (base) {
+    if (!$("roomDir").value.trim()) $("roomDir").value = base;
+    if (!$("roomJoinDir").value.trim()) $("roomJoinDir").value = base;
+  }
+}
+$("roomStartBtn").addEventListener("click", () => {
+  $("teamRoomNotice").textContent = "";
+  $("teamRoomNotice").classList.remove("show", "error");
+  const dir = $("roomDir").value.trim();
+  if (!dir) { roomError("请先选择开房的项目目录"); return; }
+  $("roomStartBtn").disabled = true;
+  post("roomStart", {
+    dir,
+    workflow: state.workflow,
+    terminal: state.terminal,
+    plugins: state.plugins,
+    resume: $("roomResume").checked,
+    noPrompt: true,
+  });
+});
+$("roomJoinBtn").addEventListener("click", () => {
+  $("teamRoomNotice").textContent = "";
+  $("teamRoomNotice").classList.remove("show", "error");
+  const invite = $("roomInvite").value.trim();
+  const name = $("roomName").value.trim();
+  const dir = $("roomJoinDir").value.trim();
+  if (!/^wss?:\/\//i.test(invite)) { roomError("邀请码格式不正确"); return; }
+  if (!name) { roomError("请填写昵称"); return; }
+  if (!dir) { roomError("请选择工作目录"); return; }
+  $("roomJoinBtn").disabled = true;
+  post("roomJoin", { dir, invite, name, terminal: state.terminal, plugins: state.plugins, noPrompt: true });
+});
 // 使用说明按定时器帮助窗口的排版渲染：小节标题（蓝）/ 正文 / 要点 / 代码块。
 const HELP_SECTION = /^(第\s*\d+\s*步|越权测试：|代码审核任务：|开始下一个任务：|常用操作：)/
 function renderHelp(container, text) {
@@ -688,7 +760,20 @@ window.chrome.webview.addEventListener("message", (event) => {
       renderState();
       break;
     case "browse":
-      if (payload) { state.dir = payload; $("dir").value = payload; checkResume(); }
+      if (payload) {
+        if (state.browseTarget === "room") $("roomDir").value = payload;
+        else if (state.browseTarget === "roomJoin") $("roomJoinDir").value = payload;
+        else { state.dir = payload; $("dir").value = payload; checkResume(); }
+        state.browseTarget = "";
+      }
+      break;
+    case "roomStart":
+      if (payload?.ok) { $("teamRoomNotice").textContent = "正在打开数字程序员…"; $("teamRoomNotice").classList.add("show"); $("teamRoomNotice").classList.remove("error"); }
+      else { $("roomStartBtn").disabled = false; roomError(payload?.error || "开房失败"); }
+      break;
+    case "roomJoin":
+      if (payload?.ok) { $("teamRoomNotice").textContent = "正在打开数字程序员…"; $("teamRoomNotice").classList.add("show"); $("teamRoomNotice").classList.remove("error"); }
+      else { $("roomJoinBtn").disabled = false; roomError(payload?.error || "加入失败"); }
       break;
     case "resume":
       updateResume(payload);

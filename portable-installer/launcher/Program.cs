@@ -3,6 +3,7 @@ using Microsoft.Web.WebView2.WinForms;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 
 namespace OpenCodeLauncher;
 
@@ -244,6 +245,51 @@ internal sealed class LauncherForm : Form
                         Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{target}\"") { UseShellExecute = true });
                     break;
                 }
+                case "roomStart":
+                {
+                    var dir = PayloadString(root, "dir");
+                    if (dir.Length == 0 || !Directory.Exists(dir))
+                    {
+                        Post("roomStart", new { ok = false, error = "请先选择有效的项目目录" });
+                        break;
+                    }
+                    if (!WriteRoomIntent(dir, "{\"mode\":\"host\"}"))
+                    {
+                        Post("roomStart", new { ok = false, error = "写入房间意图失败，请检查目录权限" });
+                        break;
+                    }
+                    Post("roomStart", await LaunchAsync(root.GetProperty("payload"), null, noPrompt: true));
+                    break;
+                }
+                case "roomJoin":
+                {
+                    var dir = PayloadString(root, "dir");
+                    var invite = PayloadString(root, "invite");
+                    var name = PayloadString(root, "name");
+                    if (dir.Length == 0 || !Directory.Exists(dir))
+                    {
+                        Post("roomJoin", new { ok = false, error = "请选择有效的工作目录" });
+                        break;
+                    }
+                    if (!InvitePattern.IsMatch(invite))
+                    {
+                        Post("roomJoin", new { ok = false, error = "邀请码格式不正确" });
+                        break;
+                    }
+                    if (name.Length == 0)
+                    {
+                        Post("roomJoin", new { ok = false, error = "请填写昵称" });
+                        break;
+                    }
+                    var intent = JsonSerializer.Serialize(new { mode = "join", invite, name });
+                    if (!WriteRoomIntent(dir, intent))
+                    {
+                        Post("roomJoin", new { ok = false, error = "写入房间意图失败，请检查目录权限" });
+                        break;
+                    }
+                    Post("roomJoin", await LaunchAsync(root.GetProperty("payload"), null, noPrompt: true));
+                    break;
+                }
                 case "cancel":
                     Close();
                     break;
@@ -281,6 +327,24 @@ internal sealed class LauncherForm : Form
         if (!root.TryGetProperty("payload", out var payload)) return false;
         if (!payload.TryGetProperty(name, out var value)) return false;
         return value.ValueKind == JsonValueKind.True;
+    }
+
+    private static readonly Regex InvitePattern = new(@"^wss?://\S+[?&]token=[^&\s]+", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>协作房间的启动意图：插件读取后立即删除，60 秒后自动失效。</summary>
+    private static bool WriteRoomIntent(string dir, string json)
+    {
+        try
+        {
+            var folder = Path.Combine(dir, ".opencode");
+            Directory.CreateDirectory(folder);
+            File.WriteAllText(Path.Combine(folder, "collab-room.json"), json);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     /// <summary>把界面里选定的数据库路径透传给 CLI，避免导出与导入分两次探测时选到不同的库。</summary>
@@ -445,8 +509,8 @@ internal sealed class LauncherForm : Form
     private static ResumeResult CheckResume(JsonElement payload)
     {
         var state = LoadState();
-        var dir = payload.GetProperty("dir").GetString() ?? "";
-        var workflow = payload.GetProperty("workflow").GetString() ?? "sdlc";
+        var dir = payload.TryGetProperty("dir", out var dirValue) ? dirValue.GetString() ?? "" : "";
+        var workflow = payload.TryGetProperty("workflow", out var workflowValue) ? workflowValue.GetString() ?? "sdlc" : "sdlc";
         var normalized = dir.TrimEnd('\\', '/');
         var last = state.LastProject.TrimEnd('\\', '/');
         var can = state.ConfigOk && state.IdentityOk && state.Sm &&
@@ -455,14 +519,16 @@ internal sealed class LauncherForm : Form
         return new ResumeResult(can, can ? "可回到上次进度" : "项目或工作流变化后需新建会话");
     }
 
-    private async Task<object> LaunchAsync(JsonElement payload, string? sessionId = null)
+    private async Task<object> LaunchAsync(JsonElement payload, string? sessionId = null, bool noPrompt = false)
     {
         var state = LoadState();
-        var dir = payload.GetProperty("dir").GetString() ?? "";
-        var workflow = payload.GetProperty("workflow").GetString() ?? "sdlc";
-        var terminal = payload.GetProperty("terminal").GetString() ?? "native";
-        var resume = payload.GetProperty("resume").GetBoolean();
-        var plugins = payload.GetProperty("plugins").EnumerateArray().Select(x => x.GetString() ?? "").Where(x => x.Length > 0).ToArray();
+        var dir = payload.TryGetProperty("dir", out var dirValue) ? dirValue.GetString() ?? "" : "";
+        var workflow = payload.TryGetProperty("workflow", out var workflowValue) ? workflowValue.GetString() ?? "sdlc" : "sdlc";
+        var terminal = payload.TryGetProperty("terminal", out var terminalValue) ? terminalValue.GetString() ?? "native" : "native";
+        var resume = payload.TryGetProperty("resume", out var resumeValue) && resumeValue.ValueKind == JsonValueKind.True;
+        var plugins = payload.TryGetProperty("plugins", out var pluginValue) && pluginValue.ValueKind == JsonValueKind.Array
+            ? pluginValue.EnumerateArray().Select(x => x.GetString() ?? "").Where(x => x.Length > 0).ToArray()
+            : Array.Empty<string>();
         if (dir.Length == 0 || !Directory.Exists(dir))
             return new { ok = false, error = "请先选择有效的项目目录" };
 
@@ -495,8 +561,9 @@ internal sealed class LauncherForm : Form
             common.Add(sessionId);
         }
         else if (resume && canResume) common.Add("-c");
-        else
+        else if (!noPrompt)
         {
+            // 协作房间不能注入启动短语：访客端会把自己的模型跑起来，违反“访客零 token”。
             common.Add("--prompt");
             common.Add(prompt);
         }

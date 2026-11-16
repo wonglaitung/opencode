@@ -45,11 +45,35 @@ describe("launcher-config 旧 bundle 目录迁移", () => {
       const parsed = JSON.parse(text) as { plugin: string[] }
       expect(parsed.plugin).toEqual([
         "custom-plugin",
+        `${root.replace(/\\/g, "/")}/runtime/opencode-collab-room`,
         `${root.replace(/\\/g, "/")}/runtime/opencode-sm-bundle/packages/plugin`,
         `${root.replace(/\\/g, "/")}/runtime/opencode-edge-debug-bundle`,
         `${root.replace(/\\/g, "/")}/runtime/opencode-server-debug-bundle`,
       ])
       expect(parsed.plugin.some((item) => /-bundle-\d/.test(item))).toBe(false)
+    } finally {
+      rmSync(home, { recursive: true, force: true })
+    }
+  })
+
+  test("不带 --plugins 的 apply 会补上协作房间入口并保留既有插件", () => {
+    const home = mkdtempSync(join(tmpdir(), "launcher-room-"))
+    const root = join(home, "OpenCode")
+    const configDir = join(home, ".config", "opencode")
+    const config = join(configDir, "opencode.jsonc")
+    mkdirSync(configDir, { recursive: true })
+    const sm = `${root.replace(/\\/g, "/")}/runtime/opencode-sm-bundle/packages/plugin`
+    writeFileSync(config, JSON.stringify({ $schema: "https://opencode.ai/config.json", plugin: [sm] }, null, 2) + "\n")
+    try {
+      const first = Bun.spawnSync([process.execPath, script, "--apply", "--root", root, "--home", home, "--terminal", "native"])
+      expect(first.exitCode).toBe(0)
+      const parsed = JSON.parse(readFileSync(config, "utf8")) as { plugin: string[] }
+      expect(parsed.plugin).toEqual([`${root.replace(/\\/g, "/")}/runtime/opencode-collab-room`, sm])
+
+      const second = Bun.spawnSync([process.execPath, script, "--apply", "--root", root, "--home", home, "--terminal", "native"])
+      expect(second.exitCode).toBe(0)
+      const again = JSON.parse(readFileSync(config, "utf8")) as { plugin: string[] }
+      expect(again.plugin).toEqual(parsed.plugin)
     } finally {
       rmSync(home, { recursive: true, force: true })
     }

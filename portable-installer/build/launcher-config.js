@@ -14,6 +14,7 @@ const os = require("node:os")
 const path = require("node:path")
 
 const ORDER = ["sm", "edge", "server"]
+const ROOM_BUNDLE = "opencode-collab-room"
 const BUNDLES = {
   sm: "opencode-sm-bundle/packages/plugin",
   edge: "opencode-edge-debug-bundle",
@@ -350,6 +351,10 @@ function canonicalPath(root, key) {
   return String(root).replace(/\\/g, "/") + "/runtime/" + BUNDLES[key]
 }
 
+function roomPath(root) {
+  return String(root).replace(/\\/g, "/") + "/runtime/" + ROOM_BUNDLE
+}
+
 function formatArray(values) {
   if (values.length === 0) return "[]"
   return "[\n" + values.map((v) => "    " + JSON.stringify(v)).join(",\n") + "\n  ]"
@@ -386,9 +391,11 @@ function buildPluginText(text, enabled, root) {
   if (arr) {
     for (const item of collectStrings(arr.inner)) {
       if (pluginKey(item)) continue
+      if (normalize(item).includes(ROOM_BUNDLE)) continue
       unknown.push(item)
     }
     for (const item of unknown) desired.push(item)
+    desired.push(roomPath(root))
     for (const key of ORDER) {
       if (enabled.has(key)) desired.push(canonicalPath(root, key))
     }
@@ -399,6 +406,7 @@ function buildPluginText(text, enabled, root) {
   const close = findRootClose(text)
   if (close < 0) throw fail("CONFIG_PARSE", "opencode.jsonc 结构无法识别，未做修改")
 
+  desired.push(roomPath(root))
   for (const key of ORDER) {
     if (enabled.has(key)) desired.push(canonicalPath(root, key))
   }
@@ -506,18 +514,25 @@ function apply(args) {
 
   const plans = []
 
-  if (args.plugins !== undefined) {
-    if (typeof args.plugins !== "string") throw fail("PLUGIN_UNKNOWN", "--plugins 需要逗号分隔的插件名")
-    const names = args.plugins.split(",").map((s) => s.trim()).filter(Boolean)
-    for (const name of names) {
-      if (!ORDER.includes(name)) throw fail("PLUGIN_UNKNOWN", "未知插件：" + name)
-    }
+  {
     const text = readText(opencodeConfig)
-    if (text === null) throw fail("CONFIG_MISSING", "未找到 opencode.jsonc，请重新运行安装包")
-    if (!validateJsonc(text)) throw fail("CONFIG_PARSE", "opencode.jsonc 无法解析，未做修改")
-    const next = buildPluginText(text, new Set(names), root)
-    if (!validateJsonc(next)) throw fail("CONFIG_WRITE_BAD", "改写后的 opencode.jsonc 校验失败，未写入")
-    if (next !== text) plans.push({ file: opencodeConfig, oldText: text, text: next, label: "opencode.jsonc" })
+    if (text === null) {
+      if (args.plugins !== undefined) throw fail("CONFIG_MISSING", "未找到 opencode.jsonc，请重新运行安装包")
+    } else if (args.plugins !== undefined || findPluginArray(text) !== null) {
+      if (!validateJsonc(text)) throw fail("CONFIG_PARSE", "opencode.jsonc 无法解析，未做修改")
+      let enabled = pluginState(text)
+      if (args.plugins !== undefined) {
+        if (typeof args.plugins !== "string") throw fail("PLUGIN_UNKNOWN", "--plugins 需要逗号分隔的插件名")
+        const names = args.plugins.split(",").map((s) => s.trim()).filter(Boolean)
+        for (const name of names) {
+          if (!ORDER.includes(name)) throw fail("PLUGIN_UNKNOWN", "未知插件：" + name)
+        }
+        enabled = new Set(names)
+      }
+      const next = buildPluginText(text, enabled, root)
+      if (!validateJsonc(next)) throw fail("CONFIG_WRITE_BAD", "改写后的 opencode.jsonc 校验失败，未写入")
+      if (next !== text) plans.push({ file: opencodeConfig, oldText: text, text: next, label: "opencode.jsonc" })
+    }
   }
 
   if (args.workflow !== undefined) {

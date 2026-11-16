@@ -4,6 +4,7 @@ import { join } from "node:path"
 
 const buildDir = join(import.meta.dir, "../../../../portable-installer/build")
 const nsi = readFileSync(join(buildDir, "OpenCode-launch.nsi"), "utf8")
+const setup = readFileSync(join(buildDir, "OpenCode-Setup.nsi"), "utf8")
 const config = readFileSync(join(buildDir, "launcher-config.js"), "utf8")
 const webview = readFileSync(join(buildDir, "../launcher/index.html"), "utf8")
 const program = readFileSync(join(buildDir, "../launcher/Program.cs"), "utf8")
@@ -115,5 +116,41 @@ describe("OpenCode-launch 工作流选项与提示", () => {
     expect(webview).toContain("!team.seen.has(item.id)")
     expect(nsi).toContain("WEB 安全自测使用会话管理内置的 Edge 桥接")
     expect(nsi).toContain("${NSD_Uncheck} $hEdge")
+  })
+})
+
+describe("协作房间入口", () => {
+  test("团队协作页有第三个 tab 与开房/加入表单", () => {
+    expect(webview).toContain('data-team-tab="room"')
+    expect(webview).toContain('id="teamRoom"')
+    expect(webview).toContain('id="roomDir"')
+    expect(webview).toContain('id="roomResume"')
+    expect(webview).toContain('id="roomStartBtn"')
+    expect(webview).toContain('id="roomInvite"')
+    expect(webview).toContain('id="roomName"')
+    expect(webview).toContain('id="roomJoinDir"')
+    expect(webview).toContain('id="roomJoinBtn"')
+    expect(webview).toContain('prefillRoom')
+    expect(webview).toContain('state.browseTarget')
+  })
+
+  test("Program.cs 写意图文件且开房/加入不注入启动短语", () => {
+    expect(program).toContain('case "roomStart"')
+    expect(program).toContain('case "roomJoin"')
+    expect(program).toContain('collab-room.json')
+    expect(program).toContain("InvitePattern")
+    expect(program).toContain("noPrompt: true")
+    expect(program).toContain("else if (!noPrompt)")
+    expect(program).toContain("访客零 token")
+  })
+
+  test("安装器首次写入 opencode.jsonc 时包含协作房间", () => {
+    expect(setup).toContain("opencode-collab-room")
+  })
+
+  test("launcher-config 常驻注册协作房间插件", () => {
+    expect(config).toContain("ROOM_BUNDLE")
+    expect(config).toContain("opencode-collab-room")
+    expect(config).toContain("function roomPath")
   })
 })
