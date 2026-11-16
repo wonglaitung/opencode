@@ -157,9 +157,23 @@ internal sealed class LauncherForm : Form
                     break;
                 case "teamListSessions":
                 {
-                    var search = PayloadString(root, "search");
+                    // 筛选与分页下推到 SQL：本机可能有几千条会话，全量拉取 + 全量渲染会让
+                    // 输入和点选都卡（本机 230 条时全量 JSON 66KB、43% 还是子代理会话）。
                     var args = new List<string> { "list-sessions" };
-                    if (search.Length > 0) { args.Add("--search"); args.Add(search); }
+                    foreach (var (flag, key) in new[]
+                    {
+                        ("--search", "search"),
+                        ("--project", "project"),
+                        ("--since", "since"),
+                        ("--sort", "sort"),
+                        ("--limit", "limit"),
+                        ("--cursor", "cursor"),
+                    })
+                    {
+                        var value = PayloadString(root, key);
+                        if (value.Length > 0) { args.Add(flag); args.Add(value); }
+                    }
+                    if (PayloadFlag(root, "includeChildren")) { args.Add("--include-children"); args.Add("true"); }
                     PostTeamJson("teamSessions", RunTeamShare(args), "读取会话失败");
                     break;
                 }
@@ -259,6 +273,14 @@ internal sealed class LauncherForm : Form
         if (!root.TryGetProperty("payload", out var payload)) return "";
         if (!payload.TryGetProperty(name, out var value)) return "";
         return value.ValueKind == JsonValueKind.String ? value.GetString() ?? "" : "";
+    }
+
+    /// <summary>布尔参数（缺省 false）；界面传 JSON true 才为真，避免字符串 "false" 被当真。</summary>
+    private static bool PayloadFlag(JsonElement root, string name)
+    {
+        if (!root.TryGetProperty("payload", out var payload)) return false;
+        if (!payload.TryGetProperty(name, out var value)) return false;
+        return value.ValueKind == JsonValueKind.True;
     }
 
     /// <summary>把界面里选定的数据库路径透传给 CLI，避免导出与导入分两次探测时选到不同的库。</summary>

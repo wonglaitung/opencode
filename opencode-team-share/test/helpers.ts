@@ -120,6 +120,8 @@ export function seedSession(
     timeCreated?: number
     timeUpdated?: number
     timeArchived?: number | null
+    /** 子会话（task 子代理分派）所属的主会话 id */
+    parentID?: string | null
     messages: SeedMessage[]
   },
 ) {
@@ -127,8 +129,8 @@ export function seedSession(
   const updated = options.timeUpdated ?? 2000
   db.query(
     `INSERT INTO session (id, project_id, slug, directory, path, title, version, agent, model,
-                          cost, time_created, time_updated, time_archived)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                          cost, time_created, time_updated, time_archived, parent_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     options.id,
     options.projectID,
@@ -143,6 +145,7 @@ export function seedSession(
     created,
     updated,
     options.timeArchived ?? null,
+    options.parentID ?? null,
   )
   for (const message of options.messages) {
     const timeCreated = message.timeCreated ?? created

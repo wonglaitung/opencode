@@ -40,10 +40,11 @@ describe("会话读取", () => {
         { id: "m3", data: { role: "assistant" } },
       ],
     })
-    const items = listSessions(db)
-    expect(items.map((item) => item.id)).toEqual(["ses_new", "ses_old"])
-    expect(items[0]!.messages).toBe(2)
-    expect(items[0]!.project).toBe("/work/proj")
+    const page = listSessions(db)
+    expect(page.items.map((item) => item.id)).toEqual(["ses_new", "ses_old"])
+    expect(page.items[0]!.messages).toBe(2)
+    expect(page.items[0]!.project).toBe("/work/proj")
+    expect(page.total).toBe(2)
   })
 
   test("归档会话不列出", () => {
@@ -57,7 +58,110 @@ describe("会话读取", () => {
       timeArchived: 3000,
       messages: [],
     })
-    expect(listSessions(db)).toHaveLength(0)
+    expect(listSessions(db).items).toHaveLength(0)
+  })
+
+  // 子代理的每次分派都会建一条子会话（本机实测占 43%）：默认混在主列表里，主会话就找不着了。
+  test("默认只列主会话，includeChildren 才带出子会话", () => {
+    const { db } = makeDb()
+    seedProject(db, "p1", "/work/proj")
+    seedSession(db, { id: "ses_main", projectID: "p1", directory: "/work/proj", title: "主会话", timeUpdated: 3000, messages: [] })
+    seedSession(db, {
+      id: "ses_child",
+      projectID: "p1",
+      directory: "/work/proj",
+      title: "子代理会话",
+      timeUpdated: 4000,
+      parentID: "ses_main",
+      messages: [],
+    })
+    expect(listSessions(db).items.map((item) => item.id)).toEqual(["ses_main"])
+    expect(listSessions(db, { includeChildren: true }).items.map((item) => item.id)).toEqual([
+      "ses_child",
+      "ses_main",
+    ])
+  })
+
+  test("分页：limit + cursor 不重复不丢，total 不受分页影响", () => {
+    const { db } = makeDb()
+    seedProject(db, "p1", "/work/proj")
+    for (let index = 0; index < 5; index++) {
+      seedSession(db, {
+        id: `ses_${index}`,
+        projectID: "p1",
+        directory: "/work/proj",
+        title: `会话 ${index}`,
+        timeCreated: 1000 + index,
+        timeUpdated: 1000 + index,
+        messages: [],
+      })
+    }
+    const first = listSessions(db, { limit: 2 })
+    expect(first.items.map((item) => item.id)).toEqual(["ses_4", "ses_3"])
+    expect(first.total).toBe(5)
+    expect(first.nextCursor).toBeDefined()
+    const second = listSessions(db, { limit: 2, cursor: first.nextCursor })
+    expect(second.items.map((item) => item.id)).toEqual(["ses_2", "ses_1"])
+    const third = listSessions(db, { limit: 2, cursor: second.nextCursor })
+    expect(third.items.map((item) => item.id)).toEqual(["ses_0"])
+    expect(third.nextCursor).toBeUndefined()
+  })
+
+  test("按消息数排序也支持游标分页", () => {
+    const { db } = makeDb()
+    seedProject(db, "p1", "/work/proj")
+    seedSession(db, {
+      id: "ses_many",
+      projectID: "p1",
+      directory: "/work/proj",
+      title: "多消息",
+      timeUpdated: 1000,
+      messages: [
+        { id: "m1", data: { role: "user" } },
+        { id: "m2", data: { role: "assistant" } },
+        { id: "m3", data: { role: "user" } },
+      ],
+    })
+    seedSession(db, {
+      id: "ses_few",
+      projectID: "p1",
+      directory: "/work/proj",
+      title: "少消息",
+      timeUpdated: 2000,
+      messages: [{ id: "m4", data: { role: "user" } }],
+    })
+    const first = listSessions(db, { sort: "messages", limit: 1 })
+    expect(first.items.map((item) => item.id)).toEqual(["ses_many"])
+    const second = listSessions(db, { sort: "messages", limit: 1, cursor: first.nextCursor })
+    expect(second.items.map((item) => item.id)).toEqual(["ses_few"])
+  })
+
+  test("搜索覆盖标题与目录，通配符按字面匹配", () => {
+    const { db } = makeDb()
+    seedProject(db, "p1", "/work/pay")
+    seedProject(db, "p2", "/work/other")
+    seedSession(db, { id: "ses_title", projectID: "p1", directory: "/work/pay", title: "登录鉴权", messages: [] })
+    seedSession(db, { id: "ses_dir", projectID: "p2", directory: "/work/pay", title: "别的事", messages: [] })
+    seedSession(db, { id: "ses_pct", projectID: "p1", directory: "/work/pay", title: "覆盖率 100%", messages: [] })
+    expect(listSessions(db, { search: "鉴权" }).items.map((item) => item.id)).toEqual(["ses_title"])
+    expect(listSessions(db, { search: "work/pay" }).items.map((item) => item.id).sort()).toEqual([
+      "ses_dir",
+      "ses_pct",
+      "ses_title",
+    ])
+    // `%` 不转义会变成「匹配全部」，把无关会话也搜出来
+    expect(listSessions(db, { search: "%" }).items.map((item) => item.id)).toEqual(["ses_pct"])
+  })
+
+  test("项目过滤与 since 过滤", () => {
+    const { db } = makeDb()
+    seedProject(db, "p1", "/work/a")
+    seedProject(db, "p2", "/work/b")
+    seedSession(db, { id: "ses_a", projectID: "p1", directory: "/work/a", title: "A", timeUpdated: 1000, messages: [] })
+    seedSession(db, { id: "ses_b", projectID: "p2", directory: "/work/b", title: "B", timeUpdated: 9000, messages: [] })
+    expect(listSessions(db, { projectID: "p2" }).items.map((item) => item.id)).toEqual(["ses_b"])
+    expect(listSessions(db, { since: 5000 }).items.map((item) => item.id)).toEqual(["ses_b"])
+    expect(listSessions(db, { projectID: "p2", since: 9001 }).items).toHaveLength(0)
   })
 
   test("读会话带出消息与 part", () => {

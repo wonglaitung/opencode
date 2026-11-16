@@ -6,7 +6,7 @@
  * 不依赖 git、不联网、不做 opencode 插件。
  *
  * 命令：
- *   list-sessions [--search <关键词>]      列出可交接的会话
+ *   list-sessions [筛选/分页参数]          列出可交接的会话（默认只列主会话、每页 50 条）
  *   list-projects                          列出本机可作为导入目标的项目
  *   inspect --file <文件>                  只读解析交接文件（导入前确认）
  *   export --session <id> --out <文件> [--note <说明>]
@@ -25,7 +25,9 @@ import { exportHandoff, importSession, listProjects, listSessions, sessionWorktr
 import { readWorkflowState, writeWorkflowState } from "./src/workflow-state"
 
 const USAGE = `用法（--db 可选，指定 opencode 数据库路径；缺省自动探测）：
-  team-share list-sessions [--search <关键词>] [--db <库>]
+  team-share list-sessions [--search <关键词>] [--project <id>] [--since <epochMs>]
+                           [--sort updated|created|messages] [--include-children true]
+                           [--limit N] [--cursor <游标>] [--db <库>]
   team-share list-projects [--db <库>]
   team-share inspect --file <文件>
   team-share export --session <id> --out <文件> [--note <说明>] [--db <库>]
@@ -77,19 +79,35 @@ function dbFor(args: Args, readonly = true) {
 function commandListSessions(args: Args) {
   const { db, dbPath } = dbFor(args)
   try {
-    const search = args.flags["search"]?.toLowerCase()
-    const items = listSessions(db)
-      .filter((item) => (search ? item.title.toLowerCase().includes(search) : true))
-      .map((item) => ({
-        id: item.id,
-        title: item.title,
-        messages: item.messages,
-        updatedAt: item.updatedAt,
-        createdAt: item.createdAt,
-        project: item.project ?? item.directory,
-        path: item.path ?? "",
-      }))
-    console.log(JSON.stringify({ db: dbPath, items }))
+    const sinceRaw = args.flags["since"]
+    const since = sinceRaw === undefined ? undefined : Number(sinceRaw)
+    if (since !== undefined && !Number.isFinite(since)) throw new TeamShareError("--since 需为 epoch 毫秒")
+    const sortRaw = args.flags["sort"]
+    const sort = sortRaw === "created" || sortRaw === "messages" ? sortRaw : "updated"
+    const page = listSessions(db, {
+      search: args.flags["search"],
+      projectID: args.flags["project"],
+      since,
+      includeChildren: args.flags["include-children"] === "true",
+      sort,
+      limit: args.flags["limit"] === undefined ? undefined : Number(args.flags["limit"]),
+      cursor: args.flags["cursor"],
+    })
+    console.log(
+      JSON.stringify({
+        db: dbPath,
+        items: page.items,
+        total: page.total,
+        nextCursor: page.nextCursor,
+        filters: {
+          search: args.flags["search"] ?? "",
+          project: args.flags["project"] ?? "",
+          since: since ?? null,
+          sort,
+          includeChildren: args.flags["include-children"] === "true",
+        },
+      }),
+    )
   } finally {
     db.close()
   }

@@ -55,19 +55,106 @@ export function listProjects(db: Database): ProjectRow[] {
   return rows.map((row) => ({ id: row.id, worktree: row.worktree, name: row.name }))
 }
 
-/** 可交接的会话列表（按最近更新倒序，排除已归档）。 */
-export function listSessions(db: Database): SessionSummary[] {
+/** 可交接的会话列表（默认只列主会话，按最近更新倒序，排除已归档）。 */
+export type SessionSort = "updated" | "created" | "messages"
+
+export type ListSessionsOptions = {
+  /** 标题/目录关键词（大小写不敏感） */
+  search?: string
+  /** 只看某个项目 */
+  projectID?: string
+  /** 只列该时刻之后更新过的会话（epoch ms） */
+  since?: number
+  /** 默认 false：task 子代理会为每次分派建一条子会话，混进列表会让主会话找不着 */
+  includeChildren?: boolean
+  sort?: SessionSort
+  /** 每页条数，默认 50；上限 200 */
+  limit?: number
+  /** 上一页返回的 nextCursor（客户端不解析） */
+  cursor?: string
+}
+
+export type SessionPage = {
+  items: SessionSummary[]
+  /** 还有下一页时给出；直接回传给 list-sessions --cursor */
+  nextCursor?: string
+  /** 当前筛选条件下的总数（不受分页影响） */
+  total: number
+}
+
+const SORT_COLUMN: Record<SessionSort, string> = {
+  updated: "time_updated",
+  created: "time_created",
+  messages: "message_count",
+}
+
+/** LIKE 里的通配符要转义，否则搜 `%` 会匹配全部。 */
+function likeTerm(value: string): string {
+  return `%${value.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`
+}
+
+/**
+ * 会话分页查询。
+ *
+ * 为什么不是「全量返回 + 前端过滤」：本机 230 条时后端只要 15ms，但传输与 DOM 是线性的——
+ * 5000 条就是约 1.4MB JSON + 2 万个节点，而且每次输入/点选都重建整表。这里把「筛选 +
+ * 分页」下推到 SQL，前端只拿一页。
+ *
+ * 消息数用**相关子查询**而不是 JOIN+GROUP BY：message 表很大（本机库 18GB），
+ * 按页聚合 50 行实测 14–22ms，而相关子查询只对输出行求值，约 1ms。
+ */
+export function listSessions(db: Database, options: ListSessionsOptions = {}): SessionPage {
+  const limit = Math.min(Math.max(Number(options.limit ?? 50) || 50, 1), 200)
+  const sort: SessionSort = options.sort === "created" || options.sort === "messages" ? options.sort : "updated"
+  const cursor = options.cursor ? decodeCursor(options.cursor) : undefined
+
+  const where: string[] = ["s.time_archived IS NULL"]
+  const params: Array<string | number> = []
+  if (!options.includeChildren) where.push("s.parent_id IS NULL")
+  if (options.projectID) {
+    where.push("s.project_id = ?")
+    params.push(options.projectID)
+  }
+  if (options.since !== undefined) {
+    where.push("s.time_updated >= ?")
+    params.push(options.since)
+  }
+  if (options.search && options.search.trim() !== "") {
+    where.push("(s.title LIKE ? ESCAPE '\\' OR s.directory LIKE ? ESCAPE '\\')")
+    const term = likeTerm(options.search.trim())
+    params.push(term, term)
+  }
+
+  const total = numberOr(
+    (
+      db
+        .query(`SELECT COUNT(*) AS n FROM session s WHERE ${where.join(" AND ")}`)
+        .get(...params) as { n?: number } | null
+    )?.n,
+    0,
+  )
+
+  const select = `SELECT s.id, s.title, s.directory, s.path, s.project_id, s.time_created, s.time_updated,
+            p.worktree AS project_worktree,
+            (SELECT COUNT(*) FROM message m WHERE m.session_id = s.id) AS message_count
+       FROM session s
+       LEFT JOIN project p ON p.id = s.project_id
+      WHERE ${where.join(" AND ")}`
+  // 外层把子查询包成 t，排序与游标都必须用 t.*（用 s.* 会 "no such column"）
+  const order = `t.${SORT_COLUMN[sort]} DESC, t.id DESC`
+
+  // 游标条件与排序键同列同向：翻页期间新增/更新的会话不会把已看过的行挤回来。
+  let pageWhere = ""
+  const pageParams: Array<string | number> = []
+  if (cursor) {
+    const column = SORT_COLUMN[sort]
+    pageWhere = ` WHERE (t.${column} < ? OR (t.${column} = ? AND t.id < ?))`
+    pageParams.push(cursor.value, cursor.value, cursor.id)
+  }
+
   const rows = db
-    .query(
-      `SELECT s.id, s.title, s.directory, s.path, s.project_id, s.time_created, s.time_updated,
-              p.worktree AS project_worktree,
-              (SELECT COUNT(*) FROM message m WHERE m.session_id = s.id) AS message_count
-         FROM session s
-         LEFT JOIN project p ON p.id = s.project_id
-        WHERE s.time_archived IS NULL
-        ORDER BY s.time_updated DESC`,
-    )
-    .all() as Array<{
+    .query(`SELECT * FROM (${select}) t${pageWhere} ORDER BY ${order} LIMIT ?`)
+    .all(...params, ...pageParams, limit) as Array<{
     id: string
     title: string
     directory: string
@@ -78,7 +165,8 @@ export function listSessions(db: Database): SessionSummary[] {
     project_worktree?: string
     message_count: number
   }>
-  return rows.map((row) => ({
+
+  const items = rows.map((row) => ({
     id: row.id,
     title: row.title,
     messages: numberOr(row.message_count, 0),
@@ -89,6 +177,35 @@ export function listSessions(db: Database): SessionSummary[] {
     projectID: row.project_id,
     project: row.project_worktree ?? undefined,
   }))
+
+  const last = rows.at(-1)
+  return {
+    items,
+    total,
+    nextCursor:
+      rows.length === limit && last
+        ? encodeCursor({
+            value:
+              sort === "messages"
+                ? numberOr(last.message_count, 0)
+                : numberOr(last[sort === "created" ? "time_created" : "time_updated"], 0),
+            id: last.id,
+          })
+        : undefined,
+  }
+}
+
+function encodeCursor(cursor: { value: number; id: string }): string {
+  return `${cursor.value}:${cursor.id}`
+}
+
+function decodeCursor(raw: string): { value: number; id: string } | undefined {
+  const index = raw.indexOf(":")
+  if (index <= 0) return undefined
+  const value = Number(raw.slice(0, index))
+  const id = raw.slice(index + 1)
+  if (!Number.isFinite(value) || id === "") return undefined
+  return { value, id }
 }
 
 /** 读一条会话的完整快照（meta + 全部消息与 part）。 */

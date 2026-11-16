@@ -89,7 +89,15 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
 .toolbar{display:flex;gap:10px;align-items:center;margin-bottom:12px}
 .toolbar input{flex:1;min-width:0;border:1px solid #cbd5e1;border-radius:9px;padding:10px 12px;background:#fff;color:#0f172a;outline:none}
 .toolbar input:focus{border-color:#60a5fa;box-shadow:0 0 0 3px #dbeafe}
-.sess-list{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff}
+.sess-list{border:1px solid var(--line);border-radius:12px;overflow:auto;background:#fff;max-height:min(52vh,460px)}
+.filter-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 10px}
+.filter-row select{border:1px solid #cbd5e1;border-radius:8px;padding:7px 9px;background:#fff;color:#0f172a;font-size:12px;outline:none}
+.filter-row select:focus{border-color:#60a5fa;box-shadow:0 0 0 3px #dbeafe}
+.check{display:inline-flex;align-items:center;gap:5px;color:#475569;font-size:12px;cursor:pointer;user-select:none}
+.more-row{display:flex;justify-content:center;margin-top:8px}
+.more-row .ghost{font-size:12px;padding:6px 14px}
+.sess-id{color:#94a3b8;font-size:11px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.empty .link{margin-left:8px}
 .sess-row{display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid #f1f5f9;cursor:pointer}
 .sess-row:last-child{border-bottom:0}
 .sess-row:hover{background:#f0f7ff}
@@ -195,10 +203,27 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
 
         <section id="teamExport">
           <div class="toolbar">
-            <input id="teamSearch" placeholder="搜索会话标题…" autocomplete="off">
+            <input id="teamSearch" placeholder="搜索标题或项目路径…" autocomplete="off">
             <button class="ghost" id="teamRefresh">刷新</button>
           </div>
+          <div class="filter-row">
+            <select id="teamRange" title="时间范围">
+              <option value="30" selected>近 30 天</option>
+              <option value="7">近 7 天</option>
+              <option value="90">近 90 天</option>
+              <option value="0">全部时间</option>
+            </select>
+            <select id="teamProjectFilter" title="项目"><option value="">全部项目</option></select>
+            <select id="teamSort" title="排序">
+              <option value="updated" selected>最近更新</option>
+              <option value="created">创建时间</option>
+              <option value="messages">消息数</option>
+            </select>
+            <label class="check"><input type="checkbox" id="teamChildren"> 显示子会话</label>
+            <span class="sess-meta" id="teamCount"></span>
+          </div>
           <div class="sess-list" id="teamSessions"><div class="empty">正在读取会话…</div></div>
+          <div class="more-row" id="teamMoreRow" hidden><button class="ghost" id="teamMore">加载更多</button></div>
           <div class="field" style="margin-top:16px">
             <label for="teamNote">交接说明（给同事的话，可留空）</label>
             <input id="teamNote" placeholder="例如：登录鉴权这块卡住了，帮忙看看 token 校验">
@@ -360,7 +385,7 @@ function clearError() {
 }
 
 // ---------------------------------------------------------------- 团队协作
-const team = { sessions: [], selected: "", file: "", inspected: null, db: "" };
+const team = { sessions: [], selected: "", file: "", inspected: null, db: "", cursor: "", total: 0, loading: false, queuedReset: false };
 
 function showView(name) {
   const isTeam = name === "team";
@@ -372,12 +397,56 @@ function showView(name) {
     button.classList.toggle("active", !isTeam && button.dataset.workflow === state.workflow);
   });
   clearError();
-  if (isTeam) loadTeamSessions();
+  if (isTeam) {
+    loadTeamSessions();
+    post("teamListProjects");
+  }
 }
 
-function loadTeamSessions() {
-  $("teamSessions").innerHTML = `<div class="empty">正在读取会话…</div>`;
-  post("teamListSessions", { search: $("teamSearch").value.trim() });
+// 筛选与分页都下推到 SQL：会话可能上千条，全量拉取再前端过滤会卡住输入与滚动。
+// 首屏 50 条 + 默认近 30 天（本机实测 86% 的主会话在 30 天以前）。
+const TEAM_PAGE_SIZE = 50;
+
+function teamFiltersActive() {
+  const days = Number($("teamRange").value) || 0;
+  return (
+    $("teamSearch").value.trim() !== "" ||
+    $("teamProjectFilter").value !== "" ||
+    (days > 0 && days !== 30) ||
+    $("teamChildren").checked
+  );
+}
+
+function loadTeamSessions(reset = true) {
+  // 串行化：查询很快（本机 15ms），但冷启动可达 200ms；防抖后仍可能有两笔在飞，
+  // 旧响应晚到会被当成新结果追加。这里等上一笔回来再发。
+  if (team.loading) {
+    team.queuedReset = team.queuedReset || reset;
+    return;
+  }
+  team.loading = true;
+  if (reset) {
+    team.cursor = "";
+    team.sessions = [];
+    team.selected = "";
+    team.total = 0;
+    $("teamExportBtn").disabled = true;
+    $("teamSessions").innerHTML = `<div class="empty">正在读取会话…</div>`;
+    $("teamCount").textContent = "";
+    $("teamMoreRow").hidden = true;
+  } else {
+    $("teamMore").disabled = true;
+  }
+  const days = Number($("teamRange").value) || 0;
+  post("teamListSessions", {
+    search: $("teamSearch").value.trim(),
+    project: $("teamProjectFilter").value,
+    sort: $("teamSort").value,
+    since: days > 0 ? String(Date.now() - days * 86400000) : "",
+    includeChildren: $("teamChildren").checked,
+    limit: String(TEAM_PAGE_SIZE),
+    cursor: reset ? "" : team.cursor,
+  });
 }
 
 function fmtTime(ms) {
@@ -394,27 +463,77 @@ function handoffName(title) {
   return `会话交接-${clean}-${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}.ocsave`;
 }
 
-function renderTeamSessions(items) {
-  team.sessions = Array.isArray(items) ? items : [];
-  if (team.selected && !team.sessions.some((item) => item.id === team.selected)) team.selected = "";
-  $("teamExportBtn").disabled = !team.selected;
-  if (team.sessions.length === 0) {
-    $("teamSessions").innerHTML = `<div class="empty">还没有会话。先打开一次 opencode，或换个项目目录。</div>`;
-    return;
-  }
-  $("teamSessions").innerHTML = team.sessions.map((item) => `
+function fmtAgo(ms) {
+  if (!ms) return "";
+  const diff = Date.now() - ms;
+  if (diff < 60 * 1000) return "刚刚";
+  if (diff < 60 * 60 * 1000) return `${Math.floor(diff / 60000)} 分钟前`;
+  if (diff < 24 * 60 * 60 * 1000) return `${Math.floor(diff / 3600000)} 小时前`;
+  if (diff < 30 * 24 * 60 * 60 * 1000) return `${Math.floor(diff / 86400000)} 天前`;
+  return fmtTime(ms);
+}
+
+function baseName(path) {
+  const text = String(path ?? "").replace(/[\\/]+$/, "");
+  const index = Math.max(text.lastIndexOf("/"), text.lastIndexOf("\\"));
+  return index >= 0 ? text.slice(index + 1) : text;
+}
+
+/** 重复标题（本机实测 6 组）只能靠短 id 区分；空标题也用它兜底。 */
+function shortId(id) {
+  return String(id ?? "").replace(/^ses_/, "").slice(0, 6);
+}
+
+function teamRowHtml(item) {
+  const title = String(item.title ?? "").trim();
+  return `
     <div class="sess-row ${team.selected === item.id ? "sel" : ""}" data-session="${esc(item.id)}">
       <span class="sess-dot"></span>
-      <span class="sess-title">${esc(item.title)}</span>
-      <span class="sess-meta">${Number(item.messages) || 0} 条 · ${esc(fmtTime(item.updatedAt))}</span>
-      <span class="sess-project" title="${esc(item.project)}">${esc(item.project)}</span>
-    </div>`).join("");
-  document.querySelectorAll("[data-session]").forEach((row) => {
-    row.addEventListener("click", () => {
-      team.selected = row.dataset.session;
-      renderTeamSessions(team.sessions);
-    });
-  });
+      <span class="sess-title" title="${esc(title || item.id)}">${esc(title || `未命名会话 · #${shortId(item.id)}`)}</span>
+      <span class="sess-meta">${Number(item.messages) || 0} 条 · ${esc(fmtAgo(item.updatedAt))} <span class="sess-id">#${esc(shortId(item.id))}</span></span>
+      <span class="sess-project" title="${esc(item.project ?? item.path ?? "")}">${esc(baseName(item.project ?? item.path))}</span>
+    </div>`;
+}
+
+/**
+ * 只追加/替换列表内容，**点选不重建**：重建会让长列表每次点击都掉滚动位置。
+ * `payload` 为 CLI 的 { items, total, nextCursor }。
+ */
+function renderTeamSessions(payload) {
+  const items = Array.isArray(payload?.items) ? payload.items : [];
+  if (team.sessions.length === 0) $("teamSessions").innerHTML = "";
+  if (items.length > 0) {
+    team.sessions.push(...items);
+    $("teamSessions").insertAdjacentHTML("beforeend", items.map(teamRowHtml).join(""));
+  }
+  team.cursor = payload?.nextCursor ?? "";
+  team.total = Number(payload?.total) || team.sessions.length;
+  $("teamCount").textContent = team.total > 0
+    ? `共 ${team.total} 条${team.sessions.length < team.total ? `，已显示 ${team.sessions.length}` : ""}`
+    : "";
+  $("teamMoreRow").hidden = team.cursor === "";
+  $("teamMore").disabled = false;
+  $("teamExportBtn").disabled = !team.selected;
+  if (team.sessions.length === 0) {
+    $("teamSessions").innerHTML = teamFiltersActive()
+      ? `<div class="empty">没有匹配的会话。<a class="link" href="#" data-clear-filters>清除筛选</a></div>`
+      : `<div class="empty">还没有会话。先打开一次 opencode，或换个项目目录。</div>`;
+  }
+  team.loading = false;
+  if (team.queuedReset) {
+    const queued = team.queuedReset;
+    team.queuedReset = false;
+    loadTeamSessions(queued);
+  }
+}
+
+function clearTeamFilters() {
+  $("teamSearch").value = "";
+  $("teamProjectFilter").value = "";
+  $("teamRange").value = "30";
+  $("teamChildren").checked = false;
+  $("teamSort").value = "updated";
+  loadTeamSessions();
 }
 
 function resetImport() {
@@ -431,12 +550,21 @@ function resetImport() {
 
 function renderTeamProjects(items) {
   const projects = Array.isArray(items) ? items : [];
-  $("teamProject").innerHTML = projects.map((item) =>
+  const options = projects.map((item) =>
     `<option value="${esc(item.id)}">${esc(item.worktree)}${item.name ? ` · ${esc(item.name)}` : ""}</option>`
   ).join("");
+  $("teamProject").innerHTML = options;
+  // 导出页的项目过滤器：保留当前选择，避免刷新后跳回「全部项目」
+  const filter = $("teamProjectFilter");
+  const current = filter.value;
+  filter.innerHTML = `<option value="">全部项目</option>` + options;
+  filter.value = current;
   $("teamProjectField").hidden = projects.length === 0;
   $("teamImportBtn").disabled = projects.length === 0 || !team.inspected;
-  if (projects.length === 0) showError("本机还没有可导入的项目，请先在该项目打开一次 opencode。");
+  // 这条提示只在导入页有意义：导出页没有项目也能按「全部项目」浏览会话
+  if (projects.length === 0 && !$("teamImport").hidden) {
+    showError("本机还没有可导入的项目，请先在该项目打开一次 opencode。");
+  }
 }
 
 $("teamEntry").addEventListener("click", () => showView("team"));
@@ -452,7 +580,27 @@ document.querySelectorAll("[data-team-tab]").forEach((tab) => {
     else resetImport();
   });
 });
-$("teamRefresh").addEventListener("click", loadTeamSessions);
+$("teamRefresh").addEventListener("click", () => loadTeamSessions());
+$("teamRange").addEventListener("change", () => loadTeamSessions());
+$("teamProjectFilter").addEventListener("change", () => loadTeamSessions());
+$("teamSort").addEventListener("change", () => loadTeamSessions());
+$("teamChildren").addEventListener("change", () => loadTeamSessions());
+$("teamMore").addEventListener("click", () => loadTeamSessions(false));
+$("teamSessions").addEventListener("click", (event) => {
+  const clear = event.target.closest("[data-clear-filters]");
+  if (clear) {
+    event.preventDefault();
+    clearTeamFilters();
+    return;
+  }
+  const row = event.target.closest("[data-session]");
+  if (!row) return;
+  team.selected = row.dataset.session;
+  // 只切类，不重建：长列表每次重建都会掉滚动位置
+  document.querySelectorAll("#teamSessions .sess-row.sel").forEach((el) => el.classList.remove("sel"));
+  row.classList.add("sel");
+  $("teamExportBtn").disabled = false;
+});
 $("teamSearch").addEventListener("input", () => {
   clearTimeout(team.searchTimer);
   team.searchTimer = setTimeout(loadTeamSessions, 250);
@@ -543,7 +691,7 @@ window.chrome.webview.addEventListener("message", (event) => {
       break;
     case "teamSessions":
       if (payload?.db) team.db = payload.db;
-      renderTeamSessions(payload?.items);
+      renderTeamSessions(payload);
       break;
     case "teamSavePath":
       if (payload?.path) post("teamExport", { sessionId: team.selected, note: $("teamNote").value.trim(), out: payload.path, db: team.db });
@@ -599,6 +747,11 @@ window.chrome.webview.addEventListener("message", (event) => {
       break;
     case "error":
       $("launch").disabled = false;
+      team.loading = false;
+      $("teamMore").disabled = false;
+      if ($("teamSessions").querySelector(".empty") === null && team.sessions.length === 0) {
+        $("teamSessions").innerHTML = `<div class="empty">读取会话失败，请点「刷新」重试。</div>`;
+      }
       showError(String(payload || "启动器发生错误"));
       break;
   }

@@ -13,7 +13,7 @@
 
 启动器 → 左侧「协作 → 团队协作」→「导出会话」：
 
-1. 搜索 / 选中一条会话
+1. 筛选 / 搜索 / 选中一条会话（见下）
 2. 填一句交接说明（可留空）
 3. 点「导出…」，选保存位置（默认桌面，文件名 `会话交接-<标题>-<日期>.ocsave`）
 4. 把文件发给同事
@@ -35,7 +35,9 @@
 ## 命令行
 
 ```bash
-bun run cli.ts list-sessions [--search 关键词] [--db <库>]
+bun run cli.ts list-sessions [--search 关键词] [--project <项目id>] [--since <epochMs>]
+                             [--sort updated|created|messages] [--include-children true]
+                             [--limit N] [--cursor <游标>] [--db <库>]
 bun run cli.ts list-projects [--db <库>]
 bun run cli.ts inspect --file <交接文件>
 bun run cli.ts export --session <会话id> --out <文件> [--note 说明] [--db <库>]
@@ -43,6 +45,8 @@ bun run cli.ts import --file <交接文件> --project <projectId> [--db <库>]
 ```
 
 stdout 输出 JSON，stderr 输出中文错误；退出码 `0` 成功 / `1` 失败 / `2` 参数错。
+
+`list-sessions` 返回 `{ items, total, nextCursor }`：默认**只列主会话**（`--include-children true` 才带 task 子代理会话）、每页 50 条；翻页把 `nextCursor` 原样回传。
 
 ## 实现要点
 
@@ -57,6 +61,7 @@ stdout 输出 JSON，stderr 输出中文错误；退出码 `0` 成功 / `1` 失�
 | 工作流状态 | 一并交接：导出时用随包分发的 `opencode-sm-bundle` 里的 `Store` 读 `<项目>/.opencode/session-mgmt.db`，导入时用同一个 Store 写回目标项目（库不存在会自动建库并迁移）；bundle 缺失时自动跳过，只交接对话内容 |
 | 两种导入模式 | `handoff`（默认）保留原会话 ID 并写回工作流状态；`reference` 生成新的 session/msg/part ID、清 `parentID`、标题加 `[参考]`、成本与 Token 归零、不写工作流状态。目的是避免收集端按 `sessionID` upsert 时把发送方的工作量改写成本机归属 |
 | 并发保护 | opencode 正在运行时拒绝导入（启动器用 `tasklist` 检测） |
+| 导出页列表 | 筛选与分页下推到 SQL：默认只列主会话 + 近 30 天（可切 7/90/全部）+ 50 条一页；搜索覆盖标题与项目路径、通配符按字面匹配；可按最近更新/创建时间/消息数排序。本机实测：子代理会话占 43%、86% 主会话在 30 天以前，全量列表既难找也拖慢渲染 |
 
 ## 已知限制
 
