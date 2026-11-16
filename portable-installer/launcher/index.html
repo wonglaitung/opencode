@@ -270,15 +270,15 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
 
         <section id="teamRoom" hidden>
           <div class="field">
-            <label for="roomDir">项目目录（用于开协作房间）</label>
-            <div class="path-row"><input id="roomDir" placeholder="选择要开协作房间的项目目录" autocomplete="off"><button class="ghost" id="roomBrowse">浏览</button></div>
+            <label for="roomDir">项目目录</label>
+            <div class="path-row"><input id="roomDir" placeholder="选择项目目录" autocomplete="off"><button class="ghost" id="roomBrowse">浏览</button></div>
           </div>
-          <label class="check"><input type="checkbox" id="roomResume" checked> 继续上次会话（没有历史时自动新建）</label>
+          <label class="check"><input type="checkbox" id="roomResume" checked> 继续上次会话</label>
           <div class="tip-line" id="roomResumeHint"></div>
           <div class="action-row">
             <button class="primary" id="roomStartBtn">开协作房间</button>
           </div>
-          <div class="warn-line">开协作房间后把邀请码发给同事；房间随本机终端关闭而结束。</div>
+          <div class="warn-line">把邀请码发给同事；房间随本机终端关闭而结束。</div>
           <button class="link" id="roomHelp">查看协作房间使用说明 ›</button>
           <div class="field" style="margin-top:20px">
             <label for="roomInvite">邀请码</label>
@@ -289,8 +289,8 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
             <input id="roomName" placeholder="例如 Bob" autocomplete="off">
           </div>
           <div class="field">
-            <label for="roomJoinDir">工作目录</label>
-            <div class="path-row"><input id="roomJoinDir" placeholder="选择加入协作房间后使用的项目目录" autocomplete="off"><button class="ghost" id="roomBrowseDir">浏览</button></div>
+            <label for="roomJoinDir">加入后使用的项目目录</label>
+            <div class="path-row"><input id="roomJoinDir" placeholder="选择加入后使用的项目目录" autocomplete="off"><button class="ghost" id="roomBrowseDir">浏览</button></div>
           </div>
           <div class="action-row">
             <button class="primary" id="roomJoinBtn">加入协作房间</button>
@@ -390,13 +390,18 @@ function roomResuming() {
   return Boolean(dir && roomResumeInfo && roomResumeInfo.can && $("roomResume").checked);
 }
 function renderTeamWorkflow() {
-  const resuming = activeTeamTab() === "room" && roomResuming();
+  const onRoom = activeTeamTab() === "room";
+  $("teamWorkflowLine").hidden = !onRoom;
+  if (!onRoom) {
+    $("teamWorkflowLine").innerHTML = "";
+    return;
+  }
+  const resuming = roomResuming();
   const selected = WORKFLOWS[state.workflow]?.label ?? "";
   const effective = resuming ? roomResumeInfo?.workflow : state.workflow;
   const label = (effective && WORKFLOWS[effective]?.label) || selected;
-  const note = resuming ? "（沿用上次会话）" : "";
   const link = resuming ? "" : ` <a class="link" href="#" id="teamWorkflowSwitch">在向导页切换 ›</a>`;
-  $("teamWorkflowLine").innerHTML = `当前工作流：<b>${esc(label)}</b>${note}${link}`;
+  $("teamWorkflowLine").innerHTML = `当前工作流：<b>${esc(label)}</b>${link}`;
   const switchLink = $("teamWorkflowSwitch");
   if (switchLink) switchLink.addEventListener("click", (event) => {
     event.preventDefault();
@@ -758,15 +763,14 @@ function updateRoomResume() {
   $("roomResume").disabled = !can;
   if (!can) $("roomResume").checked = false;
   const selected = WORKFLOWS[state.workflow]?.label ?? "";
-  if (!dir) $("roomResumeHint").textContent = "选择目录后可查询是否可继续上次会话";
+  const title = roomResumeInfo?.title || "上次会话";
+  if (!dir) $("roomResumeHint").textContent = "选择目录后可恢复上次会话";
   else if (!roomResumeInfo) $("roomResumeHint").textContent = "";
   else if (!can) $("roomResumeHint").textContent = roomResumeInfo.hint || "";
   else if (resuming) {
-    const title = roomResumeInfo.title || "上次会话";
-    const suffix = WORKFLOWS[roomResumeInfo.workflow ?? ""] ? "" : "（沿用该会话的工作流）";
-    const extra = roomResumeInfo.workflow === state.workflow ? "" : `（取消勾选则按 ${selected} 新建）`;
-    $("roomResumeHint").textContent = `将沿用上次会话：${title}${suffix}${extra}`;
-  } else $("roomResumeHint").textContent = roomResumeInfo.hint || "";
+    const extra = roomResumeInfo.workflow === state.workflow ? "" : `（改用 ${selected} 请取消勾选）`;
+    $("roomResumeHint").textContent = `恢复「${title}」${extra}`;
+  } else $("roomResumeHint").textContent = `上次会话「${title}」可勾选恢复`;
   renderTeamWorkflow();
 }
 function prefillRoom() {

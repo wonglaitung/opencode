@@ -192,13 +192,25 @@ describe("恢复会话：插件与工作流以数据库为准", () => {
     expect(program).toContain("common.Add(session)")
   })
 
-  test("工作流顶栏跟随实际：恢复时显示会话工作流", () => {
+  test("工作流顶部栏只在协作房间 tab 显示并跟随实际", () => {
     expect(webview).toContain("function roomResuming")
-    expect(webview).toContain('activeTeamTab() === "room" && roomResuming()')
-    expect(webview).toContain("（沿用上次会话）")
-    expect(webview).toContain("取消勾选则按")
-    expect(webview).toContain("沿用该会话的工作流")
+    expect(webview).toContain('const onRoom = activeTeamTab() === "room"')
+    expect(webview).toContain('$("teamWorkflowLine").hidden = !onRoom')
+    expect(webview).toContain("恢复「")
+    expect(webview).toContain("请取消勾选")
+    expect(webview).toContain("可勾选恢复")
     expect(webview).not.toContain("roomWorkflowHint")
+    expect(webview).not.toContain("（沿用上次会话）")
+  })
+
+  test("协作房间表单去除重复信息", () => {
+    expect(webview).toContain("继续上次会话</label>")
+    expect(webview).not.toContain("没有历史时自动新建")
+    expect(webview).not.toContain("用于开协作房间")
+    expect(webview).toContain("把邀请码发给同事")
+    expect(webview).not.toContain("开协作房间后把邀请码")
+    expect(webview).toContain("加入后使用的项目目录")
+    expect(webview).not.toContain("选择加入协作房间后使用的项目目录")
   })
 
   test("工作流只有向导页一个选择入口，团队页统一只读展示", () => {
@@ -213,7 +225,7 @@ describe("恢复会话：插件与工作流以数据库为准", () => {
     expect(webview).toContain("导出/导入会话交给同事")
     expect(webview).toContain("开协作房间让同事实时旁观")
     expect(webview).toContain("协作房间把当前会话实时分享给同事")
-    expect(webview).toContain("将沿用上次会话")
+    expect(webview).toContain("恢复「")
     expect(webview).toContain('workflow: state.workflow,')
     expect(webview).toContain('id="roomResumeHint"')
     expect(webview).toContain("checkRoomResume")
