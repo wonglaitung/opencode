@@ -1,4 +1,7 @@
 import { timingSafeEqual } from "node:crypto"
+import { appendFileSync } from "node:fs"
+import os from "node:os"
+import path from "node:path"
 import { parseClientJson, type ClientMessage, type ServerMessage, type WireMessage, type WireState } from "./protocol"
 
 type SocketData = { name: string }
@@ -23,6 +26,13 @@ export type Relay = {
   stop: () => Promise<void>
 }
 
+function log(line: string) {
+  try {
+    const dir = path.join(os.homedir(), ".local", "share", "opencode", "log")
+    appendFileSync(path.join(dir, "collab-room.log"), `${new Date().toISOString()} [host] ${line}\n`)
+  } catch {}
+}
+
 export function startRelay(handlers: RelayHandlers): Relay {
   const sockets = new Set<Bun.ServerWebSocket<SocketData>>()
   const peers = () =>
@@ -32,16 +42,22 @@ export function startRelay(handlers: RelayHandlers): Relay {
 
   const server = Bun.serve<SocketData, never>({
     port: handlers.port ?? 0,
+    hostname: "0.0.0.0",
     fetch(req, srv) {
       const url = new URL(req.url)
-      if (!matches(url.searchParams.get("token") ?? "", handlers.token)) {
+      const tokenOk = matches(url.searchParams.get("token") ?? "", handlers.token)
+      if (!tokenOk) {
+        log(`request ${url.pathname} token=bad`)
         return new Response("unauthorized", { status: 401 })
       }
-      if (srv.upgrade(req, { data: { name: "" } })) return
+      const upgraded = srv.upgrade(req, { data: { name: "" } })
+      log(`request ${url.pathname} token=ok upgrade=${upgraded}`)
+      if (upgraded) return
       return new Response("websocket required", { status: 426 })
     },
     websocket: {
       open(ws) {
+        log("open")
         sockets.add(ws)
         ws.send(
           JSON.stringify({
@@ -74,7 +90,8 @@ export function startRelay(handlers: RelayHandlers): Relay {
           },
         })
       },
-      close(ws) {
+      close(ws, code, reason) {
+        log(`close ${code} ${reason}`)
         sockets.delete(ws)
         handlers.onPeers?.(peers())
       },

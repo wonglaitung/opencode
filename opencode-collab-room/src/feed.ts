@@ -3,6 +3,7 @@ import type { ServerMessage, WireMessage, WirePart, WireState } from "./protocol
 export type GuestRoom = {
   connection: "connecting" | "open" | "closed"
   notice?: string
+  error?: string
   room: string
   title?: string
   seq: number

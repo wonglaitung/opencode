@@ -51,6 +51,9 @@ function RoomView(props: { api: TuiPluginApi; client: GuestClient; leave: () => 
           </text>
           <text fg={statusColor(theme(), room().connection, room().info.status)}>{statusLabel(room())}</text>
         </box>
+        <Show when={room().error}>
+          <text fg={theme().error}>{room().error}</text>
+        </Show>
 
         <scrollbox flexGrow={1} minHeight={0} stickyScroll stickyStart="bottom">
           <Show when={room().messages.length === 0}>
@@ -112,6 +115,9 @@ function RoomView(props: { api: TuiPluginApi; client: GuestClient; leave: () => 
           <b>房间状态</b>
         </text>
         <text fg={statusColor(theme(), room().connection, room().info.status)}>{statusLabel(room())}</text>
+        <Show when={room().error}>
+          <text fg={theme().error}>{room().error}</text>
+        </Show>
         <text fg={theme().textMuted}>成员 {room().info.peers}</text>
         <Show when={room().approval}>
           <text fg={theme().warning}>⏳ 等待主机审批{room().approval?.tool ? `（${room().approval?.tool}）` : ""}</text>
