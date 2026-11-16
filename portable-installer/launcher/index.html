@@ -257,7 +257,8 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
           </div>
           <div class="ok-strip" id="teamExportOk"></div>
           <div class="tab-foot">
-            <div class="tip-line">导出后把文件发给同事，让他在「导入会话」里打开即可继续。</div>
+            <div class="tip-line">导出后把文件发给同事，对方在「导入会话」里打开就能接着做。</div>
+            <button class="link" id="exportHelp">查看使用说明 ›</button>
           </div>
         </section>
 
@@ -294,7 +295,8 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
           </div>
           <div class="ok-strip" id="teamImportOk"></div>
           <div class="tab-foot">
-            <div class="tip-line">导入后可直接点「打开这条会话」继续；也可以稍后打开：启动器选该项目目录 → 打开数字程序员 → 按 Ctrl+X 再按 L 打开会话列表 → 选标题带「[交接]」的那条。</div>
+            <div class="tip-line">导入完成后可直接点「打开这条会话」；之后用 /sessions 也能在会话列表里找回（标题带「[交接]」）。</div>
+            <button class="link" id="importHelp">查看使用说明 ›</button>
           </div>
         </section>
 
@@ -388,6 +390,41 @@ const ROOM_HELP = `协作房间
 · 需要授权的操作会在右侧显示「等待主机审批」，由主机确认。
 · 网络中断会自动重连并补齐内容；主机关闭终端后显示「房间已结束」。
 提示：访客不会消耗本机模型额度；房间是否可用取决于主机终端是否开启。`;
+const EXPORT_HELP = `导出会话
+把一条会话（含工作流阶段进度）整理成一个交接文件，交给同事继续。
+
+第 1 步：选择要交接的会话
+· 默认显示近 30 天的会话，可用搜索、项目、排序和「显示子会话」缩小范围。
+· 点一行选中；标题重复时看右侧的 #短编号。
+
+第 2 步：写交接说明（可留空）
+· 说明会出现在同事的「交接信息」卡片里，写清卡在哪里、希望他看什么最有用。
+
+第 3 步：导出并发送
+· 点「导出…」选择保存位置，文件名默认带 会话交接-标题-日期。
+· 文件是明文，包含完整会话内容与阶段进度（代码、路径、可能的凭据），请通过可信渠道发送。
+
+对方怎么继续：
+· 他在启动器打开「团队协作 → 导入会话」，选中这个文件，导入后点「打开这条会话」即可。`;
+
+const IMPORT_HELP = `导入会话
+把同事导出的交接文件变成你项目里的一条会话。
+
+第 1 步：选择交接文件
+· 点「选择文件…」选中 .ocsave 文件；卡片会显示来自谁、哪条会话和交接说明。
+
+第 2 步：选择导入方式
+· 接手继续：仍是同一个会话，保留工作流阶段进度；之后的活动记入你的统计。
+· 仅参考：复制成新会话（标题加「[参考]」），不带阶段进度，也不沿用原会话的成本与 Token。
+
+第 3 步：选择项目并导入
+· 「导入到项目」决定这条会话出现在哪个项目下。
+· 导入完成后点「打开这条会话」直接继续。
+
+之后还想打开：
+· 在数字程序员里输入「/sessions」（默认也可按 Ctrl+X 再按 L）打开会话列表，选标题带「[交接]」的那条。
+提示：内容来自他人且未经验证，导入后请自行审阅。`;
+
 const PLUGINS = {
   sm: { label: "会话管理", desc: "默认启用；关闭后工作流、工时与审核报告不可用" },
   edge: { label: "Edge 调试", desc: "启用独立 Edge 调试插件；WEB 安全自测不需要勾选（使用会话管理内置桥接）" },
@@ -862,7 +899,7 @@ $("roomJoinBtn").addEventListener("click", () => {
   post("roomJoin", { dir, invite, name, terminal: state.terminal, plugins: state.plugins, noPrompt: true });
 });
 // 使用说明按定时器帮助窗口的排版渲染：小节标题（蓝）/ 正文 / 要点 / 代码块。
-const HELP_SECTION = /^(第\s*\d+\s*步|越权测试：|代码审核任务：|开始下一个任务：|常用操作：|房间内操作：|审批与断线：)/
+const HELP_SECTION = /^(第\s*\d+\s*步|越权测试：|代码审核任务：|开始下一个任务：|常用操作：|房间内操作：|审批与断线：|对方怎么继续：|之后还想打开：|稍后还想打开：)/
 function renderHelp(container, text) {
   const lines = String(text ?? "").split("\n");
   const html = [];
@@ -883,6 +920,16 @@ function renderHelp(container, text) {
 $("help").addEventListener("click", () => {
   $("helpTitle").textContent = (WORKFLOWS[state.workflow]?.label ?? "") + " · 使用说明";
   renderHelp($("helpBody"), WORKFLOWS[state.workflow]?.help ?? "");
+  $("modal").classList.add("open");
+});
+$("exportHelp").addEventListener("click", () => {
+  $("helpTitle").textContent = "导出会话 · 使用说明";
+  renderHelp($("helpBody"), EXPORT_HELP);
+  $("modal").classList.add("open");
+});
+$("importHelp").addEventListener("click", () => {
+  $("helpTitle").textContent = "导入会话 · 使用说明";
+  renderHelp($("helpBody"), IMPORT_HELP);
   $("modal").classList.add("open");
 });
 $("roomHelp").addEventListener("click", () => {

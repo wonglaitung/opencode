@@ -251,6 +251,19 @@ describe("恢复会话：插件与工作流以数据库为准", () => {
     expect(webview).not.toContain('style="margin-top:20px"')
   })
 
+  test("三个 tab 的页尾都是「用户视角一句 + 使用说明」，细节收进说明弹窗", () => {
+    expect(webview).toContain('id="exportHelp"')
+    expect(webview).toContain('id="importHelp"')
+    expect(webview).toContain('id="roomHelp"')
+    expect(webview).toContain("const EXPORT_HELP")
+    expect(webview).toContain("const IMPORT_HELP")
+    expect(webview).toContain("导入后请自行审阅")
+    // 会话列表用稳定的 slash 指令，而不是写死快捷键
+    expect(webview).toContain("/sessions")
+    expect(webview).toContain("默认也可按 Ctrl+X 再按 L")
+    expect(webview).not.toContain("启动器选该项目目录 → 打开数字程序员 → 按 Ctrl+X")
+  })
+
   test("工作流只有向导页一个选择入口，团队页统一只读展示", () => {
     expect(webview).not.toContain('id="roomWorkflow"')
     expect(webview).not.toContain("roomWorkflowHint")
