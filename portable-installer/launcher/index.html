@@ -132,8 +132,10 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
 .tab-foot .tip-line{margin:0 0 6px}
 .tab-foot .tip-line:last-child{margin-bottom:0}
 .tab-foot .link{margin:0;display:inline-block}
-.radio-row{display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin-top:2px}
-.radio-row label{display:inline-flex;align-items:center;gap:6px;margin:0;color:#334155;font-size:13px;font-weight:400;cursor:pointer}
+.radio-row{display:flex;flex-direction:row;align-items:center;gap:20px;flex-wrap:wrap;margin-top:2px}
+.radio-row label{display:inline-flex;align-items:center;gap:6px;margin:0;color:#334155;font-size:13px;font-weight:400;cursor:pointer;white-space:nowrap}
+/* .field input 的全宽样式不能套到单选框/复选框上，否则每个选项会被撑成一行宽而竖排。 */
+.field input[type="radio"],.field input[type="checkbox"]{width:auto;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;accent-color:var(--blue)}
 .handoff-card{border:1px solid var(--line);border-radius:12px;padding:14px;background:#f8fafc;margin:12px 0}
 .handoff-card dl{display:grid;grid-template-columns:56px 1fr;gap:8px 14px;margin:0}
 .handoff-card dt{color:#64748b;font-size:12px}
