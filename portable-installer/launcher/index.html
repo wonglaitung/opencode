@@ -319,6 +319,9 @@ function renderWorkflows() {
       state.workflow = button.dataset.workflow;
       applyWorkflowDefaults();
       renderWorkflows(); renderPlugins(); renderHint(); checkResume();
+      // 在「团队协作」页点工作流要回到向导页：否则只是悄悄改了选中项，界面停在协作页，
+      // 用户会以为点击没反应（且看不到该工作流的说明与参数）。
+      if (!$("teamView").hidden) showView("wizard");
     });
   });
 }

@@ -108,6 +108,9 @@ describe("OpenCode-launch 工作流选项与提示", () => {
     expect(nsi).toContain("切换到高权账号阶段")
     expect(nsi).toContain("未录入不能定稿")
     expect(program).toContain('"websec" => "启动 WEB 安全测试工作流"')
+    // 缺陷（2026-11-16）：在「团队协作」页点左侧工作流，只改了选中项、界面停在协作页，
+    // 用户以为点击没反应。点工作流必须切回向导页。
+    expect(webview).toContain('if (!$("teamView").hidden) showView("wizard")')
     expect(nsi).toContain("WEB 安全自测使用会话管理内置的 Edge 桥接")
     expect(nsi).toContain("${NSD_Uncheck} $hEdge")
   })
