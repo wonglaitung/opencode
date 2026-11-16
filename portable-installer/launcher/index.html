@@ -277,6 +277,7 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
             <button class="primary" id="roomStartBtn">开房</button>
           </div>
           <div class="warn-line">开房后把邀请码发给同事；房间随本机终端关闭而结束。</div>
+          <button class="link" id="roomHelp">查看协作房间使用说明 ›</button>
           <div class="field" style="margin-top:20px">
             <label for="roomInvite">邀请码</label>
             <input id="roomInvite" placeholder="ws://192.168.1.5:54321?token=…" autocomplete="off">
@@ -322,6 +323,26 @@ const WORKFLOWS = {
     help: "WEB 安全自测\n\n适合：开发人员对自己负责的系统做上线前安全自测，不替代专业渗透测试。\n系统内部固定五阶段：范围与边界 → 资产与接口 → 安全检查 → 验证与定级 → 报告与修复。你主要完成范围、登录走查和报告确认。\n\n第 1 步：启动\n· 新会话自动发送「启动 WEB 安全测试工作流」。\n· 勾选「继续上次会话」时不发送，直接恢复上次进度。\n\n第 2 步：说明测试范围\n一次说清目标、环境、测试账号和停止条件。输入示例：\n「目标 http://127.0.0.1:18086，测试环境，测试账号 user，角色普通用户，发现异常就停」\n不要把口令发到对话里，登录 Edge 时再输入。\nAI 问预估工时时，输入：\n「预估 8 小时」\n\n第 3 步：选择测试模式\n输入：\n「普通测试」\n或\n「越权测试」\n普通测试需要 1 个账号；越权测试需要至少 2 个不同角色账号（普通 + 高权）。\n\n第 4 步：在 Edge 中走查\nAI 打开 Edge 后，你登录并正常走完页面和操作流程。\n完成后输入：\n「本次录入已完成」\n\n越权测试：\n· 先用普通账号走完流程，输入「本次录入已完成」。\n· AI 会提示当前是普通账号还是高权账号，并自动清除登录态，然后用高权账号重新登录并走同样流程。\n· 没有自动切换时，输入「切换到高权账号阶段」。\n· 高权账号走完后再输入「本次录入已完成」。\n\n第 5 步：匿名只读探测\nAI 询问是否授权匿名探测时，输入：\n「同意匿名探测」\n或\n「不同意匿名探测」\n只对已采集的同源 GET/HEAD 端点发无 Cookie 请求，不发写操作。\n\n第 6 步：检查与验证\nAI 分析已采集的页面和接口；需要复现时会问你。\n需要写操作时必须逐次授权，例如：\n「允许对 /api/settings 做一次写入验证」\n不做写操作时输入：\n「不做写操作，按只读结论报告」\n确认结论前会做一次独立复核：AI 另起一个只读子代理尝试推翻它；被推翻的降为「待验证」，不写进确认清单。\n提示：探测只用无害标记，不执行脚本、不读真实文件、不联外网；看到版本号只能标「待验证」，不能直接当漏洞。\n\n第 7 步：确认报告\nAI 生成报告后输入：\n「报告确认，定稿」\n报告写三份文件：report.md、report.json、coverage-ledger.json，都在项目 websec-evidence/<sessionID>/，目录内 .gitignore 忽略证据正文。\n报告分两组：已确认（按严重度排序）与待验证（不评严重度）。\n定稿时会自动校验覆盖台账，缺项或证据引用不对会被打回重补。\n\n第 8 步：结束与复测\n定稿后输入 /new 开始下一次测试；修复后复测也建议新会话。\nEdge 启动失败时，AI 会请求降级，你确认后输入：\n「同意降级为人工浏览」\n未录入预估工时时不能定稿。\n\n提示：WEB 安全自测使用「会话管理」内置的 Edge 桥接，不需要额外启用「Edge 调试」插件。"
   }
 };
+const ROOM_HELP = `协作房间
+第一步：开房（主持人）
+· 选项目目录，点「开房」；启动器打开终端后自动关闭。
+· 终端右侧栏会出现「协作房间」卡片，点卡片即可查看邀请码。
+· 也可以按 Ctrl+X 再按 B 打开侧栏，或按 Ctrl+P 搜索「协作房间：邀请码」。
+· 邀请码形如：ws://192.168.1.5:54321?token=…
+· 通过可信渠道发给同事；房间随你的终端关闭而结束。
+第二步：加入（访客）
+· 在「协作房间」页粘贴邀请码、填写昵称、选择工作目录，点「加入」。
+· 终端会直接进入房间视图：左侧是主机的实时对话，右侧是房间状态。
+房间内操作：
+· 直接输入文字按 Enter：作为「建议」写入主机上下文，不会立即执行。
+· Alt+M 或 F3：切换「建议 / 排队」模式；排队由主机按先后顺序执行。
+· 排队成功后自动切回建议模式，避免下一句误发。
+· Esc：退出房间视图，回到自己的会话；不影响房间本身。
+· 中文输入法：回车会先确认候选词；确认文字已上屏后再按一次回车发送。
+审批与断线：
+· 需要授权的操作会在右侧显示「等待主机审批」，由主机确认。
+· 网络中断会自动重连并补齐内容；主机关闭终端后显示「房间已结束」。
+提示：访客不会消耗本机模型额度；房间是否可用取决于主机终端是否开启。`;
 const PLUGINS = {
   sm: { label: "会话管理", desc: "默认启用；关闭后工作流、工时与审核报告不可用" },
   edge: { label: "Edge 调试", desc: "启用独立 Edge 调试插件；WEB 安全自测不需要勾选（使用会话管理内置桥接）" },
@@ -721,7 +742,7 @@ $("roomJoinBtn").addEventListener("click", () => {
   post("roomJoin", { dir, invite, name, terminal: state.terminal, plugins: state.plugins, noPrompt: true });
 });
 // 使用说明按定时器帮助窗口的排版渲染：小节标题（蓝）/ 正文 / 要点 / 代码块。
-const HELP_SECTION = /^(第\s*\d+\s*步|越权测试：|代码审核任务：|开始下一个任务：|常用操作：)/
+const HELP_SECTION = /^(第\s*\d+\s*步|越权测试：|代码审核任务：|开始下一个任务：|常用操作：|房间内操作：|审批与断线：)/
 function renderHelp(container, text) {
   const lines = String(text ?? "").split("\n");
   const html = [];
@@ -742,6 +763,11 @@ function renderHelp(container, text) {
 $("help").addEventListener("click", () => {
   $("helpTitle").textContent = (WORKFLOWS[state.workflow]?.label ?? "") + " · 使用说明";
   renderHelp($("helpBody"), WORKFLOWS[state.workflow]?.help ?? "");
+  $("modal").classList.add("open");
+});
+$("roomHelp").addEventListener("click", () => {
+  $("helpTitle").textContent = "协作房间 · 使用说明";
+  renderHelp($("helpBody"), ROOM_HELP);
   $("modal").classList.add("open");
 });
 $("closeHelp").addEventListener("click", () => $("modal").classList.remove("open"));

@@ -144,6 +144,21 @@ describe("协作房间入口", () => {
     expect(program).toContain("访客零 token")
   })
 
+  test("协作房间使用说明遵守帮助排版约定并覆盖快捷键", () => {
+    expect(webview).toContain('id="roomHelp"')
+    expect(webview).toContain("ROOM_HELP")
+    expect(webview).toContain("第一步：开房（主持人）")
+    expect(webview).toContain("第二步：加入（访客）")
+    expect(webview).toContain("房间内操作：")
+    expect(webview).toContain("审批与断线：")
+    expect(webview).toContain("Alt+M 或 F3")
+    expect(webview).toContain("中文输入法")
+    expect(webview).toContain("Ctrl+P")
+    expect(webview).toContain("提示：访客不会消耗本机模型额度")
+    // 帮助渲染靠这两个小节标题出 h3；漏加会退化成正文段落。
+    expect(webview).toContain("|房间内操作：|审批与断线：")
+  })
+
   test("安装器首次写入 opencode.jsonc 时包含协作房间", () => {
     expect(setup).toContain("opencode-collab-room")
   })

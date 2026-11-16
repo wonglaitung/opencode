@@ -82,7 +82,7 @@ function RoomView(props: { api: TuiPluginApi; client: GuestClient; leave: () => 
                   props.leave()
                   return
                 }
-                if (key.name === "m" && (key.option || key.meta)) {
+                if ((key.name === "m" && (key.option || key.meta)) || key.name === "f3") {
                   key.preventDefault()
                   toggle()
                 }
@@ -93,7 +93,7 @@ function RoomView(props: { api: TuiPluginApi; client: GuestClient; leave: () => 
             />
           </box>
           <text fg={theme().textMuted}>
-            Enter 发送 · Alt+M 切换{mode() === "queue" ? "建议" : "排队"} · Esc 退出
+            Enter 发送 · Alt+M / F3 切换{mode() === "queue" ? "建议" : "排队"} · Esc 退出
           </text>
         </box>
       </box>
