@@ -272,15 +272,7 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
             <label for="roomDir">项目目录（开房用）</label>
             <div class="path-row"><input id="roomDir" placeholder="选择要开房的项目目录" autocomplete="off"><button class="ghost" id="roomBrowse">浏览</button></div>
           </div>
-          <div class="field">
-            <label for="roomWorkflow">工作流</label>
-            <select id="roomWorkflow">
-              <option value="task">一般任务</option>
-              <option value="sdlc">SDLC 开发流程</option>
-              <option value="reqdoc">REQDOC 需求书</option>
-              <option value="websec">WEB 安全自测</option>
-            </select>
-          </div>
+          <div class="tip-line"><span id="roomWorkflowHint"></span> <a class="link" href="#" id="roomWorkflowSwitch">在向导页切换 ›</a></div>
           <label class="check"><input type="checkbox" id="roomResume" checked> 继续上次会话（没有历史时自动新建）</label>
           <div class="tip-line" id="roomResumeHint"></div>
           <div class="action-row">
@@ -737,25 +729,25 @@ function checkRoomResume() {
 function updateRoomResume() {
   const dir = $("roomDir").value.trim();
   const can = !!(roomResumeInfo && roomResumeInfo.can && dir);
+  const resuming = can && $("roomResume").checked;
   $("roomResume").disabled = !can;
   if (!can) $("roomResume").checked = false;
-  const select = $("roomWorkflow");
   const label = roomResumeInfo?.workflow ? (WORKFLOWS[roomResumeInfo.workflow]?.label ?? "") : "";
+  $("roomWorkflowHint").textContent = resuming
+    ? `工作流：${label}（沿用上次会话）`
+    : `工作流：${WORKFLOWS[state.workflow]?.label ?? ""}`;
+  $("roomWorkflowSwitch").hidden = resuming;
   if (!dir) $("roomResumeHint").textContent = "选择目录后可查询是否可继续上次会话";
   else if (!roomResumeInfo) $("roomResumeHint").textContent = "";
   else if (!can) $("roomResumeHint").textContent = roomResumeInfo.hint || "";
-  else if ($("roomResume").checked) {
-    if (roomResumeInfo.workflow) select.value = roomResumeInfo.workflow;
-    $("roomResumeHint").textContent = `将沿用上次会话：${label} · ${roomResumeInfo.title ?? ""}`;
-  } else $("roomResumeHint").textContent = roomResumeInfo.hint || "";
-  select.disabled = can && $("roomResume").checked;
+  else if (resuming) $("roomResumeHint").textContent = `可继续：${label} · ${roomResumeInfo.title ?? ""}`;
+  else $("roomResumeHint").textContent = roomResumeInfo.hint || "";
 }
 function prefillRoom() {
   const base = state.lastProject || state.dir || "";
   if (base) {
     if (!$("roomDir").value.trim()) {
       $("roomDir").value = base;
-      $("roomWorkflow").value = state.workflow;
       checkRoomResume();
     }
     if (!$("roomJoinDir").value.trim()) $("roomJoinDir").value = base;
@@ -764,6 +756,7 @@ function prefillRoom() {
 }
 $("roomDir").addEventListener("input", () => checkRoomResume());
 $("roomResume").addEventListener("change", () => updateRoomResume());
+$("roomWorkflowSwitch").addEventListener("click", (event) => { event.preventDefault(); showView("wizard"); });
 $("roomStartBtn").addEventListener("click", () => {
   $("teamRoomNotice").textContent = "";
   $("teamRoomNotice").classList.remove("show", "error");
@@ -772,7 +765,7 @@ $("roomStartBtn").addEventListener("click", () => {
   $("roomStartBtn").disabled = true;
   post("roomStart", {
     dir,
-    workflow: $("roomWorkflow").value || state.workflow,
+    workflow: state.workflow,
     terminal: state.terminal,
     plugins: state.plugins,
     resume: $("roomResume").checked,

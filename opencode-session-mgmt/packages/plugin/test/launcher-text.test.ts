@@ -187,12 +187,16 @@ describe("恢复会话：插件与工作流以数据库为准", () => {
     expect(program).toContain("common.Add(session)")
   })
 
-  test("房间页有工作流选择与恢复提示", () => {
-    expect(webview).toContain('id="roomWorkflow"')
+  test("工作流只有向导页一个选择入口，房间页只读", () => {
+    expect(webview).not.toContain('id="roomWorkflow"')
+    expect(webview).toContain('id="roomWorkflowHint"')
+    expect(webview).toContain('id="roomWorkflowSwitch"')
+    expect(webview).toContain("在向导页切换")
+    expect(webview).toContain("沿用上次会话")
+    expect(webview).toContain('workflow: state.workflow,')
     expect(webview).toContain('id="roomResumeHint"')
     expect(webview).toContain("checkRoomResume")
     expect(webview).toContain('post("roomResume"')
-    expect(webview).toContain('workflow: $("roomWorkflow").value || state.workflow')
     expect(webview).not.toContain('resume: $("roomResume").checked,\n    noPrompt: true')
   })
 
