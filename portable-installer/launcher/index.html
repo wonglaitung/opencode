@@ -388,7 +388,7 @@ function clearError() {
 }
 
 // ---------------------------------------------------------------- 团队协作
-const team = { sessions: [], selected: "", file: "", inspected: null, db: "", cursor: "", total: 0, loading: false, queuedReset: false };
+const team = { sessions: [], seen: new Set(), selected: "", file: "", inspected: null, db: "", cursor: "", total: 0, loading: false, queuedReset: false };
 
 function showView(name) {
   const isTeam = name === "team";
@@ -431,6 +431,7 @@ function loadTeamSessions(reset = true) {
   if (reset) {
     team.cursor = "";
     team.sessions = [];
+    team.seen.clear();
     team.selected = "";
     team.total = 0;
     $("teamExportBtn").disabled = true;
@@ -504,10 +505,14 @@ function teamRowHtml(item) {
  */
 function renderTeamSessions(payload) {
   const items = Array.isArray(payload?.items) ? payload.items : [];
+  // 翻页期间排序键可能变化（尤其按消息数），同一会话可能在后续页再次出现；
+  // 用 id 去重，避免列表出现重复行、导出时选错。
+  const fresh = items.filter((item) => item?.id && !team.seen.has(item.id));
   if (team.sessions.length === 0) $("teamSessions").innerHTML = "";
-  if (items.length > 0) {
-    team.sessions.push(...items);
-    $("teamSessions").insertAdjacentHTML("beforeend", items.map(teamRowHtml).join(""));
+  if (fresh.length > 0) {
+    for (const item of fresh) team.seen.add(item.id);
+    team.sessions.push(...fresh);
+    $("teamSessions").insertAdjacentHTML("beforeend", fresh.map(teamRowHtml).join(""));
   }
   team.cursor = payload?.nextCursor ?? "";
   team.total = Number(payload?.total) || team.sessions.length;
