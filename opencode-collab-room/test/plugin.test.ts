@@ -14,6 +14,11 @@ test("房间视图提供 Alt+M 与 F3 两种切换方式", async () => {
   expect(source).toContain('key.name === "m" && (key.option || key.meta)')
   expect(source).toContain('key.name === "f3"')
   expect(source).toContain("Alt+M / F3 排队")
+  // 走宿主 keymap，输入框失焦或终端不解析 Alt 组合时也能生效
+  expect(source).toContain("props.api.keymap.registerLayer")
+  expect(source).toContain('{ key: "alt+m"')
+  expect(source).toContain('{ key: "f3"')
+  expect(source).toContain("onMouseUp={() => toggle()}")
 })
 
 test("房间视图与正常会话页保持同一版式", async () => {

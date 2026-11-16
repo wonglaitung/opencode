@@ -1,7 +1,7 @@
 import type { TextareaRenderable } from "@opentui/core"
 import type { TuiPluginApi, TuiRouteDefinition, TuiThemeCurrent } from "@opencode-ai/plugin/tui"
-import { For, Show, createSignal, onMount } from "solid-js"
-import type { GuestClient } from "./client"
+import { For, Show, createSignal, onCleanup, onMount } from "solid-js"
+import { logGuest, type GuestClient } from "./client"
 import type { WireMessage, WirePart } from "./protocol"
 
 export const ROUTE = "collab-room"
@@ -39,7 +39,29 @@ function RoomView(props: { api: TuiPluginApi; client: GuestClient; leave: () => 
   const [mode, setMode] = createSignal<Mode>("suggest")
   let input: TextareaRenderable | undefined
 
-  const toggle = () => setMode(mode() === "queue" ? "suggest" : "queue")
+  const toggle = () => {
+    setMode(mode() === "queue" ? "suggest" : "queue")
+    logGuest(`mode=${mode()}`)
+  }
+
+  // 键盘优先走宿主的 keymap（终端即便不认 Alt 组合也能生效），
+  // textarea 的 onKeyDown 只作为兜底。
+  onCleanup(
+    props.api.keymap.registerLayer({
+      commands: [
+        {
+          name: "collab.toggle-mode",
+          title: "协作房间：切换建议/排队",
+          category: "Collaboration",
+          run: () => toggle(),
+        },
+      ],
+      bindings: [
+        { key: "alt+m", cmd: "collab.toggle-mode", desc: "切换建议/排队" },
+        { key: "f3", cmd: "collab.toggle-mode", desc: "切换建议/排队" },
+      ],
+    }),
+  )
 
   const submit = () => {
     const text = input?.plainText.trim() ?? ""
@@ -138,6 +160,9 @@ function RoomView(props: { api: TuiPluginApi; client: GuestClient; leave: () => 
                   cursorColor={theme().text}
                   onSubmit={submit}
                   onKeyDown={(key) => {
+                    if (key.meta || key.option || /^f\d+$/.test(key.name)) {
+                      logGuest(`key ${key.name} meta=${key.meta} option=${key.option}`)
+                    }
                     if (key.name === "escape") {
                       key.preventDefault()
                       props.leave()
@@ -153,9 +178,11 @@ function RoomView(props: { api: TuiPluginApi; client: GuestClient; leave: () => 
                   }}
                 />
                 <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1} justifyContent="space-between">
-                  <text fg={mode() === "queue" ? theme().warning : theme().success}>
-                    <b>{mode() === "queue" ? "排队" : "建议"}</b>
-                  </text>
+                  <box onMouseUp={() => toggle()}>
+                    <text fg={mode() === "queue" ? theme().warning : theme().success}>
+                      <b>{mode() === "queue" ? "排队" : "建议"}</b>
+                    </text>
+                  </box>
                   <Show when={room().info.queue.length > 0}>
                     <text fg={theme().textMuted}>队列 {room().info.queue.length}</text>
                   </Show>
