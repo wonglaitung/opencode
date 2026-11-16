@@ -22,6 +22,13 @@ fi
 
 bun run build
 
+# 宿主的运行时模块改写用正则匹配 `from "x"`；压缩后会变成 `from"x"` 而匹配不到，
+# 导致运行时找不到 solid-js。这里强制校验，避免再次打包出坏产物。
+if grep -q 'from"solid-js"' dist/tui.js || ! grep -q 'from "solid-js"' dist/tui.js; then
+  echo "错误：dist/tui.js 的 import 格式不利于宿主改写（需要 'from \"solid-js\"'）" >&2
+  exit 1
+fi
+
 rm -rf "$DEST"
 mkdir -p "$DEST/dist"
 cp package.json "$DEST/package.json"

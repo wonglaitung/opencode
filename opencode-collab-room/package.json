@@ -9,7 +9,7 @@
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc --noEmit",
-    "build": "bun build src/tui.ts --outfile dist/tui.js --target bun --production --format esm --external @opentui/core --external @opentui/solid --external @opentui/solid/jsx-runtime --external solid-js --external solid-js/store"
+    "build": "bun build src/tui.ts --outfile dist/tui.js --target bun --format esm --external @opentui/core --external @opentui/solid --external @opentui/solid/jsx-runtime --external solid-js --external solid-js/store"
   },
   "peerDependencies": {
     "@opencode-ai/plugin": "*"
