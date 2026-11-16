@@ -26,7 +26,7 @@ export type Relay = {
   stop: () => Promise<void>
 }
 
-function log(line: string) {
+export function logHost(line: string) {
   try {
     const dir = path.join(os.homedir(), ".local", "share", "opencode", "log")
     appendFileSync(path.join(dir, "collab-room.log"), `${new Date().toISOString()} [host] ${line}\n`)
@@ -47,17 +47,17 @@ export function startRelay(handlers: RelayHandlers): Relay {
       const url = new URL(req.url)
       const tokenOk = matches(url.searchParams.get("token") ?? "", handlers.token)
       if (!tokenOk) {
-        log(`request ${url.pathname} token=bad`)
+        logHost(`request ${url.pathname} token=bad`)
         return new Response("unauthorized", { status: 401 })
       }
       const upgraded = srv.upgrade(req, { data: { name: "" } })
-      log(`request ${url.pathname} token=ok upgrade=${upgraded}`)
+      logHost(`request ${url.pathname} token=ok upgrade=${upgraded}`)
       if (upgraded) return
       return new Response("websocket required", { status: 426 })
     },
     websocket: {
       open(ws) {
-        log("open")
+        logHost("open")
         sockets.add(ws)
         ws.send(
           JSON.stringify({
@@ -91,7 +91,7 @@ export function startRelay(handlers: RelayHandlers): Relay {
         })
       },
       close(ws, code, reason) {
-        log(`close ${code} ${reason}`)
+        logHost(`close ${code} ${reason}`)
         sockets.delete(ws)
         handlers.onPeers?.(peers())
       },

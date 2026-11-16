@@ -24,7 +24,7 @@ export function describeSocketError(readyState: number) {
   return "连接中断，正在重试…"
 }
 
-function log(line: string) {
+export function logGuest(line: string) {
   try {
     const dir = path.join(os.homedir(), ".local", "share", "opencode", "log")
     appendFileSync(path.join(dir, "collab-room.log"), `${new Date().toISOString()} [guest] ${line}\n`)
@@ -48,17 +48,17 @@ export function startGuestClient(input: { url: string; name: string }): GuestCli
     if (disposed) return
     const ws = new WebSocket(input.url)
     socket = ws
-    log(`connect #${attempts}`)
+    logGuest(`connect #${attempts}`)
     // 首次连接迟迟不 open 时给出可操作的提示，而不是一直停在“连接中”。
     openTimer = setTimeout(() => {
       if (ws.readyState === 0) {
-        log("open timeout (readyState=0)")
+        logGuest("open timeout (readyState=0)")
         setRoom({ ...room(), error: describeSocketError(0) })
       }
     }, OPEN_TIMEOUT_MS)
     ws.addEventListener("open", () => {
       clearOpenTimer()
-      log("open")
+      logGuest("open")
       attempts = 0
       if (room().error) setRoom({ ...room(), error: undefined })
       ws.send(JSON.stringify({ type: "hello", name: input.name } satisfies ClientMessage))
@@ -69,12 +69,12 @@ export function startGuestClient(input: { url: string; name: string }): GuestCli
       setRoom(applyServerMessage(room(), message))
     })
     ws.addEventListener("error", (event) => {
-      log(`error ${(event as { message?: string })?.message ?? ""}`)
+      logGuest(`error ${(event as { message?: string })?.message ?? ""}`)
     })
     ws.addEventListener("close", (event) => {
       clearOpenTimer()
       socket = undefined
-      log(`close ${event.code} ${event.reason}`)
+      logGuest(`close ${event.code} ${event.reason}`)
       if (disposed || room().connection === "closed") return
       setRoom({ ...room(), connection: "connecting", error: describeSocketError(1) })
       timer = setTimeout(connect, backoff(attempts++))

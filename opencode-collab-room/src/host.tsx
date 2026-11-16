@@ -2,7 +2,7 @@ import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { Show, createSignal } from "solid-js"
 import { lanAddress } from "./net"
 import { formatInvite, type ClientMessage, type ServerMessage, type WireMessage, type WirePart } from "./protocol"
-import { startRelay, type Relay } from "./relay"
+import { logHost, startRelay, type Relay } from "./relay"
 import {
   awaitApproval,
   cancelRequest,
@@ -69,7 +69,11 @@ export function startHostRoom(api: TuiPluginApi): HostRoom {
     token,
     room: "collab-room",
     sessionTitle: () => currentTitle(api),
-    snapshot: () => ({ seq, messages: snapshotMessages(api) }),
+    snapshot: () => {
+      const messages = snapshotMessages(api)
+      logHost(`snapshot messages=${messages.length} session=${currentSession(api) ?? "-"}`)
+      return { seq, messages }
+    },
     state: (peers) => toWireState(state, peers.length),
     onPeers: (peers) => {
       for (const name of peers) {

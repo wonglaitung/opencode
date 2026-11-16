@@ -1,7 +1,7 @@
 import type { ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
 import type { TuiPluginApi, TuiRouteDefinition, TuiThemeCurrent } from "@opencode-ai/plugin/tui"
-import { For, Show, createSignal, onMount } from "solid-js"
-import type { GuestClient } from "./client"
+import { For, Show, createEffect, createSignal, onMount } from "solid-js"
+import { logGuest, type GuestClient } from "./client"
 import type { WireMessage, WirePart } from "./protocol"
 
 export const ROUTE = "collab-room"
@@ -39,7 +39,17 @@ function RoomView(props: { api: TuiPluginApi; client: GuestClient; leave: () => 
   }
 
   onMount(() => {
+    const renderer = props.api.renderer
+    logGuest(`mount ${renderer.width}x${renderer.height}`)
     setTimeout(() => input?.focus(), 0)
+  })
+
+  let lastKey = ""
+  createEffect(() => {
+    const key = `${room().connection}|${room().messages.length}`
+    if (key === lastKey) return
+    lastKey = key
+    logGuest(`render connection=${room().connection} messages=${room().messages.length}`)
   })
 
   return (
