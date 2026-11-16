@@ -159,13 +159,17 @@ describe("协作房间入口", () => {
     expect(webview).toContain("|房间内操作：|审批与断线：")
   })
 
-  test("安装器首次写入 opencode.jsonc 时包含协作房间", () => {
-    expect(setup).toContain("opencode-collab-room")
+  test("TUI 插件只写 tui.json，不污染安装器生成的 opencode.jsonc", () => {
+    expect(setup).not.toContain("opencode-collab-room")
+    expect(config).toContain("function buildTuiPluginText")
+    expect(config).toContain("https://opencode.ai/tui.json")
+    expect(config).toContain('path.join(configDir(args), "tui.json")')
   })
 
-  test("launcher-config 常驻注册协作房间插件", () => {
+  test("launcher-config 把协作房间写进 tui 配置并清理 opencode.jsonc 残留", () => {
     expect(config).toContain("ROOM_BUNDLE")
     expect(config).toContain("opencode-collab-room")
     expect(config).toContain("function roomPath")
+    expect(config).toContain('normalize(item).includes(ROOM_BUNDLE)')
   })
 })

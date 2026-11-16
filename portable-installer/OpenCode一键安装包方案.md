@@ -56,8 +56,7 @@
         "plugin": [
           "C:/Users/<用户名>/OpenCode/runtime/opencode-sm-bundle/packages/plugin",
           "C:/Users/<用户名>/OpenCode/runtime/opencode-edge-debug-bundle",
-          "C:/Users/<用户名>/OpenCode/runtime/opencode-server-debug-bundle",
-          "C:/Users/<用户名>/OpenCode/runtime/opencode-collab-room"
+          "C:/Users/<用户名>/OpenCode/runtime/opencode-server-debug-bundle"
         ],
         "provider": {
           "athlon-coding": {
@@ -217,13 +216,13 @@ cmd /c portable-installer\build\build.bat
 | `portable-installer/build/OpenCode-Setup.nsi` | 主安装脚本 |
 | `portable-installer/launcher/`（`Program.cs` / `index.html` / `Launcher.csproj`） | **现役启动器**（.NET 8 WinForms + WebView2）；`build.bat` 用 `dotnet publish` 产出 `OpenCode-launch.exe`，主安装包再把它内嵌进去 |
 | `portable-installer/build/OpenCode-launch.nsi` | **历史遗留脚本**：旧版 NSIS 启动器，`build.bat` 已不再编译（现役启动器见上一行）；保留仅为历史参考，不要按它判断启动器行为 |
-| `portable-installer/build/launcher-config.js` | 启动器配置助手（编译时内嵌，读写 `identity.json`、`terminal_mode.ini` 与 `opencode.jsonc`；每次 `--apply` 都会确保 `opencode-collab-room` 插件条目常驻） |
+| `portable-installer/build/launcher-config.js` | 启动器配置助手（编译时内嵌，读写 `identity.json`、`terminal_mode.ini`、`opencode.jsonc`；每次 `--apply` 把 `opencode-collab-room` 写入 `tui.json`/`tui.jsonc` 的 `plugin` 数组，TUI 插件只认这份配置） |
 | `portable-installer/build/OpenCode-Reset.nsi` | 清空历史会话工具脚本（构建中间产物，已内嵌进主包） |
 | `.opencode/skills/opencode-installer/SKILL.md` | **首选打包入口**：强制清缓存、完整重建、依赖核对与验收 |
 | `portable-installer/payload/OpenCode/runtime` | Node 工具链载荷 |
 | `portable-installer/payload/OpenCode/runtime/opencode-team-share` | 团队协作 CLI（会话交接导出/导入；启动器「团队协作」入口调用，bun 直接跑 TS，零第三方依赖） |
 | `opencode-collab-room/` | 协作房间插件（`{tui}` 单入口）：启动器「团队协作 → 协作房间」写意图文件触发开房/加入；WS relay 与 TUI 面板都在插件内，访客不调用本机模型 |
-| `portable-installer/payload/OpenCode/runtime/opencode-collab-room` | 协作房间插件载荷（`package.json` + `dist/tui.js`，由 `opencode-collab-room/script/sync-bundle.sh` 生成） |
+| `portable-installer/payload/OpenCode/runtime/opencode-collab-room` | 协作房间插件载荷（`package.json` + `dist/tui.js`，由 `opencode-collab-room/script/sync-bundle.sh` 生成；通过 `~/.config/opencode/tui.json` 注册） |
 | `portable-installer/payload/OpenCode/python` | Python 载荷（含 `python3.exe`） |
 | `portable-installer/payload/OpenCode/terminal` | Windows Terminal 载荷（`WindowsTerminal.exe` + `OpenConsole.exe`，所有用户均部署） |
 | `OpenCode-Setup.exe`（构建产物） | **唯一需要分发给业务的文件**：内置载荷 + 启动器 + 清空历史工具，双击即装 |

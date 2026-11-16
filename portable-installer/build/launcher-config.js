@@ -395,7 +395,6 @@ function buildPluginText(text, enabled, root) {
       unknown.push(item)
     }
     for (const item of unknown) desired.push(item)
-    desired.push(roomPath(root))
     for (const key of ORDER) {
       if (enabled.has(key)) desired.push(canonicalPath(root, key))
     }
@@ -406,10 +405,37 @@ function buildPluginText(text, enabled, root) {
   const close = findRootClose(text)
   if (close < 0) throw fail("CONFIG_PARSE", "opencode.jsonc 结构无法识别，未做修改")
 
-  desired.push(roomPath(root))
   for (const key of ORDER) {
     if (enabled.has(key)) desired.push(canonicalPath(root, key))
   }
+  const before = text.slice(0, close)
+  const after = text.slice(close)
+  const trimmed = before.replace(/\s+$/, "")
+  const needsComma = !trimmed.endsWith("{") && !trimmed.endsWith(",")
+  const block = (needsComma ? "," : "") + '\n  "plugin": ' + formatArray(desired) + "\n"
+  return trimmed + block + after
+}
+
+function buildTuiPluginText(text, root) {
+  const pluginValue = findTopLevelKey(text, "plugin")
+  if (pluginValue >= 0 && text[pluginValue] !== "[") {
+    throw fail("CONFIG_PARSE", "tui 配置的 plugin 字段不是数组，未做修改")
+  }
+  const arr = findPluginArray(text)
+  const desired = []
+
+  if (arr) {
+    for (const item of collectStrings(arr.inner)) {
+      if (normalize(item).includes(ROOM_BUNDLE)) continue
+      desired.push(item)
+    }
+    desired.push(roomPath(root))
+    return text.slice(0, arr.start) + formatArray(desired) + text.slice(arr.end + 1)
+  }
+
+  const close = findRootClose(text)
+  if (close < 0) throw fail("CONFIG_PARSE", "tui 配置结构无法识别，未做修改")
+  desired.push(roomPath(root))
   const before = text.slice(0, close)
   const after = text.slice(close)
   const trimmed = before.replace(/\s+$/, "")
@@ -532,6 +558,24 @@ function apply(args) {
       const next = buildPluginText(text, enabled, root)
       if (!validateJsonc(next)) throw fail("CONFIG_WRITE_BAD", "改写后的 opencode.jsonc 校验失败，未写入")
       if (next !== text) plans.push({ file: opencodeConfig, oldText: text, text: next, label: "opencode.jsonc" })
+    }
+  }
+
+  {
+    // TUI 插件只从 tui.json / tui.jsonc 读取（server 插件才看 opencode.jsonc）。
+    const tuiJson = path.join(configDir(args), "tui.json")
+    const tuiJsonc = path.join(configDir(args), "tui.jsonc")
+    const jsoncText = readText(tuiJsonc)
+    const file = jsoncText !== null ? tuiJsonc : tuiJson
+    const text = jsoncText ?? readText(tuiJson)
+    if (text === null) {
+      const next = JSON.stringify({ $schema: "https://opencode.ai/tui.json", plugin: [roomPath(root)] }, null, 2) + "\n"
+      plans.push({ file, oldText: null, text: next, label: "tui.json" })
+    } else {
+      if (!validateJsonc(text)) throw fail("CONFIG_PARSE", "tui 配置无法解析，未做修改")
+      const next = buildTuiPluginText(text, root)
+      if (!validateJsonc(next)) throw fail("CONFIG_WRITE_BAD", "改写后的 tui 配置校验失败，未写入")
+      if (next !== text) plans.push({ file, oldText: text, text: next, label: path.basename(file) })
     }
   }
 
