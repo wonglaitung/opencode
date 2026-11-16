@@ -132,10 +132,8 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
 .tab-foot .tip-line{margin:0 0 6px}
 .tab-foot .tip-line:last-child{margin-bottom:0}
 .tab-foot .link{margin:0;display:inline-block}
-.mode-item{display:flex;align-items:flex-start;gap:9px;padding:9px 11px;border:1px solid #e2e8f0;border-radius:9px;background:#f8fafc;margin-top:8px;cursor:pointer;color:#334155;font-size:13px}
-.mode-item:hover{border-color:#bfdbfe;background:#f0f7ff}
-.mode-item input{margin-top:2px}
-.mode-item small{display:block;margin-top:2px;color:#64748b;font-size:11px;line-height:1.5}
+.radio-row{display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin-top:2px}
+.radio-row label{display:inline-flex;align-items:center;gap:6px;margin:0;color:#334155;font-size:13px;font-weight:400;cursor:pointer}
 .handoff-card{border:1px solid var(--line);border-radius:12px;padding:14px;background:#f8fafc;margin:12px 0}
 .handoff-card dl{display:grid;grid-template-columns:56px 1fr;gap:8px 14px;margin:0}
 .handoff-card dt{color:#64748b;font-size:12px}
@@ -280,8 +278,11 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
           </div>
           <div class="field" id="teamModeField">
             <label>导入方式</label>
-            <label class="mode-item"><input type="radio" name="teamMode" value="handoff" checked><span>接手继续<small>同一会话，带工作流阶段进度；此后在这个会话里的活动会记入你的统计</small></span></label>
-            <label class="mode-item"><input type="radio" name="teamMode" value="reference"><span>仅参考<small>复制成新会话（标题加「[参考]」），不带阶段进度、不沿用原会话的成本与 Token</small></span></label>
+            <div class="radio-row">
+              <label><input type="radio" name="teamMode" value="handoff" checked> 接手继续</label>
+              <label><input type="radio" name="teamMode" value="reference"> 仅参考</label>
+            </div>
+            <div class="field-hint" id="teamModeHint"></div>
           </div>
           <div class="field" id="teamProjectField" hidden>
             <label for="teamProject">导入到项目</label>
@@ -294,7 +295,6 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
           <div class="ok-strip" id="teamImportOk"></div>
           <div class="tab-foot">
             <div class="tip-line">导入后可直接点「打开这条会话」继续；也可以稍后打开：启动器选该项目目录 → 打开数字程序员 → 按 Ctrl+X 再按 L 打开会话列表 → 选标题带「[交接]」的那条。</div>
-            <div class="tip-line">接手继续会带上原工作流阶段进度；仅参考是独立副本，打开后由「会话管理」建一个全新工作流，可以按需要重新启动。</div>
           </div>
         </section>
 
@@ -685,7 +685,18 @@ function resetImport() {
   $("teamImportOk").classList.remove("show");
   const handoffMode = document.querySelector('input[name="teamMode"][value="handoff"]');
   if (handoffMode) handoffMode.checked = true;
+  renderImportModeHint();
 }
+
+function renderImportModeHint() {
+  const mode = document.querySelector('input[name="teamMode"]:checked')?.value || "handoff";
+  $("teamModeHint").textContent = mode === "reference"
+    ? "复制成新会话（标题加「[参考]」），不带阶段进度，也不沿用原会话的成本与 Token。"
+    : "同一会话，保留工作流阶段进度；此后的活动会记入你的统计。";
+}
+document.querySelectorAll('input[name="teamMode"]').forEach((input) => {
+  input.addEventListener("change", renderImportModeHint);
+});
 
 function renderTeamProjects(items) {
   const projects = Array.isArray(items) ? items : [];

@@ -233,6 +233,12 @@ describe("恢复会话：插件与工作流以数据库为准", () => {
     expect(webview).toContain('id="teamFile"')
     expect(webview).toContain("readonly")
     expect(webview).not.toContain('id="teamFileName"')
+    // 导入方式用紧凑单选行 + 动态说明，不再用大卡片
+    expect(webview).toContain('class="radio-row"')
+    expect(webview).toContain('id="teamModeHint"')
+    expect(webview).toContain("function renderImportModeHint")
+    expect(webview).not.toContain("mode-item")
+    expect(webview).not.toContain("接手继续会带上原工作流阶段进度")
     // 房间：两个分组卡片
     expect(webview).toContain("开协作房间（主持人）")
     expect(webview).toContain("加入协作房间（访客）")
