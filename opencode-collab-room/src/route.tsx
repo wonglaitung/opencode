@@ -1,4 +1,4 @@
-import type { TextareaRenderable } from "@opentui/core"
+import type { ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
 import type { TuiPluginApi, TuiRouteDefinition, TuiThemeCurrent } from "@opencode-ai/plugin/tui"
 import { For, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { logGuest, type GuestClient } from "./client"
@@ -43,6 +43,7 @@ function RoomView(props: { api: TuiPluginApi; client: GuestClient; leave: () => 
   const room = () => props.client.room()
   const [mode, setMode] = createSignal<Mode>("suggest")
   let input: TextareaRenderable | undefined
+  let scroll: ScrollBoxRenderable | undefined
 
   // 访客自己的显示偏好（与正常会话页共用同一批 KV 键），非响应式但随数据刷新重算。
   const timestamps = () => props.api.kv.get<string>("timestamps", "hide") === "show"
@@ -66,10 +67,29 @@ function RoomView(props: { api: TuiPluginApi; client: GuestClient; leave: () => 
           category: "Collaboration",
           run: () => toggle(),
         },
+        {
+          name: "collab.page.up",
+          title: "协作房间：向上翻页",
+          category: "Collaboration",
+          run: () => {
+            if (scroll) scroll.scrollBy(-scroll.height / 2)
+          },
+        },
+        {
+          name: "collab.page.down",
+          title: "协作房间：向下翻页",
+          category: "Collaboration",
+          run: () => {
+            if (scroll) scroll.scrollBy(scroll.height / 2)
+          },
+        },
       ],
       bindings: [
         { key: "alt+m", cmd: "collab.toggle-mode", desc: "切换建议/排队" },
         { key: "f3", cmd: "collab.toggle-mode", desc: "切换建议/排队" },
+        // 与正常会话页的默认键位一致；Home/End 留给输入框移动光标
+        { key: "pageup,ctrl+alt+b", cmd: "collab.page.up", desc: "向上翻页" },
+        { key: "pagedown,ctrl+alt+f", cmd: "collab.page.down", desc: "向下翻页" },
       ],
     }),
   )
@@ -132,6 +152,7 @@ function RoomView(props: { api: TuiPluginApi; client: GuestClient; leave: () => 
     <box flexDirection="row" flexGrow={1} minHeight={0}>
       <box flexGrow={1} minHeight={0} paddingBottom={1} paddingLeft={2} paddingRight={2}>
         <scrollbox
+          ref={(renderable: ScrollBoxRenderable) => (scroll = renderable)}
           viewportOptions={{ paddingRight: scrollbar() ? 1 : 0 }}
           verticalScrollbarOptions={{
             paddingLeft: 1,
@@ -239,6 +260,12 @@ function RoomView(props: { api: TuiPluginApi; client: GuestClient; leave: () => 
                     if ((key.name === "m" && (key.option || key.meta)) || key.name === "f3") {
                       key.preventDefault()
                       toggle()
+                      return
+                    }
+                    // 兜底：textarea 可能自己吃掉 PageUp/PageDown，按半页滚动与正常会话页一致
+                    if (key.name === "pageup" || key.name === "pagedown") {
+                      key.preventDefault()
+                      if (scroll) scroll.scrollBy((key.name === "pageup" ? -1 : 1) * (scroll.height / 2))
                     }
                   }}
                   ref={(renderable: TextareaRenderable) => {
@@ -275,7 +302,7 @@ function RoomView(props: { api: TuiPluginApi; client: GuestClient; leave: () => 
           <box flexDirection="row" paddingLeft={3} paddingTop={1} justifyContent="space-between" gap={2}>
             <text fg={theme().textMuted}>房间：{room().title ?? (room().room || "协作房间")}</text>
             <text fg={statusColor(theme(), room().connection, room().info.status)}>
-              {statusLabel(room())} · 成员 {room().info.peers} · Alt+M / F3 排队 · Esc 退出
+              {statusLabel(room())} · 成员 {room().info.peers} · PgUp/PgDn 翻页 · Alt+M / F3 排队 · Esc 退出
             </text>
           </box>
         </box>
