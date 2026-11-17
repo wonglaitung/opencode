@@ -741,19 +741,21 @@ document.querySelectorAll('input[name="teamMode"]').forEach((input) => {
 
 function renderTeamProjects(items) {
   const projects = Array.isArray(items) ? items : [];
-  const options = projects.map((item) =>
-    `<option value="${esc(item.id)}">${esc(item.worktree)}${item.name ? ` · ${esc(item.name)}` : ""}</option>`
-  ).join("");
-  $("teamProject").innerHTML = options;
+  const option = (item) =>
+    `<option value="${esc(item.id)}">${esc(item.worktree)}${item.name ? ` · ${esc(item.name)}` : ""}</option>`;
+  const options = projects.map(option).join("");
+  // 导入目标必须落到真实项目；非 git 会话的目录分组只用于导出筛选
+  const targets = projects.filter((item) => item.importable !== false);
+  $("teamProject").innerHTML = targets.map(option).join("");
   // 导出页的项目过滤器：保留当前选择，避免刷新后跳回「全部项目」
   const filter = $("teamProjectFilter");
   const current = filter.value;
   filter.innerHTML = `<option value="">全部项目</option>` + options;
   filter.value = current;
-  $("teamProjectField").hidden = projects.length === 0;
-  $("teamImportBtn").disabled = projects.length === 0 || !team.inspected;
+  $("teamProjectField").hidden = targets.length === 0;
+  $("teamImportBtn").disabled = targets.length === 0 || !team.inspected;
   // 这条提示只在导入页有意义：导出页没有项目也能按「全部项目」浏览会话
-  if (projects.length === 0 && !$("teamImport").hidden) {
+  if (targets.length === 0 && !$("teamImport").hidden) {
     showError("本机还没有可导入的项目，请先在该项目打开一次 opencode。");
   }
 }

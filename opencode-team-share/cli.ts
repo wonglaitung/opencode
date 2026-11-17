@@ -23,7 +23,7 @@ import { backupDb, openDb, resolveDbPath } from "./src/db"
 import { TeamShareError } from "./src/errors"
 import { decodeHandoff, encodeHandoff, handoffSummary, type HandoffFile } from "./src/handoff"
 import { denormalize } from "./src/paths"
-import { exportHandoff, importSession, listProjects, listSessions, sessionWorktree } from "./src/session"
+import { exportHandoff, importSession, isDirectoryProject, listProjects, listSessions, sessionWorktree } from "./src/session"
 import { usableWorktree } from "./src/paths"
 import { readWorkflowState, writeWorkflowState } from "./src/workflow-state"
 
@@ -168,6 +168,11 @@ async function commandImport(args: Args) {
   const parsed = decodeHandoff(Buffer.from(await Bun.file(file).arrayBuffer()))
   const { db, dbPath } = dbFor(args, false)
   try {
+    if (isDirectoryProject(projectID)) {
+      throw new TeamShareError(
+        "这个条目是非 git 会话的目录分组，只用于导出筛选，不能作为导入目标。请先在目标目录用 opencode 打开一次，再用真实项目导入。",
+      )
+    }
     const project = db.query("SELECT id, worktree FROM project WHERE id = ?").get(projectID) as
       | { id: string; worktree: string }
       | undefined

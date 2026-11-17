@@ -13,7 +13,23 @@ import { newId } from "./ids"
 import { createSlug, denormalize, normalize, usableWorktree, type PathRules } from "./paths"
 import type { HandoffFile, HandoffMessage, HandoffSession, HandoffWorkflow } from "./handoff"
 
-export type ProjectRow = { id: string; worktree: string; name?: string }
+export type ProjectRow = {
+  id: string
+  worktree: string
+  name?: string
+  /** 目录分组只用于导出筛选，导入必须落到真实项目（见 isDirectoryProject） */
+  importable?: boolean
+}
+
+const DIRECTORY_PROJECT_PREFIX = "dir:"
+
+export function directoryProjectID(directory: string): string {
+  return DIRECTORY_PROJECT_PREFIX + directory
+}
+
+export function isDirectoryProject(id: string): boolean {
+  return id.startsWith(DIRECTORY_PROJECT_PREFIX)
+}
 
 export type SessionSummary = {
   id: string
@@ -54,9 +70,34 @@ export function listProjects(db: Database): ProjectRow[] {
   }>
   // 内置 global 项目的 worktree 是文件系统根：导入目标落在这里会把会话写到盘符根，
   // 而且启动器只能显示一个 "/"，所以不作为可导入项目列出。
-  return rows
+  const projects = rows
     .filter((row) => usableWorktree(row.worktree) !== undefined)
-    .map((row) => ({ id: row.id, worktree: row.worktree, name: row.name }))
+    .map((row) => ({ id: row.id, worktree: row.worktree, name: row.name ?? undefined }))
+
+  // 非 git 目录的会话挂在 global 下，项目表里没有它们的目录。用会话目录补出分组，
+  // 只供导出筛选：导入必须写回真实项目，所以标为不可导入。
+  const sessions = db
+    .query(
+      `SELECT s.directory AS directory, p.worktree AS worktree
+         FROM session s LEFT JOIN project p ON p.id = s.project_id
+        WHERE s.time_archived IS NULL AND s.directory IS NOT NULL AND s.directory <> ''
+        GROUP BY s.directory, p.worktree`,
+    )
+    .all() as Array<{ directory: string; worktree?: string }>
+  const grouped = sessions
+    .filter((row) => usableWorktree(row.worktree) === undefined)
+    .flatMap((row) =>
+      usableWorktree(row.directory) === undefined
+        ? []
+        : [{ id: directoryProjectID(row.directory), worktree: row.directory, name: baseName(row.directory), importable: false }],
+    )
+
+  return [...projects, ...grouped].sort((a, b) => a.worktree.localeCompare(b.worktree))
+}
+
+/** 跨平台取目录名：会话里既有 `/` 也有 `\`。 */
+function baseName(path: string): string {
+  return path.split(/[\\/]/).filter(Boolean).pop() ?? path
 }
 
 /** 可交接的会话列表（默认只列主会话，按最近更新倒序，排除已归档）。 */
@@ -116,8 +157,14 @@ export function listSessions(db: Database, options: ListSessionsOptions = {}): S
   const params: Array<string | number> = []
   if (!options.includeChildren) where.push("s.parent_id IS NULL")
   if (options.projectID) {
-    where.push("s.project_id = ?")
-    params.push(options.projectID)
+    // dir: 前缀是导出页对非 git 会话的目录分组（见 listProjects），按会话目录筛选
+    if (isDirectoryProject(options.projectID)) {
+      where.push("s.directory = ?")
+      params.push(options.projectID.slice(DIRECTORY_PROJECT_PREFIX.length))
+    } else {
+      where.push("s.project_id = ?")
+      params.push(options.projectID)
+    }
   }
   if (options.since !== undefined) {
     where.push("s.time_updated >= ?")

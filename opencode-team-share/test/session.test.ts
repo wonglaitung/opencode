@@ -208,8 +208,21 @@ describe("会话读取", () => {
       timeUpdated: 3000,
       messages: [],
     })
-    expect(listProjects(db).map((item) => item.id)).toEqual(["p1"])
+    // 目录分组补出 scheduler，方便导出页按项目筛选；但不能作为导入目标
+    expect(listProjects(db)).toEqual([
+      { id: "p1", worktree: "D:/projects/app", name: undefined },
+      {
+        id: "dir:D:/projects/scheduler",
+        worktree: "D:/projects/scheduler",
+        name: "scheduler",
+        importable: false,
+      },
+    ])
     expect(listSessions(db).items[0]!.project).toBe("D:/projects/scheduler")
+    expect(listSessions(db, { projectID: "dir:D:/projects/scheduler" }).items.map((item) => item.id)).toEqual([
+      "ses_global",
+    ])
+    expect(listSessions(db, { projectID: "p1" }).items).toEqual([])
   })
 })
 
