@@ -379,6 +379,21 @@ describe("WorkflowDefinition 注册表（3.2）", () => {
     expect(currentInProgressStage(s)).toBe("design")
   })
 
+  test("sdlc-r39：需求阶段注入需求理解卡与集中追问，且只在 requirements 阶段出现", () => {
+    const requirementRules = rulesForStage(SDLC, "requirements")
+    const r39 = requirementRules.find((rule) => rule.id === "sdlc-r39")
+    expect(r39).toBeDefined()
+    expect(r39!.stage).toBe("requirements")
+    for (const phrase of ["需求理解卡", "已知 / 待确认 / 冲突", "最多 5 问", "与 sdlc-r6 的预估工询问合并在同一轮", "不拆成两轮"]) {
+      expect(r39!.text).toContain(phrase)
+    }
+    expect(r39!.text).toContain("先等开发者答复再输出需求摘要")
+    expect(r39!.text).not.toContain("记录该决定后可跳过")
+    expect(requirementRules.some((rule) => rule.id === "sdlc-r6")).toBe(true)
+    expect(rulesForStage(SDLC, "design").some((rule) => rule.id === "sdlc-r39")).toBe(false)
+    expect(SDLC.rules.filter((rule) => rule.stage === "requirements")).toHaveLength(2)
+  })
+
   test("REQDOC 定义：四段渐进引导 + 业务确认闭环，无提交门禁", () => {
     expect(REQDOC.type).toBe("reqdoc")
     expect(REQDOC.stages).toEqual(["goal", "rules", "edge", "prd", "review"])

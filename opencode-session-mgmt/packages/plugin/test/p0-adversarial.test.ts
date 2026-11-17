@@ -1546,6 +1546,41 @@ describe("★ sdlc-r37：模型侧自审落成规则（不滞留 conventions）"
   })
 })
 
+describe("★ sdlc-r39：需求阶段先澄清歧义再确认（软约束，无新工具）", () => {
+  const wfSrc = () => read(join("..", "..", "shared", "src", "workflow.ts"))
+  const docSrc = () => read(join("..", "..", "..", "docs", "workflow-sdlc.md"))
+
+  test("★ r39 只注入 requirements，话术含理解卡、集中追问与跳过凭据", () => {
+    const { rulesForStage, SDLC } = require("../../shared/src/workflow") as {
+      rulesForStage: (def: unknown, stage: string | null) => { id: string; stage: string; text: string }[]
+      SDLC: unknown
+    }
+    const r39 = rulesForStage(SDLC, "requirements").find((r) => r.id === "sdlc-r39")
+    expect(r39).toBeDefined()
+    expect(r39!.stage).toBe("requirements")
+    for (const phrase of ["需求理解卡", "已知 / 待确认 / 冲突", "最多 5 问", "不用问了 / 直接进设计"]) {
+      expect(r39!.text).toContain(phrase)
+    }
+    // 软约束：不谎称服务端门禁，也不引入 reqdoc 的 deriveQuestions/槽位机制
+    expect(r39!.text).not.toContain("门禁")
+    expect(r39!.text).not.toContain("kbGate")
+    expect(rulesForStage(SDLC, "design").some((r) => r.id === "sdlc-r39")).toBe(false)
+  })
+
+  test("★ 规则全文与注入条数同步（r39 加进 requirements 而非新增阶段）", () => {
+    const src = wfSrc()
+    const from = src.indexOf('id: "sdlc-r39"')
+    expect(from).toBeGreaterThan(-1)
+    const rule = src.slice(from, src.indexOf('{ id: "sdlc-', from + 10))
+    expect(rule).toContain('stage: "requirements"')
+    expect(rule).toContain("需求理解卡")
+    const doc = docSrc()
+    expect(doc).toContain("sdlc 全 16 条")
+    expect(doc).toContain("requirements 注入 9 条（+r6 +r39）")
+    expect(doc).toContain("| sdlc-r39 | requirements | 进入需求阶段时，先输出需求理解卡")
+  })
+})
+
 describe("★ 07 第 0 节：AI 是业务需求分析师（方法 vs 领域）", () => {
   const conv = () => read(join("..", "conventions", "reqdoc", "07-业务口语.md"))
 

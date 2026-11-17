@@ -1,5 +1,5 @@
 /**
- * 评测场景集(67 个,sdlc s1-s25 + reqdoc r1-r54 子集 + task t1-t9)。覆盖关键规则:
+ * 评测场景集(80 个,sdlc 26 + reqdoc 34 + websec 8 + task 12)。覆盖关键规则:
  * 基线录入不重复、确认后 approve、无确认不 approve、回到XX→revisit、
  * 审查逐段不批量、前序未完成不 submit、提交前查门禁、完成后提示 /new、
  * 完成后开新需求不重启、空档态继续进入下一阶段、
@@ -263,6 +263,44 @@ export const SCENARIOS: Scenario[] = [
       kind: "tool",
       expectTool: "workflow_baseline",
       args: { estimated_hours: 24, developer_confirmed: true },
+    },
+  },
+  {
+    // sdlc-r39：需求含影响设计/实现的歧义时，先输出理解卡并集中提问，不得直接要确认。
+    // 单轮文本判据只能验「AI 说了什么」——提问没有结构化工具，无法在评测里回灌答案
+    // 验证闭环（与 s24/s25 的基线录入成对不同）；闭环仍靠真实会话人工确认。
+    name: "s26 需求有歧义先出理解卡并提问",
+    workflowType: "sdlc",
+    state: (() => {
+      const s = newSdlc()
+      enter(s, "requirements")
+      return finish(s)
+    })(),
+    userTurn: "做一个登录功能。账号锁定规则、角色数量、等保要求我都没想清楚，你先帮我理一下。",
+    judge: {
+      kind: "text",
+      type: "categoryKeywords",
+      categories: [["需求理解卡", "待确认", "冲突"], ["？", "?"], ["锁定", "角色", "等保"]],
+      minCategories: 3,
+      note: "须同时出现理解卡标记、至少一个问句、且问到具体歧义项；只总结不提问算未遵循",
+    },
+  },
+  {
+    // s26 的反向分支：开发者明确说「不用问了」时直接出摘要，不能继续追问。
+    name: "s27 明确不用问了直接出摘要",
+    workflowType: "sdlc",
+    state: (() => {
+      const s = newSdlc()
+      enter(s, "requirements")
+      return finish(s)
+    })(),
+    userTurn: "范围就按你的默认建议，不用问了，直接进设计。",
+    judge: {
+      kind: "text",
+      type: "categoryKeywords",
+      categories: [["需求摘要", "摘要", "范围"], ["设计", "下一步"]],
+      minCategories: 2,
+      note: "须给出需求摘要并交代下一步；继续追问算未遵循",
     },
   },
   {
