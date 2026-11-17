@@ -1,8 +1,12 @@
 import type { TextareaRenderable } from "@opentui/core"
 import type { TuiPluginApi, TuiRouteDefinition, TuiThemeCurrent } from "@opencode-ai/plugin/tui"
-import { For, Show, createSignal, onCleanup, onMount } from "solid-js"
+import { For, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { logGuest, type GuestClient } from "./client"
-import type { WireMessage, WirePart } from "./protocol"
+import type { ClientMessage, WirePermission, WireQuestion } from "./protocol"
+import { MessageView } from "./view/message"
+import { PermissionCard, QuestionCard } from "./view/request"
+import { useSyntaxStyle } from "./view/syntax"
+import { formatCost, formatTokens } from "./view/util"
 
 export const ROUTE = "collab-room"
 
@@ -35,9 +39,16 @@ export function roomRoute(input: { api: TuiPluginApi; client: GuestClient; leave
 
 function RoomView(props: { api: TuiPluginApi; client: GuestClient; leave: () => void }) {
   const theme = () => props.api.theme.current
+  const syntax = useSyntaxStyle(theme)
   const room = () => props.client.room()
   const [mode, setMode] = createSignal<Mode>("suggest")
   let input: TextareaRenderable | undefined
+
+  // 访客自己的显示偏好（与正常会话页共用同一批 KV 键），非响应式但随数据刷新重算。
+  const timestamps = () => props.api.kv.get<string>("timestamps", "hide") === "show"
+  const genericOutput = () => Boolean(props.api.kv.get("generic_tool_output_visibility", false))
+  const scrollbar = () => Boolean(props.api.kv.get("scrollbar_visible", false))
+  const thinkingMode = () => props.api.kv.get("thinking_mode", "hide")
 
   const toggle = () => {
     setMode(mode() === "queue" ? "suggest" : "queue")
@@ -82,14 +93,49 @@ function RoomView(props: { api: TuiPluginApi; client: GuestClient; leave: () => 
     setTimeout(() => input?.focus(), 0)
   })
 
+  const lastAssistant = createMemo(() => {
+    const messages = room().messages
+    for (let index = messages.length - 1; index >= 0; index--) {
+      const message = messages[index]!
+      if (message.role === "assistant") return message
+    }
+  })
+
+  const usage = createMemo(() => {
+    let tokens = 0
+    let cost = 0
+    for (const message of room().messages) {
+      const info = message.info
+      if (!info) continue
+      if (info.tokens) {
+        tokens +=
+          info.tokens.input +
+          info.tokens.output +
+          info.tokens.reasoning +
+          info.tokens.cacheRead +
+          info.tokens.cacheWrite
+      }
+      if (info.cost) cost += info.cost
+    }
+    const parts = [tokens > 0 ? `${formatTokens(tokens)} tokens` : undefined, formatCost(cost)]
+    return parts.filter(Boolean).join(" · ")
+  })
+
+  const hostLine = createMemo(() => {
+    const info = lastAssistant()?.info
+    const model = info?.model
+    const parts = [info?.agent, model ? (model.variant ? `${model.modelID} · ${model.variant}` : model.modelID) : undefined]
+    return parts.filter(Boolean).join(" · ")
+  })
+
   return (
     <box flexDirection="row" flexGrow={1} minHeight={0}>
       <box flexGrow={1} minHeight={0} paddingBottom={1} paddingLeft={2} paddingRight={2}>
         <scrollbox
-          viewportOptions={{ paddingRight: 1 }}
+          viewportOptions={{ paddingRight: scrollbar() ? 1 : 0 }}
           verticalScrollbarOptions={{
             paddingLeft: 1,
-            visible: true,
+            visible: scrollbar(),
             trackOptions: {
               backgroundColor: theme().backgroundElement,
               foregroundColor: theme().border,
@@ -106,35 +152,57 @@ function RoomView(props: { api: TuiPluginApi; client: GuestClient; leave: () => 
               <text fg={theme().textMuted}>{emptyText(room().connection)}</text>
             </box>
           </Show>
-          <For each={room().messages}>{(message) => <RoomMessage theme={theme} message={message} />}</For>
+          <For each={room().messages}>
+            {(message, index) => (
+              <MessageView
+                message={message}
+                first={index() === 0}
+                theme={theme}
+                syntax={syntax}
+                timestamps={timestamps()}
+                genericOutput={genericOutput()}
+                streaming={message.id === lastAssistant()?.id}
+                hideThinking={thinkingMode() !== "show"}
+              />
+            )}
+          </For>
         </scrollbox>
 
         <box flexShrink={0}>
           <Show when={room().info.queue.length > 0}>
-            <box paddingLeft={3} marginBottom={1}>
+            <box paddingLeft={3} marginBottom={1} flexDirection="column">
               <For each={room().info.queue}>
                 {(item, index) => (
                   <text fg={theme().textMuted}>
-                    {index() + 1}. {item.by}：{truncate(item.text, 48)}
+                    {index() + 1}. {item.by}：{truncate(item.text, 60)}
                   </text>
                 )}
               </For>
             </box>
           </Show>
           <Show when={room().approval}>
-            <box paddingLeft={3} marginBottom={1}>
-              <text fg={theme().warning}>
-                ⏳ 等待主机审批{room().approval?.tool ? `（${room().approval?.tool}）` : ""}
-              </text>
-            </box>
+            {(request: () => WirePermission) => <PermissionCard request={request()} theme={theme} syntax={syntax} />}
+          </Show>
+          <Show when={!room().approval && room().question}>
+            {(request: () => WireQuestion) => <QuestionCard request={request()} theme={theme} />}
+          </Show>
+          <Show when={room().sessionError}>
+            {(error: () => { name: string; message?: string }) => (
+              <box paddingLeft={3} marginTop={1}>
+                <text fg={theme().error}>
+                  {error().name}
+                  {error().message ? `: ${error().message}` : ""}
+                </text>
+              </box>
+            )}
           </Show>
           <Show when={room().notice}>
-            <box paddingLeft={3} marginBottom={1}>
+            <box paddingLeft={3} marginTop={1}>
               <text fg={theme().error}>{room().notice}</text>
             </box>
           </Show>
           <Show when={room().error}>
-            <box paddingLeft={3} marginBottom={1}>
+            <box paddingLeft={3} marginTop={1}>
               <text fg={theme().error}>{room().error}</text>
             </box>
           </Show>
@@ -177,15 +245,25 @@ function RoomView(props: { api: TuiPluginApi; client: GuestClient; leave: () => 
                     input = renderable
                   }}
                 />
-                <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1} justifyContent="space-between">
-                  <box onMouseUp={() => toggle()}>
-                    <text fg={mode() === "queue" ? theme().warning : theme().success}>
-                      <b>{mode() === "queue" ? "排队" : "建议"}</b>
-                    </text>
+                <box flexDirection="row" flexShrink={0} paddingTop={1} gap={2} justifyContent="space-between">
+                  <box flexDirection="row" gap={1}>
+                    <box onMouseUp={() => toggle()}>
+                      <text fg={mode() === "queue" ? theme().warning : theme().success}>
+                        <b>{mode() === "queue" ? "排队" : "建议"}</b>
+                      </text>
+                    </box>
+                    <Show when={hostLine()}>
+                      <text fg={theme().textMuted}>· {hostLine()}</text>
+                    </Show>
                   </box>
-                  <Show when={room().info.queue.length > 0}>
-                    <text fg={theme().textMuted}>队列 {room().info.queue.length}</text>
-                  </Show>
+                  <box flexDirection="row" gap={2}>
+                    <Show when={room().info.queue.length > 0}>
+                      <text fg={theme().textMuted}>队列 {room().info.queue.length}</text>
+                    </Show>
+                    <Show when={usage()}>
+                      <text fg={theme().textMuted}>{usage()}</text>
+                    </Show>
+                  </box>
                 </box>
               </box>
             </box>
@@ -203,64 +281,6 @@ function RoomView(props: { api: TuiPluginApi; client: GuestClient; leave: () => 
         </box>
       </box>
     </box>
-  )
-}
-
-function RoomMessage(props: { theme: () => TuiThemeCurrent; message: WireMessage }) {
-  const text = () =>
-    props.message.parts
-      .filter((part) => part.type === "text" && typeof part.text === "string")
-      .map((part) => part.text as string)
-      .join("\n\n")
-      .trim()
-
-  return (
-    <>
-      <Show when={props.message.role === "user"}>
-        <Show when={text()}>
-          <box
-            border={["left"]}
-            borderColor={props.theme().secondary}
-            customBorderChars={BORDER_CHARS}
-            marginTop={1}
-          >
-            <box
-              paddingTop={1}
-              paddingBottom={1}
-              paddingLeft={2}
-              backgroundColor={props.theme().backgroundPanel}
-              flexShrink={0}
-            >
-              <text fg={props.theme().text}>{text()}</text>
-            </box>
-          </box>
-        </Show>
-      </Show>
-      <Show when={props.message.role !== "user"}>
-        <box paddingLeft={3} marginTop={1} flexShrink={0}>
-          <For each={props.message.parts}>{(part) => <PartRow theme={props.theme} part={part} />}</For>
-        </box>
-      </Show>
-    </>
-  )
-}
-
-function PartRow(props: { theme: () => TuiThemeCurrent; part: WirePart }) {
-  if (props.part.type === "text") {
-    const value = typeof props.part.text === "string" ? props.part.text.trim() : ""
-    if (!value) return null
-    return (
-      <text fg={props.theme().text} wrapMode="word">
-        {value}
-      </text>
-    )
-  }
-  const tool = typeof props.part.tool === "string" ? ` ${props.part.tool}` : ""
-  return (
-    <text fg={props.theme().textMuted}>
-      [{props.part.type}
-      {tool}]
-    </text>
   )
 }
 

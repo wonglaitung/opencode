@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test"
 import {
   formatInvite,
   MAX_NAME_LENGTH,
+  MAX_PART_TEXT,
   MAX_TEXT_LENGTH,
+  MAX_TOOL_OUTPUT,
   parseClientJson,
   parseClientMessage,
   parseInvite,
@@ -92,14 +94,103 @@ describe("parseServerMessage", () => {
       }),
     ).toMatchObject({ type: "part.delta", seq: 1 })
 
+    // 旧 host 的顶层 id/tool/detail 仍要能解析
     expect(parseServerMessage({ type: "permission", id: "a1", tool: "bash" })).toMatchObject({
       type: "permission",
-      id: "a1",
+      request: { id: "a1", tool: "bash" },
     })
     expect(parseServerMessage({ type: "permission.result", id: "a1", reply: "maybe" })).toBeUndefined()
     expect(parseServerMessage({ type: "permission.result", id: "a1", reply: "reject" })).toMatchObject({
       type: "permission.result",
       reply: "reject",
+    })
+  })
+
+  test("消息级信息与截断边界", () => {
+    const parsed = parseServerMessage({
+      type: "message.updated",
+      seq: 3,
+      id: "m1",
+      role: "assistant",
+      info: {
+        agent: "build",
+        model: { providerID: "anthropic", modelID: "claude", variant: "high" },
+        cost: 0.12,
+        tokens: { input: 10, output: 20, reasoning: 5, cache: { read: 1, write: 2 } },
+        created: 1000,
+        completed: 2000,
+        finish: "stop",
+        error: { name: "ApiError", message: "boom" },
+      },
+    })
+    expect(parsed).toMatchObject({
+      type: "message.updated",
+      info: {
+        agent: "build",
+        model: { providerID: "anthropic", modelID: "claude", variant: "high" },
+        tokens: { input: 10, output: 20, cacheRead: 1, cacheWrite: 2 },
+        finish: "stop",
+        error: { name: "ApiError", message: "boom" },
+      },
+    })
+    // 没有可用字段时不附带空 info
+    expect(parseServerMessage({ type: "message.updated", seq: 1, id: "m1", role: "user" })).toEqual({
+      type: "message.updated",
+      seq: 1,
+      id: "m1",
+      role: "user",
+    })
+    expect(MAX_PART_TEXT).toBeGreaterThan(MAX_TOOL_OUTPUT)
+  })
+
+  test("权限请求：新格式与旧格式", () => {
+    const next = parseServerMessage({
+      type: "permission",
+      request: {
+        id: "a1",
+        tool: "edit",
+        patterns: ["src/**"],
+        always: ["src/**"],
+        metadata: { filepath: "src/a.ts", diff: "+x", nested: { skip: true }, list: ["a", 1] },
+        callID: "call_1",
+      },
+    })
+    expect(next).toMatchObject({
+      type: "permission",
+      request: { id: "a1", tool: "edit", patterns: ["src/**"], callID: "call_1" },
+    })
+    // 未知类型与嵌套对象不进 metadata，避免把任意结构转发给访客
+    expect(next).toMatchObject({ type: "permission", request: { metadata: { filepath: "src/a.ts", list: ["a"] } } })
+  })
+
+  test("提问与会话错误", () => {
+    const question = parseServerMessage({
+      type: "question",
+      request: {
+        id: "q1",
+        questions: [
+          {
+            question: "要跑全量还是增量？",
+            header: "范围",
+            options: [{ label: "全量", description: "更慢" }, { label: "增量" }, { label: "" }],
+            multiple: false,
+            custom: true,
+          },
+        ],
+      },
+    })
+    expect(question).toMatchObject({
+      type: "question",
+      request: { id: "q1", questions: [{ header: "范围", options: [{ label: "全量" }, { label: "增量" }] }] },
+    })
+    expect(parseServerMessage({ type: "question", request: { id: "q1", questions: [] } })).toBeUndefined()
+    expect(parseServerMessage({ type: "question.result", id: "q1", answers: [["全量"]] })).toMatchObject({
+      type: "question.result",
+      answers: [["全量"]],
+    })
+    expect(parseServerMessage({ type: "session.error", error: { name: "ApiError", message: "401" } })).toMatchObject({
+      type: "session.error",
+      error: { name: "ApiError", message: "401" },
     })
   })
 

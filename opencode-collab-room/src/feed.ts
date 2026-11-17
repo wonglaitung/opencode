@@ -1,4 +1,13 @@
-import type { ServerMessage, WireMessage, WirePart, WireState } from "./protocol"
+import {
+  MAX_PART_TEXT,
+  type ServerMessage,
+  type WireMessage,
+  type WireMessageInfo,
+  type WirePart,
+  type WirePermission,
+  type WireQuestion,
+  type WireState,
+} from "./protocol"
 
 export type GuestRoom = {
   connection: "connecting" | "open" | "closed"
@@ -9,7 +18,10 @@ export type GuestRoom = {
   seq: number
   info: WireState
   messages: WireMessage[]
-  approval?: { id: string; tool?: string }
+  approval?: WirePermission
+  question?: WireQuestion
+  /** 主机侧会话错误（provider 失败、上下文溢出等），下一条助手消息出现后清除。 */
+  sessionError?: { name: string; message?: string }
 }
 
 export function createGuestRoom(): GuestRoom {
@@ -36,7 +48,13 @@ export function applyServerMessage(room: GuestRoom, message: ServerMessage): Gue
       return { ...room, connection: "open", seq: message.seq, messages: message.messages }
     case "message.updated":
       if (message.seq <= room.seq) return room
-      return { ...room, seq: message.seq, messages: upsertMessage(room.messages, message.id, message.role) }
+      return {
+        ...room,
+        seq: message.seq,
+        messages: upsertMessage(room.messages, message.id, message.role, message.info),
+        // 新的助手消息代表主机恢复输出，旧错误不再挡住视线
+        sessionError: message.role === "assistant" ? undefined : room.sessionError,
+      }
     case "part.updated":
       if (message.seq <= room.seq) return room
       return { ...room, seq: message.seq, messages: upsertPart(room.messages, message.messageID, message.part) }
@@ -50,21 +68,40 @@ export function applyServerMessage(room: GuestRoom, message: ServerMessage): Gue
     case "state":
       return { ...room, info: message.state }
     case "permission":
-      return { ...room, approval: { id: message.id, tool: message.tool } }
+      return { ...room, approval: message.request }
     case "permission.result":
       return room.approval?.id === message.id ? { ...room, approval: undefined } : room
+    case "question":
+      return { ...room, question: message.request }
+    case "question.result":
+      return room.question?.id === message.id ? { ...room, question: undefined } : room
+    case "session.error":
+      return message.error === undefined ? room : { ...room, sessionError: message.error }
     case "bye":
       return { ...room, connection: "closed", notice: message.reason }
   }
 }
 
-function upsertMessage(messages: WireMessage[], id: string, role: string | undefined): WireMessage[] {
+function upsertMessage(
+  messages: WireMessage[],
+  id: string,
+  role: string | undefined,
+  info?: WireMessageInfo,
+): WireMessage[] {
   const index = messages.findIndex((message) => message.id === id)
-  if (index < 0) return [...messages, { id, role: role ?? "assistant", parts: [] }]
+  if (index < 0) {
+    const created: WireMessage = { id, role: role ?? "assistant", parts: [] }
+    if (info) created.info = info
+    return [...messages, created]
+  }
   const existing = messages[index]!
-  if (!role || existing.role === role) return messages
+  const nextRole = role ?? existing.role
+  const nextInfo = info ? { ...existing.info, ...info } : existing.info
+  if (nextRole === existing.role && nextInfo === existing.info) return messages
   const next = messages.slice()
-  next[index] = { ...existing, role }
+  const merged: WireMessage = { ...existing, role: nextRole }
+  if (nextInfo) merged.info = nextInfo
+  next[index] = merged
   return next
 }
 
@@ -90,8 +127,11 @@ function appendDelta(messages: WireMessage[], messageID: string, partID: string,
   if (partIndex < 0) return messages
   const part = message.parts[partIndex]!
   const existing = typeof part[field] === "string" ? (part[field] as string) : ""
+  // 超长流式文本在访客侧截断，避免一条粘贴内容把内存撑爆
+  if (existing.length >= MAX_PART_TEXT) return messages
+  const nextText = (existing + delta).slice(0, MAX_PART_TEXT)
   const parts = message.parts.slice()
-  parts[partIndex] = { ...part, [field]: existing + delta }
+  parts[partIndex] = { ...part, [field]: nextText }
   const next = messages.slice()
   next[messageIndex] = { ...message, parts }
   return next

@@ -29,6 +29,13 @@ if grep -q 'from"solid-js"' dist/tui.js || ! grep -q 'from "solid-js"' dist/tui.
   exit 1
 fi
 
+# 插件现在用 @opentui/core 的值导出（SyntaxStyle/RGBA）做 markdown 与 diff 渲染，
+# 同样依赖宿主按 `from "x"` 的形式改写；压缩成 from"x" 会退回本地包而版本不一致。
+if grep -q 'from"@opentui/core"' dist/tui.js || ! grep -q 'from "@opentui/core"' dist/tui.js; then
+  echo "错误：dist/tui.js 的 @opentui/core import 格式不利于宿主改写（需要 'from \"@opentui/core\"'）" >&2
+  exit 1
+fi
+
 # JSX 必须经过 OpenTUI 的 Solid 转换，产出 `get children()` 之类的反应式取值；
 # 否则信号变化不会重绘，界面会一直停在首帧（消息列表与状态都不更新）。
 if ! grep -q 'get children' dist/tui.js; then

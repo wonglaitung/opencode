@@ -1,7 +1,17 @@
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { Show, createSignal } from "solid-js"
 import { lanAddress } from "./net"
-import { formatInvite, type ClientMessage, type ServerMessage, type WireMessage, type WirePart } from "./protocol"
+import {
+  formatInvite,
+  MAX_PART_TEXT,
+  MAX_TOOL_OUTPUT,
+  type ClientMessage,
+  type ServerMessage,
+  type WireMessage,
+  type WireMessageInfo,
+  type WirePart,
+  type WirePermission,
+} from "./protocol"
 import { logHost, startRelay, type Relay } from "./relay"
 import {
   awaitApproval,
@@ -126,12 +136,8 @@ export function startHostRoom(api: TuiPluginApi): HostRoom {
     const permission = event.properties
     if (!sessionID || permission.sessionID !== sessionID) return
     awaitApproval(state, { id: permission.id, tool: permission.permission, requestedAt: Date.now() })
-    broadcast({
-      type: "permission",
-      id: permission.id,
-      tool: permission.permission,
-      detail: permission.patterns.join(" "),
-    })
+    const request = toWirePermission(permission)
+    broadcast({ type: "permission", request })
     broadcastState()
   })
 
@@ -147,7 +153,39 @@ export function startHostRoom(api: TuiPluginApi): HostRoom {
     const sessionID = currentSession(api)
     const info = event.properties.info
     if (!sessionID || info.sessionID !== sessionID) return
-    broadcast({ type: "message.updated", seq: ++seq, id: info.id, role: info.role })
+    const wireInfo = toWireInfo(info)
+    broadcast(
+      wireInfo === undefined
+        ? { type: "message.updated", seq: ++seq, id: info.id, role: info.role }
+        : { type: "message.updated", seq: ++seq, id: info.id, role: info.role, info: wireInfo },
+    )
+  })
+
+  api.event.on("question.asked", (event) => {
+    const sessionID = currentSession(api)
+    const question = event.properties
+    if (!sessionID || question.sessionID !== sessionID) return
+    broadcast({ type: "question", request: { id: question.id, questions: question.questions } })
+  })
+
+  api.event.on("question.replied", (event) => {
+    const sessionID = currentSession(api)
+    if (!sessionID || event.properties.sessionID !== sessionID) return
+    broadcast({ type: "question.result", id: event.properties.requestID, answers: event.properties.answers })
+  })
+
+  api.event.on("question.rejected", (event) => {
+    const sessionID = currentSession(api)
+    if (!sessionID || event.properties.sessionID !== sessionID) return
+    broadcast({ type: "question.result", id: event.properties.requestID, rejected: true })
+  })
+
+  api.event.on("session.error", (event) => {
+    const sessionID = currentSession(api)
+    const properties = event.properties
+    if (!sessionID || (properties.sessionID && properties.sessionID !== sessionID)) return
+    const error = toWireError(properties.error)
+    broadcast(error === undefined ? { type: "session.error" } : { type: "session.error", error })
   })
 
   api.event.on("message.part.delta", (event) => {
@@ -302,11 +340,13 @@ function currentTitle(api: TuiPluginApi): string | undefined {
 function snapshotMessages(api: TuiPluginApi): WireMessage[] {
   const sessionID = currentSession(api)
   if (!sessionID) return []
-  return api.state.session.messages(sessionID).map((message) => ({
-    id: message.id,
-    role: message.role,
-    parts: (api.state.part(message.id) ?? []).map(toWirePart),
-  }))
+  return api.state.session.messages(sessionID).map((message) => {
+    const info = toWireInfo(message)
+    const parts = (api.state.part(message.id) ?? []).map(toWirePart)
+    return info === undefined
+      ? { id: message.id, role: message.role, parts }
+      : { id: message.id, role: message.role, info, parts }
+  })
 }
 
 function toWirePart(part: unknown): WirePart {
@@ -314,8 +354,108 @@ function toWirePart(part: unknown): WirePart {
   const id = typeof part.id === "string" ? part.id : "unknown"
   const messageID = typeof part.messageID === "string" ? part.messageID : "unknown"
   const type = typeof part.type === "string" ? part.type : "unknown"
+  const wire: WirePart = { ...part, id, messageID, type }
   const text = typeof part.text === "string" ? part.text : undefined
-  return text === undefined ? { ...part, id, messageID, type } : { ...part, id, messageID, type, text }
+  if (text !== undefined) {
+    if (text.length > MAX_PART_TEXT) {
+      wire.text = text.slice(0, MAX_PART_TEXT)
+      wire.truncated = text.length - MAX_PART_TEXT
+    }
+  }
+  // 工具输出可能上百 KB：截断后再发，并在渲染侧提示省略长度
+  if (isRecord(part.state) && typeof part.state.output === "string" && part.state.output.length > MAX_TOOL_OUTPUT) {
+    const output = part.state.output
+    wire.state = { ...part.state, output: output.slice(0, MAX_TOOL_OUTPUT) }
+    wire.truncated = (typeof wire.truncated === "number" ? wire.truncated : 0) + output.length - MAX_TOOL_OUTPUT
+  }
+  return wire
+}
+
+function toWireInfo(message: unknown): WireMessageInfo | undefined {
+  if (!isRecord(message)) return undefined
+  const info: WireMessageInfo = {}
+  const agent = typeof message.agent === "string" && message.agent ? message.agent : undefined
+  if (agent) info.agent = agent
+  const model = isRecord(message.model)
+    ? message.model
+    : isRecord(message.modelID) || typeof message.modelID === "string"
+      ? { providerID: message.providerID, modelID: message.modelID, variant: message.variant }
+      : undefined
+  if (model) {
+    const providerID = typeof model.providerID === "string" ? model.providerID : ""
+    const modelID = typeof model.modelID === "string" ? model.modelID : ""
+    if (providerID && modelID) {
+      const variant = typeof model.variant === "string" && model.variant ? model.variant : undefined
+      info.model = variant === undefined ? { providerID, modelID } : { providerID, modelID, variant }
+    }
+  }
+  const time = isRecord(message.time) ? message.time : undefined
+  const created = time && typeof time.created === "number" ? time.created : undefined
+  if (created !== undefined) info.created = created
+  const completed = time && typeof time.completed === "number" ? time.completed : undefined
+  if (completed !== undefined) info.completed = completed
+  const cost = typeof message.cost === "number" ? message.cost : undefined
+  if (cost !== undefined) info.cost = cost
+  const tokens = isRecord(message.tokens) ? message.tokens : undefined
+  if (tokens) {
+    const cache = isRecord(tokens.cache) ? tokens.cache : {}
+    info.tokens = {
+      input: numberOr(tokens.input),
+      output: numberOr(tokens.output),
+      reasoning: numberOr(tokens.reasoning),
+      cacheRead: numberOr(cache.read),
+      cacheWrite: numberOr(cache.write),
+    }
+  }
+  const finish = typeof message.finish === "string" && message.finish ? message.finish : undefined
+  if (finish) info.finish = finish
+  const error = toWireError(message.error)
+  if (error) info.error = error
+  return Object.keys(info).length === 0 ? undefined : info
+}
+
+function toWireError(raw: unknown): { name: string; message?: string } | undefined {
+  if (!isRecord(raw)) return undefined
+  const name = typeof raw.name === "string" && raw.name ? raw.name : "Error"
+  const data = isRecord(raw.data) ? raw.data : undefined
+  const text = typeof data?.message === "string" ? data.message : undefined
+  return text === undefined ? { name } : { name, message: text.slice(0, 400) }
+}
+
+function toWirePermission(permission: unknown): WirePermission {
+  const record = isRecord(permission) ? permission : {}
+  const id = typeof record.id === "string" ? record.id : ""
+  const tool = typeof record.permission === "string" ? record.permission : "unknown"
+  const toolRef = isRecord(record.tool) ? record.tool : undefined
+  const callID = typeof toolRef?.callID === "string" ? toolRef.callID : undefined
+  const request: WirePermission = {
+    id,
+    tool,
+    patterns: stringList(record.patterns),
+    always: stringList(record.always),
+    metadata: metadataRecord(record.metadata),
+  }
+  if (callID) request.callID = callID
+  return request
+}
+
+function stringList(raw: unknown): string[] {
+  return Array.isArray(raw) ? raw.filter((value): value is string => typeof value === "string" && value.length > 0) : []
+}
+
+function metadataRecord(raw: unknown): Record<string, unknown> {
+  if (!isRecord(raw)) return {}
+  const out: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(raw)) {
+    if (typeof value === "string") out[key] = value.slice(0, MAX_TOOL_OUTPUT)
+    else if (typeof value === "number" || typeof value === "boolean") out[key] = value
+    else if (Array.isArray(value)) out[key] = stringList(value).slice(0, 200)
+  }
+  return out
+}
+
+function numberOr(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
