@@ -306,6 +306,7 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
           <div class="group-card">
             <h3>开协作房间（主持人）</h3>
             <p class="group-desc">把当前会话实时分享给同事；他们在自己的终端旁观、提建议、排队任务。</p>
+            <div class="tip-line" id="roomWorkflowNote"></div>
             <div class="field">
               <label for="roomDir">项目目录</label>
               <div class="path-row"><input id="roomDir" placeholder="选择项目目录" autocomplete="off"><button class="ghost" id="roomBrowse">浏览</button></div>
@@ -374,7 +375,8 @@ const WORKFLOWS = {
 const ROOM_HELP = `协作房间
 协作房间把当前会话实时分享给同事：访客可旁观、提建议、排队任务，不消耗自己的模型额度。
 第一步：开协作房间（主持人）
-· 选项目目录，点「开协作房间」；启动器打开终端后自动关闭。
+· 先确认上方「当前工作流」选对了，再选项目目录、点「开协作房间」；房间按这份选择启动会话，选错请先在向导页切换。
+· 启动器打开终端后自动关闭。
 · 终端右侧栏的「协作房间」卡片会直接显示邀请码。
 · 若没看到侧栏，按 Ctrl+X 再按 B 打开；Ctrl+P 搜索「协作房间：状态」可看人数与队列。
 · 邀请码形如：ws://192.168.1.5:54321?token=…
@@ -481,6 +483,11 @@ function renderTeamWorkflow() {
   // 工作流是状态而不是步骤：常驻显示，避免切 tab 时标题区高度跳动。
   const link = onRoom && !resuming ? ` <a class="link" href="#" id="teamWorkflowSwitch">在向导页切换 ›</a>` : "";
   $("teamWorkflowLine").innerHTML = `当前工作流：<b>${esc(label)}</b>${link}`;
+  // 房间按上面这份选择启动会话：写清楚“先选对工作流再开房间”，减少误开阶段流程
+  const roomNote = $("roomWorkflowNote");
+  if (roomNote) roomNote.innerHTML = resuming
+    ? `本次沿用上次会话的工作流：<b>${esc(label)}</b>，上方选择不生效。`
+    : `先确认上方「当前工作流」为 <b>${esc(label)}</b> 再开房间；选错请在向导页切换，房间会按这份选择启动会话。`;
   const switchLink = $("teamWorkflowSwitch");
   if (switchLink) switchLink.addEventListener("click", (event) => {
     event.preventDefault();

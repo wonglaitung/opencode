@@ -133,6 +133,9 @@ describe("协作房间入口", () => {
     expect(webview).toContain('id="roomStartBtn">开协作房间<')
     expect(webview).toContain('prefillRoom')
     expect(webview).toContain('state.browseTarget')
+    // 开房间前必须提醒先选对工作流
+    expect(webview).toContain('id="roomWorkflowNote"')
+    expect(webview).toContain("房间会按这份选择启动会话")
   })
 
   test("Program.cs 写意图文件且开协作房间/加入协作房间不注入启动短语", () => {
@@ -266,8 +269,10 @@ describe("恢复会话：插件与工作流以数据库为准", () => {
 
   test("工作流只有向导页一个选择入口，团队页统一只读展示", () => {
     expect(webview).not.toContain('id="roomWorkflow"')
-    expect(webview).not.toContain("roomWorkflowHint")
     expect(webview).not.toContain("roomWorkflowSwitch")
+    // 房间卡只写提示，不提供第二个工作流选择入口
+    expect(webview).toContain('id="roomWorkflowNote"')
+    expect(webview).toContain("先确认上方「当前工作流」")
     expect(webview).toContain('id="teamWorkflowLine"')
     expect(webview).toContain("function renderTeamWorkflow")
     expect(webview).toContain('id="teamWorkflowSwitch"')
