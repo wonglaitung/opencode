@@ -232,8 +232,8 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
             </div>
             <div class="list-filters">
               <select id="teamRange" title="时间范围">
-                <option value="30" selected>近 30 天</option>
-                <option value="7">近 7 天</option>
+                <option value="7" selected>近 7 天</option>
+                <option value="30">近 30 天</option>
                 <option value="90">近 90 天</option>
                 <option value="0">全部时间</option>
               </select>
@@ -381,7 +381,8 @@ const ROOM_HELP = `协作房间
 · 通过可信渠道发给同事；房间随你的终端关闭而结束。
 第二步：加入协作房间（访客）
 · 在「协作房间」页粘贴邀请码、填写你在房间里的昵称（其他成员可见）、选择工作目录，点「加入协作房间」。
-· 终端会直接进入房间视图：左侧是主机的实时对话，右侧是房间状态。
+· 终端会直接进入房间视图，版式与正常会话页一致：用户消息、AI 正文、工具调用（命令、改动 diff、读取结果）、思考过程都会实时显示。
+· 底部状态行显示主机当前模型、Token/成本、队列人数与连接状态。
 房间内操作：
 · 直接输入文字按 Enter：作为「建议」写入主机上下文，不会立即执行。
 · Alt+M 或 F3：切换「建议 / 排队」模式；排队由主机按先后顺序执行。
@@ -389,14 +390,15 @@ const ROOM_HELP = `协作房间
 · Esc：退出房间视图，回到自己的会话；不影响房间本身。
 · 中文输入法：回车会先确认候选词；确认文字已上屏后再按一次回车发送。
 审批与断线：
-· 需要授权的操作会在右侧显示「等待主机审批」，由主机确认。
+· 需要授权的操作会在输入框上方显示完整内容（命令、文件、diff），标注「等待主机审批」，由主机确认；访客只读。
+· AI 反问的问题与选项同样会显示，主机选择后继续。
 · 网络中断会自动重连并补齐内容；主机关闭终端后显示「房间已结束」。
 提示：访客不会消耗本机模型额度；房间是否可用取决于主机终端是否开启。`;
 const EXPORT_HELP = `导出会话
 把一条会话（含工作流阶段进度）整理成一个交接文件，交给同事继续。
 
 第 1 步：选择要交接的会话
-· 默认显示近 30 天的会话，可用搜索、项目、排序和「显示子会话」缩小范围。
+· 默认显示近 7 天的会话，可用搜索、项目、排序和「显示子会话」缩小范围。
 · 点一行选中；标题重复时看右侧的 #短编号。
 
 第 2 步：写交接说明（可留空）
@@ -577,7 +579,7 @@ function showView(name) {
 }
 
 // 筛选与分页都下推到 SQL：会话可能上千条，全量拉取再前端过滤会卡住输入与滚动。
-// 首屏 50 条 + 默认近 30 天（本机实测 86% 的主会话在 30 天以前）。
+// 首屏 50 条 + 默认近 7 天；需要更早的会话时改时间范围。
 const TEAM_PAGE_SIZE = 50;
 
 function teamFiltersActive() {
@@ -585,7 +587,7 @@ function teamFiltersActive() {
   return (
     $("teamSearch").value.trim() !== "" ||
     $("teamProjectFilter").value !== "" ||
-    (days > 0 && days !== 30) ||
+    (days > 0 && days !== 7) ||
     $("teamChildren").checked
   );
 }
@@ -708,7 +710,7 @@ function renderTeamSessions(payload) {
 function clearTeamFilters() {
   $("teamSearch").value = "";
   $("teamProjectFilter").value = "";
-  $("teamRange").value = "30";
+  $("teamRange").value = "7";
   $("teamChildren").checked = false;
   $("teamSort").value = "updated";
   loadTeamSessions();
