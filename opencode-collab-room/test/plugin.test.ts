@@ -38,8 +38,10 @@ test("房间视图与正常会话页保持同一版式", async () => {
   expect(source).toContain("verticalScrollbarOptions")
   // 输入框复用 Prompt 的左侧色条 + 底部收口外观
   expect(source).toContain("PROMPT_CHARS")
-  expect(source).toContain("TAIL_CHARS")
+  // 输入框只保留左侧竖线与底部圆角，不再画下面那条横线
+  expect(source).not.toContain("TAIL_CHARS")
   expect(source).toContain('bottomLeft: "╹"')
+  expect(source).not.toContain('border={["bottom"]}')
   // 消息、审批、提问都走与正常页对应的组件，而不是占位文本
   expect(source).toContain("<MessageView")
   expect(source).toContain("<PermissionCard")

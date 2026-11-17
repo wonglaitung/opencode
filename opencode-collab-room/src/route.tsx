@@ -28,7 +28,6 @@ const BORDER_CHARS = {
   rightT: "",
 }
 const PROMPT_CHARS = { ...BORDER_CHARS, bottomLeft: "╹" }
-const TAIL_CHARS = { ...BORDER_CHARS, vertical: " " }
 
 export function roomRoute(input: { api: TuiPluginApi; client: GuestClient; leave: () => void }): TuiRouteDefinition {
   return {
@@ -228,7 +227,7 @@ function RoomView(props: { api: TuiPluginApi; client: GuestClient; leave: () => 
             </box>
           </Show>
 
-          <box width="100%">
+          <box width="100%" marginTop={1}>
             <box width="100%" border={["left"]} borderColor={theme().border} customBorderChars={PROMPT_CHARS}>
               <box
                 paddingLeft={2}
@@ -293,9 +292,6 @@ function RoomView(props: { api: TuiPluginApi; client: GuestClient; leave: () => 
                   </box>
                 </box>
               </box>
-            </box>
-            <box height={1} border={["left"]} borderColor={theme().border} customBorderChars={TAIL_CHARS}>
-              <box height={1} border={["bottom"]} borderColor={theme().border} />
             </box>
           </box>
 
