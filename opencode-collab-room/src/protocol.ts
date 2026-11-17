@@ -179,8 +179,7 @@ export function parseServerMessage(raw: unknown): ServerMessage | undefined {
       return { type: "state", state }
     }
     case "permission": {
-      // 兼容旧 host：旧格式是顶层 id/tool/detail，新格式是 request 对象
-      const request = readPermission(raw.request) ?? readLegacyPermission(raw)
+      const request = readPermission(raw.request)
       if (!request) return
       return { type: "permission", request }
     }
@@ -308,14 +307,6 @@ function readPermission(raw: unknown): WirePermission | undefined {
   }
   if (callID) permission.callID = callID
   return permission
-}
-
-function readLegacyPermission(raw: Record<string, unknown>): WirePermission | undefined {
-  const id = readId(raw.id)
-  const tool = typeof raw.tool === "string" && raw.tool ? raw.tool : undefined
-  if (!id || !tool) return undefined
-  const detail = typeof raw.detail === "string" ? raw.detail : ""
-  return { id, tool, patterns: detail ? [detail] : [], always: [], metadata: {} }
 }
 
 function readQuestion(raw: unknown): WireQuestion | undefined {

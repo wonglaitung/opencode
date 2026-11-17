@@ -94,11 +94,14 @@ describe("parseServerMessage", () => {
       }),
     ).toMatchObject({ type: "part.delta", seq: 1 })
 
-    // 旧 host 的顶层 id/tool/detail 仍要能解析
-    expect(parseServerMessage({ type: "permission", id: "a1", tool: "bash" })).toMatchObject({
-      type: "permission",
-      request: { id: "a1", tool: "bash" },
-    })
+    // 只接受 request 对象；旧的顶层 id/tool 形状直接丢弃
+    expect(parseServerMessage({ type: "permission", id: "a1", tool: "bash" })).toBeUndefined()
+    expect(
+      parseServerMessage({
+        type: "permission",
+        request: { id: "a1", tool: "bash", patterns: [], always: [], metadata: {} },
+      }),
+    ).toMatchObject({ type: "permission", request: { id: "a1", tool: "bash" } })
     expect(parseServerMessage({ type: "permission.result", id: "a1", reply: "maybe" })).toBeUndefined()
     expect(parseServerMessage({ type: "permission.result", id: "a1", reply: "reject" })).toMatchObject({
       type: "permission.result",
