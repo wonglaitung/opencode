@@ -32,7 +32,7 @@
 安装包内嵌以下已核实自包含的内容（均来自本机 `D:\Tools`）：
 
 - `node-v22.23.2-win-x64` 整目录 → `runtime\`
-  - 含 `node.exe` / `opencode` / `opencode-sm` 及三个 plugin bundle：`opencode-sm-bundle`、`opencode-edge-debug-bundle`、`opencode-server-debug-bundle`；无需 `npm install`
+  - 含 `node.exe` / `opencode` / `opencode-sm` 及四个 plugin bundle：`opencode-sm-bundle`、`opencode-edge-debug-bundle`、`opencode-server-debug-bundle`、`opencode-collab-room`（协作房间，仅 TUI 入口）；无需 `npm install`
 - `Python312` 整目录 → `python\`
   - 含 `pandas 2.3.2`、`openpyxl 3.1.5`，技能（如 md-to-word）可直接调用；并已补 `python3.exe` 别名
   - **已剔除 `torch`**：单文件 `Lib\site-packages\torch\lib\dnnl.lib` 体积 2.17 GB，超出 NSIS 单文件 2 GB 上限；且技能仅需 pandas/openpyxl，不依赖 torch
@@ -114,6 +114,9 @@
 - 清除范围是所有项目共用的会话库；不做备份，确认框已写明不可恢复。
 
 ## 5. 启动器流程（`OpenCode-launch.exe`，WebView2 方案 B）
+
+> 本节保留立项时的方案描述，已与现状不符（侧栏 → 卡片、`identity.json` → `tui.json`、
+> 团队协作与协作房间未覆盖）。**现行说明以 [`launcher/README.md`](launcher/README.md) 为准。**
 
 启动器改为 **.NET 8 WinForms + WebView2 + 内嵌 HTML/CSS**，界面按 `GUI.png` 统一为深色侧栏、浅色主区和卡片式操作区。需要目标机安装 Microsoft Edge WebView2 Runtime（Win10/11 通常已随 Edge 提供）。NSIS 仅负责安装和释放文件，不再绘制启动器页面。
 
@@ -216,11 +219,13 @@ cmd /c portable-installer\build\build.bat
 | `portable-installer/build/OpenCode-Setup.nsi` | 主安装脚本 |
 | `portable-installer/launcher/`（`Program.cs` / `index.html` / `Launcher.csproj`） | **现役启动器**（.NET 8 WinForms + WebView2）；`build.bat` 用 `dotnet publish` 产出 `OpenCode-launch.exe`，主安装包再把它内嵌进去 |
 | `portable-installer/build/OpenCode-launch.nsi` | **历史遗留脚本**：旧版 NSIS 启动器，`build.bat` 已不再编译（现役启动器见上一行）；保留仅为历史参考，不要按它判断启动器行为 |
-| `portable-installer/build/launcher-config.js` | 启动器配置助手（编译时内嵌，读写 `identity.json`、`terminal_mode.ini` 与 `opencode.jsonc`） |
+| `portable-installer/build/launcher-config.js` | 启动器配置助手（编译时内嵌，读写 `identity.json`、`terminal_mode.ini`、`opencode.jsonc`；每次 `--apply` 把 `opencode-collab-room` 写入 `tui.json`/`tui.jsonc` 的 `plugin` 数组，TUI 插件只认这份配置） |
 | `portable-installer/build/OpenCode-Reset.nsi` | 清空历史会话工具脚本（构建中间产物，已内嵌进主包） |
 | `.opencode/skills/opencode-installer/SKILL.md` | **首选打包入口**：强制清缓存、完整重建、依赖核对与验收 |
 | `portable-installer/payload/OpenCode/runtime` | Node 工具链载荷 |
 | `portable-installer/payload/OpenCode/runtime/opencode-team-share` | 团队协作 CLI（会话交接导出/导入；启动器「团队协作」入口调用，bun 直接跑 TS，零第三方依赖） |
+| `opencode-collab-room/` | 协作房间插件（`{tui}` 单入口）：启动器「团队协作 → 协作房间」写意图文件触发开协作房间/加入协作房间；WS relay 与 TUI 面板都在插件内，访客不调用本机模型 |
+| `portable-installer/payload/OpenCode/runtime/opencode-collab-room` | 协作房间插件载荷（`package.json` + `dist/tui.js`，由 `opencode-collab-room/script/sync-bundle.sh` 生成；通过 `~/.config/opencode/tui.json` 注册） |
 | `portable-installer/payload/OpenCode/python` | Python 载荷（含 `python3.exe`） |
 | `portable-installer/payload/OpenCode/terminal` | Windows Terminal 载荷（`WindowsTerminal.exe` + `OpenConsole.exe`，所有用户均部署） |
 | `OpenCode-Setup.exe`（构建产物） | **唯一需要分发给业务的文件**：内置载荷 + 启动器 + 清空历史工具，双击即装 |

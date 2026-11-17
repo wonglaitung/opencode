@@ -3,6 +3,7 @@ using Microsoft.Web.WebView2.WinForms;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 
 namespace OpenCodeLauncher;
 
@@ -16,7 +17,9 @@ internal static class Program
     }
 }
 
-internal sealed record ResumeResult(bool Can, string Hint);
+internal sealed record ResumeResult(bool Can, string Hint, string? Workflow = null, string? SessionID = null, string? Title = null);
+
+internal sealed record SessionInfo(string SessionID, string Title, string Directory, long Updated, string? Workflow);
 
 internal sealed record ConfigState(
     string Workflow,
@@ -244,6 +247,54 @@ internal sealed class LauncherForm : Form
                         Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{target}\"") { UseShellExecute = true });
                     break;
                 }
+                case "roomResume":
+                    Post("roomResume", CheckResumeFor(PayloadString(root, "dir")));
+                    break;
+                case "roomStart":
+                {
+                    var dir = PayloadString(root, "dir");
+                    if (dir.Length == 0 || !Directory.Exists(dir))
+                    {
+                        Post("roomStart", new { ok = false, error = "请先选择有效的项目目录" });
+                        break;
+                    }
+                    if (!WriteRoomIntent(dir, "{\"mode\":\"host\"}"))
+                    {
+                        Post("roomStart", new { ok = false, error = "写入房间意图失败，请检查目录权限" });
+                        break;
+                    }
+                    Post("roomStart", await LaunchAsync(root.GetProperty("payload"), null, noPrompt: false));
+                    break;
+                }
+                case "roomJoin":
+                {
+                    var dir = PayloadString(root, "dir");
+                    var invite = PayloadString(root, "invite");
+                    var name = PayloadString(root, "name");
+                    if (dir.Length == 0 || !Directory.Exists(dir))
+                    {
+                        Post("roomJoin", new { ok = false, error = "请选择有效的工作目录" });
+                        break;
+                    }
+                    if (!InvitePattern.IsMatch(invite))
+                    {
+                        Post("roomJoin", new { ok = false, error = "邀请码格式不正确" });
+                        break;
+                    }
+                    if (name.Length == 0)
+                    {
+                        Post("roomJoin", new { ok = false, error = "请填写昵称" });
+                        break;
+                    }
+                    var intent = JsonSerializer.Serialize(new { mode = "join", invite, name });
+                    if (!WriteRoomIntent(dir, intent))
+                    {
+                        Post("roomJoin", new { ok = false, error = "写入房间意图失败，请检查目录权限" });
+                        break;
+                    }
+                    Post("roomJoin", await LaunchAsync(root.GetProperty("payload"), null, noPrompt: true));
+                    break;
+                }
                 case "cancel":
                     Close();
                     break;
@@ -281,6 +332,24 @@ internal sealed class LauncherForm : Form
         if (!root.TryGetProperty("payload", out var payload)) return false;
         if (!payload.TryGetProperty(name, out var value)) return false;
         return value.ValueKind == JsonValueKind.True;
+    }
+
+    private static readonly Regex InvitePattern = new(@"^wss?://\S+[?&]token=[^&\s]+", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>协作房间的启动意图：插件读取后立即删除，60 秒后自动失效。</summary>
+    private static bool WriteRoomIntent(string dir, string json)
+    {
+        try
+        {
+            var folder = Path.Combine(dir, ".opencode");
+            Directory.CreateDirectory(folder);
+            File.WriteAllText(Path.Combine(folder, "collab-room.json"), json);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     /// <summary>把界面里选定的数据库路径透传给 CLI，避免导出与导入分两次探测时选到不同的库。</summary>
@@ -444,27 +513,96 @@ internal sealed class LauncherForm : Form
 
     private static ResumeResult CheckResume(JsonElement payload)
     {
-        var state = LoadState();
-        var dir = payload.GetProperty("dir").GetString() ?? "";
-        var workflow = payload.GetProperty("workflow").GetString() ?? "sdlc";
-        var normalized = dir.TrimEnd('\\', '/');
-        var last = state.LastProject.TrimEnd('\\', '/');
-        var can = state.ConfigOk && state.IdentityOk && state.Sm &&
-                  dir.Length > 0 && last.Length > 0 && normalized.Equals(last, StringComparison.OrdinalIgnoreCase) &&
-                  workflow == state.LastWorkflow;
-        return new ResumeResult(can, can ? "可回到上次进度" : "项目或工作流变化后需新建会话");
+        var dir = payload.TryGetProperty("dir", out var dirValue) ? dirValue.GetString() ?? "" : "";
+        return CheckResumeFor(dir);
     }
 
-    private async Task<object> LaunchAsync(JsonElement payload, string? sessionId = null)
+    /// <summary>恢复条件以数据库里的真实会话为准，不再依赖 last_project/last_workflow 文本。</summary>
+    private static ResumeResult CheckResumeFor(string dir)
     {
         var state = LoadState();
-        var dir = payload.GetProperty("dir").GetString() ?? "";
-        var workflow = payload.GetProperty("workflow").GetString() ?? "sdlc";
-        var terminal = payload.GetProperty("terminal").GetString() ?? "native";
-        var resume = payload.GetProperty("resume").GetBoolean();
-        var plugins = payload.GetProperty("plugins").EnumerateArray().Select(x => x.GetString() ?? "").Where(x => x.Length > 0).ToArray();
+        if (dir.Length == 0) return new ResumeResult(false, "请先选择项目目录");
+        var info = LookupSession(dir, null);
+        var can = state.ConfigOk && state.IdentityOk && info != null;
+        var hint = info == null
+            ? "该项目暂无历史会话，将新建"
+            : $"可继续：{WorkflowLabel(info.Workflow)} · {info.Title}";
+        return new ResumeResult(can, hint, info?.Workflow, info?.SessionID, info?.Title);
+    }
+
+    private static readonly object SessionInfoLock = new();
+    private static readonly Dictionary<string, (DateTime At, SessionInfo? Info)> SessionInfoCache = new();
+
+    /// <summary>按目录取最近主会话，或按 id 取指定会话；失败返回 null（调用方回退为新建）。</summary>
+    private static SessionInfo? LookupSession(string? dir, string? sessionId)
+    {
+        var key = (sessionId is { Length: > 0 } ? sessionId : dir ?? "").Trim().ToLowerInvariant();
+        if (key.Length == 0) return null;
+        lock (SessionInfoLock)
+        {
+            if (SessionInfoCache.TryGetValue(key, out var hit) && (DateTime.UtcNow - hit.At).TotalSeconds < 30)
+                return hit.Info;
+        }
+
+        var args = new List<string> { "session-info" };
+        if (sessionId is { Length: > 0 }) { args.Add("--session"); args.Add(sessionId); }
+        else { args.Add("--dir"); args.Add(dir!); }
+
+        SessionInfo? info = null;
+        var run = RunTeamShare(args, 15000);
+        if (run.ExitCode == 0)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(run.Stdout.Trim());
+                var root = doc.RootElement;
+                if (root.TryGetProperty("sessionID", out var id) && id.ValueKind == JsonValueKind.String &&
+                    (id.GetString() ?? "") is { Length: > 0 } sessionID)
+                {
+                    var title = root.TryGetProperty("title", out var t) && t.ValueKind == JsonValueKind.String ? t.GetString() ?? "" : "";
+                    var directory = root.TryGetProperty("directory", out var d) && d.ValueKind == JsonValueKind.String ? d.GetString() ?? "" : "";
+                    var updated = root.TryGetProperty("updated", out var u) && u.ValueKind == JsonValueKind.Number ? u.GetInt64() : 0;
+                    var workflow = root.TryGetProperty("workflow", out var w) && w.ValueKind == JsonValueKind.String ? w.GetString() : null;
+                    info = new SessionInfo(sessionID, title, directory, updated, workflow);
+                }
+            }
+            catch
+            {
+                info = null;
+            }
+        }
+
+        lock (SessionInfoLock) SessionInfoCache[key] = (DateTime.UtcNow, info);
+        return info;
+    }
+
+    private static string WorkflowLabel(string? workflow) => workflow switch
+    {
+        "task" => "一般任务",
+        "sdlc" => "SDLC",
+        "reqdoc" => "REQDOC",
+        "websec" => "WEB 安全自测",
+        _ => "上次工作流",
+    };
+
+    private async Task<object> LaunchAsync(JsonElement payload, string? sessionId = null, bool noPrompt = false)
+    {
+        var state = LoadState();
+        var dir = payload.TryGetProperty("dir", out var dirValue) ? dirValue.GetString() ?? "" : "";
+        var workflow = payload.TryGetProperty("workflow", out var workflowValue) ? workflowValue.GetString() ?? "sdlc" : "sdlc";
+        var terminal = payload.TryGetProperty("terminal", out var terminalValue) ? terminalValue.GetString() ?? "native" : "native";
+        var resume = payload.TryGetProperty("resume", out var resumeValue) && resumeValue.ValueKind == JsonValueKind.True;
+        var plugins = payload.TryGetProperty("plugins", out var pluginValue) && pluginValue.ValueKind == JsonValueKind.Array
+            ? pluginValue.EnumerateArray().Select(x => x.GetString() ?? "").Where(x => x.Length > 0).ToArray()
+            : Array.Empty<string>();
         if (dir.Length == 0 || !Directory.Exists(dir))
             return new { ok = false, error = "请先选择有效的项目目录" };
+
+        // 恢复：会话与工作流都以数据库为准；缺 sm 会丢掉工作流进度，因此自动补齐。
+        var info = sessionId is { Length: > 0 } ? LookupSession(null, sessionId) : (resume ? LookupSession(dir, null) : null);
+        var session = sessionId is { Length: > 0 } ? sessionId : (resume ? info?.SessionID : null);
+        if (info?.Workflow is { Length: > 0 } derived) workflow = derived;
+        if (session is { Length: > 0 } && !plugins.Contains("sm")) plugins = plugins.Append("sm").ToArray();
 
         if (state.ConfigOk)
         {
@@ -488,15 +626,16 @@ internal sealed class LauncherForm : Form
             _ => "启动SDLC工作流"
         };
         var common = new List<string>();
-        if (sessionId is { Length: > 0 })
+        if (session is { Length: > 0 })
         {
-            // 直接打开指定会话（交接导入后「打开这条会话」）
+            // 数据库定位到的会话（继续/交接）直接按 id 打开，比 -c 的排序更确定。
             common.Add("--session");
-            common.Add(sessionId);
+            common.Add(session);
         }
         else if (resume && canResume) common.Add("-c");
-        else
+        else if (!noPrompt)
         {
+            // 协作房间不能注入启动短语：访客端会把自己的模型跑起来，违反“访客零 token”。
             common.Add("--prompt");
             common.Add(prompt);
         }

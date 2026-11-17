@@ -193,6 +193,37 @@ describe("会话读取", () => {
     seedProject(db, "p2", "/work/b")
     expect(listProjects(db).map((item) => item.id)).toEqual(["p1", "p2"])
   })
+
+  // 非 git 目录的会话挂在 global 项目下（worktree 是 "/" 或 "C:/"），真实位置在 session.directory。
+  test("global 项目不列为导入目标，会话显示真实目录", () => {
+    const { db } = makeDb()
+    seedProject(db, "global", "/")
+    seedProject(db, "p1", "D:/projects/app")
+    seedSession(db, {
+      id: "ses_global",
+      projectID: "global",
+      directory: "D:/projects/scheduler",
+      path: "projects/scheduler",
+      title: "没有 git 的会话",
+      timeUpdated: 3000,
+      messages: [],
+    })
+    // 目录分组补出 scheduler，方便导出页按项目筛选；但不能作为导入目标
+    expect(listProjects(db)).toEqual([
+      { id: "p1", worktree: "D:/projects/app", name: undefined },
+      {
+        id: "dir:D:/projects/scheduler",
+        worktree: "D:/projects/scheduler",
+        name: "scheduler",
+        importable: false,
+      },
+    ])
+    expect(listSessions(db).items[0]!.project).toBe("D:/projects/scheduler")
+    expect(listSessions(db, { projectID: "dir:D:/projects/scheduler" }).items.map((item) => item.id)).toEqual([
+      "ses_global",
+    ])
+    expect(listSessions(db, { projectID: "p1" }).items).toEqual([])
+  })
 })
 
 describe("导出与导入", () => {

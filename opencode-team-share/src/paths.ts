@@ -12,6 +12,18 @@
 export const WORKSPACE_PLACEHOLDER = "${WORKSPACE_ROOT}"
 export const PROJECT_PLACEHOLDER = "${PROJECT_DIR}"
 
+/**
+ * 可用作工作区根的 worktree。
+ * 非 git 目录的会话落在内置 global 项目里，worktree 是文件系统根（"/"、"C:/"），
+ * 既不能当项目路径显示，也不能拿来拼接会话目录或替换路径。
+ */
+export function usableWorktree(worktree?: string | null): string | undefined {
+  if (!worktree) return undefined
+  const trimmed = worktree.replace(/[\\/]+$/, "")
+  if (trimmed === "" || /^[A-Za-z]:$/.test(trimmed)) return undefined
+  return worktree
+}
+
 /** 归一化规则：worktree 是项目根，directory 是会话所在目录。 */
 export type PathRules = { worktree: string; directory: string }
 

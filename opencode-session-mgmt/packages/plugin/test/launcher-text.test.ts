@@ -4,6 +4,7 @@ import { join } from "node:path"
 
 const buildDir = join(import.meta.dir, "../../../../portable-installer/build")
 const nsi = readFileSync(join(buildDir, "OpenCode-launch.nsi"), "utf8")
+const setup = readFileSync(join(buildDir, "OpenCode-Setup.nsi"), "utf8")
 const config = readFileSync(join(buildDir, "launcher-config.js"), "utf8")
 const webview = readFileSync(join(buildDir, "../launcher/index.html"), "utf8")
 const program = readFileSync(join(buildDir, "../launcher/Program.cs"), "utf8")
@@ -115,5 +116,182 @@ describe("OpenCode-launch 工作流选项与提示", () => {
     expect(webview).toContain("!team.seen.has(item.id)")
     expect(nsi).toContain("WEB 安全自测使用会话管理内置的 Edge 桥接")
     expect(nsi).toContain("${NSD_Uncheck} $hEdge")
+  })
+})
+
+describe("协作房间入口", () => {
+  test("团队协作页有第三个 tab 与开协作房间/加入协作房间表单", () => {
+    expect(webview).toContain('data-team-tab="room"')
+    expect(webview).toContain('id="teamRoom"')
+    expect(webview).toContain('id="roomDir"')
+    expect(webview).toContain('id="roomResume"')
+    expect(webview).toContain('id="roomStartBtn"')
+    expect(webview).toContain('id="roomInvite"')
+    expect(webview).toContain('id="roomName"')
+    expect(webview).toContain('id="roomJoinDir"')
+    expect(webview).toContain('id="roomJoinBtn">加入协作房间<')
+    expect(webview).toContain('id="roomStartBtn">开协作房间<')
+    expect(webview).toContain('prefillRoom')
+    expect(webview).toContain('state.browseTarget')
+    // 开房间前必须提醒先选对工作流
+    expect(webview).toContain('id="roomWorkflowNote"')
+    expect(webview).toContain("房间会按这份选择启动会话")
+  })
+
+  test("Program.cs 写意图文件且开协作房间/加入协作房间不注入启动短语", () => {
+    expect(program).toContain('case "roomStart"')
+    expect(program).toContain('case "roomJoin"')
+    expect(program).toContain('collab-room.json')
+    expect(program).toContain("InvitePattern")
+    expect(program).toContain("noPrompt: true")
+    expect(program).toContain("else if (!noPrompt)")
+    expect(program).toContain("访客零 token")
+  })
+
+  test("协作房间使用说明遵守帮助排版约定并覆盖快捷键", () => {
+    expect(webview).toContain('id="roomHelp"')
+    expect(webview).toContain("ROOM_HELP")
+    expect(webview).toContain("第一步：开协作房间（主持人）")
+    expect(webview).toContain("第二步：加入协作房间（访客）")
+    expect(webview).toContain("点「开协作房间」")
+    expect(webview).toContain("点「加入协作房间」")
+    expect(webview).toContain("卡片会直接显示邀请码")
+    expect(webview).toContain("Ctrl+X 再按 B")
+    expect(webview).toContain("房间内操作：")
+    expect(webview).toContain("审批与断线：")
+    expect(webview).toContain("Alt+M 或 F3")
+    expect(webview).toContain("中文输入法")
+    expect(webview).toContain("Ctrl+P")
+    expect(webview).toContain("提示：访客不会消耗本机模型额度")
+    // 帮助渲染靠这两个小节标题出 h3；漏加会退化成正文段落。
+    expect(webview).toContain("|房间内操作：|审批与断线：")
+  })
+
+  test("TUI 插件只写 tui.json，不污染安装器生成的 opencode.jsonc", () => {
+    expect(setup).not.toContain("opencode-collab-room")
+    expect(config).toContain("function buildTuiPluginText")
+    expect(config).toContain("https://opencode.ai/tui.json")
+    expect(config).toContain('path.join(configDir(args), "tui.json")')
+  })
+
+  test("launcher-config 把协作房间写进 tui 配置并清理 opencode.jsonc 残留", () => {
+    expect(config).toContain("ROOM_BUNDLE")
+    expect(config).toContain("opencode-collab-room")
+    expect(config).toContain("function roomPath")
+    expect(config).toContain('normalize(item).includes(ROOM_BUNDLE)')
+  })
+})
+
+describe("恢复会话：插件与工作流以数据库为准", () => {
+  test("启动器所有恢复入口都走同一套查询", () => {
+    expect(program).toContain('"session-info"')
+    expect(program).toContain("LookupSession")
+    expect(program).toContain("CheckResumeFor")
+    expect(program).toContain("WorkflowLabel")
+    expect(program).toContain('case "roomResume"')
+    // 恢复/交接自动补齐 sm，避免工作流进度丢失
+    expect(program).toContain('plugins.Append("sm")')
+    // 恢复按会话 id 打开，不再依赖 -c 的排序
+    expect(program).toContain("common.Add(session)")
+  })
+
+  test("工作流 chip 常驻并跟随实际，恢复时不提供切换入口", () => {
+    expect(webview).toContain("function roomResuming")
+    expect(webview).toContain('const onRoom = activeTeamTab() === "room"')
+    expect(webview).toContain('id="teamWorkflowLine"')
+    expect(webview).toContain("workflow-chip")
+    expect(webview).not.toContain('$("teamWorkflowLine").hidden')
+    expect(webview).toContain("恢复「")
+    expect(webview).toContain("请取消勾选")
+    expect(webview).toContain("可勾选恢复")
+    expect(webview).not.toContain("（沿用上次会话）")
+  })
+
+  test("协作房间表单去除重复信息，昵称说明是成员自己的名字", () => {
+    expect(webview).toContain("继续上次会话</label>")
+    expect(webview).not.toContain("没有历史时自动新建")
+    expect(webview).not.toContain("用于开协作房间")
+    expect(webview).toContain("把邀请码发给同事")
+    expect(webview).not.toContain("开协作房间后把邀请码")
+    expect(webview).toContain("加入后使用的项目目录")
+    expect(webview).not.toContain("选择加入协作房间后使用的项目目录")
+    // 昵称只代表访客本人，不是房间名
+    expect(webview).toContain("你的昵称")
+    expect(webview).toContain("显示给房间里的其他成员")
+    expect(webview).toContain("房间名使用主持人的会话标题")
+    expect(webview).toContain("请填写你的昵称")
+  })
+
+  test("三个 tab 统一版式：分组卡片、列表面板、页脚与固定顺序", () => {
+    // 顶部：tabs 行内含 workflow chip
+    expect(webview).toContain('class="tabs-list"')
+    expect(webview).not.toContain('class="tip-line" id="teamWorkflowLine"')
+    // 导出：列表收进 panel，搜索/筛选变成 list-toolbar / list-filters
+    expect(webview).toContain('class="panel"')
+    expect(webview).toContain('class="list-toolbar"')
+    expect(webview).toContain('class="list-filters"')
+    expect(webview).not.toContain('class="toolbar"')
+    expect(webview).not.toContain('class="filter-row"')
+    // 导入：文件选择与房间一致，用 path-row + 只读输入
+    expect(webview).toContain('id="teamFile"')
+    expect(webview).toContain("readonly")
+    expect(webview).not.toContain('id="teamFileName"')
+    // 导入方式用紧凑单选行 + 动态说明，不再用大卡片
+    expect(webview).toContain('class="radio-row"')
+    expect(webview).toContain('id="teamModeHint"')
+    expect(webview).toContain("function renderImportModeHint")
+    expect(webview).not.toContain("mode-item")
+    expect(webview).not.toContain("接手继续会带上原工作流阶段进度")
+    // 房间：两个分组卡片
+    expect(webview).toContain("开协作房间（主持人）")
+    expect(webview).toContain("加入协作房间（访客）")
+    expect(webview).toContain('class="group-card"')
+    expect(webview).toContain('class="group-desc"')
+    // 结果条之后再放帮助/提示
+    expect(webview).toContain('class="tab-foot"')
+    expect(webview).toContain("把文件发给同事")
+    expect(webview).not.toContain('style="margin-top:16px"')
+    expect(webview).not.toContain('style="margin-top:20px"')
+  })
+
+  test("三个 tab 的页尾都是「用户视角一句 + 使用说明」，细节收进说明弹窗", () => {
+    expect(webview).toContain('id="exportHelp"')
+    expect(webview).toContain('id="importHelp"')
+    expect(webview).toContain('id="roomHelp"')
+    expect(webview).toContain("const EXPORT_HELP")
+    expect(webview).toContain("const IMPORT_HELP")
+    expect(webview).toContain("导入后请自行审阅")
+    // 会话列表用稳定的 slash 指令，而不是写死快捷键
+    expect(webview).toContain("/sessions")
+    expect(webview).toContain("默认也可按 Ctrl+X 再按 L")
+    expect(webview).not.toContain("启动器选该项目目录 → 打开数字程序员 → 按 Ctrl+X")
+  })
+
+  test("工作流只有向导页一个选择入口，团队页统一只读展示", () => {
+    expect(webview).not.toContain('id="roomWorkflow"')
+    expect(webview).not.toContain("roomWorkflowSwitch")
+    // 房间卡只写提示，不提供第二个工作流选择入口
+    expect(webview).toContain('id="roomWorkflowNote"')
+    expect(webview).toContain("先确认上方「当前工作流」")
+    expect(webview).toContain('id="teamWorkflowLine"')
+    expect(webview).toContain("function renderTeamWorkflow")
+    expect(webview).toContain('id="teamWorkflowSwitch"')
+    expect(webview).toContain("在向导页切换")
+    expect(webview).toContain("当前工作流：")
+    expect(webview).toContain("导出/导入会话交给同事")
+    expect(webview).toContain("开协作房间让同事实时旁观")
+    expect(webview).toContain("协作房间把当前会话实时分享给同事")
+    expect(webview).toContain("恢复「")
+    expect(webview).toContain('workflow: state.workflow,')
+    expect(webview).toContain('id="roomResumeHint"')
+    expect(webview).toContain("checkRoomResume")
+    expect(webview).toContain('post("roomResume"')
+    expect(webview).not.toContain('resume: $("roomResume").checked,\n    noPrompt: true')
+  })
+
+  test("继续上次会话时同步工作流，目录输入防抖", () => {
+    expect(webview).toContain("resumeTimer")
+    expect(webview).toContain("clearTimeout(resumeTimer)")
+    expect(webview).toContain("state.workflow = result.workflow")
   })
 })

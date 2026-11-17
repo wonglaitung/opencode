@@ -44,7 +44,7 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
 .path-row input:focus{border-color:#60a5fa;box-shadow:0 0 0 3px #dbeafe}
 .path-row button,.ghost{border:1px solid #cbd5e1;background:#fff;color:#334155;border-radius:9px;padding:11px 16px}
 .path-row button:hover,.ghost:hover{border-color:#94a3b8;background:#f8fafc}
-.action-row{display:flex;gap:10px;margin-top:14px}
+.action-row{display:flex;gap:10px;margin-top:16px}
 .primary{flex:1;border:0;border-radius:9px;padding:13px 18px;background:var(--blue);color:#fff;font-size:15px;font-weight:700}
 .primary:hover{background:#1d4ed8}
 .ghost{padding:13px 18px}
@@ -54,13 +54,15 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
 .hint{min-height:76px;margin:0;color:#475569;white-space:pre-line}
 .link{margin-top:10px;border:0;background:transparent;color:var(--blue);padding:0;font-size:13px}
 .link:hover{text-decoration:underline}
-.field{margin-bottom:12px}
+.field{margin:0 0 12px}
 .field label{display:block;margin-bottom:5px;color:#64748b;font-size:12px}
 .field select{width:100%;border:1px solid #cbd5e1;border-radius:9px;padding:10px 12px;background:#fff;color:#0f172a;outline:none}
 .field select:focus{border-color:#60a5fa;box-shadow:0 0 0 3px #dbeafe}
 .field input{width:100%;border:1px solid #cbd5e1;border-radius:9px;padding:11px 12px;background:#fff;color:#0f172a;outline:none}
 .field input:focus{border-color:#60a5fa;box-shadow:0 0 0 3px #dbeafe}
 .field input::placeholder{color:#94a3b8}
+.field input[readonly]{background:#f8fafc;color:#475569}
+.field-hint{margin-top:6px;color:#94a3b8;font-size:11px;line-height:1.5}
 .plugin-card{margin-top:16px}
 .plugin-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:12px}
 .plugin-head h2{margin:0}
@@ -82,19 +84,27 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
 .team-head h1{margin:0}
 .back-link{border:0;background:transparent;color:var(--blue);font-size:13px;padding:0;cursor:pointer}
 .back-link:hover{text-decoration:underline}
-.tabs{display:flex;gap:8px;margin:20px 0 16px}
+.tabs{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:20px 0 16px}
+.tabs-list{display:flex;gap:8px;flex-wrap:wrap}
 .tab{border:1px solid #cbd5e1;background:#fff;color:#334155;border-radius:9px;padding:9px 18px;font-size:13px}
 .tab:hover{border-color:#94a3b8;background:#f8fafc}
 .tab.active{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:600}
-.toolbar{display:flex;gap:10px;align-items:center;margin-bottom:12px}
-.toolbar input{flex:1;min-width:0;border:1px solid #cbd5e1;border-radius:9px;padding:10px 12px;background:#fff;color:#0f172a;outline:none}
-.toolbar input:focus{border-color:#60a5fa;box-shadow:0 0 0 3px #dbeafe}
-.sess-list{border:1px solid var(--line);border-radius:12px;overflow:auto;background:#fff;max-height:min(52vh,460px)}
-.filter-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 10px}
-.filter-row select{border:1px solid #cbd5e1;border-radius:8px;padding:7px 9px;background:#fff;color:#0f172a;font-size:12px;outline:none}
-.filter-row select:focus{border-color:#60a5fa;box-shadow:0 0 0 3px #dbeafe}
+.workflow-chip{margin-left:auto;color:#94a3b8;font-size:12px}
+.workflow-chip b{color:#334155;font-weight:600}
+.workflow-chip .link{margin:0 0 0 4px;font-size:12px}
+.panel{border:1px solid var(--line);border-radius:12px;background:#fff;margin:0 0 16px;overflow:hidden}
+.list-toolbar{display:flex;gap:10px;align-items:center;padding:12px 12px 10px}
+.list-toolbar input{flex:1;min-width:0;border:1px solid #cbd5e1;border-radius:9px;padding:10px 12px;background:#fff;color:#0f172a;outline:none}
+.list-toolbar input:focus{border-color:#60a5fa;box-shadow:0 0 0 3px #dbeafe}
+.list-filters{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:0 12px 10px}
+.list-filters select{border:1px solid #cbd5e1;border-radius:8px;padding:7px 9px;background:#fff;color:#0f172a;font-size:12px;outline:none}
+.list-filters select:focus{border-color:#60a5fa;box-shadow:0 0 0 3px #dbeafe}
+.sess-list{overflow:auto;background:#fff;max-height:min(52vh,460px)}
+.panel .sess-list{border-top:1px solid var(--line)}
 .check{display:inline-flex;align-items:center;gap:5px;color:#475569;font-size:12px;cursor:pointer;user-select:none}
-.more-row{display:flex;justify-content:center;margin-top:8px}
+.check-row{display:flex;align-items:center;gap:8px;color:#475569;font-size:13px;cursor:pointer;user-select:none;margin:0 0 10px}
+.more-row{display:flex;justify-content:center;padding:10px 12px 12px}
+.more-row[hidden]{display:none}
 .more-row .ghost{font-size:12px;padding:6px 14px}
 .sess-id{color:#94a3b8;font-size:11px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 .empty .link{margin-left:8px}
@@ -108,15 +118,24 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
 .sess-meta{color:#64748b;font-size:12px;white-space:nowrap}
 .sess-project{margin-left:auto;color:#94a3b8;font-size:12px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .empty{padding:20px;color:#94a3b8;font-size:13px;text-align:center}
-.ok-strip{margin:14px 0 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;font-size:12px;display:none}
+.ok-strip{margin:16px 0 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;font-size:12px;display:none}
 .ok-strip.show{display:block}
+.ok-strip.error{background:#fef2f2;border-color:#fecaca;color:#991b1b}
 .ok-strip .link{margin-left:10px}
-.warn-line{margin:14px 0;padding:10px 12px;border-radius:8px;background:#fffbeb;border:1px solid #fde68a;color:#92400e;font-size:12px}
-.tip-line{margin:10px 0 0;color:#64748b;font-size:12px;line-height:1.65}
-.mode-item{display:flex;align-items:flex-start;gap:9px;padding:9px 11px;border:1px solid #e2e8f0;border-radius:9px;background:#f8fafc;margin-top:8px;cursor:pointer;color:#334155;font-size:13px}
-.mode-item:hover{border-color:#bfdbfe;background:#f0f7ff}
-.mode-item input{margin-top:2px}
-.mode-item small{display:block;margin-top:2px;color:#64748b;font-size:11px;line-height:1.5}
+.warn-line{margin:16px 0 0;padding:10px 12px;border-radius:8px;background:#fffbeb;border:1px solid #fde68a;color:#92400e;font-size:12px}
+.tip-line{margin:8px 0 0;color:#64748b;font-size:12px;line-height:1.65}
+.group-card{border:1px solid var(--line);border-radius:14px;background:#fff;padding:18px;margin:0 0 16px;box-shadow:0 8px 28px rgba(15,23,42,.04)}
+.group-card h3{margin:0 0 4px;font-size:15px;color:#334155}
+.group-desc{margin:0 0 14px;color:#64748b;font-size:12px;line-height:1.6}
+.group-card .field:last-of-type{margin-bottom:0}
+.tab-foot{margin:16px 0 0;padding-top:12px;border-top:1px solid var(--line)}
+.tab-foot .tip-line{margin:0 0 6px}
+.tab-foot .tip-line:last-child{margin-bottom:0}
+.tab-foot .link{margin:0;display:inline-block}
+.radio-row{display:flex;flex-direction:row;align-items:center;gap:20px;flex-wrap:wrap;margin-top:2px}
+.radio-row label{display:inline-flex;align-items:center;gap:6px;margin:0;color:#334155;font-size:13px;font-weight:400;cursor:pointer;white-space:nowrap}
+/* .field input 的全宽样式不能套到单选框/复选框上，否则每个选项会被撑成一行宽而竖排。 */
+.field input[type="radio"],.field input[type="checkbox"]{width:auto;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;accent-color:var(--blue)}
 .handoff-card{border:1px solid var(--line);border-radius:12px;padding:14px;background:#f8fafc;margin:12px 0}
 .handoff-card dl{display:grid;grid-template-columns:56px 1fr;gap:8px 14px;margin:0}
 .handoff-card dt{color:#64748b;font-size:12px}
@@ -195,36 +214,42 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
           <button class="back-link" id="teamBack">‹ 返回</button>
           <h1>团队协作</h1>
         </div>
-        <p class="sub">把会话交给同事，或接手同事交接过来的会话</p>
+        <p class="sub">导出/导入会话交给同事，或开协作房间让同事实时旁观、提建议、排队任务</p>
         <div class="tabs">
-          <button class="tab active" data-team-tab="export">导出会话</button>
-          <button class="tab" data-team-tab="import">导入会话</button>
+          <div class="tabs-list">
+            <button class="tab active" data-team-tab="export">导出会话</button>
+            <button class="tab" data-team-tab="import">导入会话</button>
+            <button class="tab" data-team-tab="room">协作房间</button>
+          </div>
+          <div class="workflow-chip" id="teamWorkflowLine"></div>
         </div>
 
         <section id="teamExport">
-          <div class="toolbar">
-            <input id="teamSearch" placeholder="搜索标题或项目路径…" autocomplete="off">
-            <button class="ghost" id="teamRefresh">刷新</button>
+          <div class="panel">
+            <div class="list-toolbar">
+              <input id="teamSearch" placeholder="搜索标题或项目路径…" autocomplete="off">
+              <button class="ghost" id="teamRefresh">刷新</button>
+            </div>
+            <div class="list-filters">
+              <select id="teamRange" title="时间范围">
+                <option value="7" selected>近 7 天</option>
+                <option value="30">近 30 天</option>
+                <option value="90">近 90 天</option>
+                <option value="0">全部时间</option>
+              </select>
+              <select id="teamProjectFilter" title="项目"><option value="">全部项目</option></select>
+              <select id="teamSort" title="排序">
+                <option value="updated" selected>最近更新</option>
+                <option value="created">创建时间</option>
+                <option value="messages">消息数</option>
+              </select>
+              <label class="check"><input type="checkbox" id="teamChildren"> 显示子会话</label>
+              <span class="sess-meta" id="teamCount"></span>
+            </div>
+            <div class="sess-list" id="teamSessions"><div class="empty">正在读取会话…</div></div>
+            <div class="more-row" id="teamMoreRow" hidden><button class="ghost" id="teamMore">加载更多</button></div>
           </div>
-          <div class="filter-row">
-            <select id="teamRange" title="时间范围">
-              <option value="30" selected>近 30 天</option>
-              <option value="7">近 7 天</option>
-              <option value="90">近 90 天</option>
-              <option value="0">全部时间</option>
-            </select>
-            <select id="teamProjectFilter" title="项目"><option value="">全部项目</option></select>
-            <select id="teamSort" title="排序">
-              <option value="updated" selected>最近更新</option>
-              <option value="created">创建时间</option>
-              <option value="messages">消息数</option>
-            </select>
-            <label class="check"><input type="checkbox" id="teamChildren"> 显示子会话</label>
-            <span class="sess-meta" id="teamCount"></span>
-          </div>
-          <div class="sess-list" id="teamSessions"><div class="empty">正在读取会话…</div></div>
-          <div class="more-row" id="teamMoreRow" hidden><button class="ghost" id="teamMore">加载更多</button></div>
-          <div class="field" style="margin-top:16px">
+          <div class="field">
             <label for="teamNote">交接说明（给同事的话，可留空）</label>
             <input id="teamNote" placeholder="例如：登录鉴权这块卡住了，帮忙看看 token 校验">
           </div>
@@ -233,12 +258,19 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
             <button class="primary" id="teamExportBtn" disabled>导出…</button>
           </div>
           <div class="ok-strip" id="teamExportOk"></div>
+          <div class="tab-foot">
+            <div class="tip-line">导出后把文件发给同事，对方在「导入会话」里打开就能接着做。</div>
+            <button class="link" id="exportHelp">查看使用说明 ›</button>
+          </div>
         </section>
 
         <section id="teamImport" hidden>
-          <div class="toolbar">
-            <button class="ghost" id="teamPickFile">选择文件…</button>
-            <span class="sess-meta" id="teamFileName">未选择文件</span>
+          <div class="field">
+            <label for="teamFile">交接文件</label>
+            <div class="path-row">
+              <input id="teamFile" readonly placeholder="选择同事发来的 .ocsave 文件…">
+              <button class="ghost" id="teamPickFile">选择文件…</button>
+            </div>
           </div>
           <div class="handoff-card" id="teamHandoff" hidden>
             <dl>
@@ -249,8 +281,11 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
           </div>
           <div class="field" id="teamModeField">
             <label>导入方式</label>
-            <label class="mode-item"><input type="radio" name="teamMode" value="handoff" checked><span>接手继续<small>同一会话，带工作流阶段进度；此后在这个会话里的活动会记入你的统计</small></span></label>
-            <label class="mode-item"><input type="radio" name="teamMode" value="reference"><span>仅参考<small>复制成新会话（标题加「[参考]」），不带阶段进度、不沿用原会话的成本与 Token</small></span></label>
+            <div class="radio-row">
+              <label><input type="radio" name="teamMode" value="handoff" checked> 接手继续</label>
+              <label><input type="radio" name="teamMode" value="reference"> 仅参考</label>
+            </div>
+            <div class="field-hint" id="teamModeHint"></div>
           </div>
           <div class="field" id="teamProjectField" hidden>
             <label for="teamProject">导入到项目</label>
@@ -261,8 +296,53 @@ h1{margin:16px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
             <button class="primary" id="teamImportBtn" disabled>导入</button>
           </div>
           <div class="ok-strip" id="teamImportOk"></div>
-          <div class="tip-line">导入后可直接点「打开这条会话」继续；也可以稍后打开：启动器选该项目目录 → 打开数字程序员 → 按 Ctrl+X 再按 L 打开会话列表 → 选标题带「[交接]」的那条。</div>
-          <div class="tip-line">接手继续会带上原工作流阶段进度；仅参考是独立副本，打开后由「会话管理」建一个全新工作流，可以按需要重新启动。</div>
+          <div class="tab-foot">
+            <div class="tip-line">导入完成后可直接点「打开这条会话」；之后用 /sessions 也能在会话列表里找回（标题带「[交接]」）。</div>
+            <button class="link" id="importHelp">查看使用说明 ›</button>
+          </div>
+        </section>
+
+        <section id="teamRoom" hidden>
+          <div class="group-card">
+            <h3>开协作房间（主持人）</h3>
+            <p class="group-desc">把当前会话实时分享给同事；他们在自己的终端旁观、提建议、排队任务。</p>
+            <div class="tip-line" id="roomWorkflowNote"></div>
+            <div class="field">
+              <label for="roomDir">项目目录</label>
+              <div class="path-row"><input id="roomDir" placeholder="选择项目目录" autocomplete="off"><button class="ghost" id="roomBrowse">浏览</button></div>
+            </div>
+            <label class="check-row"><input type="checkbox" id="roomResume" checked> 继续上次会话</label>
+            <div class="tip-line" id="roomResumeHint"></div>
+            <div class="warn-line">把邀请码发给同事；房间随本机终端关闭而结束。</div>
+            <div class="action-row">
+              <button class="primary" id="roomStartBtn">开协作房间</button>
+            </div>
+          </div>
+          <div class="group-card">
+            <h3>加入协作房间（访客）</h3>
+            <p class="group-desc">粘贴同事发来的邀请码，用你的昵称加入，不消耗本机模型额度。</p>
+            <div class="field">
+              <label for="roomInvite">邀请码</label>
+              <input id="roomInvite" placeholder="ws://192.168.1.5:54321?token=…" autocomplete="off">
+            </div>
+            <div class="field">
+              <label for="roomName">你的昵称</label>
+              <input id="roomName" placeholder="例如 Bob" autocomplete="off">
+              <div class="field-hint">显示给房间里的其他成员；房间名使用主持人的会话标题。</div>
+            </div>
+            <div class="field">
+              <label for="roomJoinDir">加入后使用的项目目录</label>
+              <div class="path-row"><input id="roomJoinDir" placeholder="选择加入后使用的项目目录" autocomplete="off"><button class="ghost" id="roomBrowseDir">浏览</button></div>
+            </div>
+            <div class="warn-line">房间内容来自主机且未经验证，请自行审阅；主机关闭终端后房间结束。</div>
+            <div class="action-row">
+              <button class="primary" id="roomJoinBtn">加入协作房间</button>
+            </div>
+          </div>
+          <div class="ok-strip" id="teamRoomNotice"></div>
+          <div class="tab-foot">
+            <button class="link" id="roomHelp">查看协作房间使用说明 ›</button>
+          </div>
         </section>
       </div>
     </div>
@@ -292,13 +372,74 @@ const WORKFLOWS = {
     help: "WEB 安全自测\n\n适合：开发人员对自己负责的系统做上线前安全自测，不替代专业渗透测试。\n系统内部固定五阶段：范围与边界 → 资产与接口 → 安全检查 → 验证与定级 → 报告与修复。你主要完成范围、登录走查和报告确认。\n\n第 1 步：启动\n· 新会话自动发送「启动 WEB 安全测试工作流」。\n· 勾选「继续上次会话」时不发送，直接恢复上次进度。\n\n第 2 步：说明测试范围\n一次说清目标、环境、测试账号和停止条件。输入示例：\n「目标 http://127.0.0.1:18086，测试环境，测试账号 user，角色普通用户，发现异常就停」\n不要把口令发到对话里，登录 Edge 时再输入。\nAI 问预估工时时，输入：\n「预估 8 小时」\n\n第 3 步：选择测试模式\n输入：\n「普通测试」\n或\n「越权测试」\n普通测试需要 1 个账号；越权测试需要至少 2 个不同角色账号（普通 + 高权）。\n\n第 4 步：在 Edge 中走查\nAI 打开 Edge 后，你登录并正常走完页面和操作流程。\n完成后输入：\n「本次录入已完成」\n\n越权测试：\n· 先用普通账号走完流程，输入「本次录入已完成」。\n· AI 会提示当前是普通账号还是高权账号，并自动清除登录态，然后用高权账号重新登录并走同样流程。\n· 没有自动切换时，输入「切换到高权账号阶段」。\n· 高权账号走完后再输入「本次录入已完成」。\n\n第 5 步：匿名只读探测\nAI 询问是否授权匿名探测时，输入：\n「同意匿名探测」\n或\n「不同意匿名探测」\n只对已采集的同源 GET/HEAD 端点发无 Cookie 请求，不发写操作。\n\n第 6 步：检查与验证\nAI 分析已采集的页面和接口；需要复现时会问你。\n需要写操作时必须逐次授权，例如：\n「允许对 /api/settings 做一次写入验证」\n不做写操作时输入：\n「不做写操作，按只读结论报告」\n确认结论前会做一次独立复核：AI 另起一个只读子代理尝试推翻它；被推翻的降为「待验证」，不写进确认清单。\n提示：探测只用无害标记，不执行脚本、不读真实文件、不联外网；看到版本号只能标「待验证」，不能直接当漏洞。\n\n第 7 步：确认报告\nAI 生成报告后输入：\n「报告确认，定稿」\n报告写三份文件：report.md、report.json、coverage-ledger.json，都在项目 websec-evidence/<sessionID>/，目录内 .gitignore 忽略证据正文。\n报告分两组：已确认（按严重度排序）与待验证（不评严重度）。\n定稿时会自动校验覆盖台账，缺项或证据引用不对会被打回重补。\n\n第 8 步：结束与复测\n定稿后输入 /new 开始下一次测试；修复后复测也建议新会话。\nEdge 启动失败时，AI 会请求降级，你确认后输入：\n「同意降级为人工浏览」\n未录入预估工时时不能定稿。\n\n提示：WEB 安全自测使用「会话管理」内置的 Edge 桥接，不需要额外启用「Edge 调试」插件。"
   }
 };
+const ROOM_HELP = `协作房间
+协作房间把当前会话实时分享给同事：访客可旁观、提建议、排队任务，不消耗自己的模型额度。
+第一步：开协作房间（主持人）
+· 先确认上方「当前工作流」选对了，再选项目目录、点「开协作房间」；房间按这份选择启动会话，选错请先在向导页切换。
+· 启动器打开终端后自动关闭。
+· 终端右侧栏的「协作房间」卡片会直接显示邀请码。
+· 若没看到侧栏，按 Ctrl+X 再按 B 打开；Ctrl+P 搜索「协作房间：状态」可看人数与队列。
+· 邀请码形如：ws://192.168.1.5:54321?token=…
+· 通过可信渠道发给同事；房间随你的终端关闭而结束。
+第二步：加入协作房间（访客）
+· 在「协作房间」页粘贴邀请码、填写你在房间里的昵称（其他成员可见）、选择工作目录，点「加入协作房间」。
+· 终端会直接进入房间视图，版式与正常会话页一致：用户消息、AI 正文、工具调用（命令、改动 diff、读取结果）、思考过程都会实时显示。
+· 底部状态行显示主机当前模型、Token/成本、队列人数与连接状态。
+房间内操作：
+· 直接输入文字按 Enter：作为「建议」写入主机上下文，不会立即执行。
+· Alt+M 或 F3：切换「建议 / 排队」模式；排队由主机按先后顺序执行。
+· 排队成功后自动切回建议模式，避免下一句误发。
+· Esc：退出房间视图，回到自己的会话；不影响房间本身。
+· 中文输入法：回车会先确认候选词；确认文字已上屏后再按一次回车发送。
+审批与断线：
+· 需要授权的操作会在输入框上方显示完整内容（命令、文件、diff），标注「等待主机审批」，由主机确认；访客只读。
+· AI 反问的问题与选项同样会显示，主机选择后继续。
+· 网络中断会自动重连并补齐内容；主机关闭终端后显示「房间已结束」。
+提示：访客不会消耗本机模型额度；房间是否可用取决于主机终端是否开启。`;
+const EXPORT_HELP = `导出会话
+把一条会话（含工作流阶段进度）整理成一个交接文件，交给同事继续。
+
+第 1 步：选择要交接的会话
+· 默认显示近 7 天的会话，可用搜索、项目、排序和「显示子会话」缩小范围。
+· 点一行选中；标题重复时看右侧的 #短编号。
+
+第 2 步：写交接说明（可留空）
+· 说明会出现在同事的「交接信息」卡片里，写清卡在哪里、希望他看什么最有用。
+
+第 3 步：导出并发送
+· 点「导出…」选择保存位置，文件名默认带 会话交接-标题-日期。
+· 文件是明文，包含完整会话内容与阶段进度（代码、路径、可能的凭据），请通过可信渠道发送。
+
+对方怎么继续：
+· 他在启动器打开「团队协作 → 导入会话」，选中这个文件，导入后点「打开这条会话」即可。`;
+
+const IMPORT_HELP = `导入会话
+把同事导出的交接文件变成你项目里的一条会话。
+
+第 1 步：选择交接文件
+· 点「选择文件…」选中 .ocsave 文件；卡片会显示来自谁、哪条会话和交接说明。
+
+第 2 步：选择导入方式
+· 接手继续：仍是同一个会话，保留工作流阶段进度；之后的活动记入你的统计。
+· 仅参考：复制成新会话（标题加「[参考]」），不带阶段进度，也不沿用原会话的成本与 Token。
+
+第 3 步：选择项目并导入
+· 「导入到项目」决定这条会话出现在哪个项目下。
+· 导入完成后点「打开这条会话」直接继续。
+
+之后还想打开：
+· 在数字程序员里输入「/sessions」（默认也可按 Ctrl+X 再按 L）打开会话列表，选标题带「[交接]」的那条。
+提示：内容来自他人且未经验证，导入后请自行审阅。`;
+
 const PLUGINS = {
   sm: { label: "会话管理", desc: "默认启用；关闭后工作流、工时与审核报告不可用" },
   edge: { label: "Edge 调试", desc: "启用独立 Edge 调试插件；WEB 安全自测不需要勾选（使用会话管理内置桥接）" },
   server: { label: "服务器调试", desc: "启用服务器调试插件" }
 };
-const state = { workflow: "sdlc", terminal: "native", plugins: ["sm"], configOk: true, identityOk: true, lastProject: "", dir: "", resume: false };
+const state = { workflow: "sdlc", terminal: "native", plugins: ["sm"], configOk: true, identityOk: true, lastProject: "", dir: "", resume: false, browseTarget: "main" };
 let canResume = false;
+let roomResumeInfo = null;
+let roomResumeTimer;
 
 const $ = (id) => document.getElementById(id);
 const post = (type, payload = {}) => window.chrome.webview.postMessage({ type, payload });
@@ -323,6 +464,34 @@ function renderWorkflows() {
       // 用户会以为点击没反应（且看不到该工作流的说明与参数）。
       if (!$("teamView").hidden) showView("wizard");
     });
+  });
+  renderTeamWorkflow();
+}
+function activeTeamTab() {
+  return document.querySelector(".tab.active[data-team-tab]")?.dataset.teamTab ?? "export";
+}
+function roomResuming() {
+  const dir = $("roomDir").value.trim();
+  return Boolean(dir && roomResumeInfo && roomResumeInfo.can && $("roomResume").checked);
+}
+function renderTeamWorkflow() {
+  const onRoom = activeTeamTab() === "room";
+  const resuming = onRoom && roomResuming();
+  const selected = WORKFLOWS[state.workflow]?.label ?? "";
+  const effective = resuming ? roomResumeInfo?.workflow : state.workflow;
+  const label = (effective && WORKFLOWS[effective]?.label) || selected;
+  // 工作流是状态而不是步骤：常驻显示，避免切 tab 时标题区高度跳动。
+  const link = onRoom && !resuming ? ` <a class="link" href="#" id="teamWorkflowSwitch">在向导页切换 ›</a>` : "";
+  $("teamWorkflowLine").innerHTML = `当前工作流：<b>${esc(label)}</b>${link}`;
+  // 房间按上面这份选择启动会话：写清楚“先选对工作流再开房间”，减少误开阶段流程
+  const roomNote = $("roomWorkflowNote");
+  if (roomNote) roomNote.innerHTML = resuming
+    ? `本次沿用上次会话的工作流：<b>${esc(label)}</b>，上方选择不生效。`
+    : `先确认上方「当前工作流」为 <b>${esc(label)}</b> 再开房间；选错请在向导页切换，房间会按这份选择启动会话。`;
+  const switchLink = $("teamWorkflowSwitch");
+  if (switchLink) switchLink.addEventListener("click", (event) => {
+    event.preventDefault();
+    showView("wizard");
   });
 }
 function renderHint() {
@@ -368,15 +537,24 @@ function renderState() {
   renderWorkflows(); renderPlugins(); renderHint();
   checkResume();
 }
+let resumeTimer;
 function checkResume() {
   if (!state.dir) return;
-  post("resume", { dir: state.dir, workflow: state.workflow });
+  // 目录输入会逐字触发；查询要起 bun 子进程，必须防抖。
+  clearTimeout(resumeTimer);
+  resumeTimer = setTimeout(() => post("resume", { dir: state.dir, workflow: state.workflow }), 300);
 }
 function updateResume(result) {
   canResume = !!result?.can;
   $("resume").disabled = !canResume;
   if (!canResume) $("resume").checked = false;
   $("resumeHint").textContent = result?.hint || "";
+  // 继续时工作流必须与历史会话一致（identity.json 是机器级，不能临时换类型）。
+  if (canResume && $("resume").checked && result?.workflow && state.workflow !== result.workflow) {
+    state.workflow = result.workflow;
+    applyWorkflowDefaults();
+    renderWorkflows(); renderPlugins(); renderHint();
+  }
 }
 function showError(message) {
   $("notice").textContent = message;
@@ -401,13 +579,14 @@ function showView(name) {
   });
   clearError();
   if (isTeam) {
+    renderTeamWorkflow();
     loadTeamSessions();
     post("teamListProjects");
   }
 }
 
 // 筛选与分页都下推到 SQL：会话可能上千条，全量拉取再前端过滤会卡住输入与滚动。
-// 首屏 50 条 + 默认近 30 天（本机实测 86% 的主会话在 30 天以前）。
+// 首屏 50 条 + 默认近 7 天；需要更早的会话时改时间范围。
 const TEAM_PAGE_SIZE = 50;
 
 function teamFiltersActive() {
@@ -415,7 +594,7 @@ function teamFiltersActive() {
   return (
     $("teamSearch").value.trim() !== "" ||
     $("teamProjectFilter").value !== "" ||
-    (days > 0 && days !== 30) ||
+    (days > 0 && days !== 7) ||
     $("teamChildren").checked
   );
 }
@@ -538,7 +717,7 @@ function renderTeamSessions(payload) {
 function clearTeamFilters() {
   $("teamSearch").value = "";
   $("teamProjectFilter").value = "";
-  $("teamRange").value = "30";
+  $("teamRange").value = "7";
   $("teamChildren").checked = false;
   $("teamSort").value = "updated";
   loadTeamSessions();
@@ -547,30 +726,43 @@ function clearTeamFilters() {
 function resetImport() {
   team.file = "";
   team.inspected = null;
-  $("teamFileName").textContent = "未选择文件";
+  $("teamFile").value = "";
   $("teamHandoff").hidden = true;
   $("teamProjectField").hidden = true;
   $("teamImportBtn").disabled = true;
   $("teamImportOk").classList.remove("show");
   const handoffMode = document.querySelector('input[name="teamMode"][value="handoff"]');
   if (handoffMode) handoffMode.checked = true;
+  renderImportModeHint();
 }
+
+function renderImportModeHint() {
+  const mode = document.querySelector('input[name="teamMode"]:checked')?.value || "handoff";
+  $("teamModeHint").textContent = mode === "reference"
+    ? "复制成新会话（标题加「[参考]」），不带阶段进度，也不沿用原会话的成本与 Token。"
+    : "同一会话，保留工作流阶段进度；此后的活动会记入你的统计。";
+}
+document.querySelectorAll('input[name="teamMode"]').forEach((input) => {
+  input.addEventListener("change", renderImportModeHint);
+});
 
 function renderTeamProjects(items) {
   const projects = Array.isArray(items) ? items : [];
-  const options = projects.map((item) =>
-    `<option value="${esc(item.id)}">${esc(item.worktree)}${item.name ? ` · ${esc(item.name)}` : ""}</option>`
-  ).join("");
-  $("teamProject").innerHTML = options;
+  const option = (item) =>
+    `<option value="${esc(item.id)}">${esc(item.worktree)}${item.name ? ` · ${esc(item.name)}` : ""}</option>`;
+  const options = projects.map(option).join("");
+  // 导入目标必须落到真实项目；非 git 会话的目录分组只用于导出筛选
+  const targets = projects.filter((item) => item.importable !== false);
+  $("teamProject").innerHTML = targets.map(option).join("");
   // 导出页的项目过滤器：保留当前选择，避免刷新后跳回「全部项目」
   const filter = $("teamProjectFilter");
   const current = filter.value;
   filter.innerHTML = `<option value="">全部项目</option>` + options;
   filter.value = current;
-  $("teamProjectField").hidden = projects.length === 0;
-  $("teamImportBtn").disabled = projects.length === 0 || !team.inspected;
+  $("teamProjectField").hidden = targets.length === 0;
+  $("teamImportBtn").disabled = targets.length === 0 || !team.inspected;
   // 这条提示只在导入页有意义：导出页没有项目也能按「全部项目」浏览会话
-  if (projects.length === 0 && !$("teamImport").hidden) {
+  if (targets.length === 0 && !$("teamImport").hidden) {
     showError("本机还没有可导入的项目，请先在该项目打开一次 opencode。");
   }
 }
@@ -583,9 +775,12 @@ document.querySelectorAll("[data-team-tab]").forEach((tab) => {
     document.querySelectorAll("[data-team-tab]").forEach((item) => item.classList.toggle("active", item === tab));
     $("teamExport").hidden = name !== "export";
     $("teamImport").hidden = name !== "import";
+    $("teamRoom").hidden = name !== "room";
     clearError();
     if (name === "export") loadTeamSessions();
-    else resetImport();
+    else if (name === "import") resetImport();
+    else prefillRoom();
+    renderTeamWorkflow();
   });
 });
 $("teamRefresh").addEventListener("click", () => loadTeamSessions());
@@ -636,10 +831,12 @@ $("lastProject").addEventListener("click", () => {
   $("dir").value = state.lastProject;
   checkResume();
 });
-$("browse").addEventListener("click", () => post("browse", { dir: state.dir }));
+$("browse").addEventListener("click", () => { state.browseTarget = "main"; post("browse", { dir: state.dir }); });
+$("roomBrowse").addEventListener("click", () => { state.browseTarget = "room"; post("browse", { dir: $("roomDir").value.trim() || state.dir }); });
+$("roomBrowseDir").addEventListener("click", () => { state.browseTarget = "roomJoin"; post("browse", { dir: $("roomJoinDir").value.trim() || state.dir }); });
 $("dir").addEventListener("input", () => { state.dir = $("dir").value.trim(); checkResume(); });
 $("terminal").addEventListener("change", () => { state.terminal = $("terminal").value; });
-$("resume").addEventListener("change", () => { state.resume = $("resume").checked; });
+$("resume").addEventListener("change", () => { state.resume = $("resume").checked; checkResume(); });
 $("launch").addEventListener("click", () => {
   clearError();
   state.dir = $("dir").value.trim();
@@ -648,8 +845,74 @@ $("launch").addEventListener("click", () => {
   post("launch", { dir: state.dir, workflow: state.workflow, terminal: state.terminal, plugins: state.plugins, resume: $("resume").checked });
 });
 $("cancel").addEventListener("click", () => post("cancel"));
+function roomError(message) {
+  $("teamRoomNotice").textContent = message;
+  $("teamRoomNotice").classList.add("show", "error");
+}
+function checkRoomResume() {
+  const dir = $("roomDir").value.trim();
+  clearTimeout(roomResumeTimer);
+  if (!dir) { roomResumeInfo = null; updateRoomResume(); return; }
+  roomResumeTimer = setTimeout(() => post("roomResume", { dir }), 300);
+}
+function updateRoomResume() {
+  const dir = $("roomDir").value.trim();
+  const can = !!(roomResumeInfo && roomResumeInfo.can && dir);
+  const resuming = can && $("roomResume").checked;
+  $("roomResume").disabled = !can;
+  if (!can) $("roomResume").checked = false;
+  const selected = WORKFLOWS[state.workflow]?.label ?? "";
+  const title = roomResumeInfo?.title || "上次会话";
+  if (!dir) $("roomResumeHint").textContent = "选择目录后可恢复上次会话";
+  else if (!roomResumeInfo) $("roomResumeHint").textContent = "";
+  else if (!can) $("roomResumeHint").textContent = roomResumeInfo.hint || "";
+  else if (resuming) {
+    const extra = roomResumeInfo.workflow === state.workflow ? "" : `（改用 ${selected} 请取消勾选）`;
+    $("roomResumeHint").textContent = `恢复「${title}」${extra}`;
+  } else $("roomResumeHint").textContent = `上次会话「${title}」可勾选恢复`;
+  renderTeamWorkflow();
+}
+function prefillRoom() {
+  const base = state.lastProject || state.dir || "";
+  if (base) {
+    if (!$("roomDir").value.trim()) {
+      $("roomDir").value = base;
+      checkRoomResume();
+    }
+    if (!$("roomJoinDir").value.trim()) $("roomJoinDir").value = base;
+  }
+  updateRoomResume();
+}
+$("roomDir").addEventListener("input", () => checkRoomResume());
+$("roomResume").addEventListener("change", () => updateRoomResume());
+$("roomStartBtn").addEventListener("click", () => {
+  $("teamRoomNotice").textContent = "";
+  $("teamRoomNotice").classList.remove("show", "error");
+  const dir = $("roomDir").value.trim();
+  if (!dir) { roomError("请先选择开协作房间的项目目录"); return; }
+  $("roomStartBtn").disabled = true;
+  post("roomStart", {
+    dir,
+    workflow: state.workflow,
+    terminal: state.terminal,
+    plugins: state.plugins,
+    resume: $("roomResume").checked,
+  });
+});
+$("roomJoinBtn").addEventListener("click", () => {
+  $("teamRoomNotice").textContent = "";
+  $("teamRoomNotice").classList.remove("show", "error");
+  const invite = $("roomInvite").value.trim();
+  const name = $("roomName").value.trim();
+  const dir = $("roomJoinDir").value.trim();
+  if (!/^wss?:\/\//i.test(invite)) { roomError("邀请码格式不正确"); return; }
+  if (!name) { roomError("请填写你的昵称"); return; }
+  if (!dir) { roomError("请选择工作目录"); return; }
+  $("roomJoinBtn").disabled = true;
+  post("roomJoin", { dir, invite, name, terminal: state.terminal, plugins: state.plugins, noPrompt: true });
+});
 // 使用说明按定时器帮助窗口的排版渲染：小节标题（蓝）/ 正文 / 要点 / 代码块。
-const HELP_SECTION = /^(第\s*\d+\s*步|越权测试：|代码审核任务：|开始下一个任务：|常用操作：)/
+const HELP_SECTION = /^(第\s*\d+\s*步|越权测试：|代码审核任务：|开始下一个任务：|常用操作：|房间内操作：|审批与断线：|对方怎么继续：|之后还想打开：|稍后还想打开：)/
 function renderHelp(container, text) {
   const lines = String(text ?? "").split("\n");
   const html = [];
@@ -672,6 +935,21 @@ $("help").addEventListener("click", () => {
   renderHelp($("helpBody"), WORKFLOWS[state.workflow]?.help ?? "");
   $("modal").classList.add("open");
 });
+$("exportHelp").addEventListener("click", () => {
+  $("helpTitle").textContent = "导出会话 · 使用说明";
+  renderHelp($("helpBody"), EXPORT_HELP);
+  $("modal").classList.add("open");
+});
+$("importHelp").addEventListener("click", () => {
+  $("helpTitle").textContent = "导入会话 · 使用说明";
+  renderHelp($("helpBody"), IMPORT_HELP);
+  $("modal").classList.add("open");
+});
+$("roomHelp").addEventListener("click", () => {
+  $("helpTitle").textContent = "协作房间 · 使用说明";
+  renderHelp($("helpBody"), ROOM_HELP);
+  $("modal").classList.add("open");
+});
 $("closeHelp").addEventListener("click", () => $("modal").classList.remove("open"));
 $("modal").addEventListener("click", (event) => { if (event.target === $("modal")) $("modal").classList.remove("open"); });
 document.addEventListener("keydown", (event) => { if (event.key === "Escape") $("modal").classList.remove("open"); });
@@ -688,7 +966,24 @@ window.chrome.webview.addEventListener("message", (event) => {
       renderState();
       break;
     case "browse":
-      if (payload) { state.dir = payload; $("dir").value = payload; checkResume(); }
+      if (payload) {
+        if (state.browseTarget === "room") $("roomDir").value = payload;
+        else if (state.browseTarget === "roomJoin") $("roomJoinDir").value = payload;
+        else { state.dir = payload; $("dir").value = payload; checkResume(); }
+        state.browseTarget = "";
+      }
+      break;
+    case "roomResume":
+      roomResumeInfo = payload || null;
+      updateRoomResume();
+      break;
+    case "roomStart":
+      if (payload?.ok) { $("teamRoomNotice").textContent = "正在打开数字程序员…"; $("teamRoomNotice").classList.add("show"); $("teamRoomNotice").classList.remove("error"); }
+      else { $("roomStartBtn").disabled = false; roomError(payload?.error || "开协作房间失败"); }
+      break;
+    case "roomJoin":
+      if (payload?.ok) { $("teamRoomNotice").textContent = "正在打开数字程序员…"; $("teamRoomNotice").classList.add("show"); $("teamRoomNotice").classList.remove("error"); }
+      else { $("roomJoinBtn").disabled = false; roomError(payload?.error || "加入协作房间失败"); }
       break;
     case "resume":
       updateResume(payload);
@@ -707,7 +1002,7 @@ window.chrome.webview.addEventListener("message", (event) => {
     case "teamFilePath":
       if (payload?.path) {
         team.file = payload.path;
-        $("teamFileName").textContent = payload.path;
+        $("teamFile").value = payload.path;
         $("teamImportOk").classList.remove("show");
         post("teamInspect", { path: payload.path });
       }

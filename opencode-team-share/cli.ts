@@ -8,6 +8,8 @@
  * 命令：
  *   list-sessions [筛选/分页参数]          列出可交接的会话（默认只列主会话、每页 50 条）
  *   list-projects                          列出本机可作为导入目标的项目
+ *   session-info --dir <目录> | --session <id>
+ *                                          查询可恢复的会话及其工作流类型（启动器恢复用）
  *   inspect --file <文件>                  只读解析交接文件（导入前确认）
  *   export --session <id> --out <文件> [--note <说明>]
  *   import --file <文件> --project <projectId>
@@ -21,7 +23,8 @@ import { backupDb, openDb, resolveDbPath } from "./src/db"
 import { TeamShareError } from "./src/errors"
 import { decodeHandoff, encodeHandoff, handoffSummary, type HandoffFile } from "./src/handoff"
 import { denormalize } from "./src/paths"
-import { exportHandoff, importSession, listProjects, listSessions, sessionWorktree } from "./src/session"
+import { exportHandoff, importSession, isDirectoryProject, listProjects, listSessions, sessionWorktree } from "./src/session"
+import { usableWorktree } from "./src/paths"
 import { readWorkflowState, writeWorkflowState } from "./src/workflow-state"
 
 const USAGE = `用法（--db 可选，指定 opencode 数据库路径；缺省自动探测）：
@@ -29,6 +32,7 @@ const USAGE = `用法（--db 可选，指定 opencode 数据库路径；缺省�
                            [--sort updated|created|messages] [--include-children true]
                            [--limit N] [--cursor <游标>] [--db <库>]
   team-share list-projects [--db <库>]
+  team-share session-info --dir <项目目录> | --session <id> [--db <库>]
   team-share inspect --file <文件>
   team-share export --session <id> --out <文件> [--note <说明>] [--db <库>]
   team-share import --file <文件> --project <projectId> [--mode handoff|reference] [--db <库>]`
@@ -164,6 +168,11 @@ async function commandImport(args: Args) {
   const parsed = decodeHandoff(Buffer.from(await Bun.file(file).arrayBuffer()))
   const { db, dbPath } = dbFor(args, false)
   try {
+    if (isDirectoryProject(projectID)) {
+      throw new TeamShareError(
+        "这个条目是非 git 会话的目录分组，只用于导出筛选，不能作为导入目标。请先在目标目录用 opencode 打开一次，再用真实项目导入。",
+      )
+    }
     const project = db.query("SELECT id, worktree FROM project WHERE id = ?").get(projectID) as
       | { id: string; worktree: string }
       | undefined
@@ -173,6 +182,12 @@ async function commandImport(args: Args) {
         `目标项目不存在（project id=${projectID}）。本机可用项目：${
           available.length > 0 ? available.map((item) => item.worktree).join("、") : "无"
         }`,
+      )
+    }
+    // global 项目的 worktree 是 "/"，拼出来的目录会落到盘符根；这种项目不作为导入目标
+    if (usableWorktree(project.worktree) === undefined) {
+      throw new TeamShareError(
+        "目标项目不是独立项目（global，路径为文件系统根），不能作为导入目标。请先在目标目录用 opencode 打开一次后重试。",
       )
     }
     const directory = parsed.session.path ? join(project.worktree, parsed.session.path) : project.worktree
@@ -208,6 +223,52 @@ async function commandImport(args: Args) {
   }
 }
 
+async function commandSessionInfo(args: Args) {
+  const { db } = dbFor(args)
+  try {
+    const id = args.flags["session"] && args.flags["session"] !== "true" ? args.flags["session"] : undefined
+    const dir = args.flags["dir"] && args.flags["dir"] !== "true" ? args.flags["dir"] : undefined
+    if (!id && !dir) throw new UsageError("session-info 需要 --session <id> 或 --dir <项目目录>")
+
+    // 上游 session.directory 存正斜线（D:/projects/x），启动器传进来是反斜线。
+    const normalized = dir ? dir.replace(/\\/g, "/").replace(/\/+$/, "") : undefined
+    type SessionRow = { id: string; title: string; directory: string; time_updated: number }
+    let row: SessionRow | null = null
+    if (id) {
+      row = db
+        .query("SELECT id, title, directory, time_updated FROM session WHERE id = ?")
+        .get(id) as SessionRow | null
+    } else if (normalized) {
+      row = db
+        .query(
+          `SELECT id, title, directory, time_updated FROM session
+            WHERE parent_id IS NULL AND time_archived IS NULL AND lower(directory) = lower(?)
+            ORDER BY time_updated DESC LIMIT 1`,
+        )
+        .get(normalized) as SessionRow | null
+    }
+
+    if (!row) {
+      console.log(JSON.stringify({ sessionID: null }))
+      return
+    }
+
+    const workflow = await readWorkflowState(row.directory, row.id)
+    const type = typeof workflow?.state["type"] === "string" ? (workflow.state["type"] as string) : null
+    console.log(
+      JSON.stringify({
+        sessionID: row.id,
+        title: row.title,
+        directory: row.directory,
+        updated: row.time_updated,
+        workflow: type,
+      }),
+    )
+  } finally {
+    db.close()
+  }
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2))
   switch (args.command) {
@@ -215,6 +276,8 @@ async function main() {
       return commandListSessions(args)
     case "list-projects":
       return commandListProjects(args)
+    case "session-info":
+      return commandSessionInfo(args)
     case "inspect":
       return commandInspect(args)
     case "export":
