@@ -10,7 +10,7 @@ import type { Database } from "bun:sqlite"
 import { relative } from "node:path"
 import { TeamShareError } from "./errors"
 import { newId } from "./ids"
-import { createSlug, denormalize, normalize, type PathRules } from "./paths"
+import { createSlug, denormalize, normalize, usableWorktree, type PathRules } from "./paths"
 import type { HandoffFile, HandoffMessage, HandoffSession, HandoffWorkflow } from "./handoff"
 
 export type ProjectRow = { id: string; worktree: string; name?: string }
@@ -52,7 +52,11 @@ export function listProjects(db: Database): ProjectRow[] {
     worktree: string
     name?: string
   }>
-  return rows.map((row) => ({ id: row.id, worktree: row.worktree, name: row.name }))
+  // 内置 global 项目的 worktree 是文件系统根：导入目标落在这里会把会话写到盘符根，
+  // 而且启动器只能显示一个 "/"，所以不作为可导入项目列出。
+  return rows
+    .filter((row) => usableWorktree(row.worktree) !== undefined)
+    .map((row) => ({ id: row.id, worktree: row.worktree, name: row.name }))
 }
 
 /** 可交接的会话列表（默认只列主会话，按最近更新倒序，排除已归档）。 */
@@ -175,7 +179,8 @@ export function listSessions(db: Database, options: ListSessionsOptions = {}): S
     directory: row.directory,
     path: row.path ?? undefined,
     projectID: row.project_id,
-    project: row.project_worktree ?? undefined,
+    // 非 git 会话的 project_worktree 是 "/" 或 "C:/"：显示会话真实目录，否则启动器只能显示 "/"
+    project: usableWorktree(row.project_worktree) ?? row.directory,
   }))
 
   const last = rows.at(-1)
@@ -324,7 +329,7 @@ export function readSession(db: Database, sessionID: string): SessionSnapshot | 
  * 非 git 项目（global）的 worktree 是盘符根（"/" 或 "C:/"），不能拿来做替换，退化为会话目录。
  */
 export function exportRules(meta: HandoffSession, projectWorktree?: string): PathRules {
-  const worktree = projectWorktree && projectWorktree.length >= 4 ? projectWorktree : meta.directory
+  const worktree = usableWorktree(projectWorktree) ?? meta.directory
   return { worktree, directory: meta.directory }
 }
 
@@ -348,10 +353,12 @@ export function denormalizeMessages(messages: HandoffMessage[], rules: PathRules
 export function sessionWorktree(db: Database, sessionID: string): string | undefined {
   const row = db
     .query(
-      "SELECT p.worktree AS worktree FROM session s LEFT JOIN project p ON p.id = s.project_id WHERE s.id = ?",
+      `SELECT p.worktree AS worktree, s.directory AS directory
+         FROM session s LEFT JOIN project p ON p.id = s.project_id WHERE s.id = ?`,
     )
-    .get(sessionID) as { worktree?: string } | undefined
-  return row?.worktree
+    .get(sessionID) as { worktree?: string; directory?: string } | undefined
+  // global 项目的 worktree 是 "/"，工作流状态必须按会话目录找
+  return usableWorktree(row?.worktree) ?? row?.directory
 }
 
 /** 导出成交接文件：读会话 → 路径归一化 → 组装 manifest。 */

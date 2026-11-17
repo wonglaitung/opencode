@@ -24,6 +24,7 @@ import { TeamShareError } from "./src/errors"
 import { decodeHandoff, encodeHandoff, handoffSummary, type HandoffFile } from "./src/handoff"
 import { denormalize } from "./src/paths"
 import { exportHandoff, importSession, listProjects, listSessions, sessionWorktree } from "./src/session"
+import { usableWorktree } from "./src/paths"
 import { readWorkflowState, writeWorkflowState } from "./src/workflow-state"
 
 const USAGE = `用法（--db 可选，指定 opencode 数据库路径；缺省自动探测）：
@@ -176,6 +177,12 @@ async function commandImport(args: Args) {
         `目标项目不存在（project id=${projectID}）。本机可用项目：${
           available.length > 0 ? available.map((item) => item.worktree).join("、") : "无"
         }`,
+      )
+    }
+    // global 项目的 worktree 是 "/"，拼出来的目录会落到盘符根；这种项目不作为导入目标
+    if (usableWorktree(project.worktree) === undefined) {
+      throw new TeamShareError(
+        "目标项目不是独立项目（global，路径为文件系统根），不能作为导入目标。请先在目标目录用 opencode 打开一次后重试。",
       )
     }
     const directory = parsed.session.path ? join(project.worktree, parsed.session.path) : project.worktree

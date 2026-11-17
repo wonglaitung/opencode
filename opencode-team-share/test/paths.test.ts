@@ -6,6 +6,7 @@ import {
   normalize,
   PROJECT_PLACEHOLDER,
   safeFileName,
+  usableWorktree,
   WORKSPACE_PLACEHOLDER,
 } from "../src/paths"
 
@@ -35,6 +36,20 @@ describe("路径归一化", () => {
   test("非字符串值原样保留", () => {
     const out = normalize({ n: 1, b: true, z: null }, rules) as Record<string, unknown>
     expect(out).toEqual({ n: 1, b: true, z: null })
+  })
+})
+
+describe("工作区根", () => {
+  test("文件系统根不能当工作区根", () => {
+    expect(usableWorktree("/")).toBeUndefined()
+    expect(usableWorktree("C:/")).toBeUndefined()
+    expect(usableWorktree("C:\\")).toBeUndefined()
+    expect(usableWorktree(undefined)).toBeUndefined()
+  })
+
+  test("真实项目路径原样返回", () => {
+    expect(usableWorktree("D:/projects/app")).toBe("D:/projects/app")
+    expect(usableWorktree("/work/proj")).toBe("/work/proj")
   })
 })
 
