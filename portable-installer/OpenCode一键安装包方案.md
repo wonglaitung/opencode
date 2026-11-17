@@ -115,6 +115,9 @@
 
 ## 5. 启动器流程（`OpenCode-launch.exe`，WebView2 方案 B）
 
+> 本节保留立项时的方案描述，已与现状不符（侧栏 → 卡片、`identity.json` → `tui.json`、
+> 团队协作与协作房间未覆盖）。**现行说明以 [`launcher/README.md`](launcher/README.md) 为准。**
+
 启动器改为 **.NET 8 WinForms + WebView2 + 内嵌 HTML/CSS**，界面按 `GUI.png` 统一为深色侧栏、浅色主区和卡片式操作区。需要目标机安装 Microsoft Edge WebView2 Runtime（Win10/11 通常已随 Edge 提供）。NSIS 仅负责安装和释放文件，不再绘制启动器页面。
 
 - 目录输入框和「浏览」按钮（WinForms FolderBrowserDialog）；侧栏选择工作流按钮，主区选择终端；插件集中在独立卡片中，底部按钮「打开 Digital Programmer」。
