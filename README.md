@@ -1,217 +1,183 @@
-<p align="center">
-  <a href="https://opencode.ai">
-    <picture>
-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
-    </picture>
-  </a>
-</p>
-<p align="center">The open source AI coding agent.</p>
-<p align="center">
-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
-</p>
+# 数字程序员（Digital Programmer）
 
-<p align="center">
-  <a href="README.md">English</a> |
-  <a href="README.zh.md">简体中文</a> |
-  <a href="README.zht.md">繁體中文</a> |
-  <a href="README.ko.md">한국어</a> |
-  <a href="README.de.md">Deutsch</a> |
-  <a href="README.es.md">Español</a> |
-  <a href="README.fr.md">Français</a> |
-  <a href="README.it.md">Italiano</a> |
-  <a href="README.da.md">Dansk</a> |
-  <a href="README.ja.md">日本語</a> |
-  <a href="README.pl.md">Polski</a> |
-  <a href="README.ru.md">Русский</a> |
-  <a href="README.bs.md">Bosanski</a> |
-  <a href="README.ar.md">العربية</a> |
-  <a href="README.no.md">Norsk</a> |
-  <a href="README.br.md">Português (Brasil)</a> |
-  <a href="README.th.md">ไทย</a> |
-  <a href="README.tr.md">Türkçe</a> |
-  <a href="README.uk.md">Українська</a> |
-  <a href="README.bn.md">বাংলা</a> |
-  <a href="README.gr.md">Ελληνικά</a> |
-  <a href="README.vi.md">Tiếng Việt</a>
-</p>
+> Windows 上的团队 AI 编程工作台：双击安装、选目录和工作流就能开工；过程可管、结果可交接、同事可旁观。
 
-> **Unofficial fork notice:** this repository is a customized fork of
-> [anomalyco/opencode](https://github.com/anomalyco/opencode), used for an internal Windows delivery.
-> It is not maintained by the OpenCode team. Upstream installation and documentation remain below.
+**非官方 fork 声明**：本仓库是 [anomalyco/opencode](https://github.com/anomalyco/opencode) 的定制分支，
+用于内部 Windows 交付，不由 OpenCode 团队维护。运行内核基于上游 opencode（MIT），
+上游的安装方式与文档不适用于本发行版。
 
-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+完整产品介绍见 [PRODUCT.md](PRODUCT.md)。
 
 ---
 
-## This fork
+## 它解决什么问题
 
-This repository is an **unofficial fork** of [anomalyco/opencode](https://github.com/anomalyco/opencode),
-used for an internal Windows delivery. Upstream OpenCode is the base; the additions below are
-maintained in this fork and are not part of the official project. Other language READMEs are
-upstream translations and may not cover these customizations.
+AI 编程工具单机好用，但在团队里常卡在四件事：
 
-### What this fork adds
+| 痛点 | 常见表现 | 本产品的做法 |
+|---|---|---|
+| 装不起来 | 装 Node、配环境变量、手写 JSON、版本冲突 | 一个安装包装完全部依赖，免管理员、免命令行 |
+| 过程失控 | AI 直接改代码、跳过评审、没人知道做到哪一步 | 四种工作流把步骤写死，关键节点必须人工确认，提交有门禁 |
+| 经验带不走 | 交接只能靠聊天记录和截图 | 一条会话导出成一个文件，对方导入后接着做 |
+| 协作靠转述 | 同事只能围观屏幕、口头提建议 | 协作房间实时旁观，可提建议、排队任务、看审批内容 |
 
-- **`opencode-session-mgmt/`** — workflow engine, rules, local statistics CLI (`opencode-sm`), and
-  report client for the external collector.
-- **Three workflows**:
-  - `task` — general work such as writing documents or analyzing errors. One stage, no review or
-    commit gate. Records estimated hours and actual duration; say **“完成”** in the session to finish.
-  - `sdlc` — five-stage software development flow with review and git commit gates.
-  - `reqdoc` — five-stage business requirements flow that produces a PRD for business confirmation.
-- **`opencode-edge-debug/` and `opencode-server-debug/`** — optional debugging plugins.
-- **`portable-installer/`** — Windows portable installer and launcher. The launcher selects the
-  workflow and uses the **Digital Programmer** branding.
-- **Offline build support** — `--offline` builds skip config-directory dependency installation.
-- **`.opencode/skills/`** — local installer and Windows plugin-load verification skills.
+核心取向是**可管控的 AI 编程**：AI 负责执行，人负责确认；每一步留痕，能统计、能追责、能交接。
 
-### Quick start (Windows)
+## 产品组成
 
-1. Build or run `OpenCode-Setup.exe` / `OpenCode-launch.exe` from `portable-installer/`.
-2. Run `opencode-sm init` once: API key, collector URL, and default workflow (`task` / `sdlc` / `reqdoc`).
-3. Launch the app and pick the workflow in the launcher:
-   - `task`: type the task directly; estimate with “预估 xx 小时”; say “完成” to stop the timer.
-   - `sdlc`: enter “启动 SDLC 工作流”.
-   - `reqdoc`: enter “启动 REQDOC 工作流”.
-4. Inspect local statistics with `opencode-sm stats --workflow task` (or `sdlc` / `reqdoc`).
+```mermaid
+flowchart LR
+  U[业务 / 开发] --> L[启动器]
+  L -->|选目录 + 工作流| OC[opencode 内核]
+  OC --> WF[工作流插件<br/>会话管理]
+  OC --> CO[协作房间插件]
+  L --> TS[会话交接<br/>team-share]
+  L --> SC[定时任务]
+  WF -->|可选| CS[效能收集服务]
+  L --> DB[(本地会话库)]
+  TS --> DB
+  OC --> DB
+```
 
-### Workflow selection
+| 组件 | 形态 | 作用 |
+|---|---|---|
+| `OpenCode-Setup.exe` | 安装包 | 一次装好运行环境、插件、Python、终端 |
+| `OpenCode-launch.exe` | 启动器 | 选项目与工作流、开关插件、团队协作入口 |
+| 会话管理 | opencode 插件 | 工作流、规则注入、提交门禁、工时与阶段统计 |
+| 会话交接 | 独立 CLI + 启动器页面 | 导出 / 导入一条会话（`.ocsave`） |
+| 协作房间 | TUI 插件 | 局域网实时旁观、建议、排队、审批可见 |
+| 定时任务 | 托盘程序 | 按计划在后台跑一条 AI 任务 |
+| Edge 调试 / 服务器调试 | opencode 插件 | 可选的专项调试能力 |
 
-The launcher writes the selected type to `~/.config/opencode/session-mgmt/identity.json`.
-It applies to all new sessions started by that opencode process; it is not a per-session switch.
-Use `/new` when moving between tasks.
+## 一键安装与启动
 
-### Repository layout
+安装包内置 Node 运行时、Python、Windows Terminal 与全部插件，安装到用户目录，
+**不需要管理员权限，不需要命令行**。模型网关与密钥由部署方在安装向导中配置一次。
 
-| Path | Purpose |
+![启动器](docs/product/images/launcher.png)
+
+日常入口就是启动器：选项目目录（AI 的工作区）、选工作流、选择控制台形态与插件，点启动即可。
+约 440 MB 安装包，支持 Windows 10/11，卸载不影响会话数据。
+
+## 四种工作流
+
+工作流不是提示词模板，而是**带状态机与门禁的流程**：阶段、清单、规则由插件注册，
+AI 每轮都会收到当前阶段与纪律；该确认时它不会自己往下走。
+
+| 工作流 | 适合谁 | 阶段 | 关键产出 | 硬门禁 |
+|---|---|---|---|---|
+| **一般任务** | 业务、开发做轻量工作 | 单阶段 | 分类结果、预估/实际工时 | 完成需明确说「本次任务已完成」 |
+| **SDLC 开发** | 完整需求开发 | 需求 → 设计 → 编码 → 测试 → 审查 → 提交 | 需求摘要、设计说明、测试结论、审查清单 | 每阶段人工确认；审查通过前禁止 `git commit` |
+| **REQDOC 需求书** | 业务写 PRD | 背景 → 场景 → 流程规则 → 边界异常 → 规格书 → 业务确认 | 结构化 PRD、Word 导出 | 知识库与功能点清单确认后才可定稿 |
+| **WEB 安全自测** | 开发上线前自测 | 范围 → 资产接口 → 检查 → 验证定级 → 报告 | 报告 + 覆盖台账 | 默认只读；写操作逐次授权；结论需独立复核 |
+
+共同点：人工确认、规则常驻、产出落盘、状态可恢复（关掉终端再回来，「继续上次会话」直接续上）。
+
+## 团队协作
+
+### 会话交接（导出 / 导入）
+
+把一条会话连同工作流阶段、成本与 Token 统计导出成单个 `.ocsave` 文件，
+同事导入后**从同一条会话继续**，不用重述背景。
+
+![导出会话](docs/product/images/handoff-export.png)
+
+导出页支持搜索、按项目筛选、时间范围、排序与分页；无 git 的目录也能按目录分组找到。
+
+![导入会话](docs/product/images/handoff-import.png)
+
+导入前先只读预览来源、会话与交接说明，再选择：
+
+- **接手继续**：同一会话，保留阶段进度，后续活动记入接手人的统计。
+- **仅参考**：复制成新会话（标题带「[参考]」），不继承成本与进度，避免工作量串账。
+
+### 协作房间
+
+主持人开房，把邀请码发给同一局域网的同事；对方在自己的终端里实时旁观。
+
+![协作房间](docs/product/images/room.png)
+
+访客可见内容与正常会话页一致：消息正文与思考过程、命令与输出、文件改动 diff、
+待办清单、子代理、审批请求内容与 AI 反问，以及底部的模型、Token/成本、队列与连接状态。
+
+| 访客操作 | 说明 |
 |---|---|
-| `packages/*` | Upstream OpenCode packages (the base) |
-| `opencode-session-mgmt/` | Workflow engine, CLI, docs, tests |
-| `opencode-edge-debug/` | Edge debugging plugin |
-| `opencode-server-debug/` | Server debugging plugin |
-| `portable-installer/` | Windows installer / launcher |
-| `plugin-guide/` | Fork maintenance and upstream upgrade notes |
+| 建议 | 文字进入主机上下文，不触发模型回答 |
+| 排队 | 主机空闲时按顺序执行，队列上限 20 |
+| 翻页 / 退出 | 可回看历史；退出房间不影响主机 |
 
-### Docs
+约束：**访客零额度**（不运行模型、不执行工具）、**只读审批**（看得到但不能替主机授权）、
+**纯局域网**（邀请码是带随机令牌的 `ws://` 地址）、**断线可恢复**（自动重连并补齐内容）。
 
-- [Session management and architecture](opencode-session-mgmt/docs/session-management.md)
-- [task workflow](opencode-session-mgmt/docs/workflow-task.md)
-- [SDLC workflow](opencode-session-mgmt/docs/workflow-sdlc.md)
-- [REQDOC workflow](opencode-session-mgmt/docs/workflow-reqdoc.md)
-- [Deployment](opencode-session-mgmt/docs/deployment.md)
-- [Upstream upgrade checklist](plugin-guide/opencode-upgrade-checklist.md)
+## 定时任务
 
-### Upstream sync
+托盘常驻的 `OpenCode-Scheduler.exe` 按「一次性 / 每天 / 每周」在后台执行任务，
+适合日报整理、定时巡检、批量小改动。每个任务可单独限制读取、修改、执行命令、访问网络与
+使用项目 Skill；读取只允许项目目录。完全后台运行，历史与日志可查，同一任务不并发。
 
-Daily development syncs `origin` only. `upstream` (anomalyco/opencode) is pulled manually when
-requested; local patches are tracked in the upgrade checklist. Do not treat this fork's README
-sections as upstream documentation.
+## 质量与效能
 
-### Privacy
+会话管理插件在本机记录每条会话的工作流、阶段、预估与实际工时、Token 与成本，并可按项目聚合。
+需要跨人统计时可选接入团队自建的收集服务（默认不启用；示例实现见
+[performance_dashboard](https://github.com/karsonto/performance_dashboard)）。
+数据默认只在本机，是否上报由部署方决定。
 
-Reports contain session summaries (workflow state, duration, cost/tokens) and never code content.
-The API key is SHA-256 hashed before upload.
+## 典型场景
 
-### Known limitations
+- **业务写需求书**：选「REQDOC 需求书」→ 口述或投放材料 → AI 追问补全 → 逐条确认 → 导出 PRD。
+- **功能开发**：选「SDLC 开发」→ 确认需求与设计 → AI 编码 → 测试 → 逐段审查 → 通过后才允许提交。
+- **上线前安全自测**：选「WEB 安全自测」→ 说明范围与账号 → 正常走查 → 只读探测与复核 → 输出报告与台账。
+- **交接与协作**：把卡住的会话导出给同事；或开协作房间，让同事边看边提建议、排队代跑任务。
+- **重复巡检**：把每天的检查写成定时任务，结果进日志，人只看异常。
 
-- `task` is covered by unit/text tests and five rule-following scenarios (`t1`–`t5`); run them with `--workflow task --variant new`.
-- The Windows installer must be rebuilt after launcher/runtime changes; build artifacts are not
-  tracked in git.
-- The collector is an external project: <https://github.com/karsonto/performance_dashboard>.
-- The launcher selection is daemon-level; mixing different workflow types across historical
-  sessions in one process is not supported.
+## 上手路径
 
----
+1. 运行部署方提供的 `OpenCode-Setup.exe`，按向导填写模型网关与密钥。
+2. 从桌面快捷方式打开「数字程序员」。
+3. 选项目目录与工作流，点「打开数字程序员」。
+4. 跟着 AI 的提问回答，到确认节点说「确认」即可推进；换任务用 `/new` 开新会话。
 
-## Upstream OpenCode
+首次使用建议先跑一条「一般任务」熟悉节奏，再进入 SDLC 或 REQDOC。
 
-> Everything below is the upstream project README. It may not describe this fork's customizations.
+## 数据与安全
 
-### Installation
+- **本地优先**：会话库、配置、日志都在本机用户目录；不装服务端也能用。
+- **明文交接文件**：`.ocsave` 含完整会话正文（代码、路径、可能含凭据片段），必须走可信渠道传递。
+- **协作房间明文传输**：仅限可信局域网；邀请码等同于「旁观 + 建议 + 排队」权限。
+- **权限模型**：工具权限由主机会话与任务配置决定；访客不能提权，也不能执行工具。
 
-```bash
-# YOLO
-curl -fsSL https://opencode.ai/install | bash
+## 能力边界
 
-# Package managers
-npm i -g opencode-ai@latest        # or bun/pnpm/yarn
-scoop install opencode             # Windows
-choco install opencode             # Windows
-brew install anomalyco/tap/opencode # macOS and Linux (recommended, always up to date)
-brew install opencode              # macOS and Linux (official brew formula, updated less)
-sudo pacman -S opencode            # Arch Linux (Stable)
-paru -S opencode-bin               # Arch Linux (Latest from AUR)
-mise use -g opencode               # Any OS
-nix run nixpkgs#opencode           # or github:anomalyco/opencode for latest dev branch
-```
+- **平台**：交付形态只针对 Windows 10/11；运行不依赖 WSL。
+- **模型**：需要可用的模型网关；离线不可用。
+- **单机为主**：协作房间是「一人执行、多人旁观」，不是多人同时编辑。
+- **局域网**：协作房间不做公网穿透与账号体系；跨网需自备通道。
+- **AI 仍需人审**：门禁能防跳步，不能替代代码审查与安全判断。
 
-> [!TIP]
-> Remove versions older than 0.1.x before installing.
+## 仓库结构与构建
 
-### Desktop App (BETA)
+| 路径 | 用途 |
+|---|---|
+| `packages/*` | 上游 opencode 包（内核基础） |
+| `portable-installer/` | Windows 安装包、启动器、定时任务与重置工具 |
+| `opencode-session-mgmt/` | 工作流引擎、规则、本地统计 CLI 与插件测试 |
+| `opencode-team-share/` | 会话交接（导出 / 导入） |
+| `opencode-collab-room/` | 协作房间 TUI 插件 |
+| `opencode-edge-debug/`、`opencode-server-debug/` | 可选调试插件 |
+| `plugin-guide/` | 定制维护与上游升级说明 |
 
-OpenCode is also available as a desktop application. Download directly from the [releases page](https://github.com/anomalyco/opencode/releases) or [opencode.ai/download](https://opencode.ai/download).
+启动器 UI 内嵌在 `OpenCode-launch.exe`，改动 `launcher/index.html` 后必须重建启动器与整个安装包；
+构建产物不入库。构建步骤见 [portable-installer/README.md](portable-installer/README.md)。
 
-| Platform              | Download                           |
-| --------------------- | ---------------------------------- |
-| macOS (Apple Silicon) | `opencode-desktop-mac-arm64.dmg`   |
-| macOS (Intel)         | `opencode-desktop-mac-x64.dmg`     |
-| Windows               | `opencode-desktop-windows-x64.exe` |
-| Linux                 | `.deb`, `.rpm`, or `.AppImage`     |
+## 相关文档
 
-```bash
-# macOS (Homebrew)
-brew install --cask opencode-desktop
-# Windows (Scoop)
-scoop bucket add extras; scoop install extras/opencode-desktop
-```
+- [产品介绍（完整版）](PRODUCT.md)
+- [安装与打包](portable-installer/README.md) · [启动器](portable-installer/launcher/README.md) · [定时任务](portable-installer/scheduler/README.md)
+- [会话交接](opencode-team-share/README.md) · [协作房间](opencode-collab-room/README.md) · [会话管理](opencode-session-mgmt/README.md)
+- [会话管理架构](opencode-session-mgmt/docs/session-management.md) · [SDLC 工作流](opencode-session-mgmt/docs/workflow-sdlc.md) · [REQDOC 工作流](opencode-session-mgmt/docs/workflow-reqdoc.md)
 
-#### Installation Directory
+## 内核与许可
 
-The install script respects the following priority order for the installation path:
-
-1. `$OPENCODE_INSTALL_DIR` - Custom installation directory
-2. `$XDG_BIN_DIR` - XDG Base Directory Specification compliant path
-3. `$HOME/bin` - Standard user binary directory (if it exists or can be created)
-4. `$HOME/.opencode/bin` - Default fallback
-
-```bash
-# Examples
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
-```
-
-### Agents
-
-OpenCode includes two built-in agents you can switch between with the `Tab` key.
-
-- **build** - Default, full-access agent for development work
-- **plan** - Read-only agent for analysis and code exploration
-  - Denies file edits by default
-  - Asks permission before running bash commands
-  - Ideal for exploring unfamiliar codebases or planning changes
-
-Also included is a **general** subagent for complex searches and multistep tasks.
-This is used internally and can be invoked using `@general` in messages.
-
-Learn more about [agents](https://opencode.ai/docs/agents).
-
-### Documentation
-
-For more info on how to configure OpenCode, [**head over to our docs**](https://opencode.ai/docs).
-
-### Contributing
-
-If you're interested in contributing to OpenCode, please read our [contributing docs](./CONTRIBUTING.md) before submitting a pull request.
-
-### Building on OpenCode
-
-If you are working on a project that's related to OpenCode and is using "opencode" as part of its name, for example "opencode-dashboard" or "opencode-mobile", please add a note to your README to clarify that it is not built by the OpenCode team and is not affiliated with us in any way.
-
----
-
-**Join our community** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+运行内核基于开源项目 [opencode](https://github.com/anomalyco/opencode)（MIT License）。
+上游的安装脚本、包管理器、桌面端与 Agent 说明请参阅
+[官方文档](https://opencode.ai/docs)；本仓库的自研组件与内核同仓库维护，随安装包整体交付。
