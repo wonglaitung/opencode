@@ -269,4 +269,5 @@ AI 只读探测与复核 → 输出报告与覆盖台账。定位是自查，不
 - 定时任务：[`portable-installer/scheduler/README.md`](portable-installer/scheduler/README.md)
 - 会话交接：[`opencode-team-share/README.md`](opencode-team-share/README.md)
 - 协作房间：[`opencode-collab-room/README.md`](opencode-collab-room/README.md)
+- 团队房间实施方案（待实施）：[`TEAM-ROOM.md`](TEAM-ROOM.md)
 - 会话管理：[`opencode-session-mgmt/README.md`](opencode-session-mgmt/README.md)
