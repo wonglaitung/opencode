@@ -174,7 +174,7 @@ AI 每轮都会收到当前阶段与纪律；该确认时它不会自己往下�
 - [产品介绍（完整版）](PRODUCT.md)
 - [安装与打包](portable-installer/README.md) · [启动器](portable-installer/launcher/README.md) · [定时任务](portable-installer/scheduler/README.md)
 - [会话交接](opencode-team-share/README.md) · [协作房间](opencode-collab-room/README.md) · [会话管理](opencode-session-mgmt/README.md)
-- [团队房间实施方案（待实施）](TEAM-ROOM.md)
+- [COLLECTIVE · 人机协作平台方案（待实施）](COLLECTIVE.md)
 - [会话管理架构](opencode-session-mgmt/docs/session-management.md) · [SDLC 工作流](opencode-session-mgmt/docs/workflow-sdlc.md) · [REQDOC 工作流](opencode-session-mgmt/docs/workflow-reqdoc.md)
 
 ## 内核与许可
