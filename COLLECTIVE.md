@@ -160,7 +160,7 @@ COLLECTIVE 独立部署,选用成熟、社区活跃、企业级广泛采用的�
 | 服务端框架 | NestJS(基于 Express/Fastify) | 企业级主流框架,模块化 / DI / 拦截器 / 守卫,契合 RBAC、状态机、领域分层 |
 | REST / 实时 | NestJS REST + Socket.IO | REST 做资源 API,Socket.IO 做讨论流与状态推送(自带房间/命名空间,契合"团队房间") |
 | 前端门户 | Vue 3 + Vite + TypeScript + Pinia + Tailwind CSS | 主流前端栈;Vue 组合式 API 易维护,Pinia 管状态,Vite 构建快,Tailwind 统一 UI |
-| 状态持久化 | PostgreSQL + Prisma ORM | 关系型标准,Prisma 类型安全、迁移与事务支持;Room/Member/Spec 索引结构化查询 |
+| 状态持久化 | SQLite + 卷(Prisma ORM) | 一期轻量、零运维、文件即库,放卷里天然满足"关容器保留、重开恢复";Prisma 屏蔽方言差异,后续可迁移 PostgreSQL / MySQL |
 | Git 服务 | JGit(Java,独立进程) | 已定"内置 JGit 服务";提供 smart HTTP,版本化团队上下文 |
 | 容器编排 | Docker Engine API(`dockerode`) | 规模可控,按需起停房间容器,不上 K8s |
 | 认证 | JWT + OAuth2(Passport.js) | 标准方案;邀请令牌签 JWT,角色声明进 token |
@@ -207,13 +207,15 @@ COLLECTIVE 独立部署,选用成熟、社区活跃、企业级广泛采用的�
 
 | 实体 | 存储 | 关键字段 |
 |---|---|---|
-| Room | PostgreSQL | id, team, host, state(会议/执行/已结束), speakMode, containerID, volumeRef, submitTarget |
-| Member | PostgreSQL | roomID, identityHash, role(房主/成员/访客), tokenHash |
-| Spec | JGit `specs/` + PostgreSQL 索引 | specID, version, status(草稿/终审/废弃), author |
+| Room | SQLite(卷) | id, team, host, state(会议/执行/已结束), speakMode, containerID, volumeRef, submitTarget |
+| Member | SQLite(卷) | roomID, identityHash, role(房主/成员/访客), tokenHash |
+| Spec | JGit `specs/` + SQLite 索引 | specID, version, status(草稿/终审/废弃), author |
 | Eval | JGit `evals/<specID>` | 四项指标 + 埋点 |
 | 操作日志 | JGit(append-only) | 事件、actor、时间、specID |
 
 会话态与工作流态在容器卷的 `opencode.db` / `session-mgmt.db`,不进总线库(避免双写不一致)。
+
+**迁移路径**:一期用 SQLite + 卷,零运维、满足单机恢复;数据访问统一走 Prisma,业务代码不写方言 SQL。后续如需多副本或更大并发,切换 Prisma datasource 到 PostgreSQL / MySQL 并做一次数据迁移即可,不改领域层。
 
 ### 6.5 模块划分(总线服务内)
 
@@ -232,7 +234,7 @@ src/
 │   ├── jgit/     # Git 服务 + 原始文件 + hash 校验
 │   ├── redis/    # BullMQ 队列 + WS 多副本广播
 │   └── bus/      # 状态推送、事件总线
-├── store/        # PostgreSQL + Prisma(房间/成员/状态/日志)
+├── store/        # SQLite + 卷 + Prisma(房间/成员/状态/日志;方言可迁移 PG/MySQL)
 └── web/          # Vue 3 + Vite 门户源码
 ```
 
