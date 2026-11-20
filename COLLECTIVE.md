@@ -113,6 +113,47 @@
 重开:挂载卷恢复会话 → 重新 fetch AGENTS.md → 重跑 bootstrap 拉子树 → 降级权限到只读
 ```
 
+用户旅程的交互时序:
+
+```mermaid
+sequenceDiagram
+    participant 管理员
+    participant 房主
+    participant 成员
+    participant 网关
+    participant AI as 规约守卫(Agent)
+    participant JGit
+
+    管理员->>JGit: 初始化 context/code 双仓库 + AGENTS.md
+    管理员->>成员: 发邀请链接
+    成员->>网关: 进入房间(按需启动容器)
+    网关->>JGit: bootstrap 校验 + 拉子树
+    网关->>AI: 注入基线(AGENTS.md URL)+ references
+
+    loop 会议态(Agent 只读,工具全 deny)
+        成员->>网关: 发言
+        网关->>AI: noReply 写入(静默记录)
+        opt 被 @ / 形成 Spec
+            网关->>AI: 普通 prompt(仍 deny)
+            AI-->>网关: 提示/冲突/先例/Spec 草稿
+            网关-->>成员: 讨论流(带 AI 标识)
+        end
+    end
+
+    房主->>网关: 逐条终审 Spec
+    网关->>JGit: 提交 specs/,分配 specID
+    网关->>AI: allow prompt 提权(只读→可写)
+    AI->>AI: task 串行委派 需求/开发/测试/审查(单 writer)
+    AI-->>网关: 执行完成
+    网关->>网关: 自动跑测试/lint
+    网关-->>房主: 证据 + diff(待确认)
+    房主->>网关: 确认交付
+    网关->>JGit: 提交代码(commit 带 Spec:<specID>)
+    网关->>JGit: 写 evals/<specID> + 证据
+    房主->>网关: 关闭房间
+    网关->>网关: 销毁容器、保留卷
+```
+
 ### 5.2 两种进入方式
 
 ```
@@ -193,6 +234,54 @@
 启动器第四 tab:令牌代填 + 本地文件/会话上传 JGit + 一键开浏览器
 ```
 
+组件关系与依赖:
+
+```mermaid
+flowchart TB
+    subgraph 客户端
+        Portal[浏览器门户<br/>Vue 3 + Vite]
+        Launcher[启动器第四 tab<br/>本地桥接]
+    end
+
+    subgraph 总线服务[总线服务 COLLECTIVE]
+        GW[认证网关 + REST/WS]
+        Domain[领域服务<br/>房间/会议/Spec/执行/验证/评测]
+        SM[状态机引擎<br/>10.7]
+        Docker[容器管理<br/>Docker Engine API]
+        JGitGW[JGit 网关<br/>Git HTTP + 原始文件]
+    end
+
+    subgraph 存储
+        DB[(SQLite + 卷<br/>Prisma)]
+        Ctx[("<team>-context<br/>规约/决策/Spec/技能/证据/评测")]
+        Code[("<team>-code<br/>执行产出代码")]
+        Redis[(Redis + BullMQ)]
+    end
+
+    subgraph 房间容器[房间容器(每房间一个)]
+        OC[opencode serve<br/>V1 + task 委派]
+        Bootstrap[bootstrap<br/>校验 JGit + 拉子树]
+        Vol[(work/ + opencode.db<br/>+ session-mgmt.db)]
+    end
+
+    Portal -->|HTTPS/WSS| GW
+    Launcher -->|上传文件/令牌| JGitGW
+    Launcher -->|打开浏览器| Portal
+    GW --> Domain
+    Domain --> SM
+    Domain --> Docker
+    Domain --> JGitGW
+    Domain --> DB
+    Domain --> Redis
+    Docker -->|起停| OC
+    Docker -->|挂载| Vol
+    OC --> Bootstrap
+    Bootstrap -->|拉子树| JGitGW
+    OC -->|config.instructions URL| JGitGW
+    OC -->|写入| Vol
+    OC -->|提交代码| Code
+```
+
 ---
 
 ## 9. 技术架构设计
@@ -224,6 +313,40 @@ COLLECTIVE 是独立项目,独立仓库、独立部署,不依赖本仓库的工�
 │  ├─ bootstrap:校验 JGit → 拉子树到 .opencode/         │
 │  └─ 卷:work/ + opencode.db + session-mgmt.db          │
 └────────────────────────────────────────────────────────┘
+```
+
+分层视图:
+
+```mermaid
+flowchart TB
+    subgraph L1[客户端层]
+        A[浏览器门户 Vue 3]
+        B[启动器 tab WebView2→浏览器]
+    end
+    subgraph L2[总线服务 Node.js + NestJS]
+        C[认证网关 JWT/OAuth2 + RBAC]
+        D[REST API / Socket.IO WS]
+        E[领域服务]
+        F[容器管理 dockerode]
+        G[JGit 网关]
+        H[状态机引擎 → 10.7]
+    end
+    subgraph L3[房间容器]
+        I[opencode serve V1 + session-mgmt 插件]
+        J[bootstrap 校验 JGit + 拉子树]
+        K[(卷 work/ + db)]
+    end
+    A -->|HTTPS/WSS| D
+    B -->|HTTPS/WSS| D
+    D --> C
+    D --> E
+    E --> H
+    E --> F
+    E --> G
+    F -->|起停/挂载| I
+    I --> J
+    I --> K
+    J -->|拉取子树| G
 ```
 
 ### 9.2 技术选型与理由
@@ -396,6 +519,26 @@ AI 发言模式是**房间级配置项**,房主在页面上实时切换,即时�
 - 返工切回会议态时:网关发一次 tools 全 deny 的 prompt,把会话压回只读态。
 - 重开房间进入新会议时:同上,避免上次执行残留的 `allow` 随卷恢复带进新会议(V1 `session.permission` 是持久的)。
 
+权限切换状态图:
+
+```mermaid
+stateDiagram-v2
+    [*] --> 只读: 进房/重开(tools 全 deny)
+    只读 --> 可写: 房主终审 Spec(allow prompt 提权)
+    可写 --> 只读: 返工/重开(deny prompt 降级)
+    可写 --> [*]: 房间结束
+
+    note right of 只读
+        AI 只能说不能做:
+        禁 edit/write/bash/task
+        及插件工具
+    end note
+    note right of 可写
+        单 writer 委派:
+        子会话继承 allow
+    end note
+```
+
 ### 10.5 验证、交付与评测
 
 - Orchestrator 用 `task` 按阶段串行委派需求/开发/测试/审查(单 writer)。
@@ -417,6 +560,22 @@ AI 发言模式是**房间级配置项**,房主在页面上实时切换,即时�
 - **执行态 → 会议态(返工)**:测试/lint 失败或房主退回时,网关自动发 deny prompt 降级权限并切回会议态,由人重新讨论细节;返工轮次上限 3 轮,超限强制结束并落失败评测。
 - **空闲超时参数**:默认 N 分钟(建议 30),仅会议态计时,执行态冻结;房主显式操作优先于超时仲裁。
 - 重开:挂载卷恢复会话,重新 fetch AGENTS.md,重跑 bootstrap 拉子树(基线刷新),并**显式降级权限到只读态**。
+
+房间生命周期状态图(触发点详见 10.7):
+
+```mermaid
+stateDiagram-v2
+    [*] --> 会议态: 首个成员进入(校验 JGit + bootstrap)
+    会议态 --> 会议态: 发言(noReply 静默记录)
+    会议态 --> 会议态: @ AI / 形成 Spec / 滚动摘要
+    会议态 --> 执行态: 房主逐条终审(allow 提权)
+    执行态 --> 会议态: 测试失败/房主退回(deny 降级,轮次<3)
+    执行态 --> 已结束: 完成 + 评测落盘
+    执行态 --> 已结束: 房主强制关闭(落失败评测)
+    会议态 --> 已结束: 房主关闭 / 空闲超时(无执行任务)
+    已结束 --> 会议态: 房主重开(恢复会话 + bootstrap + deny)
+    已结束 --> [*]
+```
 
 ### 10.7 状态转换矩阵与触发点
 
