@@ -363,7 +363,7 @@ COLLECTIVE 独立部署,选用成熟、社区活跃、企业级广泛采用的�
 | Git 服务 | JGit(Java,独立进程) | 已定"内置 JGit 服务";提供 smart HTTP,版本化团队上下文 |
 | 容器编排 | Docker Engine API(`dockerode`) | 规模可控,按需起停房间容器,不上 K8s |
 | 认证 | JWT + OAuth2(Passport.js) | 标准方案;邀请令牌签 JWT,角色声明进 token |
-| 任务队列 | BullMQ + Redis | 状态机异步转换、滚动摘要、评测落盘等后台任务;WS 多副本广播 |
+| 任务队列 | BullMQ + Redis | 基于 Redis 的 Node.js 主流任务队列,任务持久化(进程挂了不丢)、失败重试与退避、延迟/定时、优先级与并发控制。用途:**JGit 串行写队列**(多房间并发写同一 `context` 仓库会撞 `index.lock`,必须排队串行提交)、滚动摘要后台生成、评测落盘、房主离线异步通知、WS 多副本广播(Redis pub/sub) |
 | 可观测 | OpenTelemetry + Prometheus / Grafana | 业界标准追踪与指标;评测字段也可进metrics |
 | 容器内 Agent | `opencode serve` + 原生 HTTP API | `noReply`/`tools` 经 `PromptPayload` 透传(`groups/session.ts:70`、`prompt.ts:1499-1521`),零侵入内核 |
 
