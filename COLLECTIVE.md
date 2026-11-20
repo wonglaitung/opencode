@@ -117,26 +117,26 @@
 启动器第四 tab:令牌代填 + 本地文件/会话上传 JGit + 一键开浏览器
 ```
 
-本章给出可落地的技术设计,所有能力均基于 V1 原生接口,不改内核。
-
 ---
 
 ## 6. 技术架构设计
+
+COLLECTIVE 是独立项目,独立仓库、独立部署,不依赖本仓库的工具链。技术选型以业界主流、企业级可维护为原则;对 opencode 内核仅通过 HTTP 调用,不改内核。
 
 ### 6.1 分层与进程边界
 
 ```
 ┌─ 客户端层 ────────────────────────────────────────────┐
-│  浏览器门户(静态站)  │  启动器第四 tab(WebView2→浏览器) │
+│  浏览器门户(React + Vite) │ 启动器第四 tab(WebView2→浏览器) │
 └──────────────────────┬────────────────────────────────┘
                        │ HTTPS / WSS
 ┌──────────────────────▼────────────────────────────────┐
-│  总线服务 opencode-team-bus(Bun + Hono/Elysia)         │
-│  ├─ 认证网关:令牌校验、角色鉴权(RBAC)                  │
-│  ├─ HTTP API:房间/Spec/技能/成员/状态机               │
-│  ├─ WS 网关:讨论流、AI 回应、状态推送                  │
+│  总线服务 COLLECTIVE(Node.js + NestJS)                 │
+│  ├─ 认证网关:JWT/OAuth2、角色鉴权(RBAC)               │
+│  ├─ REST API:房间/Spec/技能/成员/状态机               │
+│  ├─ WS 网关(Socket.IO):讨论流、AI 回应、状态推送      │
 │  ├─ 领域服务:房间/会议/Spec/执行编排/验证/评测         │
-│  ├─ 容器管理:Docker SDK(起停、卷、bootstrap)         │
+│  ├─ 容器管理:Docker Engine API(起停、卷、bootstrap)  │
 │  ├─ JGit 网关:Git HTTP smart protocol + 原始文件服务   │
 │  └─ 状态机引擎:驱动 8.7 的各转换与触发点               │
 └──────────────────────┬────────────────────────────────┘
@@ -152,14 +152,23 @@
 
 ### 6.2 技术选型与理由
 
+COLLECTIVE 独立部署,选用成熟、社区活跃、企业级广泛采用的栈,便于长期维护与招人:
+
 | 层 | 选型 | 理由 |
 |---|---|---|
-| 总线服务运行时 | Bun | 与仓库现有定制工程一致(`bun:sqlite`、TS 直跑) |
-| HTTP/WS 框架 | Hono 或 Elysia | Bun 原生、轻量;WS 网关同源 |
-| 状态持久化 | SQLite(每房间一库)+ 卷 | 会话/状态机/评测落盘,重开恢复 |
-| Git 服务 | JGit(Java,独立进程)或 Git HTTP 网关 | 已定"内置 JGit 服务";提供 smart HTTP |
-| 容器编排 | Docker SDK(直接 API,不上 K8s) | 规模可控、依赖少 |
-| 容器内 Agent | `opencode serve` + 原生 HTTP API | `noReply`/`tools` 经 `PromptPayload` 透传(`groups/session.ts:70`、`prompt.ts:1499-1521`) |
+| 运行时 | Node.js 22 LTS + TypeScript | 业界事实标准,生态最大;TypeScript 类型安全,适合复杂领域模型 |
+| 服务端框架 | NestJS(基于 Express/Fastify) | 企业级主流框架,模块化 / DI / 拦截器 / 守卫,契合 RBAC、状态机、领域分层 |
+| REST / 实时 | NestJS REST + Socket.IO | REST 做资源 API,Socket.IO 做讨论流与状态推送(自带房间/命名空间,契合"团队房间") |
+| 前端门户 | React + Vite + TypeScript + Tailwind CSS | 主流前端栈;Vite 构建快,Tailwind 便于一致 UI |
+| 状态持久化 | PostgreSQL + Prisma ORM | 关系型标准,Prisma 类型安全、迁移与事务支持;Room/Member/Spec 索引结构化查询 |
+| Git 服务 | JGit(Java,独立进程) | 已定"内置 JGit 服务";提供 smart HTTP,版本化团队上下文 |
+| 容器编排 | Docker Engine API(`dockerode`) | 规模可控,按需起停房间容器,不上 K8s |
+| 认证 | JWT + OAuth2(Passport.js) | 标准方案;邀请令牌签 JWT,角色声明进 token |
+| 任务队列 | BullMQ + Redis | 状态机异步转换、滚动摘要、评测落盘等后台任务;WS 多副本广播 |
+| 可观测 | OpenTelemetry + Prometheus / Grafana | 业界标准追踪与指标;评测字段也可进metrics |
+| 容器内 Agent | `opencode serve` + 原生 HTTP API | `noReply`/`tools` 经 `PromptPayload` 透传(`groups/session.ts:70`、`prompt.ts:1499-1521`),零侵入内核 |
+
+**不选什么**:Bun/Hono/Elysia(绑定本仓库工具链,不便独立);独立 Flask/Django(与 TS 前端割裂);自建 Agent loop(丢掉 V1 的 `task` 委派);K8s(规模不需要);改 opencode 内核(破坏零侵入、升级必冲突)。
 
 ### 6.3 核心数据流
 
@@ -198,9 +207,9 @@
 
 | 实体 | 存储 | 关键字段 |
 |---|---|---|
-| Room | 总线 SQLite | id, team, host, state(会议/执行/已结束), speakMode, containerID, volumeRef, submitTarget |
-| Member | 总线 SQLite | roomID, identityHash, role(房主/成员/访客), tokenHash |
-| Spec | JGit `specs/` + 总线索引 | specID, version, status(草稿/终审/废弃), author |
+| Room | PostgreSQL | id, team, host, state(会议/执行/已结束), speakMode, containerID, volumeRef, submitTarget |
+| Member | PostgreSQL | roomID, identityHash, role(房主/成员/访客), tokenHash |
+| Spec | JGit `specs/` + PostgreSQL 索引 | specID, version, status(草稿/终审/废弃), author |
 | Eval | JGit `evals/<specID>` | 四项指标 + 埋点 |
 | 操作日志 | JGit(append-only) | 事件、actor、时间、specID |
 
@@ -219,10 +228,12 @@ src/
 │   └── skill/    # 上传、审批、沙箱
 ├── infra/
 │   ├── opencode/ # 封装 opencode serve 的 HTTP 客户端(noReply/tools/提权)
-│   ├── docker/   # 容器起停、卷、bootstrap
+│   ├── docker/   # 容器起停、卷、bootstrap(dockerode)
 │   ├── jgit/     # Git 服务 + 原始文件 + hash 校验
+│   ├── redis/    # BullMQ 队列 + WS 多副本广播
 │   └── bus/      # 状态推送、事件总线
-└── store/        # SQLite(房间/成员/状态/日志)
+├── store/        # PostgreSQL + Prisma(房间/成员/状态/日志)
+└── web/          # React + Vite 门户源码
 ```
 
 ### 6.6 关键接口(网关 → opencode serve)
@@ -236,7 +247,7 @@ src/
 ### 6.7 部署与生命周期
 
 - 总线服务常驻(单实例或少量副本),容器按需启动。
-- 容器镜像:以 `packages/opencode/Dockerfile:1-18` 为基础,加 bun、git、bootstrap 脚本、受限网络配置(9.3)。
+- 容器镜像:独立构建,基于官方 opencode 运行时镜像,加入 git、bootstrap 脚本与受限网络配置(9.3);不依赖本仓库的构建产物。
 - 卷命名 `room-<id>-work` / `room-<id>-db`,房主关闭房间只停容器不删卷;重开挂载同卷。
 - 空闲超时与执行态冻结按 8.6 状态机。
 
@@ -539,7 +550,7 @@ AI 发言模式是**房间级配置项**,房主在页面上实时切换,即时�
 ### 12.1 改动清单
 
 1. 总线服务(独立项目):门户、房间 API、双 JGit 仓库、会议纪要、验证门禁、评测、权限、**状态机**、**两阶段权限切换**、**乐观锁**、发言模式切换、**人工关卡分级(9.1)**、**中断/接管/回滚(9.2)**、**技能沙箱与不可信输入校验(9.3)**。
-2. 房间镜像:基于 `packages/opencode/Dockerfile:1-18`,加 bun + git + bootstrap 脚本(重开重跑)、受限网络与凭据隔离(9.3)。
+2. 房间镜像:独立构建(基于官方 opencode 运行时镜像),加 git + bootstrap 脚本(重开重跑)、受限网络与凭据隔离(9.3),不依赖本仓库构建产物。
 3. 启动器第四 tab:`index.html:220-222`、`Program.cs:126-307`、静态断言改 tab 计数、按安装 skill 全量重打包。
 4. 技能审批与启用流、技能静态扫描与沙箱(9.3)。
 5. 会议规约内容(写进 JGit `AGENTS.md`,非代码)。
