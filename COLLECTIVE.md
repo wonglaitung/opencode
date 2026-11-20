@@ -127,7 +127,7 @@ COLLECTIVE 是独立项目,独立仓库、独立部署,不依赖本仓库的工�
 
 ```
 ┌─ 客户端层 ────────────────────────────────────────────┐
-│  浏览器门户(React + Vite) │ 启动器第四 tab(WebView2→浏览器) │
+│  浏览器门户(Vue 3 + Vite) │ 启动器第四 tab(WebView2→浏览器) │
 └──────────────────────┬────────────────────────────────┘
                        │ HTTPS / WSS
 ┌──────────────────────▼────────────────────────────────┐
@@ -159,7 +159,7 @@ COLLECTIVE 独立部署,选用成熟、社区活跃、企业级广泛采用的�
 | 运行时 | Node.js 22 LTS + TypeScript | 业界事实标准,生态最大;TypeScript 类型安全,适合复杂领域模型 |
 | 服务端框架 | NestJS(基于 Express/Fastify) | 企业级主流框架,模块化 / DI / 拦截器 / 守卫,契合 RBAC、状态机、领域分层 |
 | REST / 实时 | NestJS REST + Socket.IO | REST 做资源 API,Socket.IO 做讨论流与状态推送(自带房间/命名空间,契合"团队房间") |
-| 前端门户 | React + Vite + TypeScript + Tailwind CSS | 主流前端栈;Vite 构建快,Tailwind 便于一致 UI |
+| 前端门户 | Vue 3 + Vite + TypeScript + Pinia + Tailwind CSS | 主流前端栈;Vue 组合式 API 易维护,Pinia 管状态,Vite 构建快,Tailwind 统一 UI |
 | 状态持久化 | PostgreSQL + Prisma ORM | 关系型标准,Prisma 类型安全、迁移与事务支持;Room/Member/Spec 索引结构化查询 |
 | Git 服务 | JGit(Java,独立进程) | 已定"内置 JGit 服务";提供 smart HTTP,版本化团队上下文 |
 | 容器编排 | Docker Engine API(`dockerode`) | 规模可控,按需起停房间容器,不上 K8s |
@@ -233,7 +233,7 @@ src/
 │   ├── redis/    # BullMQ 队列 + WS 多副本广播
 │   └── bus/      # 状态推送、事件总线
 ├── store/        # PostgreSQL + Prisma(房间/成员/状态/日志)
-└── web/          # React + Vite 门户源码
+└── web/          # Vue 3 + Vite 门户源码
 ```
 
 ### 6.6 关键接口(网关 → opencode serve)
