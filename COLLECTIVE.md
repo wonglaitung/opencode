@@ -121,7 +121,7 @@ sequenceDiagram
     participant 房主
     participant 成员
     participant 网关
-    participant AI as 规约守卫(Agent)
+    participant AI as "规约守卫(Agent)"
     participant JGit
 
     管理员->>JGit: 初始化 context/code 双仓库 + AGENTS.md
@@ -258,7 +258,7 @@ flowchart TB
         Redis[(Redis + BullMQ)]
     end
 
-    subgraph 房间容器[房间容器(每房间一个)]
+    subgraph 房间容器["房间容器(每房间一个)"]
         OC[opencode serve<br/>V1 + task 委派]
         Bootstrap[bootstrap<br/>校验 JGit + 拉子树]
         Vol[(work/ + opencode.db<br/>+ session-mgmt.db)]
@@ -323,7 +323,7 @@ flowchart TB
         A[浏览器门户 Vue 3]
         B[启动器 tab WebView2→浏览器]
     end
-    subgraph L2[总线服务 Node.js + NestJS]
+    subgraph L2["总线服务 Node.js + NestJS"]
         C[认证网关 JWT/OAuth2 + RBAC]
         D[REST API / Socket.IO WS]
         E[领域服务]
