@@ -10,7 +10,7 @@
 
 ## 1. 一句话概述
 
-一期以**本地目录 + Git 后台同步**开展工作:成员在自己机器上用现有启动器 + 工作流处理通用任务(业务需求走 reqdoc、研发走 task/sdlc);团队规约、文档、Spec、代码通过**后台 Git 服务**在成员间同步(复用并扩展现有的 `opencode-git-sync`);AI 以**规约守卫**主笔文档/Spec 并在 PR 里做**异步评审**(bot comment);评审阶段 Agent **只读**(AI 只输出文本、插件落盘成 PR),人终审 Spec 后**显式提权**执行,**串行单 writer** + 确定性门禁,commit 与证据用 `specID` 关联。二期(愿景)引入**后台编排器 + Docker 化自动化智能体**,实现事件驱动的全自动;一期只保留扩展点,不提前建编排平台。
+一期以**本地目录 + Git 后台同步**开展工作:成员用现有启动器 + 工作流处理三类任务——写文档(`task`/`reqdoc`,文档即产出)、写代码(`sdlc`,Spec → 提权执行 → 门禁)、通用任务(`task` 单阶段,直接执行);团队规约、文档、Spec、代码通过**后台 Git 服务**同步(复用并扩展 `opencode-git-sync`)。AI 以**规约守卫**主笔文档/Spec 并在 PR 里**异步评审**(bot comment);评审阶段 Agent **只读**(AI 输出文本、插件落盘成 PR),写代码任务经人终审 Spec 后**显式提权**执行,**串行单 writer** + 确定性门禁,commit 与证据用 `specID` 关联。二期(愿景)引入**后台编排器 + Docker 化自动化智能体**实现全自动;一期只保留扩展点。
 
 ---
 
@@ -100,75 +100,109 @@
 
 ## 5. 用户视角
 
-### 5.1 完整旅程
+三类任务(写文档 / 写代码 / 通用任务)共享启动注入、AI 异步评审、git-sync 同步与角色权限,差异在**是否形成 Spec、是否提权执行代码、是否门禁**。第 5.1 给分支总览,5.2 给三类子旅程。
+
+### 5.1 三类任务分支总览
+
+| 任务类型 | 对应工作流 | 产出 | 是否形成 Spec | 是否提权执行代码 | 是否验证门禁 |
+|---|---|---|---|---|---|
+| 写文档 | `task` / `reqdoc` | 文档本身(PRD / 分析 / 材料) | 否(文档即共识) | 否 | 否 |
+| 写代码 | `sdlc` | 代码 commit | 是(需求共识 → Spec 契约) | 是 | 是 |
+| 通用任务 | `task`(单阶段) | 一次性结果 | 否 | 否 | 否 |
 
 ```
-管理员:建 Git 后台/初始化团队仓库(context/ + work/)/写 AGENTS.md/加成员
-房主:建 Git 后台团队仓库 → 邀请成员(共享仓库)
-成员:启动器选目录 + 工作流 → 本地 opencode(git-sync 拉取最新)
-发起:负责人给任务描述(背景、目标、材料链接、初步想法)→ AI 主笔起草文档,插件落盘成 PR
-评审态(Agent 只读,工具全 deny):
-  成员在 PR 里异步评论、补充 —— 文档由 AI 单主笔,人不直接改文档
-  AI 规约守卫被请求或文档更新时异步评审:对照 AGENTS.md/规约/历史决策
-  → 输出冲突/遗漏/先例,作为 PR 里的「AI 评审」bot comment(独立、带 AI 标识)
-  → 追问用槽位清单一次问完,减少来回
-  → 超长文档由 AI 生成评审纪要存 JGit(人看的交接材料)
-收尾:房主点「形成 Spec」→ AI 读 PR 讨论 → 结构化 Spec 草稿(作为新 PR)
-  → Spec 草稿 PR(带 version)→ 成员在 PR 评论;如需修改由 AI 修订(乐观锁)
-  → 房主逐条终审 → 提交 JGit,分配 specID
-提权:本地插件发一次 tools=allow 的 prompt → session.permission 切到可写态
-执行态:AI 转编排者 → task 串行委派需求/开发/测试/审查(单 writer,继承 allow)
-  房主可随时中断 / 接管 / 回滚(11.2)
-验证:自动跑测试/lint → 证据回写 evidence/<specID>/
-交付:房主看「证据+diff」确认 → 按房间配置提交 commit(带 Spec:<specID>)
-评测:记录 spec 一次通过率/验证一次通过率/人工介入率/返工次数到 evals/<specID>
-结束:成员关本地会话 → git-sync push 同步到 Git 后台
-重开:git-sync pull 恢复会话 → 重新 fetch AGENTS.md → 降级权限到只读
+共同前置:管理员建 Git 后台/仓库/AGENTS.md → 成员启动器选目录+工作流(git-sync pull)
+         → 注入团队规约 + references
+    │
+    ├─ 分支 A · 写文档(task/reqdoc):文档即产出
+    ├─ 分支 B · 写代码(sdlc):文档 → Spec → 提权执行 → 门禁 → 提交代码
+    └─ 分支 C · 通用任务(task 单阶段):Agent 直接执行 → 结果
 ```
 
-用户旅程的交互时序:
+### 5.2 三类子旅程
+
+**分支 A · 写文档 `(task / reqdoc)`——文档即交付物**
+
+```
+发起:给任务描述 → AI 主笔需求/设计文档,插件落盘成 PR
+评审态:成员在 PR 评论;AI 异步评审(bot comment),槽位清单一次问完
+修订:AI 依 PR 评论修订文档(乐观锁),人只评论不改文档
+交付:文档定稿即产出 → git-sync push 同步;无 Spec、无提权写代码、无测试门禁
+重开:git-sync pull 恢复会话 → 重新拉取 AGENTS.md
+```
+
+mermaid 时序(写文档):
 
 ```mermaid
 sequenceDiagram
-    participant 管理员
+    participant 成员
+    participant 本地插件
+    participant AI as "规约守卫(Agent)"
+    participant Git
+
+    成员->>本地插件: 给任务描述
+    本地插件->>Git: git-sync pull + 注入 AGENTS.md
+    AI->>本地插件: 主笔文档(文本),插件落盘成 PR
+    loop 异步评审(成员不必同时在线)
+        成员->>本地插件: 在 PR 评论
+        本地插件->>AI: 请求评审(tools deny)
+        AI-->>本地插件: 冲突/遗漏/先例(bot comment)
+    end
+    本地插件->>AI: 依评论修订文档(乐观锁)
+    AI-->>本地插件: 修订后的文档
+    本地插件->>Git: 文档定稿 push(产出完成)
+```
+
+**分支 B · 写代码 `(sdlc)`——文档是 Spec 前置,代码是产出**
+
+```
+发起:给需求描述 → AI 主笔需求文档(PR),成员 PR 评论
+收尾:房主点「形成 Spec」→ AI 据 PR 讨论结构化 Spec 草稿(新 PR)
+     → 成员 PR 评论 → 房主逐条终审 → 提交 Spec,分配 specID
+提权:本地插件发 tools=allow 的 prompt → session.permission 切可写态
+执行:AI 转编排者 → task 串行委派需求/开发/测试/审查(单 writer)
+验证:自动跑测试/lint → 证据回写 evidence/<specID>/
+交付:房主看证据+diff 确认 → 提交代码(commit 带 Spec:<specID>)
+评测:落 evals/<specID>;结束 git-sync push
+```
+
+mermaid 时序(写代码):
+
+```mermaid
+sequenceDiagram
     participant 房主
     participant 成员
     participant 本地插件
     participant AI as "规约守卫(Agent)"
-    participant JGit
+    participant Git
 
-    管理员->>JGit: 建后台仓库 context/ + work/ + AGENTS.md
-    管理员->>成员: 发邀请链接
-    成员->>本地插件: 启动器选目录+工作流(git-sync pull)
-    本地插件->>JGit: 校验 + 拉取最新上下文
-    本地插件->>AI: 注入基线(AGENTS.md)+ references
-
-    房主->>本地插件: 给任务描述
-    loop 异步评审(成员不必同时在线)
-        成员->>本地插件: 在 PR 里评论
-        本地插件->>AI: AI 主笔起草文档→开 PR;评审仍 deny
-        AI-->>本地插件: 冲突/遗漏/先例(槽位清单一次问完)
-        本地插件-->>成员: PR 里的"AI 评审"bot comment(带 AI 标识)
+    房主->>本地插件: 给需求描述
+    AI->>本地插件: 主笔文档→PR
+    loop 异步评审
+        成员->>本地插件: PR 评论
+        AI-->>本地插件: 评审 bot comment
     end
-
     房主->>本地插件: 点"形成 Spec"
-    AI-->>本地插件: 基于 PR 讨论结构化 Spec 草稿(新 PR)
-    成员->>本地插件: 在 Spec PR 里评论
+    AI-->>本地插件: 结构化 Spec 草稿(新 PR)
     房主->>本地插件: 逐条终审 Spec
-    本地插件->>JGit: 提交 specs/,分配 specID
+    本地插件->>Git: 提交 specs/,分配 specID
     本地插件->>AI: allow prompt 提权(只读→可写)
     AI->>AI: task 串行委派 需求/开发/测试/审查(单 writer)
     AI-->>本地插件: 执行完成
-    本地插件->>本地插件: 自动跑测试/lint
+    本地插件->>本地插件: 跑测试/lint
     本地插件-->>房主: 证据 + diff(待确认)
     房主->>本地插件: 确认交付
-    本地插件->>JGit: 提交代码(commit 带 Spec:<specID>)
-    本地插件->>JGit: 写 evals/<specID> + 证据
-    房主->>本地插件: 关闭会话
-    本地插件->>JGit: git-sync push 同步
+    本地插件->>Git: 提交代码(commit 带 Spec:<specID>)+ evals + 证据
 ```
 
-### 5.2 两种进入方式
+**分支 C · 通用任务 `(task 单阶段)`——轻量直接执行**
+
+```
+给任务 → Agent 执行 → 结果 → git-sync push
+无 Spec、无提权写代码、无验证门禁、无多角色委派
+```
+
+### 5.3 两种进入方式
 
 ```
 方式一:配置 Git 仓库 → 启动器选目录+工作流 → 本地 opencode
@@ -177,15 +211,13 @@ sequenceDiagram
 
 注意:一期没有服务端容器,成员用自己机器的目录;git-sync 负责把目录内容与会话在成员间同步。
 
-### 5.3 不变 / 不会发生 / 需配合
+### 5.4 不变 / 不会发生 / 需配合
 
 **不变**:本地局域网房间照旧;四种工作流规则/门禁/理解确认不变;启动器其他页面不变。
 
-**不会发生**:评审阶段 AI 改代码或跑命令(工具全 deny);成员不能直接改代码(只有提权后被委派的开发 Agent 能改 `work/`);不确认就不执行;基线不在运行中热更新;不自动提交代码;执行中不会因空闲超时被销毁;tab 不做本地目录实时挂载。
+**不会发生**:评审阶段 AI 不改文件/不跑命令(工具全 deny);人不直接改文档(由 AI 单主笔);写代码任务不确认就不执行、不自动提交;基线不在运行中热更新;tab 不做本地目录实时挂载。
 
 **需配合**:建 Git 后台;初始化团队仓库(context/ + work/);成员配置 git-sync;团队维护仓库中的 AGENTS.md。
-
----
 
 ## 6. 角色与权限
 
@@ -212,7 +244,7 @@ sequenceDiagram
 | AI 评审角色 | 规约守卫,**主笔文档/Spec(落成 PR)**并对 PR 做异步评审,不拍板;评审意见作为 **PR 里的"AI 评审"bot comment**(带 AI 标识,与人评论严格区分) | V1 `noReply` 与 HTTP 端点透传(`session/prompt.ts:1069`),零侵入内核 |
 | 协作载体 | **Git PR 评论**:文档/Spec 由 AI 单主笔(插件落盘成 PR),人异步评论、房主终审 | 单 writer 原则统一;异步优先,符合 Git 协作习惯 |
 | **评审阶段权限** | **Agent 只读**:所有评审期 prompt 带 `tools` 全 deny,只能说不能做 | V1 `input.tools` 覆盖并 `setPermission`(`prompt.ts:1060-1067`) |
-| **阶段提权** | 房主终审 Spec 后,执行前用一次带 `edit/bash/task=allow` 的 prompt 显式重设权限;确认子会话继承该 allow | V1 `session.permission` 持久、空 tools 不触发重设;子会话继承父 deny(`subagent-permissions.ts:4-27`) |
+| **阶段提权(仅写代码分支)** | 房主终审 Spec 后,执行前用一次带 `edit/bash/task=allow` 的 prompt 显式重设权限;确认子会话继承该 allow。写文档/通用任务不提权 | V1 `session.permission` 持久、空 tools 不触发重设;子会话继承父 deny(`subagent-permissions.ts:4-27`) |
 | Spec 确认 | AI 主笔草稿 PR → 成员在 PR 评论 →(如需修改由 AI 修订,乐观锁)→ 房主逐条终审 → 合并 | 草稿带 version,修订需带 expectedVersion |
 | 技能 | 上传 JGit → 房主审批 → 勾选启用 | skill 含 prompt+脚本,审批是信任边界 |
 | 执行写入 | 同一阶段单 writer 串行,角色按阶段排队 | 业界 "one writer per area";V1 `task` 不自动建 worktree |
