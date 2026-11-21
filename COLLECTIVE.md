@@ -374,7 +374,19 @@ flowchart TB
 - `task` 按阶段串行委派需求/开发/测试/审查,单 writer。
 - 自动跑测试/lint,证据回写 `evidence/<specID>/`。
 - 房主看证据+diff 确认(**可解释性**:证据与 diff 说明"改了什么、为何这样改")→ 提交代码到分支,commit 带 `Spec:<specID>`(**责任归属**:可追溯 Spec 与终审人)→ 合并主分支。
-- 评测落 `evals/<specID>`:spec 一次通过率、验证一次通过率、人工介入率、返工次数。
+
+**评测口径与埋点**(每 spec 落 `evals/<specID>.json`,随 Git 版本化):
+
+| 指标 | 计算口径 | 埋点来源 |
+|---|---|---|
+| spec 一次通过率 | 首次「形成 Spec」草稿即被终审接受(期间无驳回/无重做)的 spec 数 ÷ 进入终审的 spec 总数 | DB `spec_review`(形成 Spec 任务、驳回、终审事件) |
+| 验证一次通过率 | 首轮执行后验证即通过(`retryCount=0`)的 spec 数 ÷ 进入验证态的 spec 总数 | `state.json` 的 `retryCount` 与验证态转换事件 |
+| 人工介入率 | 发生**非必经**人工动作(验证失败退回 / 取消执行 / 回滚 / 人工修订)的 spec 数 ÷ spec 总数 | `state.json` 事件(退回、取消、`lastRollback`、人工修订标记) |
+| 平均返工次数 | Σ(每 spec 的 验证失败退回 + 取消执行 + 回滚 次数) ÷ spec 总数 | `state.json`(`retryCount` 增量、`rollbackCount`、取消计数) |
+
+- **必经硬关卡不计入人工介入**:Spec 终审、产出确认提交、技能审批是流程必经,不算"补救";只统计非预期的人工返工动作。
+- **不新增独立埋点**:所有指标由 10.5/10.6/10.7 的既有状态转换事件推导,与状态机保持单一口径,避免"日志口径"与"状态口径"两套数。
+- **可重建**:原始事件在 Git/DB,`evals/<specID>.json` 为派生快照;全局聚合由 DB 查询生成,可重建。
 
 ### 10.5 生命周期与状态机(Git 状态 + 容器任务调度)
 
@@ -584,7 +596,7 @@ stateDiagram-v2
 1. **自建 Git 服务端** + 团队仓库初始化(context/ + work/)。
 2. **轻量 PR 层**:工作项分支 + 只读 unified diff + 文本评论(已解决标记)+ 房主单点 squash 合并;不支持行级建议/在线冲突解决/多级审批(边界见 8.1)。
 3. **极简 Vue 评审页**:新建工作项(选任务类型)、分支 diff、评论、终审。
-4. **NestJS 后端**:工作项/评论/状态机/RBAC/Agent 容器调度(Docker API 起停)/**失败补偿 reconciler**(幂等重试、恢复非终结态)/**分支快照与回滚**(runBase、按 specID revert)。
+4. **NestJS 后端**:工作项/评论/状态机/RBAC/Agent 容器调度(Docker API 起停)/**失败补偿 reconciler**(幂等重试、恢复非终结态)/**分支快照与回滚**(runBase、按 specID revert)/**评测落盘**(`evals/<specID>.json`,口径见 10.4)。
 5. **Agent 容器镜像**:基于官方 opencode 运行时镜像,加 git;每任务起一个无状态容器,从 Git 恢复上下文后做主笔/评审/委派/门禁,结果回写 Git 后销毁。
 6. **技能管理(最小)**:Git `context/skills/` 存放 + 上传 + 静态扫描 + hash + 房主审批 + 按白名单注入 + 容器受限运行(见 10.8)。
 
