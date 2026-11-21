@@ -10,6 +10,7 @@
 | 做什么 | 5 用户视角、6 角色权限、7 已定决策总表 | 三类任务旅程、参与者、决策汇总 |
 | 怎么做 | 8 总体架构(含 PR 层)、9 技术架构、10 关键机制、11 补强设计 | 形态、技术栈、状态机与容器调度、关卡与可控性 |
 | 验证与落地 | 12 业界对齐、13 一期范围与落地 | 对标、要建什么、实施路径、扩展点 |
+| 集成规格 | 14 opencode serve 调用与权限注入 | 容器启动、会话/权限注入、基线/结构化输出、preflight |
 
 附录"核心诉求确认清单"是方案的依据,可回头对照。
 
@@ -340,9 +341,13 @@ flowchart TB
 
 ### 9.2 关键接口(后端 → 服务端 opencode)
 
-- `POST /session/:id/message` — 主笔 / 评审 / 修订 / 形成 Spec / 提权(含 `text`、`noReply`、`tools`)
-- `GET /session/:id/messages` — 读回 AI 输出
+- `POST /session` — 建会话,body 含 `permission` 规则集(权限随会话创建注入,见 14.2)
+- `POST /session/:id/message` — 主笔 / 评审 / 修订 / 形成 Spec / 执行(同步返回最终消息;`parts` 载体、可带 `agent`/`model`/`format`)
+- `GET /session/:id/message` — 读回消息历史
+- `POST /session/:id/abort` — 中断当前轮(容器内取消)
 - 取消执行任务:后端终止运行中的容器(一期不支持"中断长驻会话"——容器短生命周期,取消即终止容器、丢弃未完成输出,状态回评审态)
+
+> 精确字段、鉴权、权限规则与结构化输出见第 14 章。
 
 （安全边界统一在第 11.3 节描述。）
 
@@ -366,7 +371,7 @@ flowchart TB
 
 - 评审态:所有进 `loop()` 的 prompt 带 tools 全 deny;AI 只输出文本(后端提交到分支),不改文件/跑命令/委派。
 - 提权:房主终审 Spec 后,后端把「允许执行」阶段写入 Git;执行任务起新容器时,按 Git 阶段给 prompt 带 `tools=allow`,委派开发 Agent。没有长驻会话,权限状态在 Git、由新容器继承。
-- 子会话继承提权后的 allow;提权必须先于任何委派。
+- 子会话只继承父会话的 deny/external_directory,**不继承 allow**;执行子代理的写权限来自其 agent 配置。评审态的 `*:deny` 会传播并阻断委派(详见 14.2)。提权必须先于任何委派。
 - 写文档/通用任务不提权。
 
 ### 10.4 执行、门禁与评测(仅写代码分支)
@@ -618,7 +623,7 @@ stateDiagram-v2
 
 | 阶段 | 范围 | 周期(粗估) |
 |---|---|---|
-| PoC | 评审页新建 → 起 Agent 容器 → 主笔 PR → 评论 →(写代码)终审把 allow 写入 Git → 新起执行容器注入 allow → task 串行委派(子会话继承 allow)→ 验证 → 门禁 → 提交/合并;**验证 state.json CAS、幂等键去重、失败补偿,以及中断丢弃与按 specID 回滚** | 4–6 周 |
+| PoC | 评审页新建 → 起 Agent 容器 → 主笔 PR → 评论 →(写代码)终审把 allow 写入 Git → 新起执行容器注入 allow → task 串行委派(子代理按 agent 配置授写、仅继承父 deny)→ 验证 → 门禁 → 提交/合并;**验证 state.json CAS、幂等键去重、失败补偿、中断丢弃与按 specID 回滚,以及第 14.6 的权限 preflight** | 4–6 周 |
 | 一期可用 | 三类任务旅程、轻量 PR、状态机、补强设计、权限 | 5–7 周 |
 | 二期 | 编排后台 + Docker 智能体;落地后再定 | 待评估 |
 
@@ -631,6 +636,84 @@ stateDiagram-v2
 
 ---
 
+## 14. 集成规格:opencode serve 容器调用与权限注入
+
+本章把 9.2 的接口落到可直接编码的字段与调用序列;所有结论以当前 V1 源码为准(`session/prompt.ts`、`tool/task.ts`、`permission/index.ts`)。
+
+### 14.1 容器与 serve 启动
+
+- 镜像在官方 opencode 运行时基础上加 `git`;容器 `entrypoint` 拉取 `work/<id>` 到 `/workspace`,再执行 `opencode serve --hostname 0.0.0.0 --port <p>`。
+- 鉴权:启动前注入随机 `OPENCODE_SERVER_PASSWORD`;后端每次请求带 `Authorization: Basic base64(":"+password)`(或 `?auth_token=`)。未设密码的 serve 不鉴权,生产禁用。
+- 工作目录:每个请求带 `x-opencode-directory: /workspace`(或 `?directory=`),服务端按此定位实例,不必在启动时绑定项目。
+- 就绪探针:`GET /session` 返回 200 即视为可服务;超时未就绪则容器失败,按 10.6 补偿。
+
+### 14.2 会话创建与权限注入(关键)
+
+权限随会话创建注入:`POST /session` 的 body 含 `permission: Rule[]`,`Rule = { permission, pattern, action }`,`action ∈ {allow, deny, ask}`。
+
+**判定语义(务必注意)**:
+- `evaluate` 无匹配规则时**默认 `ask`**(非 deny);headless 容器里 `ask` 会阻塞,故必须显式给足规则,不留 `ask`。
+- 规则按数组顺序 `findLast` 命中,后加者优先。
+
+**评审态(只读)**——用显式 deny 兜底,再按需放行只读工具:
+```jsonc
+{ "permission": [
+  { "permission": "*", "pattern": "*", "action": "deny" },
+  { "permission": "read", "pattern": "*", "action": "allow" },
+  { "permission": "glob", "pattern": "*", "action": "allow" },
+  { "permission": "grep", "pattern": "*", "action": "allow" }
+] }
+```
+
+**执行态(可写)**——显式 allow 所需工具(避免落回 `ask`):
+```jsonc
+{ "permission": [
+  { "permission": "*", "pattern": "*", "action": "deny" },
+  { "permission": "read", "pattern": "*", "action": "allow" },
+  { "permission": "glob", "pattern": "*", "action": "allow" },
+  { "permission": "grep", "pattern": "*", "action": "allow" },
+  { "permission": "edit", "pattern": "*", "action": "allow" },
+  { "permission": "bash", "pattern": "*", "action": "allow" },
+  { "permission": "task", "pattern": "*", "action": "allow" }
+] }
+```
+
+**子会话继承的真实语义(修正"继承 allow")**:
+- `task` 派生子会话时,子会话权限 = 父会话的 **deny 与 external_directory** 规则 + 默认 `todowrite/task` deny;父会话的 **allow 不向子会话传播**。
+- 子会话的 allow 来自**子代理自身 `agent.permission` 配置**;评估时以 `merge(agent.permission, childSession.permission)` 的 `findLast` 决定。
+- 因此执行态的提权落法:`①` 执行会话显式 allow(`task` 等);`②` 确保所选执行子代理在其 agent 配置中允许 `edit/write/bash`。评审态的 `*:deny` 会传播到子会话,从而**阻断委派**,正合只读要求。
+- 复用旧会话(带 `task_id`)不再重建权限;一期不复用旧会话,每次任务新建会话,保证权限与 Git 阶段一致。
+
+### 14.3 基线注入与结构化输出
+
+- 基线:`/workspace` 内已有 `AGENTS.md/conventions`,由 V1 原生发现;技能只把 **approved 且 hash 匹配** 的目录复制进工作区 skills 路径(见 10.8),不额外走消息注入。
+- 模型/代理:请求可带 `agent`、`model`;不传则用镜像内默认配置。
+- 结构化输出:对"形成 Spec""验证结果"等,传 `format: { type: "json_schema", schema: <JSONSchema>, retryCount: 2 }`,从返回消息的 `parts` 读取结构化结果;普通文本任务用 `format: { type: "text" }`。
+- `noReply: true` 仅用于"写入消息但不触发模型轮"(播种历史),常规任务不用。
+
+### 14.4 任务调用与结果读取
+
+- 主笔/评审/修订/形成 Spec:`POST /session/:id/message`,body `{ parts: [{ type: "text", text: "<任务指令>" }], agent?, format? }`;**同步**返回最终消息(单个 JSON 流),容器据此判定本轮完成。
+- 执行:`agent` 选编排代理,依赖 `task` 工具串行委派;会话权限为 14.2 执行态。
+- 验证:执行会话或专用验证代理用 `bash` 跑测试/lint;证据 = 命令输出 + `GET /session/:id/diff`;按 10.7 只读源码、临时目录可写。
+- 结果汇总:后端读返回消息 `parts`(文本或结构化)与 `/diff`,生成结果清单(见 10.7,后端侧生成、不信任容器自报)。
+
+### 14.5 取消、超时与异步
+
+- 同步 prompt 期间取消:后端调 `POST /session/:id/abort`,再按容器级 kill;按 10.7 `reset --hard runBase`。
+- 单次任务超时:达 10.7 的任务级时限即 kill 容器,按失败处理。
+- 需要异步时用 `POST /session/:id/prompt_async`(立即 204),靠 `GET /session/:id/status` 或事件流轮询完成;一期默认用同步,逻辑更简单。
+
+### 14.6 上线前 preflight(验证 V1 行为一致)
+
+1. 建评审会话(`*:deny` + 只读 allow),发一条要求写文件的消息 → 断言无 `edit/write` 工具调用、无落盘。
+2. 建执行会话(allow 集),发同类消息 → 断言可写并产生提交。
+3. 执行会话内触发 `task` 子代理 → 断言子代理仅继承父 deny、其写权限来自 agent 配置;评审会话内 `task` 被 deny。
+4. 断言未出现 `ask` 挂起(headless 无人工应答)。
+5. 锁定 opencode 版本;升级时重跑以上断言。
+
+---
+
 ## 附:核心诉求确认清单(本方案据此重写)
 
 1. 人机协作平台,业务+开发共用;两步走,二期只留接口。
@@ -640,6 +723,6 @@ stateDiagram-v2
 5. 三类任务旅程分支;AI 主笔 + PR 评审对写文档/写代码都适用。
 6. 一期 = 极简评审页 + 后端 + Git 服务 + **无状态短生命周期 Docker Agent 容器(状态全在 Git)**,不建编排器;容器形态已为二期就绪。
 7. 单 writer 统一:AI 主笔文档、代码单 writer;人不与 Agent 并发写,需人工调整时走人工修订分支(11.2)。
-8. 写代码分支:评审只读 → 终审把 allow 写入 Git → 新起执行容器注入 allow → task 串行委派(子会话继承 allow)→ 验证 → 门禁 → 提交/合并。
+8. 写代码分支:评审只读 → 终审把 allow 写入 Git → 新起执行容器注入 allow → task 串行委派(子代理按 agent 配置授写、仅继承父 deny)→ 验证 → 门禁 → 提交/合并。
 9. V1 零侵入,不 fork 内核;技术栈最小。
 10. 文档要求:逻辑顺序、无历史、旅程自洽、触发点明确。
