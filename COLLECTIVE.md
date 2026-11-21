@@ -48,7 +48,7 @@
 | Agent 运行 | 成员本机 | **服务端 Docker 容器**(评审页触发) |
 | AI 角色 | 执行者,不介入讨论 | 规约守卫,异步评审、不拍板 |
 | 产物 | 对话流,关终端即散 | Git 版本化 Spec + 决策/证据 + 代码 |
-| 入口 | 启动器第三 tab | 评审页「新建协作工作项」按钮 |
+| 入口 | 现有协作房间入口 | 评审页「新建协作工作项」按钮 |
 
 ---
 
@@ -833,12 +833,38 @@ flowchart TB
 
 ### 15.10 UI 规范(强制)
 
-前述为界面行为设计;本节是实现必须遵守的规范。评审页与启动器**共用同一套令牌与组件语言**,外壳尺寸按评审页场景定义。
+前述为界面行为设计;本节是实现必须遵守的规范。内容自成一体、不依赖其他项目文档;评审页使用本节定义的令牌与组件语言,外壳尺寸按评审页场景定义。
 
 **15.10.1 设计令牌(唯一取值来源)**
-- 用 CSS 变量集中定义 `tokens.css`;组件内禁止裸色值、裸圆角、裸字号。
-- 色板(与启动器一致):`--sidebar/--main/--card/--ink/--muted/--line/--blue/--blue-soft/--green`,以及 warn / ok / danger / brand 系列。
-- 比例尺:间距 `--s*`(4/8/12/16/24/32)、圆角 `--r-*`(6/8/12/16)、字号 `--t-*`(11–30)、阴影 `--shadow-card/--shadow-modal`。
+
+用 CSS 变量集中定义(建议 `tokens.css`);组件内禁止裸色值、裸圆角、裸字号。评审页采用如下令牌,**值即实现值**:
+
+```css
+:root{
+  /* 色板 */
+  --sidebar:#0f172a; --sidebar-soft:#162033;
+  --main:#f8fafc; --card:#ffffff; --surface-2:#f1f5f9;
+  --ink:#0f172a; --ink-2:#334155; --ink-3:#475569; --ink-weak:#94a3b8;
+  --muted:#64748b; --line:#e2e8f0; --line-strong:#cbd5e1;
+  --blue:#2563eb; --blue-strong:#1d4ed8; --blue-focus:#60a5fa; --blue-soft:#dbeafe;
+  --green:#10b981;
+  --warn-bg:#fffbeb; --warn-line:#fde68a; --warn-ink:#92400e;
+  --ok-bg:#ecfdf5; --ok-line:#a7f3d0; --ok-ink:#065f46;
+  --danger-bg:#fef2f2; --danger-line:#fecaca; --danger-ink:#991b1b;
+  /* 间距(4 的倍数) */
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s6:24px; --s8:32px;
+  /* 圆角 */
+  --r-6:6px; --r-8:8px; --r-12:12px; --r-16:16px;
+  /* 字号 */
+  --t-11:11px; --t-12:12px; --t-13:13px; --t-14:14px; --t-15:15px;
+  --t-18:18px; --t-20:20px; --t-22:22px; --t-30:30px;
+  /* 阴影 */
+  --shadow-card:0 8px 28px rgba(15,23,42,.04);
+  --shadow-modal:0 24px 64px rgba(15,23,42,.28);
+}
+```
+
+- 用法:正文 `--ink`,次要 `--muted`,分隔 `--line`,主操作 `--blue`,成功/警告/危险用对应 `*-bg` / `*-line` / `*-ink` 三件套。
 - 例外:`1px` 描边、`0`、`50%` 可直接写。
 
 **15.10.2 外壳契约(冻结)**
