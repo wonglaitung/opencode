@@ -295,3 +295,68 @@ describe("恢复会话：插件与工作流以数据库为准", () => {
     expect(webview).toContain("state.workflow = result.workflow")
   })
 })
+
+// UI 结构基线：防止"每加一个功能就换一套版面"。
+// 依据 portable-installer/launcher/UI-STANDARD.md。
+describe("启动器 UI 结构基线", () => {
+  const style = webview.slice(webview.indexOf("<style>"), webview.indexOf("</style>"))
+  // :root 之后的样式区，用于统计裸色值（令牌区允许写色值）
+  const outsideRoot = style.slice(style.indexOf("}") + 1)
+
+  test("外壳尺寸为契约值（侧栏/顶栏/内容宽度/内边距/断点）", () => {
+    expect(style).toContain(".app{height:100%;display:flex")
+    expect(style).toMatch(/\.sidebar\{width:260px;min-width:260px/)
+    expect(style).toContain(".topbar{height:52px")
+    expect(style).toContain("max-width:1040px")
+    expect(style).toContain("padding:28px 34px 24px")
+    expect(style).toContain("@media(max-width:1000px)")
+    expect(style).toContain("@media(max-width:900px)")
+  })
+
+  test("必备设计令牌存在", () => {
+    for (const token of [
+      "--sidebar",
+      "--sidebar-soft",
+      "--main",
+      "--card",
+      "--ink",
+      "--muted",
+      "--line",
+      "--blue",
+      "--blue-soft",
+      "--green",
+    ]) {
+      expect(style).toContain(token + ":")
+    }
+  })
+
+  test("页面复用统一组件原语", () => {
+    for (const selector of [".primary{", ".ghost{", ".card{", ".panel{", ".tabs{", ".tab{", ".modal{"]) {
+      expect(style).toContain(selector)
+    }
+  })
+
+  test("每个视图都有标题与主操作入口", () => {
+    expect(webview).toContain('id="wizardView"')
+    expect(webview).toContain('id="teamView"')
+    const wizard = webview.slice(webview.indexOf('id="wizardView"'), webview.indexOf('id="teamView"'))
+    const team = webview.slice(webview.indexOf('id="teamView"'))
+    expect(wizard).toContain("<h1")
+    expect(wizard).toContain('class="primary"')
+    expect(team).toContain("<h1")
+    expect(team).toContain('class="primary"')
+  })
+
+  test("列表与页签使用统一模式", () => {
+    const team = webview.slice(webview.indexOf('id="teamView"'))
+    expect(team).toContain('class="panel"')
+    expect(team).toContain('class="list-toolbar"')
+    expect(team).toContain('class="tab active"')
+    expect(team).toContain("data-team-tab=")
+  })
+
+  test("裸色值不新增（棘轮：基线 125，只降不升）", () => {
+    const rawHex = outsideRoot.match(/#[0-9a-fA-F]{3,8}\b/g) ?? []
+    expect(rawHex.length).toBeLessThanOrEqual(125)
+  })
+})
