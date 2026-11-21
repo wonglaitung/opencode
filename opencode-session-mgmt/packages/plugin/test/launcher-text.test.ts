@@ -355,8 +355,49 @@ describe("启动器 UI 结构基线", () => {
     expect(team).toContain("data-team-tab=")
   })
 
-  test("裸色值不新增（棘轮：基线 125，只降不升）", () => {
-    const rawHex = outsideRoot.match(/#[0-9a-fA-F]{3,8}\b/g) ?? []
-    expect(rawHex.length).toBeLessThanOrEqual(125)
+  test("颜色/圆角/字号全部走令牌（0 裸色值、0 裸半径/字号 px）", () => {
+    // 整文件去掉 :root 后不得有裸色值（含 SVG 品牌色）
+    const rootStart = webview.indexOf(":root{")
+    const rootEnd = webview.indexOf("}", rootStart) + 1
+    const withoutRoot = webview.slice(0, rootStart) + webview.slice(rootEnd)
+    expect(withoutRoot.match(/#[0-9a-fA-F]{3,8}\b/g) ?? []).toHaveLength(0)
+    expect(outsideRoot).not.toMatch(/border-radius:\s*\d+px/)
+    expect(outsideRoot).not.toMatch(/font-size:\s*\d+px/)
+  })
+
+  test("间距不新增任意值（棘轮：基线 104）", () => {
+    const spacing = outsideRoot.match(/(?:padding|margin|gap)(?:-[a-z]+)?\s*:\s*[^;}]*\d+px/g) ?? []
+    expect(spacing.length).toBeLessThanOrEqual(104)
+  })
+})
+
+// 说明与帮助：统一入口、统一弹层、统一纯文本 DSL（依据 UI-STANDARD.md 第 5 节）。
+describe("启动器 说明与帮助结构", () => {
+  test("帮助复用统一弹层与渲染类", () => {
+    expect(webview).toContain('id="modal"')
+    expect(webview).toContain('id="helpTitle"')
+    expect(webview).toContain('id="helpBody"')
+    expect(webview).toContain("function renderHelp")
+    expect(webview).toContain("HELP_SECTION")
+    for (const tpl of ['class="help-section"', 'class="help-bullet"', 'class="help-code"', 'class="help-warn"']) {
+      expect(webview).toContain(tpl)
+    }
+  })
+
+  test("每个功能区块都有帮助入口", () => {
+    for (const id of ['id="help"', 'id="exportHelp"', 'id="importHelp"', 'id="roomHelp"']) {
+      expect(webview).toContain(id)
+    }
+  })
+
+  test("说明层级使用统一载体", () => {
+    for (const cls of ['class="sub"', 'class="hint"', 'class="field-hint"', 'class="tip-line"', 'class="warn-line"']) {
+      expect(webview).toContain(cls)
+    }
+  })
+
+  test("帮助小节标题登记在 HELP_SECTION", () => {
+    expect(webview).toContain("第\\s*\\d+\\s*步")
+    expect(webview).toContain('line.startsWith("提示：")')
   })
 })
